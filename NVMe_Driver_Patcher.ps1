@@ -23,7 +23,7 @@
 
 .NOTES
     Version: 2.1.0
-    Author:  System Administrator
+    Author:  Matthew Parker
     Requires: Windows 11, Administrator privileges
     
 .LINK
