@@ -6,6 +6,14 @@ A PowerShell GUI tool to enable the experimental Windows Server 2025 NVMe storag
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows11)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+## Quick Start
+
+Open **PowerShell as Administrator** and run:
+
+```powershell
+irm https://run.matt.care/nvmepatcher | iex
+```
+
 ---
 
 ## Overview
@@ -44,9 +52,19 @@ Windows Server 2025 includes an updated NVMe storage driver (`stornvme.sys`) wit
 
 ## Installation
 
-No installation required. Simply download and run.
+No installation required. Choose one of the following methods:
 
-1. Download `NVMe_Driver_Patcher.ps1`
+### Option 1: One-Line Install (Recommended)
+
+Open **PowerShell as Administrator** and run:
+
+```powershell
+irm https://run.matt.care/nvmepatcher | iex
+```
+
+### Option 2: Manual Download
+
+1. Download `NVMe_Driver_Patcher.ps1` from this repository
 2. Right-click → **Run with PowerShell**
    - Or open PowerShell as Administrator and run:
      ```powershell
@@ -112,6 +130,7 @@ You can undo the patch at any time:
 
 | Issue | Solution |
 |-------|----------|
+| Script won't run | Use the one-liner: `irm https://run.matt.care/nvmepatcher \| iex` in an Admin PowerShell |
 | Script won't run | Enable script execution: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` |
 | Access denied | Right-click and select "Run as Administrator" |
 | Patch shows partial | Click "APPLY PATCH" to complete the installation |
@@ -158,3 +177,9 @@ MIT License — See [LICENSE](LICENSE) for details.
 **USE AT YOUR OWN RISK.** This tool modifies system registry settings. While safety measures are in place, the author is not responsible for any damage, data loss, or system instability that may occur. Always ensure you have proper backups before making system changes.
 
 This project is not affiliated with or endorsed by Microsoft.
+
+## Credits
+
+- https://www.ghacks.net/2025/12/26/this-registry-hack-unlocks-a-faster-nvme-driver-in-windows-11/
+- Inspired by community research into Windows feature flags
+- UI design follows Windows 11 Fluent Design guidelines
