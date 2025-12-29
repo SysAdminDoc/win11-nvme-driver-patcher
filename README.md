@@ -64,7 +64,7 @@ irm https://run.matt.care/nvmepatcher | iex
 
 ### Option 2: Manual Download
 
-1. Download `NVMe_Driver_Patcher.ps1` from this repository
+1. Download `NVMe_Driver_Patcher.ps1` from [this repository](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/raw/refs/heads/main/NVMe_Driver_Patcher.ps1)
 2. Right-click → **Run with PowerShell**
    - Or open PowerShell as Administrator and run:
      ```powershell
