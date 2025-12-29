@@ -18,9 +18,18 @@ irm https://run.matt.care/nvmepatcher | iex
 
 ## Overview
 
-Windows Server 2025 includes an updated NVMe storage driver (`stornvme.sys`) with performance improvements and new features. This tool enables those driver enhancements on Windows 11 by toggling the appropriate feature flags in the registry.
+Windows Server 2025 includes an updated NVMe storage driver (`stornvme.sys`) designed to reduce CPU overhead and improve IOPS performance. This tool enables that driver on Windows 11 by toggling the appropriate feature flags in the registry.
 
-> **Note:** This patch enables existing but disabled functionality within Windows 11. It does not install new drivers or modify system files.
+### Performance Expectations
+
+| Environment | Claimed Improvement |
+|-------------|---------------------|
+| Windows Server 2025 | Up to 80% higher IOPS, ~45% lower CPU usage |
+| Windows 11 (real-world) | **10-15% improvement** in storage-heavy workloads |
+
+> **Note:** Microsoft's server-side claims do not translate directly to desktop usage. Community testing on Windows 11 25H2 shows more modest but still meaningful gains. Results vary by hardware and workload.
+
+This patch enables existing but disabled functionality within Windows 11. It does not install new drivers or modify system files.
 
 ---
 
@@ -44,9 +53,10 @@ Windows Server 2025 includes an updated NVMe storage driver (`stornvme.sys`) wit
 
 ## Requirements
 
-- **Windows 11** (Build 22000 or later)
+- **Windows 11** (Build 22000 or later, tested on 25H2)
 - **PowerShell 5.1** or later (included with Windows)
 - **Administrator privileges** (the tool will prompt for elevation)
+- **NVMe SSD** (SATA drives are not affected by this patch)
 
 ---
 
@@ -80,7 +90,8 @@ irm https://run.matt.care/nvmepatcher | iex
 2. **Review status** — The tool displays current patch and Windows version status
 3. **Apply Patch** — Click "APPLY PATCH" to enable the NVMe driver enhancements
 4. **Restart** — Reboot your computer for changes to take effect
-5. **Remove Patch** — Click "REMOVE PATCH" to revert to default behavior
+5. **Verify** — Open Device Manager; your NVMe drive should now appear under **"Storage Media"** instead of "Devices"
+6. **Remove Patch** — Click "REMOVE PATCH" to revert to default behavior if needed
 
 ---
 
@@ -135,6 +146,8 @@ You can undo the patch at any time:
 | Access denied | Right-click and select "Run as Administrator" |
 | Patch shows partial | Click "APPLY PATCH" to complete the installation |
 | No performance change | Ensure you rebooted after applying the patch |
+| Samsung Magician broken | This is a known issue; see Known Issues section below |
+| Drive not in "Storage Media" | Your hardware may not be compatible with the new driver |
 
 ---
 
@@ -144,13 +157,28 @@ You can undo the patch at any time:
 A: The tool only modifies three registry values that enable existing Windows functionality. A restore point is created automatically, and you can revert changes at any time.
 
 **Q: Will this survive Windows Updates?**  
-A: Major Windows updates may reset these registry values. Simply re-run the tool after major updates if needed.
+A: Major Windows updates may reset these registry values. Simply re-run the tool after major updates if needed. Future builds could also disable this behavior without notice.
 
 **Q: How do I know if it's working?**  
-A: After rebooting, check Device Manager → Storage Controllers. The NVMe controller should show the updated driver. Performance improvements vary by hardware.
+A: After rebooting, open **Device Manager** and check your NVMe drive. If the patch is active, your drive will appear under **"Storage Media"** instead of **"Devices"**. This confirms the newer driver is loaded.
+
+**Q: What performance gains should I expect?**  
+A: Community testing shows **10-15% improvement** in storage-intensive workloads on Windows 11. Results vary by hardware. Microsoft's 80% IOPS claims apply to server workloads only.
 
 **Q: Does this work on Windows 10?**  
-A: No, this tool is designed for Windows 11 only.
+A: No, this tool is designed for Windows 11 only (Build 22000+, tested on 25H2).
+
+---
+
+## Known Issues
+
+| Issue | Details |
+|-------|---------|
+| **Samsung Magician** | May fail to detect drives or display incorrect information after enabling the driver |
+| **SSD Management Tools** | Other vendor utilities (firmware updaters, health monitors) may have compatibility issues |
+| **Device Monitoring** | Some third-party disk monitoring software may not recognize drives correctly |
+
+If you rely on these tools, consider whether the performance gains outweigh the compatibility trade-offs. You can always revert by clicking "REMOVE PATCH" and rebooting.
 
 ---
 
@@ -174,7 +202,11 @@ MIT License — See [LICENSE](LICENSE) for details.
 
 ## Disclaimer
 
-**USE AT YOUR OWN RISK.** This tool modifies system registry settings. While safety measures are in place, the author is not responsible for any damage, data loss, or system instability that may occur. Always ensure you have proper backups before making system changes.
+**USE AT YOUR OWN RISK.** This tool modifies system registry settings to enable functionality that Microsoft does not officially support on consumer Windows. While safety measures are in place, the author is not responsible for any damage, data loss, or system instability that may occur.
+
+This is best viewed as an **experimental optimization** rather than a guaranteed upgrade. Gains vary by workload, and future Windows updates could disable this behavior without notice.
+
+Always ensure you have proper backups before making system changes.
 
 This project is not affiliated with or endorsed by Microsoft.
 
