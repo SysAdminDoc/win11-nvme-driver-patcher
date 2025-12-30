@@ -26,8 +26,8 @@
     HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
 
 .NOTES
-    Version: 2.2.0
-    Author:  System Administrator
+    Version: 2.3.0
+    Author:  Matthew Parker
     Requires: Windows 11, Administrator privileges
     
 .LINK
@@ -79,7 +79,7 @@ Add-Type -AssemblyName System.Drawing
 # Global Configuration
 $script:Config = @{
     AppName        = "NVMe Driver Patcher"
-    AppVersion     = "2.2.0"
+    AppVersion     = "2.3.0"
     RegistryPath   = "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides"
     FeatureIDs     = @("735209102", "1853569164", "156965516")
     SafeBootMinimal = "HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"
@@ -508,6 +508,114 @@ function New-StatusIndicator {
     $panel.Controls.Add($statusLabel)
     
     return $panel
+}
+
+# Registry key status row with dot indicator and description
+function New-KeyStatusRow {
+    param(
+        [System.Drawing.Point]$Location,
+        [string]$KeyName,
+        [string]$Description
+    )
+    
+    $panel = New-Object System.Windows.Forms.Panel
+    $panel.Location = $Location
+    $panel.Size = New-Object System.Drawing.Size(492, 22)
+    $panel.BackColor = [System.Drawing.Color]::Transparent
+    
+    # Status dot (8x8 circle)
+    $dot = New-Object System.Windows.Forms.Panel
+    $dot.Size = New-Object System.Drawing.Size(8, 8)
+    $dot.Location = New-Object System.Drawing.Point(0, 7)
+    $dot.BackColor = $script:Colors.TextMuted
+    Set-ControlTagData -Control $dot -NewData @{ Role = "dot" }
+    
+    # Make it circular
+    $dotPath = $null
+    try {
+        $dotPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $dotPath.AddEllipse(0, 0, 8, 8)
+        $dot.Region = New-Object System.Drawing.Region($dotPath)
+    }
+    finally {
+        if ($dotPath) { $dotPath.Dispose() }
+    }
+    
+    # Key name label (monospace)
+    $keyLabel = New-Object System.Windows.Forms.Label
+    $keyLabel.Location = New-Object System.Drawing.Point(16, 2)
+    $keyLabel.Size = New-Object System.Drawing.Size(95, 18)
+    $keyLabel.ForeColor = $script:Colors.TextPrimary
+    $keyLabel.Font = New-Object System.Drawing.Font("Cascadia Code, Consolas", 8.5)
+    $keyLabel.Text = $KeyName
+    Set-ControlTagData -Control $keyLabel -NewData @{ Role = "keyname" }
+    
+    # Description label
+    $descLabel = New-Object System.Windows.Forms.Label
+    $descLabel.Location = New-Object System.Drawing.Point(118, 2)
+    $descLabel.Size = New-Object System.Drawing.Size(374, 18)
+    $descLabel.ForeColor = $script:Colors.TextMuted
+    $descLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $descLabel.Text = $Description
+    Set-ControlTagData -Control $descLabel -NewData @{ Role = "description" }
+    
+    $panel.Controls.Add($dot)
+    $panel.Controls.Add($keyLabel)
+    $panel.Controls.Add($descLabel)
+    
+    return $panel
+}
+
+# Update a key status row's dot color
+function Update-KeyStatusRow {
+    param(
+        [System.Windows.Forms.Panel]$Row,
+        [bool]$IsApplied
+    )
+    
+    $dot = $Row.Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "dot" }
+    if ($dot) {
+        if ($IsApplied) {
+            $dot.BackColor = $script:Colors.Success
+        }
+        else {
+            $dot.BackColor = $script:Colors.Danger
+        }
+    }
+}
+
+# Check if a specific registry key/value exists
+function Test-RegistryKeyValue {
+    param(
+        [string]$Path,
+        [string]$Name = $null,
+        [int]$ExpectedValue = $null
+    )
+    
+    try {
+        if (-not (Test-Path $Path)) {
+            return $false
+        }
+        
+        if ($Name) {
+            $value = Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue
+            if ($null -eq $value) { return $false }
+            
+            $propValue = $value | Select-Object -ExpandProperty $Name -ErrorAction SilentlyContinue
+            if ($null -ne $ExpectedValue) {
+                return ($propValue -eq $ExpectedValue)
+            }
+            return ($null -ne $propValue)
+        }
+        else {
+            # Check for default value
+            $value = Get-ItemProperty -Path $Path -Name "(Default)" -ErrorAction SilentlyContinue
+            return ($null -ne $value)
+        }
+    }
+    catch {
+        return $false
+    }
 }
 
 # ===========================================================================
@@ -1118,6 +1226,27 @@ function Refresh-StatusDisplay {
         }
     }
     
+    # Update individual key status indicators
+    if ($script:keyRows) {
+        # Feature flags
+        foreach ($id in $script:Config.FeatureIDs) {
+            if ($script:keyRows.ContainsKey($id)) {
+                $applied = Test-RegistryKeyValue -Path $script:Config.RegistryPath -Name $id -ExpectedValue 1
+                Update-KeyStatusRow -Row $script:keyRows[$id] -IsApplied $applied
+            }
+        }
+        
+        # Safe Mode keys
+        if ($script:keyRows.ContainsKey("SafeBootMinimal")) {
+            $applied = Test-Path $script:Config.SafeBootMinimal
+            Update-KeyStatusRow -Row $script:keyRows["SafeBootMinimal"] -IsApplied $applied
+        }
+        if ($script:keyRows.ContainsKey("SafeBootNetwork")) {
+            $applied = Test-Path $script:Config.SafeBootNetwork
+            Update-KeyStatusRow -Row $script:keyRows["SafeBootNetwork"] -IsApplied $applied
+        }
+    }
+    
     if ($isApplied) {
         Update-StatusIndicator -Panel $script:pnlPatchStatus -Status "OK" -Text "Patch Applied"
         if ($script:btnApply) {
@@ -1199,7 +1328,7 @@ $script:ToolTipProvider.ReshowDelay = 200
 # Main Form
 $script:form = New-Object System.Windows.Forms.Form
 $script:form.Text = "$($script:Config.AppName) v$($script:Config.AppVersion)"
-$script:form.Size = New-Object System.Drawing.Size(580, 786)
+$script:form.Size = New-Object System.Drawing.Size(580, 940)
 $script:form.StartPosition = "CenterScreen"
 $script:form.FormBorderStyle = "FixedSingle"
 $script:form.MaximizeBox = $false
@@ -1304,8 +1433,36 @@ $cardWarning.Controls.Add($lblWarningText)
 
 $script:form.Controls.Add($cardWarning)
 
+# ============ REGISTRY KEYS STATUS CARD ============
+$cardKeys = New-CardPanel -Location (New-Object System.Drawing.Point(20, 293)) -Size (New-Object System.Drawing.Size(524, 164)) -Title "Registry Keys Status"
+
+# Initialize hashtable to store key row references
+$script:keyRows = @{}
+
+# Feature Flag 1
+$script:keyRows["735209102"] = New-KeyStatusRow -Location (New-Object System.Drawing.Point(16, 36)) -KeyName "735209102" -Description "NVMe Feature Flag 1 - Primary driver enable"
+$cardKeys.Controls.Add($script:keyRows["735209102"])
+
+# Feature Flag 2
+$script:keyRows["1853569164"] = New-KeyStatusRow -Location (New-Object System.Drawing.Point(16, 60)) -KeyName "1853569164" -Description "NVMe Feature Flag 2 - Extended functionality"
+$cardKeys.Controls.Add($script:keyRows["1853569164"])
+
+# Feature Flag 3
+$script:keyRows["156965516"] = New-KeyStatusRow -Location (New-Object System.Drawing.Point(16, 84)) -KeyName "156965516" -Description "NVMe Feature Flag 3 - Performance optimizations"
+$cardKeys.Controls.Add($script:keyRows["156965516"])
+
+# Safe Mode Minimal
+$script:keyRows["SafeBootMinimal"] = New-KeyStatusRow -Location (New-Object System.Drawing.Point(16, 114)) -KeyName "SafeBoot" -Description "Safe Mode support (Minimal) - Prevents boot issues"
+$cardKeys.Controls.Add($script:keyRows["SafeBootMinimal"])
+
+# Safe Mode Network
+$script:keyRows["SafeBootNetwork"] = New-KeyStatusRow -Location (New-Object System.Drawing.Point(16, 138)) -KeyName "SafeBoot/Net" -Description "Safe Mode with Networking support"
+$cardKeys.Controls.Add($script:keyRows["SafeBootNetwork"])
+
+$script:form.Controls.Add($cardKeys)
+
 # ============ ACTIONS CARD ============
-$cardActions = New-CardPanel -Location (New-Object System.Drawing.Point(20, 293)) -Size (New-Object System.Drawing.Size(524, 150)) -Title "Actions"
+$cardActions = New-CardPanel -Location (New-Object System.Drawing.Point(20, 469)) -Size (New-Object System.Drawing.Size(524, 150)) -Title "Actions"
 
 # Row 1: Primary Action Buttons (consistent height: 44px)
 $script:btnApply = New-ModernButton `
@@ -1385,7 +1542,7 @@ $cardActions.Controls.Add($script:btnFullBackup)
 $script:form.Controls.Add($cardActions)
 
 # ============ LOG CARD ============
-$cardLog = New-CardPanel -Location (New-Object System.Drawing.Point(20, 455)) -Size (New-Object System.Drawing.Size(524, 268)) -Title "Activity Log"
+$cardLog = New-CardPanel -Location (New-Object System.Drawing.Point(20, 631)) -Size (New-Object System.Drawing.Size(524, 220)) -Title "Activity Log"
 
 # Export Log Button
 $script:btnExport = New-ModernButton `
@@ -1402,7 +1559,7 @@ $cardLog.Controls.Add($script:btnExport)
 # RichTextBox for colorized log output
 $script:rtbOutput = New-Object System.Windows.Forms.RichTextBox
 $script:rtbOutput.Location = New-Object System.Drawing.Point(16, 36)
-$script:rtbOutput.Size = New-Object System.Drawing.Size(492, 216)
+$script:rtbOutput.Size = New-Object System.Drawing.Size(492, 168)
 $script:rtbOutput.ReadOnly = $true
 $script:rtbOutput.BackColor = $script:Colors.Surface
 $script:rtbOutput.ForeColor = $script:Colors.TextSecondary
@@ -1418,7 +1575,7 @@ $script:form.Controls.Add($cardLog)
 # ============ FOOTER ============
 $lblFooter = New-Object System.Windows.Forms.Label
 $lblFooter.Text = "v$($script:Config.AppVersion)  |  Registry: ...\FeatureManagement\Overrides"
-$lblFooter.Location = New-Object System.Drawing.Point(20, 734)
+$lblFooter.Location = New-Object System.Drawing.Point(20, 862)
 $lblFooter.Size = New-Object System.Drawing.Size(524, 16)
 $lblFooter.ForeColor = $script:Colors.TextDimmed
 $lblFooter.Font = New-Object System.Drawing.Font("Segoe UI", 7.5)
