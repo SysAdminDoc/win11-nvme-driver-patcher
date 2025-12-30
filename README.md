@@ -47,7 +47,7 @@ This patch enables existing but disabled functionality within Windows 11. It doe
 
 ## Screenshot
 
-<img width="707" height="970" alt="2025-12-29 18_02_46-NVMe Driver Patcher v2 1 0" src="https://github.com/user-attachments/assets/d068dcd5-93e9-4f0c-9ed9-165aa1e89276" />
+<img width="1390" height="944" alt="2025-12-29 21_15_09-NVMe Driver Patcher v2 6 3" src="https://github.com/user-attachments/assets/186c5157-56b5-4f97-94fc-ca5f55693dad" />
 
 ---
 
