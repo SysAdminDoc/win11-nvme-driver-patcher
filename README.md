@@ -34,21 +34,6 @@ Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the 
 
 > ⚠️ **Important:** The SafeBoot keys are critical. Without them, your system cannot boot into Safe Mode after enabling Native NVMe. Many manual guides omit these keys — this tool includes them automatically.
 
-## Features
-
-### Drive Detection
-- **Accurate NVMe Detection** — Uses `MSFT_Disk` storage namespace with `Win32_DiskDrive` correlation
-- **Bus Type Identification** — Properly identifies NVMe (⚡), SATA (🖴), USB (🔌) drives
-- **Boot Drive Indicator** — Shows which drive is your system disk
-- **No NVMe Warning** — Alerts you if no NVMe drives are detected before patching
-
-### Safety Features
-- **Automatic Restore Point** — Created before any changes
-- **System Protection Check** — Enables protection on C: if disabled
-- **Confirmation Dialogs** — Requires explicit consent for all operations
-- **Atomic Operations** — All 5 components applied/removed together
-- **Detailed Logging** — Exportable activity log
-
 ## Requirements
 
 | Requirement | Details |
@@ -136,26 +121,9 @@ HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-
 This shouldn't happen if you used this tool (SafeBoot keys are included). If it does:
 1. Boot from Windows installation media
 2. Open Command Prompt
-3. Create the SafeBoot keys manually (see Registry Details above)
-
-## Building / Development
-
-The script is a single self-contained PowerShell file with no external dependencies beyond Windows built-in assemblies:
-- `System.Windows.Forms`
-- `System.Drawing`
-
-To modify, edit `NVMe_Driver_Patcher.ps1` directly. The code is organized into numbered sections:
-1. Initialization & Privilege Elevation
-2. Assembly Loading & Configuration
-3. Custom UI Components
-4. Logging System
-5. System Validation Functions
-6. System Protection & Restore Points
-7. Registry Operations
-8. UI Helper Functions
-9. Main Form Construction
-10. Form Event Handlers & Startup
-11. Run Application
+3. Run: `reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f`
+4. Repeat for `1853569164` and `156965516`
+5. Restart
 
 ## Credits
 
@@ -163,10 +131,6 @@ To modify, edit `NVMe_Driver_Patcher.ps1` directly. The code is organized into n
 - **Microsoft TechCommunity** — [Native NVMe announcement](https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353)
 - **Whirlpool Forums** — Discovery of missing SafeBoot keys ([whrl.pl/RgTgVj](https://whrl.pl/RgTgVj))
 - **Community Contributors** — Testing and feedback
-
-## License
-
-MIT License — See [LICENSE](LICENSE) for details.
 
 ## Disclaimer
 
