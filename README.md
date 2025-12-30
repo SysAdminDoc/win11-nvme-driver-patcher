@@ -56,15 +56,6 @@ Microsoft's benchmarks show **~80% IOPS improvement** on Windows Server 2025 wit
 
 The biggest gains are in high-queue-depth random I/O operations.
 
-## How to Verify It's Working
-
-After applying the patch and **restarting your computer**:
-
-1. Open **Device Manager**
-2. Look for a new category: **Storage disks**
-3. Your NVMe drive should appear there (moved from "Disk drives")
-4. Check driver details — should show `nvmedisk.sys` instead of `disk.sys`
-
 ## Scope
 
 **This patch affects ALL NVMe drives** in your system that use the Windows inbox driver (`StorNVMe.sys`), not just the OS drive.
@@ -83,25 +74,6 @@ Some third-party software may have issues with Native NVMe:
 | Backup software | Rare issues with disk enumeration |
 
 If you experience problems, use the **Remove Patch** button and restart.
-
-## Registry Details
-
-**Feature Flags Location:**
-```
-HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides
-├── 735209102 = 1 (DWORD)
-├── 1853569164 = 1 (DWORD)
-└── 156965516 = 1 (DWORD)
-```
-
-**SafeBoot Keys Location:**
-```
-HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
-    (Default) = "Storage Disks"
-
-HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
-    (Default) = "Storage Disks"
-```
 
 ## Troubleshooting
 
