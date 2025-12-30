@@ -12,21 +12,16 @@
     - Mandatory restore point creation before changes
     - Confirmation dialogs for all critical operations
     - Comprehensive logging with export capability
-    - Registry backup before modifications
-    - System registry (HKLM) backup option
     
-    REGISTRY KEYS MODIFIED:
-    HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides
-    - 735209102  (NVMe Feature Flag 1)
-    - 1853569164 (NVMe Feature Flag 2)
-    - 156965516  (NVMe Feature Flag 3)
-    
-    Safe Mode Support (prevents boot issues):
-    HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
-    HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
+    REGISTRY KEYS MODIFIED (5 COMPONENT ATOMIC PATCH):
+    1. Feature Flag: 735209102
+    2. Feature Flag: 1853569164
+    3. Feature Flag: 156965516
+    4. SafeBoot Minimal: {75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
+    5. SafeBoot Network: {75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
 
 .NOTES
-    Version: 2.3.0
+    Version: 2.6.3
     Author:  Matthew Parker
     Requires: Windows 11, Administrator privileges
     
@@ -41,7 +36,7 @@
 # SECTION 1: INITIALIZATION & PRIVILEGE ELEVATION
 # ===========================================================================
 
-# Error handling preference (strict mode removed - causes issues with WinForms property access)
+# Error handling preference
 $ErrorActionPreference = "Continue"
 
 # Check and request Administrator privileges
@@ -79,7 +74,7 @@ Add-Type -AssemblyName System.Drawing
 # Global Configuration
 $script:Config = @{
     AppName        = "NVMe Driver Patcher"
-    AppVersion     = "2.3.0"
+    AppVersion     = "2.6.3"
     RegistryPath   = "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides"
     FeatureIDs     = @("735209102", "1853569164", "156965516")
     SafeBootMinimal = "HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"
@@ -88,6 +83,7 @@ $script:Config = @{
     MinWinBuild    = 22000  # Windows 11 minimum build
     LogHistory     = [System.Collections.ArrayList]::new()
     WorkingDir     = $null  # Set at startup
+    TotalComponents = 5     # 3 Features + 2 SafeBoot Keys
 }
 
 # Initialize working directory at startup
@@ -105,40 +101,94 @@ if (-not (Test-Path $script:Config.WorkingDir)) {
     }
 }
 
-# Modern Windows 11 Dark Mode Color Palette
-$script:Colors = @{
+# ===========================================================================
+# THEME DETECTION
+# ===========================================================================
+
+function Get-WindowsThemeMode {
+    try {
+        $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        $val = Get-ItemProperty -Path $key -Name "AppsUseLightTheme" -ErrorAction SilentlyContinue
+        if ($null -ne $val -and $val.AppsUseLightTheme -eq 1) {
+            return "Light"
+        }
+    }
+    catch {}
+    return "Dark" # Default to Dark if unsure
+}
+
+$currentTheme = Get-WindowsThemeMode
+
+# Define Palettes
+$PaletteDark = @{
     Background      = [System.Drawing.Color]::FromArgb(32, 32, 32)
     Surface         = [System.Drawing.Color]::FromArgb(40, 40, 40)
     SurfaceLight    = [System.Drawing.Color]::FromArgb(50, 50, 50)
-    SurfaceHover    = [System.Drawing.Color]::FromArgb(55, 55, 55)
+    SurfaceHover    = [System.Drawing.Color]::FromArgb(60, 60, 60)
     CardBackground  = [System.Drawing.Color]::FromArgb(44, 44, 44)
     CardBorder      = [System.Drawing.Color]::FromArgb(60, 60, 60)
     Border          = [System.Drawing.Color]::FromArgb(70, 70, 70)
     TextPrimary     = [System.Drawing.Color]::FromArgb(255, 255, 255)
     TextSecondary   = [System.Drawing.Color]::FromArgb(200, 200, 200)
-    TextMuted       = [System.Drawing.Color]::FromArgb(140, 140, 140)
-    TextDimmed      = [System.Drawing.Color]::FromArgb(100, 100, 100)
-    Accent          = [System.Drawing.Color]::FromArgb(96, 205, 255)
-    AccentDark      = [System.Drawing.Color]::FromArgb(0, 120, 212)
-    AccentHover     = [System.Drawing.Color]::FromArgb(116, 225, 255)
-    Success         = [System.Drawing.Color]::FromArgb(108, 203, 95)
-    SuccessHover    = [System.Drawing.Color]::FromArgb(128, 223, 115)
-    SuccessDim      = [System.Drawing.Color]::FromArgb(45, 80, 40)
-    Warning         = [System.Drawing.Color]::FromArgb(252, 185, 65)
-    WarningHover    = [System.Drawing.Color]::FromArgb(255, 205, 85)
-    WarningDim      = [System.Drawing.Color]::FromArgb(80, 65, 30)
-    Danger          = [System.Drawing.Color]::FromArgb(243, 80, 80)
-    DangerHover     = [System.Drawing.Color]::FromArgb(255, 100, 100)
-    DangerDim       = [System.Drawing.Color]::FromArgb(80, 40, 40)
-    Info            = [System.Drawing.Color]::FromArgb(96, 165, 250)
+    TextMuted       = [System.Drawing.Color]::FromArgb(150, 150, 150)
+    TextDimmed      = [System.Drawing.Color]::FromArgb(110, 110, 110)
+    WarningDim      = [System.Drawing.Color]::FromArgb(55, 50, 40)
+}
+
+$PaletteLight = @{
+    Background      = [System.Drawing.Color]::FromArgb(243, 243, 243)
+    Surface         = [System.Drawing.Color]::FromArgb(255, 255, 255)
+    SurfaceLight    = [System.Drawing.Color]::FromArgb(240, 240, 240)
+    SurfaceHover    = [System.Drawing.Color]::FromArgb(230, 230, 230)
+    CardBackground  = [System.Drawing.Color]::FromArgb(255, 255, 255)
+    CardBorder      = [System.Drawing.Color]::FromArgb(220, 220, 220)
+    Border          = [System.Drawing.Color]::FromArgb(200, 200, 200)
+    TextPrimary     = [System.Drawing.Color]::FromArgb(20, 20, 20)
+    TextSecondary   = [System.Drawing.Color]::FromArgb(60, 60, 60)
+    TextMuted       = [System.Drawing.Color]::FromArgb(100, 100, 100)
+    TextDimmed      = [System.Drawing.Color]::FromArgb(140, 140, 140)
+    WarningDim      = [System.Drawing.Color]::FromArgb(255, 248, 220)
+}
+
+# Select Palette
+$Theme = if ($currentTheme -eq "Light") { $PaletteLight } else { $PaletteDark }
+
+$script:Colors = @{
+    Background      = $Theme.Background
+    Surface         = $Theme.Surface
+    SurfaceLight    = $Theme.SurfaceLight
+    SurfaceHover    = $Theme.SurfaceHover
+    CardBackground  = $Theme.CardBackground
+    CardBorder      = $Theme.CardBorder
+    Border          = $Theme.Border
+    TextPrimary     = $Theme.TextPrimary
+    TextSecondary   = $Theme.TextSecondary
+    TextMuted       = $Theme.TextMuted
+    TextDimmed      = $Theme.TextDimmed
+    WarningDim      = $Theme.WarningDim
+    
+    # Constants across themes
+    Accent          = [System.Drawing.Color]::FromArgb(0, 120, 212)
+    AccentDark      = [System.Drawing.Color]::FromArgb(0, 90, 158)
+    AccentHover     = [System.Drawing.Color]::FromArgb(30, 140, 230)
+    Success         = [System.Drawing.Color]::FromArgb(16, 124, 16)
+    SuccessHover    = [System.Drawing.Color]::FromArgb(26, 144, 26)
+    Warning         = [System.Drawing.Color]::FromArgb(180, 130, 0)
+    WarningBright   = [System.Drawing.Color]::FromArgb(255, 185, 0)
+    Danger          = [System.Drawing.Color]::FromArgb(232, 17, 35)
+    DangerHover     = [System.Drawing.Color]::FromArgb(250, 50, 50)
+    Info            = [System.Drawing.Color]::FromArgb(0, 99, 177)
+}
+
+if ($currentTheme -eq "Dark") {
+    $script:Colors.Warning = [System.Drawing.Color]::FromArgb(252, 185, 65)
 }
 
 # ===========================================================================
 # SECTION 3: CUSTOM UI COMPONENTS
 # ===========================================================================
 
-# Helper function to create rounded region (DPI-safe, with proper GDI cleanup)
-# Returns Region object; caller is responsible for disposing old region if replacing
+# Helper function to create rounded region
 function Get-RoundedRegion {
     param(
         [int]$Width,
@@ -163,11 +213,9 @@ function Get-RoundedRegion {
         $path.AddArc(0, $Height - $diameter, $diameter, $diameter, 90, 90)
         $path.CloseFigure()
         
-        # Create region from path - region copies the path data
         $region = New-Object System.Drawing.Region($path)
     }
     finally {
-        # Always dispose the path - region has its own copy of the data
         if ($path) {
             $path.Dispose()
         }
@@ -189,13 +237,11 @@ function Set-ControlTagData {
         $Control.Tag = $NewData.Clone()
     }
     elseif ($existingTag -is [hashtable]) {
-        # Merge new data into existing hashtable
         foreach ($key in $NewData.Keys) {
             $existingTag[$key] = $NewData[$key]
         }
     }
     else {
-        # Existing tag is not a hashtable - create new with _OriginalTag preserved
         $merged = $NewData.Clone()
         $merged['_OriginalTag'] = $existingTag
         $Control.Tag = $merged
@@ -218,20 +264,18 @@ function Get-ControlTagValue {
     return $Default
 }
 
-# Apply rounded corners with resize handler for DPI safety (no leaks, no stacking)
+# Apply rounded corners with resize handler
 function Set-RoundedCorners {
     param(
         [System.Windows.Forms.Control]$Control,
         [int]$Radius = 8
     )
     
-    # Merge corner radius into existing Tag data
     Set-ControlTagData -Control $Control -NewData @{ 
         CornerRadius = $Radius 
         _ResizeHandlerAttached = $true
     }
     
-    # Apply initial region
     $region = Get-RoundedRegion -Width $Control.Width -Height $Control.Height -Radius $Radius
     if ($region) {
         $oldRegion = $Control.Region
@@ -241,14 +285,11 @@ function Set-RoundedCorners {
         }
     }
     
-    # Only attach resize handler if not already attached
     $alreadyAttached = Get-ControlTagValue -Control $Control -Key '_ResizeHandlerAttached' -Default $false
     if (-not $alreadyAttached) {
         Set-ControlTagData -Control $Control -NewData @{ _ResizeHandlerAttached = $true }
     }
     
-    # Attach resize handler (PowerShell doesn't easily allow checking existing handlers)
-    # Use a flag in Tag to track, but handler will be idempotent
     $Control.Add_Resize({
         $r = Get-ControlTagValue -Control $this -Key 'CornerRadius' -Default 8
         $newRegion = Get-RoundedRegion -Width $this.Width -Height $this.Height -Radius $r
@@ -262,7 +303,7 @@ function Set-RoundedCorners {
     })
 }
 
-# Create a modern card panel with optional title and border
+# Create a modern card panel
 function New-CardPanel {
     param(
         [System.Drawing.Point]$Location,
@@ -278,22 +319,18 @@ function New-CardPanel {
     $card.BackColor = $script:Colors.CardBackground
     $card.Padding = New-Object System.Windows.Forms.Padding($Padding)
     
-    # Enable double buffering to reduce flicker
     $card.GetType().GetProperty("DoubleBuffered", [System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic).SetValue($card, $true, $null)
     
-    # Set Tag data (will be merged by Set-RoundedCorners)
     Set-ControlTagData -Control $card -NewData @{ 
         CornerRadius = $CornerRadius
         Title = $Title 
     }
     
-    # Apply rounded region with proper cleanup
     $region = Get-RoundedRegion -Width $Size.Width -Height $Size.Height -Radius $CornerRadius
     if ($region) {
         $card.Region = $region
     }
     
-    # Handle resize for DPI safety with proper GDI cleanup
     $card.Add_Resize({
         $r = Get-ControlTagValue -Control $this -Key 'CornerRadius' -Default 8
         $newRegion = Get-RoundedRegion -Width $this.Width -Height $this.Height -Radius $r
@@ -306,7 +343,6 @@ function New-CardPanel {
         }
     })
     
-    # Draw border via Paint event with proper GDI disposal
     $card.Add_Paint({
         param($sender, $e)
         $g = $e.Graphics
@@ -337,7 +373,6 @@ function New-CardPanel {
         }
     })
     
-    # Add title label if provided
     if ($Title) {
         $titleLabel = New-Object System.Windows.Forms.Label
         $titleLabel.Text = $Title.ToUpper()
@@ -352,7 +387,7 @@ function New-CardPanel {
     return $card
 }
 
-# Modern flat button with hover effects and rounded corners
+# Modern flat button
 function New-ModernButton {
     param(
         [string]$Text,
@@ -377,7 +412,6 @@ function New-ModernButton {
     $button.ForeColor = $ForeColor
     $button.Cursor = [System.Windows.Forms.Cursors]::Hand
     
-    # Set all Tag data at once to avoid overwriting
     Set-ControlTagData -Control $button -NewData @{ 
         Original = $BackColor
         Hover = $HoverColor
@@ -391,13 +425,11 @@ function New-ModernButton {
         $button.Font = New-Object System.Drawing.Font("Segoe UI", 9.5)
     }
     
-    # Apply rounded region with proper cleanup
     $region = Get-RoundedRegion -Width $Size.Width -Height $Size.Height -Radius $CornerRadius
     if ($region) {
         $button.Region = $region
     }
     
-    # Handle resize for DPI safety with proper GDI cleanup
     $button.Add_Resize({
         $r = Get-ControlTagValue -Control $this -Key 'CornerRadius' -Default 6
         $newRegion = Get-RoundedRegion -Width $this.Width -Height $this.Height -Radius $r
@@ -454,7 +486,7 @@ function New-ModernButton {
     return $button
 }
 
-# Enhanced status indicator with icon (text stays neutral, icon gets color)
+# Enhanced status indicator
 function New-StatusIndicator {
     param(
         [System.Drawing.Point]$Location,
@@ -467,7 +499,6 @@ function New-StatusIndicator {
     $panel.Size = $Size
     $panel.BackColor = [System.Drawing.Color]::Transparent
     
-    # Label text (category) - positioned at top with positive margin
     $labelCtrl = New-Object System.Windows.Forms.Label
     $labelCtrl.Location = New-Object System.Drawing.Point(0, 2)
     $labelCtrl.Size = New-Object System.Drawing.Size($Size.Width, 16)
@@ -476,14 +507,12 @@ function New-StatusIndicator {
     $labelCtrl.Text = $Label.ToUpper()
     Set-ControlTagData -Control $labelCtrl -NewData @{ Role = "title" }
     
-    # Status icon circle - positioned to align with status text
     $iconPanel = New-Object System.Windows.Forms.Panel
     $iconPanel.Size = New-Object System.Drawing.Size(10, 10)
     $iconPanel.Location = New-Object System.Drawing.Point(0, 26)
     $iconPanel.BackColor = $script:Colors.TextMuted
     Set-ControlTagData -Control $iconPanel -NewData @{ Role = "icon" }
     
-    # Make it circular with proper GDI cleanup
     $iconPath = $null
     try {
         $iconPath = New-Object System.Drawing.Drawing2D.GraphicsPath
@@ -494,7 +523,6 @@ function New-StatusIndicator {
         if ($iconPath) { $iconPath.Dispose() }
     }
     
-    # Status text (value) - positioned below title with clear separation
     $statusLabel = New-Object System.Windows.Forms.Label
     $statusLabel.Location = New-Object System.Drawing.Point(16, 22)
     $statusLabel.Size = New-Object System.Drawing.Size(($Size.Width - 20), 22)
@@ -510,7 +538,7 @@ function New-StatusIndicator {
     return $panel
 }
 
-# Registry key status row with dot indicator and description
+# Registry key status row
 function New-KeyStatusRow {
     param(
         [System.Drawing.Point]$Location,
@@ -523,14 +551,12 @@ function New-KeyStatusRow {
     $panel.Size = New-Object System.Drawing.Size(492, 22)
     $panel.BackColor = [System.Drawing.Color]::Transparent
     
-    # Status dot (8x8 circle)
     $dot = New-Object System.Windows.Forms.Panel
     $dot.Size = New-Object System.Drawing.Size(8, 8)
     $dot.Location = New-Object System.Drawing.Point(0, 7)
     $dot.BackColor = $script:Colors.TextMuted
     Set-ControlTagData -Control $dot -NewData @{ Role = "dot" }
     
-    # Make it circular
     $dotPath = $null
     try {
         $dotPath = New-Object System.Drawing.Drawing2D.GraphicsPath
@@ -541,7 +567,6 @@ function New-KeyStatusRow {
         if ($dotPath) { $dotPath.Dispose() }
     }
     
-    # Key name label (monospace)
     $keyLabel = New-Object System.Windows.Forms.Label
     $keyLabel.Location = New-Object System.Drawing.Point(16, 2)
     $keyLabel.Size = New-Object System.Drawing.Size(95, 18)
@@ -550,7 +575,6 @@ function New-KeyStatusRow {
     $keyLabel.Text = $KeyName
     Set-ControlTagData -Control $keyLabel -NewData @{ Role = "keyname" }
     
-    # Description label
     $descLabel = New-Object System.Windows.Forms.Label
     $descLabel.Location = New-Object System.Drawing.Point(118, 2)
     $descLabel.Size = New-Object System.Drawing.Size(374, 18)
@@ -608,7 +632,6 @@ function Test-RegistryKeyValue {
             return ($null -ne $propValue)
         }
         else {
-            # Check for default value
             $value = Get-ItemProperty -Path $Path -Name "(Default)" -ErrorAction SilentlyContinue
             return ($null -ne $value)
         }
@@ -617,6 +640,197 @@ function Test-RegistryKeyValue {
         return $false
     }
 }
+
+# Authoritative Drive Detection using MSFT_Disk and Win32_DiskDrive
+function Get-SystemDrives {
+    $drives = [System.Collections.ArrayList]::new()
+    
+    try {
+        # 1. Get Physical Disks via Storage Module (Primary Source for BusType/Attributes)
+        # Namespace is present on Win10/11/Server2016+
+        $msftDisks = Get-CimInstance -Namespace root/Microsoft/Windows/Storage -ClassName MSFT_Disk -ErrorAction Stop
+        
+        # 2. Get WMI Disks for PNP/Model correlation
+        $win32Disks = Get-CimInstance -ClassName Win32_DiskDrive -ErrorAction SilentlyContinue
+        
+        foreach ($mDisk in $msftDisks) {
+            # Correlate via Index/Number
+            $wDisk = $win32Disks | Where-Object { $_.Index -eq $mDisk.Number } | Select-Object -First 1
+            
+            # Determine Name/Model
+            $friendlyName = if ($wDisk) { $wDisk.Model } else { $mDisk.FriendlyName }
+            $pnpId = if ($wDisk) { $wDisk.PNPDeviceID } else { "Unknown" }
+            
+            # BusType Detection (MSFT_Disk.BusType Enum)
+            # 17 = NVMe, 11 = SATA, 7 = USB, 8 = RAID
+            $busEnum = $mDisk.BusType
+            $isNVMe = ($busEnum -eq 17)
+            
+            # Fallback for "SCSI" masquerading as NVMe
+            if (-not $isNVMe -and ($pnpId -match "NVMe" -or $friendlyName -match "NVMe")) {
+                $isNVMe = $true
+            }
+            
+            # Bus Label
+            $busLabel = switch ($busEnum) {
+                17 { "NVMe" }
+                11 { "SATA" }
+                7  { "USB" }
+                8  { "RAID" }
+                default { 
+                    if ($isNVMe) { "NVMe" } else { "Other" }
+                }
+            }
+            
+            # System/Boot Status
+            $isBoot = ($mDisk.IsBoot -eq $true -or $mDisk.IsSystem -eq $true)
+            
+            # Size Formatting
+            $sizeGB = [math]::Round($mDisk.Size / 1GB, 0)
+            
+            [void]$drives.Add([PSCustomObject]@{
+                Number      = $mDisk.Number
+                Name        = $friendlyName
+                Size        = "$sizeGB GB"
+                IsNVMe      = $isNVMe
+                BusType     = $busLabel
+                IsBoot      = $isBoot
+                PNPDeviceID = $pnpId
+            })
+        }
+        
+        # Sort by Disk Number
+        $drives = [System.Collections.ArrayList]@($drives | Sort-Object Number)
+    }
+    catch {
+        Write-Log "Error scanning drives: $($_.Exception.Message)" -Level "WARNING"
+    }
+    
+    return $drives
+}
+
+# Check if any NVMe drives exist in the system
+function Test-NVMePresent {
+    $drives = Get-SystemDrives
+    foreach ($drive in $drives) {
+        if ($drive.IsNVMe) {
+            return $true
+        }
+    }
+    return $false
+}
+
+# Modern Drive Status Row with Iconography and Tooltips
+function New-DriveStatusRow {
+    param(
+        [System.Drawing.Point]$Location,
+        [PSCustomObject]$DriveObject
+    )
+    
+    # Adjust width to account for possible scrollbar (460px safe width)
+    $panel = New-Object System.Windows.Forms.Panel
+    $panel.Location = $Location
+    $panel.Size = New-Object System.Drawing.Size(470, 24)
+    $panel.BackColor = [System.Drawing.Color]::Transparent
+    
+    # --- Iconography ---
+    $iconChar = "🖴" # Default generic
+    $iconColor = $script:Colors.TextMuted
+    
+    switch ($DriveObject.BusType) {
+        "NVMe" { 
+            $iconChar = "⚡" 
+            $iconColor = $script:Colors.Warning 
+        }
+        "USB" { 
+            $iconChar = "🔌" 
+            $iconColor = $script:Colors.Info 
+        }
+        "SATA" {
+            $iconChar = "🖴"
+            $iconColor = $script:Colors.TextSecondary
+        }
+    }
+    
+    # Icon Label
+    $iconLabel = New-Object System.Windows.Forms.Label
+    $iconLabel.Location = New-Object System.Drawing.Point(0, 0)
+    $iconLabel.Size = New-Object System.Drawing.Size(24, 24)
+    $iconLabel.Text = $iconChar
+    $iconLabel.ForeColor = $iconColor
+    $iconLabel.Font = New-Object System.Drawing.Font("Segoe UI Symbol", 10)
+    $iconLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    
+    # Disk Number Label
+    $numLabel = New-Object System.Windows.Forms.Label
+    $numLabel.Location = New-Object System.Drawing.Point(26, 3)
+    $numLabel.Size = New-Object System.Drawing.Size(55, 18)
+    $numLabel.ForeColor = $script:Colors.TextPrimary
+    $numLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+    $numLabel.Text = "Disk $($DriveObject.Number)"
+    
+    # Model Label
+    $nameLabel = New-Object System.Windows.Forms.Label
+    $nameLabel.Location = New-Object System.Drawing.Point(85, 3)
+    $nameLabel.Size = New-Object System.Drawing.Size(200, 18)
+    $nameLabel.ForeColor = $script:Colors.TextSecondary
+    $nameLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    # Truncate
+    $displayName = if ($DriveObject.Name.Length -gt 28) { $DriveObject.Name.Substring(0, 26) + "..." } else { $DriveObject.Name }
+    $nameLabel.Text = $displayName
+    
+    # Badges (BusType + Boot)
+    $badgePanel = New-Object System.Windows.Forms.FlowLayoutPanel
+    $badgePanel.Location = New-Object System.Drawing.Point(290, 3)
+    $badgePanel.Size = New-Object System.Drawing.Size(100, 18)
+    $badgePanel.FlowDirection = [System.Windows.Forms.FlowDirection]::LeftToRight
+    $badgePanel.WrapContents = $false
+    
+    # Bus Badge
+    $busLabel = New-Object System.Windows.Forms.Label
+    $busLabel.AutoSize = $true
+    $busLabel.Text = $DriveObject.BusType
+    $busLabel.Font = New-Object System.Drawing.Font("Segoe UI", 7.5, [System.Drawing.FontStyle]::Bold)
+    $busLabel.ForeColor = if ($DriveObject.IsNVMe) { $script:Colors.Success } else { $script:Colors.TextDimmed }
+    $busLabel.Padding = New-Object System.Windows.Forms.Padding(0, 0, 5, 0)
+    $badgePanel.Controls.Add($busLabel)
+    
+    # Boot Badge
+    if ($DriveObject.IsBoot) {
+        $bootLabel = New-Object System.Windows.Forms.Label
+        $bootLabel.AutoSize = $true
+        $bootLabel.Text = "BOOT"
+        $bootLabel.Font = New-Object System.Drawing.Font("Segoe UI", 7.5, [System.Drawing.FontStyle]::Bold)
+        $bootLabel.ForeColor = $script:Colors.Accent
+        $badgePanel.Controls.Add($bootLabel)
+    }
+    
+    # Size Label
+    $sizeLabel = New-Object System.Windows.Forms.Label
+    $sizeLabel.Location = New-Object System.Drawing.Point(395, 3)
+    $sizeLabel.Size = New-Object System.Drawing.Size(70, 18)
+    $sizeLabel.ForeColor = $script:Colors.TextDimmed
+    $sizeLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $sizeLabel.Text = $DriveObject.Size
+    $sizeLabel.TextAlign = [System.Drawing.ContentAlignment]::TopRight
+    
+    $panel.Controls.Add($iconLabel)
+    $panel.Controls.Add($numLabel)
+    $panel.Controls.Add($nameLabel)
+    $panel.Controls.Add($badgePanel)
+    $panel.Controls.Add($sizeLabel)
+    
+    # Tooltip Logic
+    $tipText = "PNP ID: $($DriveObject.PNPDeviceID)`nModel: $($DriveObject.Name)"
+    $script:ToolTipProvider.SetToolTip($panel, $tipText)
+    $script:ToolTipProvider.SetToolTip($nameLabel, $tipText)
+    $script:ToolTipProvider.SetToolTip($iconLabel, $tipText)
+    
+    return $panel
+}
+
+# Global variable to track NVMe presence
+$script:HasNVMeDrives = $false
 
 # ===========================================================================
 # SECTION 4: LOGGING SYSTEM
@@ -633,10 +847,8 @@ function Write-Log {
     $timestamp = Get-Date -Format "HH:mm:ss"
     $logEntry = "[$timestamp] [$Level] $Message"
     
-    # Store in history
     [void]$script:Config.LogHistory.Add($logEntry)
     
-    # Append to RichTextBox with color coding
     if ($script:rtbOutput) {
         $color = switch ($Level) {
             "SUCCESS" { $script:Colors.Success }
@@ -702,54 +914,64 @@ function Test-WindowsCompatibility {
 }
 
 function Test-PatchStatus {
-    Write-Log "Checking current patch status..."
+    Write-Log "Checking current patch status (5 components)..." -Level "DEBUG"
     
-    $result = [PSCustomObject]@{
-        Applied = $false
-        Partial = $false
-        Keys    = @()
-        Total   = $script:Config.FeatureIDs.Count
-    }
-    
-    if (-not (Test-Path $script:Config.RegistryPath)) {
-        Write-Log "Registry path does not exist - Patch NOT applied" -Level "INFO"
-        return $result
-    }
-    
+    $count = 0
     $appliedKeys = [System.Collections.ArrayList]::new()
-    foreach ($id in $script:Config.FeatureIDs) {
-        try {
-            $value = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue
-            if ($null -ne $value) {
-                $propValue = $value | Select-Object -ExpandProperty $id -ErrorAction SilentlyContinue
+    
+    # 1. Check Feature Flags (3 Items)
+    if (Test-Path $script:Config.RegistryPath) {
+        foreach ($id in $script:Config.FeatureIDs) {
+            $val = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue
+            if ($null -ne $val) {
+                $propValue = $val | Select-Object -ExpandProperty $id -ErrorAction SilentlyContinue
                 if ($propValue -eq 1) {
+                    $count++
                     [void]$appliedKeys.Add($id)
                 }
             }
         }
-        catch {
-            # Key doesn't exist, continue
+    }
+    
+    # 2. Check SafeBoot Minimal (1 Item)
+    if (Test-Path $script:Config.SafeBootMinimal) {
+        $val = Get-ItemProperty -Path $script:Config.SafeBootMinimal -Name "(Default)" -ErrorAction SilentlyContinue
+        if ($val -and $val."(Default)" -eq $script:Config.SafeBootValue) {
+            $count++
+            [void]$appliedKeys.Add("SafeBootMinimal")
         }
     }
     
-    $result.Keys = $appliedKeys.ToArray()
-    $result.Applied = ($appliedKeys.Count -eq $script:Config.FeatureIDs.Count)
-    $result.Partial = ($appliedKeys.Count -gt 0 -and $appliedKeys.Count -lt $script:Config.FeatureIDs.Count)
+    # 3. Check SafeBoot Network (1 Item)
+    if (Test-Path $script:Config.SafeBootNetwork) {
+        $val = Get-ItemProperty -Path $script:Config.SafeBootNetwork -Name "(Default)" -ErrorAction SilentlyContinue
+        if ($val -and $val."(Default)" -eq $script:Config.SafeBootValue) {
+            $count++
+            [void]$appliedKeys.Add("SafeBootNetwork")
+        }
+    }
+    
+    $result = [PSCustomObject]@{
+        Applied = ($count -eq $script:Config.TotalComponents)
+        Partial = ($count -gt 0 -and $count -lt $script:Config.TotalComponents)
+        Count   = $count
+        Total   = $script:Config.TotalComponents
+        Keys    = $appliedKeys
+    }
     
     if ($result.Applied) {
-        Write-Log "Patch status: APPLIED ($($appliedKeys.Count)/$($result.Total) keys)" -Level "SUCCESS"
+        Write-Log "Patch status: APPLIED ($count/$($script:Config.TotalComponents) components)" -Level "SUCCESS"
     }
     elseif ($result.Partial) {
-        Write-Log "Patch status: PARTIAL ($($appliedKeys.Count)/$($result.Total) keys)" -Level "WARNING"
+        Write-Log "Patch status: PARTIAL ($count/$($script:Config.TotalComponents) components)" -Level "WARNING"
     }
     else {
-        Write-Log "Patch status: NOT APPLIED" -Level "INFO"
+        Write-Log "Patch status: NOT APPLIED (0/$($script:Config.TotalComponents) components)" -Level "INFO"
     }
     
     return $result
 }
 
-# Status indicator update - icon gets color, text stays neutral
 function Update-StatusIndicator {
     param(
         [System.Windows.Forms.Panel]$Panel,
@@ -769,10 +991,8 @@ function Update-StatusIndicator {
         default    { $script:Colors.TextMuted }
     }
     
-    # Only icon gets the status color
     if ($icon) { $icon.BackColor = $color }
     
-    # Text stays neutral for readability
     if ($label) { 
         $label.Text = $Text 
         $label.ForeColor = $script:Colors.TextSecondary
@@ -847,7 +1067,6 @@ function New-SafeRestorePoint {
     
     Write-Log "Creating system restore point..."
     
-    # Ensure protection is enabled first
     $protectionReady = Enable-SystemProtectionSafe
     
     if (-not $protectionReady) {
@@ -868,7 +1087,6 @@ function New-SafeRestorePoint {
     }
     
     try {
-        # Attempt to create restore point
         Checkpoint-Computer -Description $Description -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
         Write-Log "Restore point created: '$Description'" -Level "SUCCESS"
         return $true
@@ -899,190 +1117,103 @@ function New-SafeRestorePoint {
 # SECTION 7: REGISTRY OPERATIONS
 # ===========================================================================
 
-function Backup-RegistryPath {
-    param([string]$BackupName = "NVMe_RegBackup")
-    
-    $backupDir = $script:Config.WorkingDir
-    $backupFile = Join-Path $backupDir "$BackupName`_$(Get-Date -Format 'yyyyMMdd_HHmmss').reg"
-    
-    try {
-        if (-not (Test-Path $backupDir)) {
-            New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
-        }
-        
-        if (Test-Path $script:Config.RegistryPath) {
-            $regExportPath = $script:Config.RegistryPath -replace "HKLM:\\", "HKEY_LOCAL_MACHINE\"
-            $process = Start-Process -FilePath "reg.exe" -ArgumentList "export `"$regExportPath`" `"$backupFile`" /y" -Wait -PassThru -NoNewWindow
-            
-            if ($process.ExitCode -eq 0 -and (Test-Path $backupFile)) {
-                Write-Log "Registry backup saved: $backupFile" -Level "SUCCESS"
-                return $backupFile
-            }
-        }
-        else {
-            Write-Log "No existing registry path to backup" -Level "INFO"
-            return $null
-        }
-    }
-    catch {
-        Write-Log "Registry backup failed: $($_.Exception.Message)" -Level "WARNING"
-    }
-    
-    return $null
-}
-
-# System Registry (HKLM) Backup
-function Backup-SystemRegistry {
-    Write-Log "========================================" -Level "INFO"
-    Write-Log "STARTING SYSTEM REGISTRY (HKLM) BACKUP" -Level "INFO"
-    Write-Log "========================================" -Level "INFO"
-    
-    Set-ButtonsEnabled -Enabled $false
-    $script:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-    
-    try {
-        $backupDir = $script:Config.WorkingDir
-        
-        if (-not (Test-Path $backupDir)) {
-            Write-Log "Creating backup folder: $backupDir"
-            New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
-            Write-Log "Backup folder created" -Level "SUCCESS"
-        }
-        
-        $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-        $backupFile = Join-Path $backupDir "SystemRegistry_HKLM_$timestamp.reg"
-        
-        Write-Log "Exporting HKLM registry to: $backupFile"
-        Write-Log "This may take several minutes..." -Level "WARNING"
-        
-        [System.Windows.Forms.Application]::DoEvents()
-        
-        # Export HKLM (system registry hive)
-        $process = Start-Process -FilePath "reg.exe" -ArgumentList "export HKLM `"$backupFile`" /y" -Wait -PassThru -NoNewWindow
-        
-        if ($process.ExitCode -eq 0 -and (Test-Path $backupFile)) {
-            $fileInfo = Get-Item $backupFile
-            $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
-            
-            Write-Log "========================================" -Level "INFO"
-            Write-Log "SYSTEM REGISTRY BACKUP COMPLETE" -Level "SUCCESS"
-            Write-Log "Location: $backupFile" -Level "INFO"
-            Write-Log "Size: $fileSizeMB MB" -Level "INFO"
-            Write-Log "========================================" -Level "INFO"
-            
-            [System.Windows.Forms.MessageBox]::Show(
-                "System registry (HKLM) backup completed successfully!`n`nLocation: $backupFile`nSize: $fileSizeMB MB",
-                "Backup Complete",
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Information
-            )
-        }
-        else {
-            Write-Log "Registry export failed with exit code: $($process.ExitCode)" -Level "ERROR"
-            [System.Windows.Forms.MessageBox]::Show(
-                "Failed to create registry backup.`n`nPlease check the activity log for details.",
-                "Backup Failed",
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            )
-        }
-    }
-    catch {
-        Write-Log "BACKUP FAILED: $($_.Exception.Message)" -Level "ERROR"
-        [System.Windows.Forms.MessageBox]::Show(
-            "An error occurred during backup:`n`n$($_.Exception.Message)",
-            "Backup Error",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Error
-        )
-    }
-    finally {
-        $script:form.Cursor = [System.Windows.Forms.Cursors]::Default
-        Set-ButtonsEnabled -Enabled $true
-    }
-}
-
 function Install-NVMePatch {
     Write-Log "========================================" -Level "INFO"
     Write-Log "STARTING PATCH INSTALLATION" -Level "INFO"
+    Write-Log "Target Components: $($script:Config.TotalComponents)" -Level "DEBUG"
     Write-Log "========================================" -Level "INFO"
     
-    # Disable buttons during operation
     Set-ButtonsEnabled -Enabled $false
     $script:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
     
+    $successCount = 0
+    
     try {
-        # Step 1: Create restore point
-        Write-Log "Step 1/5: Creating system backup..."
+        # --- PREPARATION ---
+        Write-Log "Step 1/3: Creating system backup..."
         $restoreOK = New-SafeRestorePoint -Description "Pre-NVMe-Driver-Patch"
         if (-not $restoreOK) {
             Write-Log "Installation cancelled" -Level "WARNING"
             return
         }
         
-        # Step 2: Backup existing registry
-        Write-Log "Step 2/5: Backing up registry..."
-        Backup-RegistryPath -BackupName "Pre_Install"
+        # --- COMPONENT INSTALLATION ---
+        Write-Log "Step 2/3: Applying 5 registry components..."
         
-        # Step 3: Create registry path if needed
-        Write-Log "Step 3/5: Preparing registry..."
+        # 1. Feature Management Keys
         if (-not (Test-Path $script:Config.RegistryPath)) {
-            Write-Log "Creating registry path..."
+            Write-Log "Creating registry path: Overrides" -Level "INFO"
             New-Item -Path $script:Config.RegistryPath -Force | Out-Null
-            Write-Log "Registry path created" -Level "SUCCESS"
         }
         
-        # Step 4: Apply feature flags
-        Write-Log "Step 4/5: Applying feature flags..."
-        $successCount = 0
         foreach ($id in $script:Config.FeatureIDs) {
             try {
                 New-ItemProperty -Path $script:Config.RegistryPath -Name $id -Value 1 -PropertyType DWORD -Force | Out-Null
-                Write-Log "  Applied: $id = 1" -Level "SUCCESS"
-                $successCount++
+                
+                # Verify immediately
+                $verify = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue
+                if ($verify.$id -eq 1) {
+                    Write-Log "  [OK] Feature Flag: $id" -Level "SUCCESS"
+                    $successCount++
+                } else {
+                    Write-Log "  [FAIL] Feature Flag: $id" -Level "ERROR"
+                }
             }
             catch {
-                Write-Log "  Failed: $id - $($_.Exception.Message)" -Level "ERROR"
+                Write-Log "  [FAIL] Feature Flag $id - $($_.Exception.Message)" -Level "ERROR"
             }
         }
         
-        # Step 5: Add Safe Mode support keys (prevents boot issues in Safe Mode)
-        Write-Log "Step 5/5: Configuring Safe Mode support..."
-        $safeBootSuccess = $true
-        
-        # SafeBoot\Minimal key (Safe Mode)
+        # 2. SafeBoot Minimal
         try {
             if (-not (Test-Path $script:Config.SafeBootMinimal)) {
                 New-Item -Path $script:Config.SafeBootMinimal -Force | Out-Null
             }
             Set-ItemProperty -Path $script:Config.SafeBootMinimal -Name "(Default)" -Value $script:Config.SafeBootValue -Force
-            Write-Log "  SafeBoot\Minimal configured" -Level "SUCCESS"
+            
+            # Verify
+            $val = Get-ItemProperty -Path $script:Config.SafeBootMinimal -Name "(Default)" -ErrorAction SilentlyContinue
+            if ($val."(Default)" -eq $script:Config.SafeBootValue) {
+                Write-Log "  [OK] SafeBoot Minimal Support" -Level "SUCCESS"
+                $successCount++
+            } else {
+                Write-Log "  [FAIL] SafeBoot Minimal Support" -Level "ERROR"
+            }
         }
         catch {
-            Write-Log "  Failed to configure SafeBoot\Minimal: $($_.Exception.Message)" -Level "ERROR"
-            $safeBootSuccess = $false
+            Write-Log "  [FAIL] SafeBoot Minimal: $($_.Exception.Message)" -Level "ERROR"
         }
         
-        # SafeBoot\Network key (Safe Mode with Networking)
+        # 3. SafeBoot Network
         try {
             if (-not (Test-Path $script:Config.SafeBootNetwork)) {
                 New-Item -Path $script:Config.SafeBootNetwork -Force | Out-Null
             }
             Set-ItemProperty -Path $script:Config.SafeBootNetwork -Name "(Default)" -Value $script:Config.SafeBootValue -Force
-            Write-Log "  SafeBoot\Network configured" -Level "SUCCESS"
+            
+            # Verify
+            $val = Get-ItemProperty -Path $script:Config.SafeBootNetwork -Name "(Default)" -ErrorAction SilentlyContinue
+            if ($val."(Default)" -eq $script:Config.SafeBootValue) {
+                Write-Log "  [OK] SafeBoot Network Support" -Level "SUCCESS"
+                $successCount++
+            } else {
+                Write-Log "  [FAIL] SafeBoot Network Support" -Level "ERROR"
+            }
         }
         catch {
-            Write-Log "  Failed to configure SafeBoot\Network: $($_.Exception.Message)" -Level "ERROR"
-            $safeBootSuccess = $false
+            Write-Log "  [FAIL] SafeBoot Network: $($_.Exception.Message)" -Level "ERROR"
         }
         
+        # --- FINAL SUMMARY ---
+        Write-Log "Step 3/3: Validating installation..."
         Write-Log "========================================" -Level "INFO"
-        if ($successCount -eq $script:Config.FeatureIDs.Count -and $safeBootSuccess) {
-            Write-Log "INSTALLATION COMPLETE" -Level "SUCCESS"
+        
+        if ($successCount -eq $script:Config.TotalComponents) {
+            Write-Log "Patch Status: SUCCESS – Applied 5/5 components" -Level "SUCCESS"
             Write-Log "Please RESTART your computer to apply changes" -Level "WARNING"
             
             $result = [System.Windows.Forms.MessageBox]::Show(
-                "Patch applied successfully!`n`nRestart your computer now to enable the new NVMe driver?",
+                "Patch applied successfully (5/5 components).`n`nRestart your computer now to enable the new NVMe driver?",
                 "Installation Complete",
                 [System.Windows.Forms.MessageBoxButtons]::YesNo,
                 [System.Windows.Forms.MessageBoxIcon]::Question
@@ -1094,7 +1225,13 @@ function Install-NVMePatch {
             }
         }
         else {
-            Write-Log "PARTIAL INSTALLATION (some components may have failed)" -Level "WARNING"
+            Write-Log "Patch Status: PARTIAL – Applied $successCount/$($script:Config.TotalComponents) components" -Level "WARNING"
+            [System.Windows.Forms.MessageBox]::Show(
+                "The patch was only partially applied ($successCount/5).`nCheck the log for details.",
+                "Partial Success",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            )
         }
         Write-Log "========================================" -Level "INFO"
     }
@@ -1116,70 +1253,76 @@ function Uninstall-NVMePatch {
     Set-ButtonsEnabled -Enabled $false
     $script:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
     
+    $removedCount = 0
+    
     try {
-        # Backup before removal
-        Write-Log "Backing up current registry state..."
-        Backup-RegistryPath -BackupName "Pre_Uninstall"
+        Write-Log "Removing 5 registry components..."
         
-        # Remove feature flags
-        Write-Log "Removing feature flags..."
-        $removedCount = 0
-        
+        # 1. Remove Feature Flags (3 items)
         if (Test-Path $script:Config.RegistryPath) {
             foreach ($id in $script:Config.FeatureIDs) {
-                try {
-                    $prop = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue
-                    if ($null -ne $prop) {
+                $exists = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue
+                if ($exists) {
+                    try {
                         Remove-ItemProperty -Path $script:Config.RegistryPath -Name $id -Force -ErrorAction Stop
-                        Write-Log "  Removed: $id" -Level "SUCCESS"
+                        Write-Log "  [REMOVED] Feature Flag: $id" -Level "SUCCESS"
                         $removedCount++
+                    } catch {
+                        Write-Log "  [FAIL] Failed to remove $($id): $($_.Exception.Message)" -Level "ERROR"
                     }
-                    else {
-                        Write-Log "  Skipped: $id (not present)" -Level "INFO"
-                    }
-                }
-                catch {
-                    Write-Log "  Failed to remove: $id - $($_.Exception.Message)" -Level "ERROR"
+                } else {
+                    Write-Log "  [ABSENT] Feature Flag: $id (Already gone)" -Level "INFO"
                 }
             }
-        }
-        else {
-            Write-Log "Feature flags registry path does not exist" -Level "INFO"
+        } else {
+            Write-Log "  [ABSENT] Feature Flags path not found" -Level "INFO"
         }
         
-        # Remove Safe Mode keys
-        Write-Log "Removing Safe Mode configuration..."
-        
-        # Remove SafeBoot\Minimal key
+        # 2. Remove SafeBoot Minimal
         if (Test-Path $script:Config.SafeBootMinimal) {
             try {
                 Remove-Item -Path $script:Config.SafeBootMinimal -Force -ErrorAction Stop
-                Write-Log "  Removed: SafeBoot\Minimal" -Level "SUCCESS"
+                Write-Log "  [REMOVED] SafeBoot Minimal" -Level "SUCCESS"
+                $removedCount++
+            } catch {
+                Write-Log "  [FAIL] SafeBoot Minimal: $($_.Exception.Message)" -Level "ERROR"
             }
-            catch {
-                Write-Log "  Failed to remove SafeBoot\Minimal: $($_.Exception.Message)" -Level "WARNING"
-            }
-        }
-        else {
-            Write-Log "  Skipped: SafeBoot\Minimal (not present)" -Level "INFO"
+        } else {
+            Write-Log "  [ABSENT] SafeBoot Minimal (Already gone)" -Level "INFO"
         }
         
-        # Remove SafeBoot\Network key
+        # 3. Remove SafeBoot Network
         if (Test-Path $script:Config.SafeBootNetwork) {
             try {
                 Remove-Item -Path $script:Config.SafeBootNetwork -Force -ErrorAction Stop
-                Write-Log "  Removed: SafeBoot\Network" -Level "SUCCESS"
+                Write-Log "  [REMOVED] SafeBoot Network" -Level "SUCCESS"
+                $removedCount++
+            } catch {
+                Write-Log "  [FAIL] SafeBoot Network: $($_.Exception.Message)" -Level "ERROR"
             }
-            catch {
-                Write-Log "  Failed to remove SafeBoot\Network: $($_.Exception.Message)" -Level "WARNING"
-            }
-        }
-        else {
-            Write-Log "  Skipped: SafeBoot\Network (not present)" -Level "INFO"
+        } else {
+            Write-Log "  [ABSENT] SafeBoot Network (Already gone)" -Level "INFO"
         }
         
         Write-Log "========================================" -Level "INFO"
-        Write-Log "REMOVAL COMPLETE ($removedCount feature flags removed)" -Level "SUCCESS"
+        
+        # Logic for summary based on what was actually done
+        if ($removedCount -eq 5) {
+             Write-Log "Patch Status: REMOVED – Removed 5/5 components" -Level "SUCCESS"
+        }
+        elseif ($removedCount -gt 0) {
+             Write-Log "Patch Status: PARTIAL – Removed $removedCount/5 components" -Level "WARNING"
+        }
+        else {
+             # If nothing was found to remove, verify system is clean
+             $finalStatus = Test-PatchStatus
+             if ($finalStatus.Count -eq 0) {
+                 Write-Log "Patch Status: CLEAN – No components found to remove" -Level "SUCCESS"
+             } else {
+                 Write-Log "Patch Status: ERROR – Removal failed or incomplete" -Level "ERROR"
+             }
+        }
+        
         Write-Log "Please RESTART your computer" -Level "WARNING"
         Write-Log "========================================" -Level "INFO"
     }
@@ -1203,7 +1346,6 @@ function Set-ButtonsEnabled {
     if ($script:btnApply) { $script:btnApply.Enabled = $Enabled }
     if ($script:btnRemove) { $script:btnRemove.Enabled = $Enabled }
     if ($script:btnBackup) { $script:btnBackup.Enabled = $Enabled }
-    if ($script:btnFullBackup) { $script:btnFullBackup.Enabled = $Enabled }
     if ($script:btnExport) { $script:btnExport.Enabled = $Enabled }
     
     [System.Windows.Forms.Application]::DoEvents()
@@ -1212,47 +1354,33 @@ function Set-ButtonsEnabled {
 function Refresh-StatusDisplay {
     $status = Test-PatchStatus
     
-    # Safely access properties
-    $isApplied = $false
-    $isPartial = $false
-    $keyCount = 0
-    $totalCount = $script:Config.FeatureIDs.Count
-    
-    if ($null -ne $status) {
-        $isApplied = [bool]$status.Applied
-        $isPartial = [bool]$status.Partial
-        if ($null -ne $status.Keys) {
-            $keyCount = @($status.Keys).Count
-        }
-    }
-    
-    # Update individual key status indicators
+    # Update individual key dots
     if ($script:keyRows) {
-        # Feature flags
+        # Features
         foreach ($id in $script:Config.FeatureIDs) {
             if ($script:keyRows.ContainsKey($id)) {
-                $applied = Test-RegistryKeyValue -Path $script:Config.RegistryPath -Name $id -ExpectedValue 1
-                Update-KeyStatusRow -Row $script:keyRows[$id] -IsApplied $applied
+                $isPresent = ($status.Keys -contains $id)
+                Update-KeyStatusRow -Row $script:keyRows[$id] -IsApplied $isPresent
             }
         }
         
-        # Safe Mode keys
+        # SafeBoot
         if ($script:keyRows.ContainsKey("SafeBootMinimal")) {
-            $applied = Test-Path $script:Config.SafeBootMinimal
-            Update-KeyStatusRow -Row $script:keyRows["SafeBootMinimal"] -IsApplied $applied
+            $isPresent = ($status.Keys -contains "SafeBootMinimal")
+            Update-KeyStatusRow -Row $script:keyRows["SafeBootMinimal"] -IsApplied $isPresent
         }
         if ($script:keyRows.ContainsKey("SafeBootNetwork")) {
-            $applied = Test-Path $script:Config.SafeBootNetwork
-            Update-KeyStatusRow -Row $script:keyRows["SafeBootNetwork"] -IsApplied $applied
+            $isPresent = ($status.Keys -contains "SafeBootNetwork")
+            Update-KeyStatusRow -Row $script:keyRows["SafeBootNetwork"] -IsApplied $isPresent
         }
     }
     
-    if ($isApplied) {
+    # Update Main Status Panel & Button Colors
+    if ($status.Applied) {
+        # 5/5 Present
         Update-StatusIndicator -Panel $script:pnlPatchStatus -Status "OK" -Text "Patch Applied"
         if ($script:btnApply) {
             $script:btnApply.Text = "REINSTALL"
-            # Swap visual emphasis - Remove becomes primary when patch is applied
-            # Update Tag safely
             $tag = $script:btnApply.Tag
             if ($tag -is [hashtable]) {
                 $tag['Original'] = $script:Colors.SurfaceLight
@@ -1268,14 +1396,15 @@ function Refresh-StatusDisplay {
             $script:btnRemove.BackColor = $script:Colors.Danger
         }
     }
-    elseif ($isPartial) {
-        Update-StatusIndicator -Panel $script:pnlPatchStatus -Status "Warning" -Text "Partial ($keyCount/$totalCount)"
+    elseif ($status.Partial) {
+        # 1 to 4 Present
+        Update-StatusIndicator -Panel $script:pnlPatchStatus -Status "Warning" -Text "Partial ($($status.Count)/5)"
     }
     else {
+        # 0 Present
         Update-StatusIndicator -Panel $script:pnlPatchStatus -Status "Neutral" -Text "Not Applied"
         if ($script:btnApply) {
             $script:btnApply.Text = "APPLY PATCH"
-            # Apply is primary when patch is not installed
             $tag = $script:btnApply.Tag
             if ($tag -is [hashtable]) {
                 $tag['Original'] = $script:Colors.Success
@@ -1297,8 +1426,23 @@ function Show-ConfirmDialog {
     param(
         [string]$Title,
         [string]$Message,
-        [string]$WarningText = ""
+        [string]$WarningText = "",
+        [bool]$CheckNVMe = $false
     )
+    
+    if ($CheckNVMe -and -not $script:HasNVMeDrives) {
+        $noNVMeResult = [System.Windows.Forms.MessageBox]::Show(
+            "NO NVMe DRIVES DETECTED ON THIS SYSTEM!`n`nThis patch only affects NVMe drives using the Windows inbox driver.`nYour system appears to have no NVMe drives.`n`nDo you still want to continue?",
+            "No NVMe Detected",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        )
+        
+        if ($noNVMeResult -ne [System.Windows.Forms.DialogResult]::Yes) {
+            Write-Log "Operation cancelled - No NVMe drives detected" -Level "WARNING"
+            return $false
+        }
+    }
     
     $fullMessage = $Message
     if ($WarningText) {
@@ -1325,29 +1469,26 @@ $script:ToolTipProvider.AutoPopDelay = 10000
 $script:ToolTipProvider.InitialDelay = 500
 $script:ToolTipProvider.ReshowDelay = 200
 
-# Main Form
+# Main Form - WIDE LAYOUT REDESIGN
 $script:form = New-Object System.Windows.Forms.Form
 $script:form.Text = "$($script:Config.AppName) v$($script:Config.AppVersion)"
-$script:form.Size = New-Object System.Drawing.Size(580, 940)
+$script:form.Size = New-Object System.Drawing.Size(1125, 760) # Increased width significantly
 $script:form.StartPosition = "CenterScreen"
 $script:form.FormBorderStyle = "FixedSingle"
 $script:form.MaximizeBox = $false
 $script:form.BackColor = $script:Colors.Background
 $script:form.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 
-# Enable double buffering on form to reduce flicker
 $script:form.GetType().GetProperty("DoubleBuffered", [System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic).SetValue($script:form, $true, $null)
 
 # ============ HEADER SECTION ============
 $pnlHeader = New-Object System.Windows.Forms.Panel
 $pnlHeader.Location = New-Object System.Drawing.Point(0, 0)
-$pnlHeader.Size = New-Object System.Drawing.Size(580, 101)
+$pnlHeader.Size = New-Object System.Drawing.Size(1125, 101) # Full width
 $pnlHeader.BackColor = $script:Colors.Surface
 
-# Enable double buffering
 $pnlHeader.GetType().GetProperty("DoubleBuffered", [System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic).SetValue($pnlHeader, $true, $null)
 
-# App Icon/Logo area
 $lblIcon = New-Object System.Windows.Forms.Label
 $lblIcon.Text = "NVMe"
 $lblIcon.Location = New-Object System.Drawing.Point(24, 24)
@@ -1375,7 +1516,6 @@ $lblSubtitle.ForeColor = $script:Colors.TextMuted
 $lblSubtitle.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $pnlHeader.Controls.Add($lblSubtitle)
 
-# Header divider line with proper GDI cleanup
 $pnlHeader.Add_Paint({
     param($sender, $e)
     $pen = $null
@@ -1390,92 +1530,117 @@ $pnlHeader.Add_Paint({
 
 $script:form.Controls.Add($pnlHeader)
 
-# ============ STATUS CARD ============
-$cardStatus = New-CardPanel -Location (New-Object System.Drawing.Point(20, 117)) -Size (New-Object System.Drawing.Size(524, 96)) -Title "System Status"
+# ============ LEFT COLUMN (System Status, Drives, Keys) ============
 
-# Patch Status Indicator
+# 1. STATUS CARD
+$cardStatus = New-CardPanel -Location (New-Object System.Drawing.Point(20, 120)) -Size (New-Object System.Drawing.Size(524, 96)) -Title "System Status"
+
 $script:pnlPatchStatus = New-StatusIndicator -Location (New-Object System.Drawing.Point(16, 36)) -Size (New-Object System.Drawing.Size(240, 50)) -Label "Driver Patch"
 $cardStatus.Controls.Add($script:pnlPatchStatus)
 
-# Windows Status Indicator
 $script:pnlWinStatus = New-StatusIndicator -Location (New-Object System.Drawing.Point(270, 36)) -Size (New-Object System.Drawing.Size(240, 50)) -Label "Windows Version"
 $cardStatus.Controls.Add($script:pnlWinStatus)
 
 $script:form.Controls.Add($cardStatus)
 
-# ============ WARNING CARD ============
-$cardWarning = New-Object System.Windows.Forms.Panel
-$cardWarning.Location = New-Object System.Drawing.Point(20, 225)
-$cardWarning.Size = New-Object System.Drawing.Size(524, 56)
-$cardWarning.BackColor = $script:Colors.WarningDim
-Set-ControlTagData -Control $cardWarning -NewData @{ CornerRadius = 8 }
-Set-RoundedCorners -Control $cardWarning -Radius 8
+# 2. DETECTED DRIVES CARD
+$script:cardDrives = New-CardPanel -Location (New-Object System.Drawing.Point(20, 230)) -Size (New-Object System.Drawing.Size(524, 180)) -Title "Detected Drives"
 
-# Warning icon
-$lblWarningIcon = New-Object System.Windows.Forms.Label
-$lblWarningIcon.Text = "!"
-$lblWarningIcon.Location = New-Object System.Drawing.Point(16, 12)
-$lblWarningIcon.Size = New-Object System.Drawing.Size(32, 32)
-$lblWarningIcon.ForeColor = $script:Colors.Warning
-$lblWarningIcon.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
-$lblWarningIcon.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-$lblWarningIcon.BackColor = [System.Drawing.Color]::FromArgb(60, 50, 30)
-Set-RoundedCorners -Control $lblWarningIcon -Radius 16
-$cardWarning.Controls.Add($lblWarningIcon)
+$script:lblDrivesStatus = New-Object System.Windows.Forms.Label
+$script:lblDrivesStatus.Location = New-Object System.Drawing.Point(16, 40)
+$script:lblDrivesStatus.Size = New-Object System.Drawing.Size(492, 20)
+$script:lblDrivesStatus.ForeColor = $script:Colors.TextMuted
+$script:lblDrivesStatus.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$script:lblDrivesStatus.Text = "Scanning drives..."
+$script:cardDrives.Controls.Add($script:lblDrivesStatus)
 
-$lblWarningText = New-Object System.Windows.Forms.Label
-$lblWarningText.Text = "This tool modifies system registry. A restore point will be created automatically before any changes are made."
-$lblWarningText.Location = New-Object System.Drawing.Point(58, 12)
-$lblWarningText.Size = New-Object System.Drawing.Size(450, 32)
-$lblWarningText.ForeColor = $script:Colors.Warning
-$lblWarningText.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
-$cardWarning.Controls.Add($lblWarningText)
+# Scrollable Drive List Container
+$script:pnlDrivesList = New-Object System.Windows.Forms.Panel
+$script:pnlDrivesList.Location = New-Object System.Drawing.Point(16, 36)
+$script:pnlDrivesList.Size = New-Object System.Drawing.Size(492, 136) # Adjusted height
+$script:pnlDrivesList.BackColor = [System.Drawing.Color]::Transparent
+$script:pnlDrivesList.AutoScroll = $true
+$script:pnlDrivesList.Visible = $false
+$script:cardDrives.Controls.Add($script:pnlDrivesList)
 
-$script:form.Controls.Add($cardWarning)
+$script:form.Controls.Add($script:cardDrives)
 
-# ============ REGISTRY KEYS STATUS CARD ============
-$cardKeys = New-CardPanel -Location (New-Object System.Drawing.Point(20, 293)) -Size (New-Object System.Drawing.Size(524, 164)) -Title "Registry Keys Status"
+# 3. REGISTRY KEYS STATUS CARD
+$cardKeys = New-CardPanel -Location (New-Object System.Drawing.Point(20, 424)) -Size (New-Object System.Drawing.Size(524, 164)) -Title "Registry Keys Status"
 
-# Initialize hashtable to store key row references
 $script:keyRows = @{}
 
-# Feature Flag 1
 $script:keyRows["735209102"] = New-KeyStatusRow -Location (New-Object System.Drawing.Point(16, 36)) -KeyName "735209102" -Description "NVMe Feature Flag 1 - Primary driver enable"
 $cardKeys.Controls.Add($script:keyRows["735209102"])
 
-# Feature Flag 2
 $script:keyRows["1853569164"] = New-KeyStatusRow -Location (New-Object System.Drawing.Point(16, 60)) -KeyName "1853569164" -Description "NVMe Feature Flag 2 - Extended functionality"
 $cardKeys.Controls.Add($script:keyRows["1853569164"])
 
-# Feature Flag 3
 $script:keyRows["156965516"] = New-KeyStatusRow -Location (New-Object System.Drawing.Point(16, 84)) -KeyName "156965516" -Description "NVMe Feature Flag 3 - Performance optimizations"
 $cardKeys.Controls.Add($script:keyRows["156965516"])
 
-# Safe Mode Minimal
 $script:keyRows["SafeBootMinimal"] = New-KeyStatusRow -Location (New-Object System.Drawing.Point(16, 114)) -KeyName "SafeBoot" -Description "Safe Mode support (Minimal) - Prevents boot issues"
 $cardKeys.Controls.Add($script:keyRows["SafeBootMinimal"])
 
-# Safe Mode Network
 $script:keyRows["SafeBootNetwork"] = New-KeyStatusRow -Location (New-Object System.Drawing.Point(16, 138)) -KeyName "SafeBoot/Net" -Description "Safe Mode with Networking support"
 $cardKeys.Controls.Add($script:keyRows["SafeBootNetwork"])
 
 $script:form.Controls.Add($cardKeys)
 
-# ============ ACTIONS CARD ============
-$cardActions = New-CardPanel -Location (New-Object System.Drawing.Point(20, 469)) -Size (New-Object System.Drawing.Size(524, 150)) -Title "Actions"
+# ============ RIGHT COLUMN (Warning, Actions, Log) ============
 
-# Row 1: Primary Action Buttons (consistent height: 44px)
+# 1. WARNING CARD (Enhanced)
+$cardWarning = New-Object System.Windows.Forms.Panel
+$cardWarning.Location = New-Object System.Drawing.Point(564, 120)
+$cardWarning.Size = New-Object System.Drawing.Size(524, 56)
+$cardWarning.BackColor = $script:Colors.WarningDim
+Set-ControlTagData -Control $cardWarning -NewData @{ CornerRadius = 8 }
+Set-RoundedCorners -Control $cardWarning -Radius 8
+
+# Warning Accent Bar
+$warningAccent = New-Object System.Windows.Forms.Panel
+$warningAccent.Location = New-Object System.Drawing.Point(0, 0)
+$warningAccent.Size = New-Object System.Drawing.Size(6, 56)
+$warningAccent.BackColor = $script:Colors.Warning
+$cardWarning.Controls.Add($warningAccent)
+
+$lblWarningIcon = New-Object System.Windows.Forms.Label
+$lblWarningIcon.Text = "!"
+$lblWarningIcon.Location = New-Object System.Drawing.Point(22, 12)
+$lblWarningIcon.Size = New-Object System.Drawing.Size(32, 32)
+$lblWarningIcon.ForeColor = $script:Colors.Warning
+$lblWarningIcon.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+$lblWarningIcon.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+$lblWarningIcon.BackColor = [System.Drawing.Color]::Transparent
+Set-RoundedCorners -Control $lblWarningIcon -Radius 16
+$cardWarning.Controls.Add($lblWarningIcon)
+
+$lblWarningText = New-Object System.Windows.Forms.Label
+$lblWarningText.Text = "This tool modifies system registry. A restore point will be created automatically before any changes are made."
+$lblWarningText.Location = New-Object System.Drawing.Point(64, 12)
+$lblWarningText.Size = New-Object System.Drawing.Size(440, 32)
+$lblWarningText.ForeColor = $script:Colors.TextSecondary
+$lblWarningText.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+$lblWarningText.BackColor = [System.Drawing.Color]::Transparent
+$cardWarning.Controls.Add($lblWarningText)
+
+$script:form.Controls.Add($cardWarning)
+
+# 2. ACTIONS CARD (Improved Grouping)
+$cardActions = New-CardPanel -Location (New-Object System.Drawing.Point(564, 190)) -Size (New-Object System.Drawing.Size(524, 150)) -Title "Actions"
+
+# Primary Operations Group
 $script:btnApply = New-ModernButton `
     -Text "APPLY PATCH" `
     -Location (New-Object System.Drawing.Point(16, 40)) `
-    -Size (New-Object System.Drawing.Size(156, 44)) `
+    -Size (New-Object System.Drawing.Size(240, 44)) `
     -BackColor $script:Colors.Success `
     -HoverColor $script:Colors.SuccessHover `
     -ToolTip "Apply NVMe driver enhancement patch" `
     -IsPrimary $true `
     -CornerRadius 6 `
     -OnClick {
-        if (Show-ConfirmDialog -Title "Apply Patch" -Message "Apply the NVMe driver enhancement patch?" -WarningText "This will modify system registry settings.") {
+        if (Show-ConfirmDialog -Title "Apply Patch" -Message "Apply the NVMe driver enhancement patch?" -WarningText "This will modify system registry settings." -CheckNVMe $true) {
             Install-NVMePatch
         }
     }
@@ -1483,24 +1648,25 @@ $cardActions.Controls.Add($script:btnApply)
 
 $script:btnRemove = New-ModernButton `
     -Text "REMOVE PATCH" `
-    -Location (New-Object System.Drawing.Point(184, 40)) `
-    -Size (New-Object System.Drawing.Size(156, 44)) `
+    -Location (New-Object System.Drawing.Point(268, 40)) `
+    -Size (New-Object System.Drawing.Size(240, 44)) `
     -BackColor $script:Colors.SurfaceLight `
     -HoverColor $script:Colors.SurfaceHover `
     -ToolTip "Remove all NVMe patch registry entries" `
     -IsPrimary $false `
     -CornerRadius 6 `
     -OnClick {
-        if (Show-ConfirmDialog -Title "Remove Patch" -Message "Remove the NVMe driver patch?" -WarningText "This will revert to default Windows behavior.") {
+        if (Show-ConfirmDialog -Title "Remove Patch" -Message "Remove the NVMe driver patch?" -WarningText "This will revert to default Windows behavior." -CheckNVMe $true) {
             Uninstall-NVMePatch
         }
     }
 $cardActions.Controls.Add($script:btnRemove)
 
+# Safety Operations Group
 $script:btnBackup = New-ModernButton `
     -Text "CREATE RESTORE POINT" `
-    -Location (New-Object System.Drawing.Point(352, 40)) `
-    -Size (New-Object System.Drawing.Size(156, 44)) `
+    -Location (New-Object System.Drawing.Point(16, 96)) `
+    -Size (New-Object System.Drawing.Size(492, 36)) `
     -BackColor $script:Colors.AccentDark `
     -HoverColor $script:Colors.Accent `
     -ToolTip "Create a manual system restore point" `
@@ -1515,36 +1681,11 @@ $script:btnBackup = New-ModernButton `
     }
 $cardActions.Controls.Add($script:btnBackup)
 
-# Row 2: Secondary Action - System Registry Backup (consistent height: 36px)
-$script:btnFullBackup = New-ModernButton `
-    -Text "BACKUP SYSTEM REGISTRY (HKLM)" `
-    -Location (New-Object System.Drawing.Point(16, 96)) `
-    -Size (New-Object System.Drawing.Size(492, 36)) `
-    -BackColor $script:Colors.SurfaceLight `
-    -HoverColor $script:Colors.SurfaceHover `
-    -ToolTip "Export HKEY_LOCAL_MACHINE registry to $($script:Config.WorkingDir)" `
-    -IsPrimary $false `
-    -CornerRadius 6 `
-    -OnClick {
-        $confirm = [System.Windows.Forms.MessageBox]::Show(
-            "This will export the system registry (HKEY_LOCAL_MACHINE).`n`nThe backup file will be saved to:`n$($script:Config.WorkingDir)`n`nThis may take several minutes and the file can be large (100-500 MB).`n`nContinue?",
-            "System Registry Backup",
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Question
-        )
-        
-        if ($confirm -eq [System.Windows.Forms.DialogResult]::Yes) {
-            Backup-SystemRegistry
-        }
-    }
-$cardActions.Controls.Add($script:btnFullBackup)
-
 $script:form.Controls.Add($cardActions)
 
-# ============ LOG CARD ============
-$cardLog = New-CardPanel -Location (New-Object System.Drawing.Point(20, 631)) -Size (New-Object System.Drawing.Size(524, 220)) -Title "Activity Log"
+# 3. LOG CARD
+$cardLog = New-CardPanel -Location (New-Object System.Drawing.Point(564, 354)) -Size (New-Object System.Drawing.Size(524, 234)) -Title "Activity Log"
 
-# Export Log Button
 $script:btnExport = New-ModernButton `
     -Text "Export" `
     -Location (New-Object System.Drawing.Point(450, 6)) `
@@ -1556,10 +1697,9 @@ $script:btnExport = New-ModernButton `
     -OnClick { Export-LogFile }
 $cardLog.Controls.Add($script:btnExport)
 
-# RichTextBox for colorized log output
 $script:rtbOutput = New-Object System.Windows.Forms.RichTextBox
 $script:rtbOutput.Location = New-Object System.Drawing.Point(16, 36)
-$script:rtbOutput.Size = New-Object System.Drawing.Size(492, 168)
+$script:rtbOutput.Size = New-Object System.Drawing.Size(492, 182)
 $script:rtbOutput.ReadOnly = $true
 $script:rtbOutput.BackColor = $script:Colors.Surface
 $script:rtbOutput.ForeColor = $script:Colors.TextSecondary
@@ -1575,8 +1715,8 @@ $script:form.Controls.Add($cardLog)
 # ============ FOOTER ============
 $lblFooter = New-Object System.Windows.Forms.Label
 $lblFooter.Text = "v$($script:Config.AppVersion)  |  Registry: ...\FeatureManagement\Overrides"
-$lblFooter.Location = New-Object System.Drawing.Point(20, 862)
-$lblFooter.Size = New-Object System.Drawing.Size(524, 16)
+$lblFooter.Location = New-Object System.Drawing.Point(20, 680)
+$lblFooter.Size = New-Object System.Drawing.Size(1080, 16)
 $lblFooter.ForeColor = $script:Colors.TextDimmed
 $lblFooter.Font = New-Object System.Drawing.Font("Segoe UI", 7.5)
 $lblFooter.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
@@ -1588,7 +1728,61 @@ $script:form.Controls.Add($lblFooter)
 
 $script:form.Add_Load({
     Write-Log "$($script:Config.AppName) v$($script:Config.AppVersion) started"
+    Write-Log "Theme detected: $currentTheme"
     Write-Log "Working directory: $($script:Config.WorkingDir)"
+    Write-Log "----------------------------------------"
+    
+    # Scan and display drives using MSFT_Disk/Win32_DiskDrive pipeline
+    Write-Log "Scanning system drives (Storage/CIM)..."
+    $drives = Get-SystemDrives
+    $nvmeCount = 0
+    
+    if ($drives.Count -eq 0) {
+        $script:lblDrivesStatus.Text = "No physical drives detected"
+        $script:lblDrivesStatus.ForeColor = $script:Colors.Warning
+        Write-Log "No physical drives detected" -Level "WARNING"
+    }
+    else {
+        $script:lblDrivesStatus.Visible = $false
+        $script:pnlDrivesList.Visible = $true
+        
+        # Suspend layout for better performance during population
+        $script:pnlDrivesList.SuspendLayout()
+        
+        $yOffset = 0
+        
+        foreach ($drive in $drives) {
+            # Add new row
+            $driveRow = New-DriveStatusRow `
+                -Location (New-Object System.Drawing.Point(0, $yOffset)) `
+                -DriveObject $drive
+            
+            $script:pnlDrivesList.Controls.Add($driveRow)
+            $yOffset += 24 # 24px height per row
+            
+            # Log discovery
+            if ($drive.IsNVMe) {
+                $nvmeCount++
+                Write-Log "  [NVMe] Disk $($drive.Number): $($drive.Name)" -Level "SUCCESS"
+            }
+            else {
+                Write-Log "  [$($drive.BusType)] Disk $($drive.Number): $($drive.Name)" -Level "INFO"
+            }
+        }
+        
+        $script:pnlDrivesList.ResumeLayout()
+    }
+    
+    # Set global NVMe presence flag
+    $script:HasNVMeDrives = ($nvmeCount -gt 0)
+    
+    if ($nvmeCount -eq 0) {
+        Write-Log "WARNING: No NVMe drives detected on this system!" -Level "WARNING"
+    }
+    else {
+        Write-Log "$nvmeCount NVMe drive(s) detected" -Level "SUCCESS"
+    }
+    
     Write-Log "----------------------------------------"
     
     # Check Windows compatibility
@@ -1609,7 +1803,6 @@ $script:form.Add_Load({
 })
 
 $script:form.Add_FormClosing({
-    # Dispose tooltip provider
     if ($script:ToolTipProvider) {
         $script:ToolTipProvider.Dispose()
     }
