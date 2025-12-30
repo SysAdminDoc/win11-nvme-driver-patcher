@@ -20,10 +20,14 @@
     - 735209102  (NVMe Feature Flag 1)
     - 1853569164 (NVMe Feature Flag 2)
     - 156965516  (NVMe Feature Flag 3)
+    
+    Safe Mode Support (prevents boot issues):
+    HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
+    HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
 
 .NOTES
-    Version: 2.1.0
-    Author:  Matthew Parker
+    Version: 2.2.0
+    Author:  System Administrator
     Requires: Windows 11, Administrator privileges
     
 .LINK
@@ -75,9 +79,12 @@ Add-Type -AssemblyName System.Drawing
 # Global Configuration
 $script:Config = @{
     AppName        = "NVMe Driver Patcher"
-    AppVersion     = "2.1.0"
+    AppVersion     = "2.2.0"
     RegistryPath   = "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides"
     FeatureIDs     = @("735209102", "1853569164", "156965516")
+    SafeBootMinimal = "HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"
+    SafeBootNetwork = "HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"
+    SafeBootValue   = "Storage Disks"
     MinWinBuild    = 22000  # Windows 11 minimum build
     LogHistory     = [System.Collections.ArrayList]::new()
     WorkingDir     = $null  # Set at startup
@@ -898,7 +905,7 @@ function Install-NVMePatch {
     
     try {
         # Step 1: Create restore point
-        Write-Log "Step 1/4: Creating system backup..."
+        Write-Log "Step 1/5: Creating system backup..."
         $restoreOK = New-SafeRestorePoint -Description "Pre-NVMe-Driver-Patch"
         if (-not $restoreOK) {
             Write-Log "Installation cancelled" -Level "WARNING"
@@ -906,11 +913,11 @@ function Install-NVMePatch {
         }
         
         # Step 2: Backup existing registry
-        Write-Log "Step 2/4: Backing up registry..."
+        Write-Log "Step 2/5: Backing up registry..."
         Backup-RegistryPath -BackupName "Pre_Install"
         
         # Step 3: Create registry path if needed
-        Write-Log "Step 3/4: Preparing registry..."
+        Write-Log "Step 3/5: Preparing registry..."
         if (-not (Test-Path $script:Config.RegistryPath)) {
             Write-Log "Creating registry path..."
             New-Item -Path $script:Config.RegistryPath -Force | Out-Null
@@ -918,7 +925,7 @@ function Install-NVMePatch {
         }
         
         # Step 4: Apply feature flags
-        Write-Log "Step 4/4: Applying feature flags..."
+        Write-Log "Step 4/5: Applying feature flags..."
         $successCount = 0
         foreach ($id in $script:Config.FeatureIDs) {
             try {
@@ -931,9 +938,39 @@ function Install-NVMePatch {
             }
         }
         
+        # Step 5: Add Safe Mode support keys (prevents boot issues in Safe Mode)
+        Write-Log "Step 5/5: Configuring Safe Mode support..."
+        $safeBootSuccess = $true
+        
+        # SafeBoot\Minimal key (Safe Mode)
+        try {
+            if (-not (Test-Path $script:Config.SafeBootMinimal)) {
+                New-Item -Path $script:Config.SafeBootMinimal -Force | Out-Null
+            }
+            Set-ItemProperty -Path $script:Config.SafeBootMinimal -Name "(Default)" -Value $script:Config.SafeBootValue -Force
+            Write-Log "  SafeBoot\Minimal configured" -Level "SUCCESS"
+        }
+        catch {
+            Write-Log "  Failed to configure SafeBoot\Minimal: $($_.Exception.Message)" -Level "ERROR"
+            $safeBootSuccess = $false
+        }
+        
+        # SafeBoot\Network key (Safe Mode with Networking)
+        try {
+            if (-not (Test-Path $script:Config.SafeBootNetwork)) {
+                New-Item -Path $script:Config.SafeBootNetwork -Force | Out-Null
+            }
+            Set-ItemProperty -Path $script:Config.SafeBootNetwork -Name "(Default)" -Value $script:Config.SafeBootValue -Force
+            Write-Log "  SafeBoot\Network configured" -Level "SUCCESS"
+        }
+        catch {
+            Write-Log "  Failed to configure SafeBoot\Network: $($_.Exception.Message)" -Level "ERROR"
+            $safeBootSuccess = $false
+        }
+        
         Write-Log "========================================" -Level "INFO"
-        if ($successCount -eq $script:Config.FeatureIDs.Count) {
-            Write-Log "INSTALLATION COMPLETE ($successCount/$($script:Config.FeatureIDs.Count))" -Level "SUCCESS"
+        if ($successCount -eq $script:Config.FeatureIDs.Count -and $safeBootSuccess) {
+            Write-Log "INSTALLATION COMPLETE" -Level "SUCCESS"
             Write-Log "Please RESTART your computer to apply changes" -Level "WARNING"
             
             $result = [System.Windows.Forms.MessageBox]::Show(
@@ -949,7 +986,7 @@ function Install-NVMePatch {
             }
         }
         else {
-            Write-Log "PARTIAL INSTALLATION ($successCount/$($script:Config.FeatureIDs.Count))" -Level "WARNING"
+            Write-Log "PARTIAL INSTALLATION (some components may have failed)" -Level "WARNING"
         }
         Write-Log "========================================" -Level "INFO"
     }
@@ -976,32 +1013,65 @@ function Uninstall-NVMePatch {
         Write-Log "Backing up current registry state..."
         Backup-RegistryPath -BackupName "Pre_Uninstall"
         
-        if (-not (Test-Path $script:Config.RegistryPath)) {
-            Write-Log "Registry path does not exist - nothing to remove" -Level "INFO"
-            return
-        }
-        
+        # Remove feature flags
         Write-Log "Removing feature flags..."
         $removedCount = 0
-        foreach ($id in $script:Config.FeatureIDs) {
+        
+        if (Test-Path $script:Config.RegistryPath) {
+            foreach ($id in $script:Config.FeatureIDs) {
+                try {
+                    $prop = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue
+                    if ($null -ne $prop) {
+                        Remove-ItemProperty -Path $script:Config.RegistryPath -Name $id -Force -ErrorAction Stop
+                        Write-Log "  Removed: $id" -Level "SUCCESS"
+                        $removedCount++
+                    }
+                    else {
+                        Write-Log "  Skipped: $id (not present)" -Level "INFO"
+                    }
+                }
+                catch {
+                    Write-Log "  Failed to remove: $id - $($_.Exception.Message)" -Level "ERROR"
+                }
+            }
+        }
+        else {
+            Write-Log "Feature flags registry path does not exist" -Level "INFO"
+        }
+        
+        # Remove Safe Mode keys
+        Write-Log "Removing Safe Mode configuration..."
+        
+        # Remove SafeBoot\Minimal key
+        if (Test-Path $script:Config.SafeBootMinimal) {
             try {
-                $prop = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue
-                if ($null -ne $prop) {
-                    Remove-ItemProperty -Path $script:Config.RegistryPath -Name $id -Force -ErrorAction Stop
-                    Write-Log "  Removed: $id" -Level "SUCCESS"
-                    $removedCount++
-                }
-                else {
-                    Write-Log "  Skipped: $id (not present)" -Level "INFO"
-                }
+                Remove-Item -Path $script:Config.SafeBootMinimal -Force -ErrorAction Stop
+                Write-Log "  Removed: SafeBoot\Minimal" -Level "SUCCESS"
             }
             catch {
-                Write-Log "  Failed to remove: $id - $($_.Exception.Message)" -Level "ERROR"
+                Write-Log "  Failed to remove SafeBoot\Minimal: $($_.Exception.Message)" -Level "WARNING"
             }
+        }
+        else {
+            Write-Log "  Skipped: SafeBoot\Minimal (not present)" -Level "INFO"
+        }
+        
+        # Remove SafeBoot\Network key
+        if (Test-Path $script:Config.SafeBootNetwork) {
+            try {
+                Remove-Item -Path $script:Config.SafeBootNetwork -Force -ErrorAction Stop
+                Write-Log "  Removed: SafeBoot\Network" -Level "SUCCESS"
+            }
+            catch {
+                Write-Log "  Failed to remove SafeBoot\Network: $($_.Exception.Message)" -Level "WARNING"
+            }
+        }
+        else {
+            Write-Log "  Skipped: SafeBoot\Network (not present)" -Level "INFO"
         }
         
         Write-Log "========================================" -Level "INFO"
-        Write-Log "REMOVAL COMPLETE ($removedCount keys removed)" -Level "SUCCESS"
+        Write-Log "REMOVAL COMPLETE ($removedCount feature flags removed)" -Level "SUCCESS"
         Write-Log "Please RESTART your computer" -Level "WARNING"
         Write-Log "========================================" -Level "INFO"
     }
