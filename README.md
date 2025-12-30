@@ -1,6 +1,6 @@
 # NVMe Driver Patcher for Windows 11
 
-A modern GUI tool to enable the experimental Windows Server 2025 Native NVMe storage driver on Windows 11. Features automatic system protection, theme-aware UI, and comprehensive drive detection.
+A modern GUI tool to enable the experimental Windows Server 2025 Native NVMe storage driver on Windows 11. 
 
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue?logo=powershell)
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows11)
