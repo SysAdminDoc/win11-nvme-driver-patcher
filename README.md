@@ -1,217 +1,179 @@
 # NVMe Driver Patcher for Windows 11
 
-A PowerShell GUI tool to enable the experimental Windows Server 2025 NVMe storage driver on Windows 11.
+A modern GUI tool to enable the experimental Windows Server 2025 Native NVMe storage driver on Windows 11. Features automatic system protection, theme-aware UI, and comprehensive drive detection.
 
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue?logo=powershell)
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows11)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+<img width="1390" height="944" alt="2025-12-29 21_15_09-NVMe Driver Patcher v2 6 3" src="https://github.com/user-attachments/assets/186c5157-56b5-4f97-94fc-ca5f55693dad" />
+
 ## Quick Start
 
-Open **PowerShell as Administrator** and run:
+**One-line install** (Run as Administrator in PowerShell):
 
 ```powershell
 irm https://run.matt.care/nvmepatcher | iex
 ```
 
----
+Or download `NVMe_Driver_Patcher.ps1` and right-click → **Run with PowerShell**.
 
-## Overview
+## What Does This Do?
 
-Windows Server 2025 includes an updated NVMe storage driver (`stornvme.sys`) designed to reduce CPU overhead and improve IOPS performance. This tool enables that driver on Windows 11 by toggling the appropriate feature flags in the registry.
+Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the legacy SCSI translation layer, allowing direct communication with NVMe drives. This driver is available in Windows 11 (24H2+) but disabled by default.
 
-### Performance Expectations
+**This tool enables it via 5 registry components:**
 
-| Environment | Claimed Improvement |
-|-------------|---------------------|
-| Windows Server 2025 | Up to 80% higher IOPS, ~45% lower CPU usage |
-| Windows 11 (real-world) | **10-15% improvement** in storage-heavy workloads |
+| Component | Purpose |
+|-----------|---------|
+| Feature Flag `735209102` | Primary driver enable |
+| Feature Flag `1853569164` | Extended functionality |
+| Feature Flag `156965516` | Performance optimizations |
+| SafeBoot Minimal Key | Prevents boot failure in Safe Mode |
+| SafeBoot Network Key | Safe Mode with Networking support |
 
-> **Note:** Microsoft's server-side claims do not translate directly to desktop usage. Community testing on Windows 11 25H2 shows more modest but still meaningful gains. Results vary by hardware and workload.
-
-This patch enables existing but disabled functionality within Windows 11. It does not install new drivers or modify system files.
-
----
+> ⚠️ **Important:** The SafeBoot keys are critical. Without them, your system cannot boot into Safe Mode after enabling Native NVMe. Many manual guides omit these keys — this tool includes them automatically.
 
 ## Features
 
-- ✅ **One-click patching** — Apply or remove the NVMe driver enhancement with a single button
-- 🛡️ **Automatic restore points** — Creates a system restore point before any changes
-- 💾 **Registry backup** — Backs up relevant registry keys before modification
-- 📦 **Full HKLM backup option** — Export the entire system registry hive on demand
-- 🔍 **Status detection** — Automatically detects if the patch is already applied
-- 📋 **Activity logging** — Detailed, color-coded log with export capability
-- 🎨 **Modern UI** — Windows 11 Fluent-inspired dark mode interface
+### Drive Detection
+- **Accurate NVMe Detection** — Uses `MSFT_Disk` storage namespace with `Win32_DiskDrive` correlation
+- **Bus Type Identification** — Properly identifies NVMe (⚡), SATA (🖴), USB (🔌) drives
+- **Boot Drive Indicator** — Shows which drive is your system disk
+- **No NVMe Warning** — Alerts you if no NVMe drives are detected before patching
 
----
-
-## Screenshot
-
-<img width="1390" height="944" alt="2025-12-29 21_15_09-NVMe Driver Patcher v2 6 3" src="https://github.com/user-attachments/assets/186c5157-56b5-4f97-94fc-ca5f55693dad" />
-
----
+### Safety Features
+- **Automatic Restore Point** — Created before any changes
+- **System Protection Check** — Enables protection on C: if disabled
+- **Confirmation Dialogs** — Requires explicit consent for all operations
+- **Atomic Operations** — All 5 components applied/removed together
+- **Detailed Logging** — Exportable activity log
 
 ## Requirements
 
-- **Windows 11** (Build 22000 or later, tested on 25H2)
-- **PowerShell 5.1** or later (included with Windows)
-- **Administrator privileges** (the tool will prompt for elevation)
-- **NVMe SSD** (SATA drives are not affected by this patch)
+| Requirement | Details |
+|-------------|---------|
+| **OS** | Windows 11 Build 22000+ (24H2 or 25H2 recommended) |
+| **Privileges** | Administrator (auto-elevation prompt) |
+| **Hardware** | NVMe SSD using Windows inbox driver (`StorNVMe.sys`) |
+| **Update** | October 2025 cumulative update or newer |
 
----
+## Performance Expectations
 
-## Installation
+Microsoft's benchmarks show **~80% IOPS improvement** on Windows Server 2025 with enterprise NVMe drives. Real-world results on Windows 11 consumer hardware are more modest:
 
-No installation required. Choose one of the following methods:
+| Scenario | Expected Improvement |
+|----------|---------------------|
+| Server (synthetic benchmarks) | ~80% IOPS, ~45% CPU reduction |
+| Desktop (real-world workloads) | 10-15% improvement |
+| Gaming | Minimal noticeable difference |
+| Large file transfers | Modest improvement |
 
-### Option 1: One-Line Install (Recommended)
+The biggest gains are in high-queue-depth random I/O operations.
 
-Open **PowerShell as Administrator** and run:
+## How to Verify It's Working
 
-```powershell
-irm https://run.matt.care/nvmepatcher | iex
+After applying the patch and **restarting your computer**:
+
+1. Open **Device Manager**
+2. Look for a new category: **Storage disks**
+3. Your NVMe drive should appear there (moved from "Disk drives")
+4. Check driver details — should show `nvmedisk.sys` instead of `disk.sys`
+
+## Scope
+
+**This patch affects ALL NVMe drives** in your system that use the Windows inbox driver (`StorNVMe.sys`), not just the OS drive.
+
+**Exception:** Drives using vendor-specific drivers (e.g., Samsung's proprietary driver) are not affected.
+
+## Known Compatibility Issues
+
+Some third-party software may have issues with Native NVMe:
+
+| Software | Issue |
+|----------|-------|
+| Samsung Magician | May not detect drives |
+| SSD vendor tools | Firmware update tools may fail |
+| Hardware monitoring | Some disk monitoring utilities |
+| Backup software | Rare issues with disk enumeration |
+
+If you experience problems, use the **Remove Patch** button and restart.
+
+## Registry Details
+
+**Feature Flags Location:**
+```
+HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides
+├── 735209102 = 1 (DWORD)
+├── 1853569164 = 1 (DWORD)
+└── 156965516 = 1 (DWORD)
 ```
 
-### Option 2: Manual Download
+**SafeBoot Keys Location:**
+```
+HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
+    (Default) = "Storage Disks"
 
-1. Download `NVMe_Driver_Patcher.ps1` from [this repository](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/raw/refs/heads/main/NVMe_Driver_Patcher.ps1)
-2. Right-click → **Run with PowerShell**
-   - Or open PowerShell as Administrator and run:
-     ```powershell
-     Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-     .\NVMe_Driver_Patcher.ps1
-     ```
-
----
-
-## Usage
-
-1. **Launch the tool** — It will automatically request administrator privileges
-2. **Review status** — The tool displays current patch and Windows version status
-3. **Apply Patch** — Click "APPLY PATCH" to enable the NVMe driver enhancements
-4. **Restart** — Reboot your computer for changes to take effect
-5. **Verify** — Open Device Manager; your NVMe drive should now appear under **"Storage Media"** instead of "Devices"
-6. **Remove Patch** — Click "REMOVE PATCH" to revert to default behavior if needed
-
----
-
-## What Does This Patch Do?
-
-The tool modifies three feature flags in the Windows registry:
-
-| Registry Path | Value |
-|---------------|-------|
-| `HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides` | |
-| `735209102` | `1` (DWORD) |
-| `1853569164` | `1` (DWORD) |
-| `156965516` | `1` (DWORD) |
-
-These flags enable the updated NVMe driver behavior from Windows Server 2025 on Windows 11.
-
----
-
-## Safety Features
-
-This tool prioritizes system safety:
-
-| Feature | Description |
-|---------|-------------|
-| **System Restore Point** | Automatically created before any registry changes |
-| **Registry Backup** | Exports the specific registry path before modification |
-| **Full Backup Option** | One-click export of entire HKLM hive to Desktop |
-| **Confirmation Dialogs** | All destructive operations require confirmation |
-| **Admin Verification** | Ensures proper privileges before running |
-| **Detailed Logging** | All operations are logged with timestamps |
-
-Backups are saved to: `Desktop\NVMe Patcher\`
-
----
-
-## Reverting Changes
-
-You can undo the patch at any time:
-
-1. **Using the tool** — Click "REMOVE PATCH" to delete the registry entries
-2. **System Restore** — Use the restore point created before patching
-3. **Manual removal** — Delete the three values from the registry path above
-
----
+HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
+    (Default) = "Storage Disks"
+```
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| Script won't run | Use the one-liner: `irm https://run.matt.care/nvmepatcher \| iex` in an Admin PowerShell |
-| Script won't run | Enable script execution: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` |
-| Access denied | Right-click and select "Run as Administrator" |
-| Patch shows partial | Click "APPLY PATCH" to complete the installation |
-| No performance change | Ensure you rebooted after applying the patch |
-| Samsung Magician broken | This is a known issue; see Known Issues section below |
-| Drive not in "Storage Media" | Your hardware may not be compatible with the new driver |
+### "No NVMe drives detected"
+- Your drives may use vendor-specific drivers
+- Check Device Manager → Disk drives → Properties → Driver
+- If using Samsung/WD proprietary drivers, this patch won't help
 
----
+### System won't boot after patch
+1. Boot into Windows Recovery Environment
+2. Open Command Prompt
+3. Run: `reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f`
+4. Repeat for `1853569164` and `156965516`
+5. Restart
 
-## FAQ
-
-**Q: Is this safe?**  
-A: The tool only modifies three registry values that enable existing Windows functionality. A restore point is created automatically, and you can revert changes at any time.
-
-**Q: Will this survive Windows Updates?**  
-A: Major Windows updates may reset these registry values. Simply re-run the tool after major updates if needed. Future builds could also disable this behavior without notice.
-
-**Q: How do I know if it's working?**  
-A: After rebooting, open **Device Manager** and check your NVMe drive. If the patch is active, your drive will appear under **"Storage Media"** instead of **"Devices"**. This confirms the newer driver is loaded.
-
-**Q: What performance gains should I expect?**  
-A: Community testing shows **10-15% improvement** in storage-intensive workloads on Windows 11. Results vary by hardware. Microsoft's 80% IOPS claims apply to server workloads only.
-
-**Q: Does this work on Windows 10?**  
-A: No, this tool is designed for Windows 11 only (Build 22000+, tested on 25H2).
-
----
-
-## Known Issues
-
-| Issue | Details |
-|-------|---------|
-| **Samsung Magician** | May fail to detect drives or display incorrect information after enabling the driver |
-| **SSD Management Tools** | Other vendor utilities (firmware updaters, health monitors) may have compatibility issues |
-| **Device Monitoring** | Some third-party disk monitoring software may not recognize drives correctly |
-
-If you rely on these tools, consider whether the performance gains outweigh the compatibility trade-offs. You can always revert by clicking "REMOVE PATCH" and rebooting.
-
----
+### Can't boot into Safe Mode
+This shouldn't happen if you used this tool (SafeBoot keys are included). If it does:
+1. Boot from Windows installation media
+2. Open Command Prompt
+3. Create the SafeBoot keys manually (see Registry Details above)
 
 ## Building / Development
 
-This is a single-file PowerShell script with no build process required.
+The script is a single self-contained PowerShell file with no external dependencies beyond Windows built-in assemblies:
+- `System.Windows.Forms`
+- `System.Drawing`
 
-To modify:
-1. Edit `NVMe_Driver_Patcher.ps1` in any text editor
-2. Test by running with PowerShell
+To modify, edit `NVMe_Driver_Patcher.ps1` directly. The code is organized into numbered sections:
+1. Initialization & Privilege Elevation
+2. Assembly Loading & Configuration
+3. Custom UI Components
+4. Logging System
+5. System Validation Functions
+6. System Protection & Restore Points
+7. Registry Operations
+8. UI Helper Functions
+9. Main Form Construction
+10. Form Event Handlers & Startup
+11. Run Application
 
-The script uses Windows Forms for the GUI and requires no external dependencies.
+## Credits
 
----
+- **Ghacks** - [This Registry Hack Unlocks a Faster NVMe Driver in Windows 11](https://www.ghacks.net/2025/12/26/this-registry-hack-unlocks-a-faster-nvme-driver-in-windows-11/)
+- **Microsoft TechCommunity** — [Native NVMe announcement](https://techcommunity.microsoft.com/blog/windowsserver/native-nvme--taking-nvme-further-performance-with-less-cpu/4355533)
+- **Whirlpool Forums** — Discovery of missing SafeBoot keys ([whrl.pl/RgTgVj](https://whrl.pl/RgTgVj))
+- **Community Contributors** — Testing and feedback
 
 ## License
 
 MIT License — See [LICENSE](LICENSE) for details.
 
----
-
 ## Disclaimer
 
-**USE AT YOUR OWN RISK.** This tool modifies system registry settings to enable functionality that Microsoft does not officially support on consumer Windows. While safety measures are in place, the author is not responsible for any damage, data loss, or system instability that may occur.
+This tool modifies system registry settings. While safety measures are included, use at your own risk. Always ensure you have backups before making system changes. The author is not responsible for any damage to your system.
 
-This is best viewed as an **experimental optimization** rather than a guaranteed upgrade. Gains vary by workload, and future Windows updates could disable this behavior without notice.
+---
 
-Always ensure you have proper backups before making system changes.
-
-This project is not affiliated with or endorsed by Microsoft.
-
-## Credits
-
-- https://www.ghacks.net/2025/12/26/this-registry-hack-unlocks-a-faster-nvme-driver-in-windows-11/
-- Inspired by community research into Windows feature flags
-- UI design follows Windows 11 Fluent Design guidelines
+<p align="center">
+  <b>Made with ☕ by <a href="https://www.buymeacoffee.com/mattcreatingthings">SysAdminDoc</a></b>
+</p>
