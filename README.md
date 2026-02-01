@@ -14,7 +14,7 @@ A tool to make it easier to enable the experimental Windows Server 2025 Native N
 **One-line install** (Run as Administrator in PowerShell):
 
 ```powershell
-irm https://run.matt.care/nvmepatcher | iex
+irm https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v.3.0.0/NVMe_Driver_Patcher.ps1 | iex
 ```
 
 Or download `NVMe_Driver_Patcher.ps1` and right-click → **Run with PowerShell**.
