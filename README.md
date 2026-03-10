@@ -30,6 +30,7 @@ Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the 
 | Feature Flag `735209102` | Primary driver enable |
 | Feature Flag `1853569164` | Extended functionality |
 | Feature Flag `156965516` | Performance optimizations |
+| Feature Flag `1176759950` | Microsoft official Server 2025 key |
 | SafeBoot Minimal Key | Prevents boot failure in Safe Mode |
 | SafeBoot Network Key | Safe Mode with Networking support |
 
@@ -43,6 +44,43 @@ Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the 
 | **Privileges** | Administrator (auto-elevation prompt) |
 | **Hardware** | NVMe SSD using Windows inbox driver (`StorNVMe.sys`) |
 | **Update** | October 2025 cumulative update or newer |
+
+## Windows Version Compatibility
+
+| Windows 11 Version | Build | Support |
+|--------------------|-------|---------|
+| 25H2 | 26200+ | Full support, best performance |
+| 24H2 | 26100 | Full support, recommended minimum |
+| 23H2 | 22631 | Partial — feature flags apply but driver may not activate |
+| 22H2 | 22621 | Not recommended — driver not present in base image |
+| 21H2 | 22000 | Unsupported |
+
+> The tool will warn you if your build is below 26100 but will not block the patch.
+
+## Hardware Compatibility
+
+The patch works with any NVMe drive using the Windows inbox `StorNVMe.sys` driver. Drives using vendor-specific drivers are unaffected.
+
+**Confirmed working:**
+
+| Brand | Models |
+|-------|--------|
+| Samsung | 970 Evo/Plus, 980, 980 Pro, 990 Pro (when using inbox driver) |
+| WD | SN570, SN580, SN770, SN850X (when using inbox driver) |
+| Crucial | P3, P3 Plus, P5, P5 Plus |
+| SK Hynix | Platinum P41, Gold P31 |
+| Kingston | NV2, KC3000 |
+| Sabrent | Rocket 4 Plus |
+| Generic/OEM | Any drive using StorNVMe.sys |
+
+**Not compatible (uses vendor driver by default):**
+
+| Brand | Notes |
+|-------|-------|
+| Samsung (with Samsung NVMe Driver) | Uses `samsungnvmedriver.sys` — patch has no effect |
+| WD (with WD Dashboard driver) | Uses proprietary driver |
+
+To check which driver your drive uses: **Device Manager → Disk drives → [Your NVMe] → Properties → Driver → Driver Files**
 
 ## Performance Expectations
 
@@ -86,17 +124,23 @@ If you experience problems, use the **Remove Patch** button and restart.
 ### System won't boot after patch
 1. Boot into Windows Recovery Environment
 2. Open Command Prompt
-3. Run: `reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f`
-4. Repeat for `1853569164` and `156965516`
-5. Restart
+3. Run the following commands to remove all 5 patch components:
+```cmd
+reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f
+reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f
+reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f
+reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f
+reg delete "HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-8D8D-4B38-B65B-D55B36B7CC71}" /f
+reg delete "HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-8D8D-4B38-B65B-D55B36B7CC71}" /f
+```
+4. Restart
 
 ### Can't boot into Safe Mode
 This shouldn't happen if you used this tool (SafeBoot keys are included). If it does:
 1. Boot from Windows installation media
 2. Open Command Prompt
-3. Run: `reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f`
-4. Repeat for `1853569164` and `156965516`
-5. Restart
+3. Run the same 6 commands from the section above
+4. Restart
 
 ## Credits
 
