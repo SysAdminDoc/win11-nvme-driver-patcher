@@ -884,11 +884,28 @@ function Invoke-PreflightChecks {
         BypassIO         = @{ Status = "Checking"; Message = "Checking..."; Critical = $false }
     }
 
-    # Cache expensive CIM queries ONCE (these are the slow ones: ~5-15s each if uncached)
+    # Cache expensive CIM queries ONCE
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-Log "  Querying system drivers..." -Level "DEBUG"
     $cimDrivers = try { Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue } catch { @() }
+    Write-Log "  System drivers: $($sw.ElapsedMilliseconds)ms ($($cimDrivers.Count) items)" -Level "DEBUG"
+
+    Write-Log "  Querying services..." -Level "DEBUG"
+    $t = $sw.ElapsedMilliseconds
     $cimServices = try { Get-CimInstance Win32_Service -ErrorAction SilentlyContinue } catch { @() }
+    Write-Log "  Services: $($sw.ElapsedMilliseconds - $t)ms ($($cimServices.Count) items)" -Level "DEBUG"
+
+    Write-Log "  Querying signed drivers (slow)..." -Level "DEBUG"
+    $t = $sw.ElapsedMilliseconds
     $cimSignedDrivers = try { Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue } catch { @() }
+    Write-Log "  Signed drivers: $($sw.ElapsedMilliseconds - $t)ms ($($cimSignedDrivers.Count) items)" -Level "DEBUG"
+
+    Write-Log "  Querying PnP entities..." -Level "DEBUG"
+    $t = $sw.ElapsedMilliseconds
     $cimPnpEntities = try { Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue } catch { @() }
+    Write-Log "  PnP entities: $($sw.ElapsedMilliseconds - $t)ms ($($cimPnpEntities.Count) items)" -Level "DEBUG"
+
+    Write-Log "  CIM cache built in $($sw.ElapsedMilliseconds)ms total" -Level "DEBUG"
     $script:CimCache = @{
         Drivers = $cimDrivers
         Services = $cimServices
@@ -897,6 +914,7 @@ function Invoke-PreflightChecks {
     }
 
     # Windows Version
+    Write-Log "  [1/10] Checking Windows version..." -Level "DEBUG"
     try {
         $script:BuildDetails = Get-WindowsBuildDetails
         $buildNumber = $script:BuildDetails.BuildNumber
@@ -917,6 +935,7 @@ function Invoke-PreflightChecks {
     }
 
     # NVMe Drives
+    Write-Log "  [2/10] Scanning drives and health data..." -Level "DEBUG"
     $script:CachedHealth = Get-NVMeHealthData
     $script:CachedDrives = Get-SystemDrives
     $drives = $script:CachedDrives
@@ -930,6 +949,7 @@ function Invoke-PreflightChecks {
     }
 
     # BitLocker
+    Write-Log "  [3/10] Checking BitLocker..." -Level "DEBUG"
     $script:BitLockerEnabled = Test-BitLockerEnabled
     if ($script:BitLockerEnabled) {
         $script:PreflightChecks.BitLocker = @{ Status = "Warning"; Message = "Encryption active"; Critical = $false }
@@ -939,6 +959,7 @@ function Invoke-PreflightChecks {
     }
 
     # VeraCrypt
+    Write-Log "  [4/10] Checking VeraCrypt..." -Level "DEBUG"
     $script:VeraCryptDetected = Test-VeraCryptSystemEncryption -CachedDrivers $script:CimCache.Drivers
     if ($script:VeraCryptDetected) {
         $script:PreflightChecks.VeraCrypt = @{ Status = "Fail"; Message = "BLOCKS PATCH - breaks boot"; Critical = $true }
@@ -948,6 +969,7 @@ function Invoke-PreflightChecks {
     }
 
     # Incompatible Software
+    Write-Log "  [5/10] Checking software compatibility..." -Level "DEBUG"
     $script:IncompatibleSoftware = Get-IncompatibleSoftware -CachedServices $script:CimCache.Services -CachedDrivers $script:CimCache.Drivers
     $criticalSw = @($script:IncompatibleSoftware | Where-Object { $_.Severity -eq "Critical" })
     $warnSw = @($script:IncompatibleSoftware | Where-Object { $_.Severity -ne "Critical" })
@@ -962,6 +984,7 @@ function Invoke-PreflightChecks {
     }
 
     # Third-party Driver
+    Write-Log "  [6/10] Checking NVMe drivers..." -Level "DEBUG"
     $script:DriverInfo = Get-NVMeDriverInfo -CachedSignedDrivers $script:CimCache.SignedDrivers
     if ($script:DriverInfo.HasThirdParty) {
         $script:PreflightChecks.ThirdPartyDriver = @{ Status = "Warning"; Message = $script:DriverInfo.ThirdPartyName; Critical = $false }
@@ -971,6 +994,7 @@ function Invoke-PreflightChecks {
     }
 
     # System Protection
+    Write-Log "  [7/10] Checking System Protection..." -Level "DEBUG"
     try {
         $null = Get-ComputerRestorePoint -ErrorAction SilentlyContinue
         $script:PreflightChecks.SystemProtection = @{ Status = "Pass"; Message = "Available"; Critical = $false }
@@ -980,6 +1004,7 @@ function Invoke-PreflightChecks {
     }
 
     # Native NVMe Driver Activation Status
+    Write-Log "  [8/10] Checking native NVMe driver status..." -Level "DEBUG"
     $script:NativeNVMeStatus = Test-NativeNVMeActive -CachedDrivers $script:CimCache.Drivers -CachedPnpEntities $script:CimCache.PnpEntities -CachedSignedDrivers $script:CimCache.SignedDrivers
     if ($script:NativeNVMeStatus.IsActive) {
         $script:PreflightChecks.DriverStatus = @{ Status = "Pass"; Message = "nvmedisk.sys active"; Critical = $false }
@@ -995,6 +1020,7 @@ function Invoke-PreflightChecks {
     }
 
     # BypassIO / DirectStorage Status
+    Write-Log "  [9/10] Checking BypassIO / DirectStorage..." -Level "DEBUG"
     $script:BypassIOStatus = Get-BypassIOStatus
     if ($script:BypassIOStatus.Supported) {
         $script:PreflightChecks.BypassIO = @{ Status = "Pass"; Message = "Supported"; Critical = $false }
@@ -1009,6 +1035,7 @@ function Invoke-PreflightChecks {
         }
     }
 
+    Write-Log "  [10/10] Pre-flight complete ($($sw.ElapsedMilliseconds)ms)" -Level "DEBUG"
     return $script:PreflightChecks
 }
 
@@ -3075,9 +3102,10 @@ $script:window.Add_ContentRendered({
                    'Get-NVMeDriverInfo', 'Test-NativeNVMeActive',
                    'Get-BypassIOStatus', 'Test-PatchStatus', 'Invoke-PreflightChecks')
     $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
-    $noop = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new(
-        'Write-Log', 'param([string]$Message, [string]$Level = "INFO")')
-    $iss.Commands.Add($noop)
+    # Write-Log in the background runspace: collects messages for replay on UI thread
+    $bgLogFunc = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new(
+        'Write-Log', 'param([string]$Message, [string]$Level = "INFO"); if (-not $script:BgLogMessages) { $script:BgLogMessages = [System.Collections.ArrayList]::new() }; [void]$script:BgLogMessages.Add(@{ Message = $Message; Level = $Level })')
+    $iss.Commands.Add($bgLogFunc)
     foreach ($fn in $funcNames) {
         $cmd = Get-Command $fn -ErrorAction SilentlyContinue
         if ($cmd) {
@@ -3110,6 +3138,7 @@ $script:window.Add_ContentRendered({
             DriverInfo          = $script:DriverInfo
             NativeNVMeStatus    = $script:NativeNVMeStatus
             BypassIOStatus      = $script:BypassIOStatus
+            BgLogMessages       = $script:BgLogMessages
         }
     }).AddParameter('cfg', $configCopy)
 
@@ -3141,6 +3170,13 @@ $script:window.Add_ContentRendered({
             $script:NativeNVMeStatus    = $r.NativeNVMeStatus
             $script:BypassIOStatus      = $r.BypassIOStatus
             $checks                     = $r.Checks
+
+            # Replay background log messages on the UI thread
+            if ($r.BgLogMessages) {
+                foreach ($msg in $r.BgLogMessages) {
+                    Write-Log $msg.Message -Level $msg.Level
+                }
+            }
 
             $bc = [System.Windows.Media.BrushConverter]::new()
 
