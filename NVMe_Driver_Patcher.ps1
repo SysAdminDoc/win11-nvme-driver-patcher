@@ -70,10 +70,57 @@
     Export full system diagnostics report for support.
 
 .NOTES
-    Version: 3.0.0
+    Version: 3.3.0
     Author:  Matthew Parker
     Requires: Windows 11 24H2/25H2, Administrator privileges
-    
+
+    CHANGELOG v3.3.0:
+    - Removed version number from script filename (now NVMe_Driver_Patcher.ps1)
+    - Renamed Import-Configuration to Import-Configuration (PSScriptAnalyzer compliance)
+    - Renamed Update-StatusDisplay to Update-StatusDisplay (PSScriptAnalyzer compliance)
+    - Removed AcceptButton (Enter triggered patch unexpectedly)
+    - Fixed invalid CheckBox FlatAppearance properties
+    - Merged duplicate resize handlers into one
+    - Moved preflight checks from Add_Load to Add_Shown
+    - Made preflight checks fully async using [PowerShell]::Create() + BeginInvoke() + Timer polling
+    - Fixed footer link visibility (BackColor + BringToFront)
+    - Added runspace/timer cleanup in FormClosing
+    - Added slim marquee loading bar below header during preflight scanning
+    - Enabled form AutoScroll with dark scrollbar theming (SetWindowTheme DarkMode_Explorer)
+    - Resize handler uses DisplayRectangle.Height + MinContentH for AutoScroll compatibility
+
+    CHANGELOG v3.2.0:
+    - Fixed GDI Region memory leak in Update-DrivesList (dot indicators)
+    - Fixed remaining DoEvents() re-entrancy in Set-ButtonsEnabled and Update-Progress
+    - Fixed boot label using hardcoded semi-transparent color instead of theme-aware WarningDim
+    - Removed dead "Keyboard shortcuts" comment placeholder
+    - Styled server key checkbox to match custom dark/light theme
+    - Added right-click context menu on Activity Log (Copy, Save, Clear)
+    - Made footer GitHub URL a clickable LinkLabel
+    - Made form resizable with Sizable border, min size constraint, and dynamic log card stretching
+    - Optimized checklist dot matching from O(n^2) Where-Object to O(1) hashtable lookup
+    - Added keyboard accessibility (AcceptButton, KeyPreview)
+    - Added animated status pulse when patch state changes
+    - Added system tray minimize with double-click restore and context menu
+    - Added before/after comparison view showing component changes after patch/unpatch
+    - Added circular GDI+ progress ring replacing flat progress bar
+    - Added NVMe health indicators (temperature, wear %) via StorageReliabilityCounter
+
+    CHANGELOG v3.1.0:
+    - Fixed silent mode falling through to GUI (missing exit)
+    - Fixed toast notifications disposing before rendering (timer-based cleanup)
+    - Fixed registry backup using inconsistent line endings (now proper CRLF)
+    - Fixed verification script not accounting for optional server key
+    - Fixed light theme AccentSubtle color being hardcoded to dark palette
+    - Fixed Update-StatusDisplay showing hardcoded "/5" instead of dynamic total
+    - Deduplicated CIM queries in Get-NVMeDriverInfo (2x Win32_PnPSignedDriver)
+    - Cached system detection results to avoid redundant WMI calls
+    - Replaced DoEvents with targeted Control.Refresh to prevent re-entrancy
+    - Improved mutex single-instance check using createdNew parameter
+    - Simplified theme color initialization ($Theme.Clone())
+    - Added debug logging/comments to all empty catch blocks
+    - Reformatted compressed single-line functions for readability
+
     CHANGELOG v3.0.0:
     - Added optional 4th feature flag (1176759950) - Microsoft's official Server 2025 key
     - Added active NVMe driver verification (nvmedisk.sys vs stornvme.sys/disk.sys)
@@ -222,7 +269,7 @@ public class DarkScrollBar {
 "@ -ErrorAction SilentlyContinue
 
 try { [DpiAwareness]::SetProcessDpiAwareness(2) | Out-Null }
-catch { try { [DpiAwareness]::SetProcessDPIAware() | Out-Null } catch { } }
+catch { try { [DpiAwareness]::SetProcessDPIAware() | Out-Null } catch { <# DPI awareness optional #> } }
 
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
@@ -235,8 +282,9 @@ $mutexName = "Global\NVMeDriverPatcher_SingleInstance"
 
 if (-not $ExportDiagnostics -and -not $GenerateVerifyScript -and -not $Status) {
     try {
-        $script:AppMutex = New-Object System.Threading.Mutex($false, $mutexName, [ref]$false)
-        if (-not $script:AppMutex.WaitOne(0, $false)) {
+        $createdNew = $false
+        $script:AppMutex = New-Object System.Threading.Mutex($true, $mutexName, [ref]$createdNew)
+        if (-not $createdNew) {
             if (-not $Silent) {
                 [System.Windows.Forms.MessageBox]::Show(
                     "NVMe Driver Patcher is already running.",
@@ -251,7 +299,9 @@ if (-not $ExportDiagnostics -and -not $GenerateVerifyScript -and -not $Status) {
             exit 0
         }
     }
-    catch { }
+    catch {
+        Write-Warning "Mutex check failed: $($_.Exception.Message)"
+    }
 }
 
 # ===========================================================================
@@ -260,7 +310,7 @@ if (-not $ExportDiagnostics -and -not $GenerateVerifyScript -and -not $Status) {
 
 $script:Config = @{
     AppName         = "NVMe Driver Patcher"
-    AppVersion      = "3.0.0"
+    AppVersion      = "3.3.0"
     RegistryPath    = "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides"
     FeatureIDs      = @("735209102", "1853569164", "156965516")
     FeatureNames    = @{
@@ -327,7 +377,7 @@ $script:Config.ConfigFile = Join-Path $script:Config.WorkingDir "config.json"
 # SECTION 5: CONFIGURATION PERSISTENCE
 # ===========================================================================
 
-function Load-Configuration {
+function Import-Configuration {
     if (Test-Path $script:Config.ConfigFile) {
         try {
             $savedConfig = Get-Content $script:Config.ConfigFile -Raw | ConvertFrom-Json
@@ -337,7 +387,9 @@ function Load-Configuration {
             if ($null -ne $savedConfig.RestartDelay) { $script:Config.RestartDelay = $savedConfig.RestartDelay }
             if ($null -ne $savedConfig.IncludeServerKey) { $script:Config.IncludeServerKey = $savedConfig.IncludeServerKey }
         }
-        catch { }
+        catch {
+            Write-Warning "Failed to load configuration: $($_.Exception.Message)"
+        }
     }
 }
 
@@ -353,10 +405,12 @@ function Save-Configuration {
         }
         $configToSave | ConvertTo-Json | Out-File $script:Config.ConfigFile -Encoding UTF8
     }
-    catch { }
+    catch {
+        Write-Warning "Failed to save configuration: $($_.Exception.Message)"
+    }
 }
 
-Load-Configuration
+Import-Configuration
 
 # ===========================================================================
 # SECTION 6: THEME DETECTION
@@ -368,7 +422,7 @@ function Get-WindowsThemeMode {
         $val = Get-ItemProperty -Path $key -Name "AppsUseLightTheme" -ErrorAction SilentlyContinue
         if ($null -ne $val -and $val.AppsUseLightTheme -eq 1) { return "Light" }
     }
-    catch { }
+    catch { <# Theme detection failed, default to dark #> }
     return "Dark"
 }
 
@@ -410,45 +464,33 @@ $PaletteLight = @{
 
 $Theme = if ($currentTheme -eq "Light") { $PaletteLight } else { $PaletteDark }
 
-$script:Colors = @{
-    Background    = $Theme.Background
-    Surface       = $Theme.Surface
-    SurfaceLight  = $Theme.SurfaceLight
-    SurfaceHover  = $Theme.SurfaceHover
-    CardBackground= $Theme.CardBackground
-    CardBorder    = $Theme.CardBorder
-    Border        = $Theme.Border
-    TextPrimary   = $Theme.TextPrimary
-    TextSecondary = $Theme.TextSecondary
-    TextMuted     = $Theme.TextMuted
-    TextDimmed    = $Theme.TextDimmed
-    WarningDim    = $Theme.WarningDim
-    ProgressBack  = $Theme.ProgressBack
-    ChecklistBg   = $Theme.ChecklistBg
-    Accent        = [System.Drawing.Color]::FromArgb(56, 132, 244)
-    AccentDark    = [System.Drawing.Color]::FromArgb(40, 100, 200)
-    AccentHover   = [System.Drawing.Color]::FromArgb(80, 152, 255)
-    AccentSubtle  = [System.Drawing.Color]::FromArgb(36, 44, 62)
-    Success       = [System.Drawing.Color]::FromArgb(34, 154, 80)
-    SuccessHover  = [System.Drawing.Color]::FromArgb(44, 174, 96)
-    SuccessBg     = [System.Drawing.Color]::FromArgb(30, 50, 38)
-    Warning       = [System.Drawing.Color]::FromArgb(210, 155, 40)
-    WarningBright = [System.Drawing.Color]::FromArgb(245, 190, 60)
-    WarningBg     = [System.Drawing.Color]::FromArgb(52, 48, 34)
-    Danger        = [System.Drawing.Color]::FromArgb(220, 55, 65)
-    DangerHover   = [System.Drawing.Color]::FromArgb(240, 70, 80)
-    DangerBg      = [System.Drawing.Color]::FromArgb(55, 34, 36)
-    Info          = [System.Drawing.Color]::FromArgb(56, 132, 244)
-    Neutral       = [System.Drawing.Color]::FromArgb(110, 110, 125)
-}
+$script:Colors = $Theme.Clone()
+
+# Shared accent colors
+$script:Colors.Accent        = [System.Drawing.Color]::FromArgb(56, 132, 244)
+$script:Colors.AccentDark    = [System.Drawing.Color]::FromArgb(40, 100, 200)
+$script:Colors.AccentHover   = [System.Drawing.Color]::FromArgb(80, 152, 255)
+$script:Colors.Success       = [System.Drawing.Color]::FromArgb(34, 154, 80)
+$script:Colors.SuccessHover  = [System.Drawing.Color]::FromArgb(44, 174, 96)
+$script:Colors.Danger        = [System.Drawing.Color]::FromArgb(220, 55, 65)
+$script:Colors.DangerHover   = [System.Drawing.Color]::FromArgb(240, 70, 80)
+$script:Colors.WarningBright = [System.Drawing.Color]::FromArgb(245, 190, 60)
+$script:Colors.Info          = [System.Drawing.Color]::FromArgb(56, 132, 244)
+$script:Colors.Neutral       = [System.Drawing.Color]::FromArgb(110, 110, 125)
 
 if ($currentTheme -eq "Dark") {
-    $script:Colors.Warning = [System.Drawing.Color]::FromArgb(245, 190, 60)
+    $script:Colors.AccentSubtle  = [System.Drawing.Color]::FromArgb(36, 44, 62)
+    $script:Colors.Warning       = [System.Drawing.Color]::FromArgb(245, 190, 60)
+    $script:Colors.WarningBg     = [System.Drawing.Color]::FromArgb(52, 48, 34)
+    $script:Colors.SuccessBg     = [System.Drawing.Color]::FromArgb(30, 50, 38)
+    $script:Colors.DangerBg      = [System.Drawing.Color]::FromArgb(55, 34, 36)
 }
-if ($currentTheme -eq "Light") {
-    $script:Colors.SuccessBg = [System.Drawing.Color]::FromArgb(220, 240, 220)
-    $script:Colors.WarningBg = [System.Drawing.Color]::FromArgb(255, 250, 230)
-    $script:Colors.DangerBg = [System.Drawing.Color]::FromArgb(255, 235, 235)
+else {
+    $script:Colors.AccentSubtle  = [System.Drawing.Color]::FromArgb(220, 232, 252)
+    $script:Colors.Warning       = [System.Drawing.Color]::FromArgb(210, 155, 40)
+    $script:Colors.WarningBg     = [System.Drawing.Color]::FromArgb(255, 250, 230)
+    $script:Colors.SuccessBg     = [System.Drawing.Color]::FromArgb(220, 240, 220)
+    $script:Colors.DangerBg      = [System.Drawing.Color]::FromArgb(255, 235, 235)
 }
 
 # ===========================================================================
@@ -463,8 +505,9 @@ function Initialize-EventLogSource {
             [System.Diagnostics.EventLog]::CreateEventSource($script:Config.EventLogSource, "Application")
         }
     }
-    catch { 
+    catch {
         $script:Config.WriteEventLog = $false
+        Write-Warning "Event log source creation failed (non-critical): $($_.Exception.Message)"
     }
 }
 
@@ -516,12 +559,22 @@ function Show-ToastNotification {
         $notifyIcon.BalloonTipIcon = $tipIcon
         $notifyIcon.Visible = $true
         $notifyIcon.ShowBalloonTip(5000)
-        
-        # Clean up after display
-        Start-Sleep -Milliseconds 100
-        $notifyIcon.Dispose()
+
+        # Clean up via timer so balloon has time to render
+        $cleanupTimer = New-Object System.Windows.Forms.Timer
+        $cleanupTimer.Interval = 6000
+        $iconRef = $notifyIcon
+        $cleanupTimer.Add_Tick({
+            $this.Stop()
+            $this.Dispose()
+            $iconRef.Visible = $false
+            $iconRef.Dispose()
+        }.GetNewClosure())
+        $cleanupTimer.Start()
     }
-    catch { }
+    catch {
+        Write-Warning "Toast notification failed: $($_.Exception.Message)"
+    }
 }
 
 # ===========================================================================
@@ -548,7 +601,7 @@ function Test-BitLockerEnabled {
                 return $true
             }
         }
-        catch { }
+        catch { <# Both BitLocker detection methods failed, assume not encrypted #> }
     }
     return $false
 }
@@ -563,9 +616,10 @@ function Get-NVMeDriverInfo {
     }
     
     try {
-        $nvmeDrivers = Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue |
+        $allSignedDrivers = Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue
+        $nvmeDrivers = $allSignedDrivers |
             Where-Object { $_.DeviceClass -eq "SCSIAdapter" -or $_.DeviceName -match "NVMe" }
-        
+
         $thirdPartyPatterns = @(
             @{ Pattern = "Samsung"; Name = "Samsung NVMe" },
             @{ Pattern = "WD.*NVMe|Western Digital"; Name = "Western Digital NVMe" },
@@ -575,7 +629,7 @@ function Get-NVMeDriverInfo {
             @{ Pattern = "SK.?hynix"; Name = "SK Hynix NVMe" },
             @{ Pattern = "Phison"; Name = "Phison NVMe" }
         )
-        
+
         foreach ($driver in $nvmeDrivers) {
             foreach ($tp in $thirdPartyPatterns) {
                 if ($driver.DeviceName -match $tp.Pattern -or $driver.Manufacturer -match $tp.Pattern) {
@@ -587,8 +641,8 @@ function Get-NVMeDriverInfo {
             }
             if ($driverInfo.HasThirdParty) { break }
         }
-        
-        $stornvme = Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue |
+
+        $stornvme = $allSignedDrivers |
             Where-Object { $_.InfName -eq "stornvme.inf" } | Select-Object -First 1
         if ($stornvme) {
             $driverInfo.InboxVersion = $stornvme.DriverVersion
@@ -605,13 +659,42 @@ function Get-NVMeDriverInfo {
                 if ($qd) { $driverInfo.QueueDepth = $qd.IoQueueDepth }
             }
         }
-        catch { }
+        catch { <# Queue depth registry key may not exist #> }
     }
     catch {
         $driverInfo.CurrentDriver = "Unable to detect"
     }
     
     return $driverInfo
+}
+
+function Get-NVMeHealthData {
+    $health = @{}
+    try {
+        $physDisks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.BusType -eq "NVMe" -or $_.MediaType -eq "SSD" }
+        foreach ($pd in $physDisks) {
+            $diskNum = $pd.DeviceId
+            $info = @{
+                Temperature = "N/A"
+                Wear = "N/A"
+                MediaErrors = 0
+                HealthStatus = $pd.HealthStatus
+                OperationalStatus = $pd.OperationalStatus
+            }
+            try {
+                $reliability = $pd | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue
+                if ($reliability) {
+                    if ($null -ne $reliability.Temperature) { $info.Temperature = "$($reliability.Temperature)C" }
+                    if ($null -ne $reliability.Wear) { $info.Wear = "$([Math]::Max(0, 100 - $reliability.Wear))%" }
+                    if ($null -ne $reliability.MediaErrors) { $info.MediaErrors = $reliability.MediaErrors }
+                }
+            }
+            catch { <# StorageReliabilityCounter not available on all drives #> }
+            $health[$diskNum] = $info
+        }
+    }
+    catch { <# PhysicalDisk query failed, health data unavailable #> }
+    return $health
 }
 
 function Get-SystemDrives {
@@ -808,16 +891,25 @@ function Get-WindowsBuildDetails {
             if ($cv.DisplayVersion) { $details.DisplayVersion = $cv.DisplayVersion }
             if ($cv.UBR) { $details.UBR = [int]$cv.UBR }
         }
-        catch { }
-        
+        catch { <# Display version registry key may not exist on older builds #> }
+
         # Build 26100+ = 24H2, Build 26200+ = 25H2
         $details.Is24H2OrLater = ($details.BuildNumber -ge 26100)
         $details.IsRecommended = ($details.BuildNumber -ge $script:Config.RecommendedBuild)
     }
-    catch { }
+    catch {
+        Write-Warning "Failed to retrieve build details: $($_.Exception.Message)"
+    }
     
     return $details
 }
+
+# Animation state
+$script:StatusPulseTimer = $null
+$script:PulseStep = 0
+$script:PulseDirection = 1
+$script:PulseTargetColor = $null
+$script:PreviousPatchState = $null
 
 # Global state
 $script:HasNVMeDrives = $false
@@ -826,6 +918,8 @@ $script:DriverInfo = $null
 $script:NativeNVMeStatus = $null
 $script:BypassIOStatus = $null
 $script:BuildDetails = $null
+$script:CachedDrives = $null
+$script:CachedHealth = $null
 $script:PreflightChecks = @{}
 
 # ===========================================================================
@@ -865,7 +959,9 @@ function Invoke-PreflightChecks {
     }
     
     # NVMe Drives
-    $drives = Get-SystemDrives
+    $script:CachedHealth = Get-NVMeHealthData
+    $script:CachedDrives = Get-SystemDrives
+    $drives = $script:CachedDrives
     $nvmeCount = ($drives | Where-Object { $_.IsNVMe }).Count
     $script:HasNVMeDrives = ($nvmeCount -gt 0)
     if ($nvmeCount -gt 0) {
@@ -895,7 +991,7 @@ function Invoke-PreflightChecks {
     
     # System Protection
     try {
-        $restoreStatus = Get-ComputerRestorePoint -ErrorAction SilentlyContinue
+        $null = Get-ComputerRestorePoint -ErrorAction SilentlyContinue
         $script:PreflightChecks.SystemProtection = @{ Status = "Pass"; Message = "Available"; Critical = $false }
     }
     catch {
@@ -1001,9 +1097,11 @@ function Write-Log {
         $script:rtbOutput.SelectionColor = $color
         $script:rtbOutput.AppendText("$logEntry`r`n")
         $script:rtbOutput.ScrollToCaret()
-        
-        if ($script:Config.LogHistory.Count % 5 -eq 0) {
-            [System.Windows.Forms.Application]::DoEvents()
+
+        # Refresh UI periodically - only process paint/timer messages to avoid
+        # re-entrancy from user input during long operations
+        if ($script:Config.LogHistory.Count % 10 -eq 0 -and $script:form) {
+            $script:rtbOutput.Refresh()
         }
     }
 }
@@ -1098,10 +1196,10 @@ OS: $([Environment]::OSVersion.VersionString)
         $report += "Model: $($cs.Model)`n"
         $report += "Total RAM: $([math]::Round($cs.TotalPhysicalMemory / 1GB, 2)) GB`n"
     }
-    catch { }
-    
+    catch { $report += "Unable to retrieve hardware information`n" }
+
     $report += "`nSTORAGE DRIVES`n--------------`n"
-    $drives = Get-SystemDrives
+    $drives = if ($script:CachedDrives) { $script:CachedDrives } else { Get-SystemDrives }
     foreach ($drive in $drives) {
         $nvmeTag = if ($drive.IsNVMe) { " [NVMe]" } else { "" }
         $bootTag = if ($drive.IsBoot) { " [BOOT]" } else { "" }
@@ -1111,14 +1209,14 @@ OS: $([Environment]::OSVersion.VersionString)
     }
     
     $report += "`nNVMe DRIVER INFORMATION`n-----------------------`n"
-    $driverInfo = Get-NVMeDriverInfo
+    $driverInfo = if ($script:DriverInfo) { $script:DriverInfo } else { Get-NVMeDriverInfo }
     $report += "Current Driver: $($driverInfo.CurrentDriver)`n"
     $report += "Inbox Version: $($driverInfo.InboxVersion)`n"
     $report += "Third-Party: $(if ($driverInfo.HasThirdParty) { $driverInfo.ThirdPartyName } else { 'No' })`n"
     $report += "Queue Depth: $($driverInfo.QueueDepth)`n"
     
     $report += "`nNATIVE NVMe DRIVER STATUS`n-------------------------`n"
-    $nativeStatus = Test-NativeNVMeActive
+    $nativeStatus = if ($script:NativeNVMeStatus) { $script:NativeNVMeStatus } else { Test-NativeNVMeActive }
     $report += "Native NVMe Active: $(if ($nativeStatus.IsActive) { 'Yes' } else { 'No' })`n"
     $report += "Active Driver: $($nativeStatus.ActiveDriver)`n"
     $report += "Device Category: $($nativeStatus.DeviceCategory)`n"
@@ -1129,7 +1227,7 @@ OS: $([Environment]::OSVersion.VersionString)
     $report += "Details: $($nativeStatus.Details)`n"
     
     $report += "`nBYPASSIO / DIRECTSTORAGE STATUS`n-------------------------------`n"
-    $bypassStatus = Get-BypassIOStatus
+    $bypassStatus = if ($script:BypassIOStatus) { $script:BypassIOStatus } else { Get-BypassIOStatus }
     $report += "BypassIO Supported: $(if ($bypassStatus.Supported) { 'Yes' } else { 'No' })`n"
     $report += "Storage Type: $($bypassStatus.StorageType)`n"
     $report += "Driver Compatibility: $($bypassStatus.DriverCompat)`n"
@@ -1138,7 +1236,7 @@ OS: $([Environment]::OSVersion.VersionString)
     $report += "Raw Output:`n$($bypassStatus.RawOutput)`n"
     
     $report += "`nWINDOWS BUILD DETAILS`n--------------------`n"
-    $buildDets = Get-WindowsBuildDetails
+    $buildDets = if ($script:BuildDetails) { $script:BuildDetails } else { Get-WindowsBuildDetails }
     $report += "Build Number: $($buildDets.BuildNumber)`n"
     $report += "Display Version: $($buildDets.DisplayVersion)`n"
     $report += "UBR: $($buildDets.UBR)`n"
@@ -1239,11 +1337,15 @@ $featureIDs = @(
     @{ ID = "1853569164"; Name = "UxAccOptimization (Extended functionality)" },
     @{ ID = "156965516"; Name = "Standalone_Future (Performance optimizations)" }
 )
+$includeServerKey = SERVERKEY_PLACEHOLDER
+if ($includeServerKey) {
+    $featureIDs += @{ ID = "1176759950"; Name = "Microsoft Official (Server 2025 key)" }
+}
 $safeBootMinimal = "HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"
 $safeBootNetwork = "HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"
 
 $passCount = 0
-$totalChecks = 5
+$totalChecks = $featureIDs.Count + 2  # feature flags + 2 SafeBoot keys
 
 Write-Host "REGISTRY KEYS" -ForegroundColor Yellow
 Write-Host "-------------" -ForegroundColor Yellow
@@ -1259,12 +1361,6 @@ foreach ($feat in $featureIDs) {
     else {
         Write-Host "  [FAIL] $($feat.ID) - $($feat.Name)" -ForegroundColor Red
     }
-}
-
-# Optional Server Key
-$serverKeyVal = Get-ItemProperty -Path $registryPath -Name "1176759950" -ErrorAction SilentlyContinue
-if ($serverKeyVal -and $serverKeyVal."1176759950" -eq 1) {
-    Write-Host "  [INFO] 1176759950 - Microsoft Official Server key (optional, present)" -ForegroundColor Cyan
 }
 
 # SafeBoot Keys
@@ -1375,6 +1471,10 @@ Write-Host "Press any key to exit..."
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 '@
     
+    # Inject actual server key setting into the generated script
+    $serverKeyValue = if ($script:Config.IncludeServerKey) { '$true' } else { '$false' }
+    $scriptContent = $scriptContent -replace 'SERVERKEY_PLACEHOLDER', $serverKeyValue
+
     try {
         $scriptContent | Out-File -FilePath $OutputPath -Encoding UTF8
         return $OutputPath
@@ -1524,13 +1624,13 @@ function Set-RoundedCorners {
 
 function Set-DarkScrollbar {
     param([System.Windows.Forms.Control]$Control)
-    try { [DarkScrollBar]::SetWindowTheme($Control.Handle, "DarkMode_Explorer", $null) | Out-Null } catch { }
+    try { [DarkScrollBar]::SetWindowTheme($Control.Handle, "DarkMode_Explorer", $null) | Out-Null } catch { <# Dark scrollbar theming is cosmetic-only #> }
 }
 
 function Update-DrivesList {
     if (-not $script:pnlDrivesContent) { return }
     $script:pnlDrivesContent.Controls.Clear()
-    $drives = Get-SystemDrives
+    $drives = if ($script:CachedDrives) { $script:CachedDrives } else { Get-SystemDrives }
     if ($drives.Count -eq 0) {
         $noLabel = New-Object System.Windows.Forms.Label
         $noLabel.Location  = New-Object System.Drawing.Point(0, 4)
@@ -1555,7 +1655,8 @@ function Update-DrivesList {
         $dot.Location = New-Object System.Drawing.Point(4, 10)
         $dot.BackColor = if ($drv.IsNVMe) { $script:Colors.Success } else { $script:Colors.TextDimmed }
         $dp = New-Object System.Drawing.Drawing2D.GraphicsPath; $dp.AddEllipse(0, 0, 8, 8)
-        $dot.Region = New-Object System.Drawing.Region($dp); $dp.Dispose()
+        $rgn = New-Object System.Drawing.Region($dp); $dp.Dispose()
+        $oldRgn = $dot.Region; $dot.Region = $rgn; if ($oldRgn) { $oldRgn.Dispose() }
         $row.Controls.Add($dot)
 
         # Drive name
@@ -1596,17 +1697,56 @@ function Update-DrivesList {
         $row.Controls.Add($busLbl)
 
         # Boot indicator
+        $nextBadgeX = 426
         if ($drv.IsBoot) {
             $bootLbl = New-Object System.Windows.Forms.Label
             $bootLbl.Size      = New-Object System.Drawing.Size(42, 18)
-            $bootLbl.Location  = New-Object System.Drawing.Point(426, 5)
+            $bootLbl.Location  = New-Object System.Drawing.Point($nextBadgeX, 5)
             $bootLbl.Text      = "BOOT"
             $bootLbl.Font      = New-Object System.Drawing.Font("Segoe UI Semibold", 7.5)
             $bootLbl.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
             $bootLbl.ForeColor = $script:Colors.Warning
-            $bootLbl.BackColor = [System.Drawing.Color]::FromArgb(40, 255, 193, 7)
+            $bootLbl.BackColor = $script:Colors.WarningDim
             Set-RoundedCorners -Control $bootLbl -Radius 8
             $row.Controls.Add($bootLbl)
+            $nextBadgeX += 48
+        }
+
+        # NVMe health badges (temperature, wear)
+        if ($drv.IsNVMe -and $script:CachedHealth) {
+            $diskKey = "$($drv.Number)"
+            $hData = $script:CachedHealth[$diskKey]
+            if ($hData) {
+                if ($hData.Temperature -ne "N/A") {
+                    $tempLbl = New-Object System.Windows.Forms.Label
+                    $tempLbl.Size = New-Object System.Drawing.Size(38, 18)
+                    $tempLbl.Location = New-Object System.Drawing.Point($nextBadgeX, 5)
+                    $tempLbl.Text = $hData.Temperature
+                    $tempLbl.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 7)
+                    $tempLbl.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+                    $tempVal = 0; [int]::TryParse(($hData.Temperature -replace '[^0-9]',''), [ref]$tempVal) | Out-Null
+                    $tempLbl.ForeColor = if ($tempVal -ge 70) { $script:Colors.Danger } elseif ($tempVal -ge 50) { $script:Colors.Warning } else { $script:Colors.Success }
+                    $tempLbl.BackColor = $script:Colors.SurfaceLight
+                    Set-RoundedCorners -Control $tempLbl -Radius 6
+                    $row.Controls.Add($tempLbl)
+                    $nextBadgeX += 42
+                }
+                if ($hData.Wear -ne "N/A") {
+                    $wearLbl = New-Object System.Windows.Forms.Label
+                    $wearLbl.Size = New-Object System.Drawing.Size(38, 18)
+                    $wearLbl.Location = New-Object System.Drawing.Point($nextBadgeX, 5)
+                    $wearLbl.Text = $hData.Wear
+                    $wearLbl.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 7)
+                    $wearLbl.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+                    $wearVal = 0; [int]::TryParse(($hData.Wear -replace '[^0-9]',''), [ref]$wearVal) | Out-Null
+                    $wearLbl.ForeColor = if ($wearVal -le 20) { $script:Colors.Danger } elseif ($wearVal -le 50) { $script:Colors.Warning } else { $script:Colors.Success }
+                    $wearLbl.BackColor = $script:Colors.SurfaceLight
+                    Set-RoundedCorners -Control $wearLbl -Radius 6
+                    if ($script:ToolTipProvider) { $script:ToolTipProvider.SetToolTip($wearLbl, "Drive health remaining") }
+                    $row.Controls.Add($wearLbl)
+                    $nextBadgeX += 42
+                }
+            }
         }
 
         $script:pnlDrivesContent.Controls.Add($row)
@@ -1625,7 +1765,7 @@ function New-CardPanel {
     $region = Get-RoundedRegion -Width $Size.Width -Height $Size.Height -Radius $CornerRadius
     if ($region) { $card.Region = $region }
     $card.Add_Resize({ $r = Get-ControlTagValue -Control $this -Key 'CornerRadius' -Default 10; $newRegion = Get-RoundedRegion -Width $this.Width -Height $this.Height -Radius $r; if ($newRegion) { $oldRegion = $this.Region; $this.Region = $newRegion; if ($oldRegion) { $oldRegion.Dispose() } } })
-    $card.Add_Paint({ param($sender, $e); $g = $e.Graphics; $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias; $r = Get-ControlTagValue -Control $sender -Key 'CornerRadius' -Default 10; $d = $r * 2; $pen = $null; $borderPath = $null; try { $pen = New-Object System.Drawing.Pen($script:Colors.CardBorder, 1); $rect = New-Object System.Drawing.Rectangle(0, 0, ($sender.Width - 1), ($sender.Height - 1)); $borderPath = New-Object System.Drawing.Drawing2D.GraphicsPath; $borderPath.AddArc($rect.X, $rect.Y, $d, $d, 180, 90); $borderPath.AddArc($rect.Right - $d, $rect.Y, $d, $d, 270, 90); $borderPath.AddArc($rect.Right - $d, $rect.Bottom - $d, $d, $d, 0, 90); $borderPath.AddArc($rect.X, $rect.Bottom - $d, $d, $d, 90, 90); $borderPath.CloseFigure(); $g.DrawPath($pen, $borderPath) } finally { if ($borderPath) { $borderPath.Dispose() }; if ($pen) { $pen.Dispose() } } })
+    $card.Add_Paint({ param($paintSender, $e); $g = $e.Graphics; $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias; $r = Get-ControlTagValue -Control $paintSender -Key 'CornerRadius' -Default 10; $d = $r * 2; $pen = $null; $borderPath = $null; try { $pen = New-Object System.Drawing.Pen($script:Colors.CardBorder, 1); $rect = New-Object System.Drawing.Rectangle(0, 0, ($paintSender.Width - 1), ($paintSender.Height - 1)); $borderPath = New-Object System.Drawing.Drawing2D.GraphicsPath; $borderPath.AddArc($rect.X, $rect.Y, $d, $d, 180, 90); $borderPath.AddArc($rect.Right - $d, $rect.Y, $d, $d, 270, 90); $borderPath.AddArc($rect.Right - $d, $rect.Bottom - $d, $d, $d, 0, 90); $borderPath.AddArc($rect.X, $rect.Bottom - $d, $d, $d, 90, 90); $borderPath.CloseFigure(); $g.DrawPath($pen, $borderPath) } finally { if ($borderPath) { $borderPath.Dispose() }; if ($pen) { $pen.Dispose() } } })
     if ($Title) { $titleLabel = New-Object System.Windows.Forms.Label; $titleLabel.Text = $Title.ToUpper(); $titleLabel.Location = New-Object System.Drawing.Point($Padding, 16); $titleLabel.Size = New-Object System.Drawing.Size(($Size.Width - $Padding * 2), 18); $titleLabel.ForeColor = $script:Colors.TextMuted; $titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8.25, [System.Drawing.FontStyle]::Bold); Set-ControlTagData -Control $titleLabel -NewData @{ Role = "cardTitle" }; $card.Controls.Add($titleLabel) }
     return $card
 }
@@ -1648,13 +1788,65 @@ function New-ModernButton {
     return $button
 }
 
-function Set-ButtonsEnabled { param([bool]$Enabled); if ($script:btnApply) { $script:btnApply.Enabled = $Enabled }; if ($script:btnRemove) { $script:btnRemove.Enabled = $Enabled }; if ($script:btnBackup) { $script:btnBackup.Enabled = $Enabled }; [System.Windows.Forms.Application]::DoEvents() }
+function Set-ButtonsEnabled { param([bool]$Enabled); if ($script:btnApply) { $script:btnApply.Enabled = $Enabled }; if ($script:btnRemove) { $script:btnRemove.Enabled = $Enabled }; if ($script:btnBackup) { $script:btnBackup.Enabled = $Enabled }; if ($script:form) { $script:form.Refresh() } }
 
-function Update-Progress { param([int]$Value, [string]$Status = ""); if ($script:progressBar) { $script:progressBar.Value = [Math]::Min($Value, 100); $script:progressBar.Visible = ($Value -gt 0 -and $Value -lt 100) }; if ($script:lblProgress -and $Status) { $script:lblProgress.Text = $Status; $script:lblProgress.Visible = ($Status -ne "") }; [System.Windows.Forms.Application]::DoEvents() }
+function Update-Progress { param([int]$Value, [string]$Status = ""); if ($script:progressBar) { $script:progressBar.Value = [Math]::Min($Value, 100); $script:progressBar.Visible = ($Value -gt 0 -and $Value -lt 100) }; if ($script:progressRing) { $script:progressRing.Tag = @{ Value = $Value }; $script:progressRing.Visible = ($Value -gt 0 -and $Value -lt 100); $script:progressRing.Invalidate() }; if ($script:lblProgress -and $Status) { $script:lblProgress.Text = $Status; $script:lblProgress.Visible = ($Status -ne "") }; if ($script:form) { $script:form.Refresh() } }
 
 # ===========================================================================
 # SECTION 16: BACKUP & PATCH OPERATIONS (Same as v2.8.0 with toast notifications)
 # ===========================================================================
+
+function Get-PatchSnapshot {
+    $snapshot = @{
+        Timestamp = Get-Date -Format "HH:mm:ss"
+        Status = Test-PatchStatus
+        DriverActive = if ($script:NativeNVMeStatus) { $script:NativeNVMeStatus.ActiveDriver } else { "Unknown" }
+        BypassIO = if ($script:BypassIOStatus) { $script:BypassIOStatus.Supported } else { $false }
+        Components = @{}
+    }
+    foreach ($id in $script:Config.FeatureIDs) {
+        $val = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue
+        $snapshot.Components[$id] = if ($val -and $val.$id -eq 1) { "Set (1)" } else { "Not Set" }
+    }
+    $snapshot.Components["SafeBootMinimal"] = if (Test-Path $script:Config.SafeBootMinimal) { "Present" } else { "Absent" }
+    $snapshot.Components["SafeBootNetwork"] = if (Test-Path $script:Config.SafeBootNetwork) { "Present" } else { "Absent" }
+    return $snapshot
+}
+
+function Show-BeforeAfterComparison {
+    param($Before, $After, [string]$Operation = "Patch")
+    if (-not $Before -or -not $After) { return }
+
+    Write-Log ""
+    Write-Log "========== BEFORE / AFTER ==========" -Level "INFO"
+    Write-Log "  Operation: $Operation" -Level "INFO"
+
+    $beforeStatus = if ($Before.Status.Applied) { "Applied ($($Before.Status.Count)/$($Before.Status.Total))" }
+                    elseif ($Before.Status.Partial) { "Partial ($($Before.Status.Count)/$($Before.Status.Total))" }
+                    else { "Not Applied" }
+    $afterStatus  = if ($After.Status.Applied) { "Applied ($($After.Status.Count)/$($After.Status.Total))" }
+                    elseif ($After.Status.Partial) { "Partial ($($After.Status.Count)/$($After.Status.Total))" }
+                    else { "Not Applied" }
+
+    if ($beforeStatus -ne $afterStatus) {
+        Write-Log "  Status:  $beforeStatus  -->  $afterStatus" -Level "SUCCESS"
+    } else {
+        Write-Log "  Status:  $beforeStatus  (unchanged)" -Level "INFO"
+    }
+
+    foreach ($key in $After.Components.Keys) {
+        $bVal = $Before.Components[$key]
+        $aVal = $After.Components[$key]
+        $friendlyName = if ($script:Config.FeatureNames.ContainsKey($key)) { $script:Config.FeatureNames[$key] } else { $key }
+        if ($bVal -ne $aVal) {
+            Write-Log "  $($friendlyName):  $bVal  -->  $aVal" -Level "SUCCESS"
+        }
+    }
+    Write-Log "====================================" -Level "INFO"
+    Write-Log ""
+}
+
+$script:BeforeSnapshot = $null
 
 function Export-RegistryBackup {
     param([string]$Description = "NVMe_Backup")
@@ -1662,9 +1854,26 @@ function Export-RegistryBackup {
     $backupFile = Join-Path $script:Config.WorkingDir "$($Description)_$timestamp.reg"
     Write-Log "Exporting registry backup to file..."
     try {
-        $regContent = "Windows Registry Editor Version 5.00`n`n; NVMe Driver Patcher Registry Backup`n; Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`n; Description: $Description`n`n[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides]"
-        if (Test-Path $script:Config.RegistryPath) { foreach ($id in $script:Config.FeatureIDs) { $val = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue; if ($val) { $propValue = $val | Select-Object -ExpandProperty $id -ErrorAction SilentlyContinue; if ($null -ne $propValue) { $regContent += "`n`"$id`"=dword:$('{0:x8}' -f $propValue)" } } } }
-        $regContent | Out-File -FilePath $backupFile -Encoding Unicode
+        $lines = [System.Collections.ArrayList]::new()
+        [void]$lines.Add("Windows Registry Editor Version 5.00")
+        [void]$lines.Add("")
+        [void]$lines.Add("; NVMe Driver Patcher Registry Backup")
+        [void]$lines.Add("; Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
+        [void]$lines.Add("; Description: $Description")
+        [void]$lines.Add("")
+        [void]$lines.Add("[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides]")
+        if (Test-Path $script:Config.RegistryPath) {
+            foreach ($id in $script:Config.FeatureIDs) {
+                $val = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue
+                if ($val) {
+                    $propValue = $val | Select-Object -ExpandProperty $id -ErrorAction SilentlyContinue
+                    if ($null -ne $propValue) {
+                        [void]$lines.Add("`"$id`"=dword:$('{0:x8}' -f $propValue)")
+                    }
+                }
+            }
+        }
+        $lines -join "`r`n" | Out-File -FilePath $backupFile -Encoding Unicode -NoNewline
         Write-Log "Registry backup saved: $backupFile" -Level "SUCCESS"
         return $backupFile
     }
@@ -1673,18 +1882,54 @@ function Export-RegistryBackup {
 
 function New-SafeRestorePoint {
     param([string]$Description = "NVMe Patcher Backup")
-    Write-Log "Creating system backup..."; Update-Progress -Value 10 -Status "Creating registry backup..."
+
+    Write-Log "Creating system backup..."
+    Update-Progress -Value 10 -Status "Creating registry backup..."
     $regBackup = Export-RegistryBackup -Description "Pre_Patch"
     Update-Progress -Value 50 -Status "Creating restore point..."
-    try { Checkpoint-Computer -Description $Description -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop; Write-Log "System restore point created: '$Description'" -Level "SUCCESS"; Update-Progress -Value 0 -Status ""; return $true }
-    catch { $errorMsg = $_.Exception.Message; if ($errorMsg -match "1111|24.hour|frequency") { Write-Log "Note: Windows limits restore points (one per 24 hours)" -Level "WARNING"; if ($regBackup) { Write-Log "Registry backup available as alternative" -Level "INFO" }; Update-Progress -Value 0 -Status ""; return $true }; Write-Log "Restore point failed: $errorMsg" -Level "ERROR"; if ($regBackup) { Write-Log "Registry backup is available" -Level "INFO"; Update-Progress -Value 0 -Status ""; return $true }; Update-Progress -Value 0 -Status ""; return $script:Config.ForceMode }
+
+    try {
+        Checkpoint-Computer -Description $Description -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
+        Write-Log "System restore point created: '$Description'" -Level "SUCCESS"
+        Update-Progress -Value 0 -Status ""
+        return $true
+    }
+    catch {
+        $errorMsg = $_.Exception.Message
+        if ($errorMsg -match "1111|24.hour|frequency") {
+            Write-Log "Note: Windows limits restore points (one per 24 hours)" -Level "WARNING"
+            if ($regBackup) { Write-Log "Registry backup available as alternative" -Level "INFO" }
+            Update-Progress -Value 0 -Status ""
+            return $true
+        }
+
+        Write-Log "Restore point failed: $errorMsg" -Level "ERROR"
+        if ($regBackup) {
+            Write-Log "Registry backup is available" -Level "INFO"
+            Update-Progress -Value 0 -Status ""
+            return $true
+        }
+
+        Update-Progress -Value 0 -Status ""
+        return $script:Config.ForceMode
+    }
 }
 
 function Install-NVMePatch {
-    Write-Log "========================================" -Level "INFO"; Write-Log "STARTING PATCH INSTALLATION" -Level "INFO"; Write-Log "========================================" -Level "INFO"
+    Write-Log "========================================" -Level "INFO"
+    Write-Log "STARTING PATCH INSTALLATION" -Level "INFO"
+    Write-Log "========================================" -Level "INFO"
     Write-AppEventLog -Message "NVMe Driver Patch installation started" -EntryType "Information" -EventId 1000
-    if (-not $script:Config.SilentMode) { Set-ButtonsEnabled -Enabled $false; $script:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor }
-    $successCount = 0; $appliedKeys = [System.Collections.ArrayList]::new()
+    $script:BeforeSnapshot = Get-PatchSnapshot
+
+    if (-not $script:Config.SilentMode) {
+        Set-ButtonsEnabled -Enabled $false
+        $script:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+    }
+
+    $successCount = 0
+    $appliedKeys = [System.Collections.ArrayList]::new()
+
     # Determine total components based on server key inclusion
     $effectiveTotal = $script:Config.TotalComponents
     $featureIDsToApply = [System.Collections.ArrayList]@($script:Config.FeatureIDs)
@@ -1693,71 +1938,479 @@ function Install-NVMePatch {
         $effectiveTotal = $script:Config.TotalComponents + 1
         Write-Log "Including optional Microsoft Server 2025 key (1176759950)" -Level "INFO"
     }
+
     try {
-        Write-Log "Step 1/3: Creating system backup..."; $restoreOK = New-SafeRestorePoint -Description "Pre-NVMe-Driver-Patch"; if (-not $restoreOK) { Write-Log "Installation cancelled" -Level "WARNING"; return $false }
-        Write-Log "Step 2/3: Applying $effectiveTotal registry components..."; Update-Progress -Value 60 -Status "Applying registry changes..."
-        if (-not (Test-Path $script:Config.RegistryPath)) { Write-Log "Creating registry path: Overrides" -Level "INFO"; New-Item -Path $script:Config.RegistryPath -Force | Out-Null }
-        foreach ($id in $featureIDsToApply) { $friendlyName = if ($script:Config.FeatureNames.ContainsKey($id)) { $script:Config.FeatureNames[$id] } else { "Feature Flag" }; try { New-ItemProperty -Path $script:Config.RegistryPath -Name $id -Value 1 -PropertyType DWORD -Force | Out-Null; $verify = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue; if ($verify.$id -eq 1) { Write-Log "  [OK] $id - $friendlyName" -Level "SUCCESS"; $successCount++; [void]$appliedKeys.Add(@{ Type = "Feature"; ID = $id }) } else { Write-Log "  [FAIL] $id - $friendlyName" -Level "ERROR" } } catch { Write-Log "  [FAIL] $id - $($_.Exception.Message)" -Level "ERROR" } }
-        try { if (-not (Test-Path $script:Config.SafeBootMinimal)) { New-Item -Path $script:Config.SafeBootMinimal -Force | Out-Null }; Set-ItemProperty -Path $script:Config.SafeBootMinimal -Name "(Default)" -Value $script:Config.SafeBootValue -Force; $val = Get-ItemProperty -Path $script:Config.SafeBootMinimal -Name "(Default)" -ErrorAction SilentlyContinue; if ($val."(Default)" -eq $script:Config.SafeBootValue) { Write-Log "  [OK] SafeBoot Minimal Support" -Level "SUCCESS"; $successCount++; [void]$appliedKeys.Add(@{ Type = "SafeBoot"; ID = "Minimal" }) } else { Write-Log "  [FAIL] SafeBoot Minimal Support" -Level "ERROR" } } catch { Write-Log "  [FAIL] SafeBoot Minimal: $($_.Exception.Message)" -Level "ERROR" }
-        try { if (-not (Test-Path $script:Config.SafeBootNetwork)) { New-Item -Path $script:Config.SafeBootNetwork -Force | Out-Null }; Set-ItemProperty -Path $script:Config.SafeBootNetwork -Name "(Default)" -Value $script:Config.SafeBootValue -Force; $val = Get-ItemProperty -Path $script:Config.SafeBootNetwork -Name "(Default)" -ErrorAction SilentlyContinue; if ($val."(Default)" -eq $script:Config.SafeBootValue) { Write-Log "  [OK] SafeBoot Network Support" -Level "SUCCESS"; $successCount++; [void]$appliedKeys.Add(@{ Type = "SafeBoot"; ID = "Network" }) } else { Write-Log "  [FAIL] SafeBoot Network Support" -Level "ERROR" } } catch { Write-Log "  [FAIL] SafeBoot Network: $($_.Exception.Message)" -Level "ERROR" }
-        Update-Progress -Value 95 -Status "Validating..."; Write-Log "Step 3/3: Validating installation..."; Write-Log "========================================" -Level "INFO"
+        # Step 1: Backup
+        Write-Log "Step 1/3: Creating system backup..."
+        $restoreOK = New-SafeRestorePoint -Description "Pre-NVMe-Driver-Patch"
+        if (-not $restoreOK) {
+            Write-Log "Installation cancelled" -Level "WARNING"
+            return $false
+        }
+
+        # Step 2: Apply registry components
+        Write-Log "Step 2/3: Applying $effectiveTotal registry components..."
+        Update-Progress -Value 60 -Status "Applying registry changes..."
+
+        if (-not (Test-Path $script:Config.RegistryPath)) {
+            Write-Log "Creating registry path: Overrides" -Level "INFO"
+            New-Item -Path $script:Config.RegistryPath -Force | Out-Null
+        }
+
+        foreach ($id in $featureIDsToApply) {
+            $friendlyName = if ($script:Config.FeatureNames.ContainsKey($id)) { $script:Config.FeatureNames[$id] } else { "Feature Flag" }
+            try {
+                New-ItemProperty -Path $script:Config.RegistryPath -Name $id -Value 1 -PropertyType DWORD -Force | Out-Null
+                $verify = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue
+                if ($verify.$id -eq 1) {
+                    Write-Log "  [OK] $id - $friendlyName" -Level "SUCCESS"
+                    $successCount++
+                    [void]$appliedKeys.Add(@{ Type = "Feature"; ID = $id })
+                }
+                else {
+                    Write-Log "  [FAIL] $id - $friendlyName" -Level "ERROR"
+                }
+            }
+            catch {
+                Write-Log "  [FAIL] $id - $($_.Exception.Message)" -Level "ERROR"
+            }
+        }
+
+        # SafeBoot Minimal
+        try {
+            if (-not (Test-Path $script:Config.SafeBootMinimal)) {
+                New-Item -Path $script:Config.SafeBootMinimal -Force | Out-Null
+            }
+            Set-ItemProperty -Path $script:Config.SafeBootMinimal -Name "(Default)" -Value $script:Config.SafeBootValue -Force
+            $val = Get-ItemProperty -Path $script:Config.SafeBootMinimal -Name "(Default)" -ErrorAction SilentlyContinue
+            if ($val."(Default)" -eq $script:Config.SafeBootValue) {
+                Write-Log "  [OK] SafeBoot Minimal Support" -Level "SUCCESS"
+                $successCount++
+                [void]$appliedKeys.Add(@{ Type = "SafeBoot"; ID = "Minimal" })
+            }
+            else {
+                Write-Log "  [FAIL] SafeBoot Minimal Support" -Level "ERROR"
+            }
+        }
+        catch {
+            Write-Log "  [FAIL] SafeBoot Minimal: $($_.Exception.Message)" -Level "ERROR"
+        }
+
+        # SafeBoot Network
+        try {
+            if (-not (Test-Path $script:Config.SafeBootNetwork)) {
+                New-Item -Path $script:Config.SafeBootNetwork -Force | Out-Null
+            }
+            Set-ItemProperty -Path $script:Config.SafeBootNetwork -Name "(Default)" -Value $script:Config.SafeBootValue -Force
+            $val = Get-ItemProperty -Path $script:Config.SafeBootNetwork -Name "(Default)" -ErrorAction SilentlyContinue
+            if ($val."(Default)" -eq $script:Config.SafeBootValue) {
+                Write-Log "  [OK] SafeBoot Network Support" -Level "SUCCESS"
+                $successCount++
+                [void]$appliedKeys.Add(@{ Type = "SafeBoot"; ID = "Network" })
+            }
+            else {
+                Write-Log "  [FAIL] SafeBoot Network Support" -Level "ERROR"
+            }
+        }
+        catch {
+            Write-Log "  [FAIL] SafeBoot Network: $($_.Exception.Message)" -Level "ERROR"
+        }
+
+        # Step 3: Validate
+        Update-Progress -Value 95 -Status "Validating..."
+        Write-Log "Step 3/3: Validating installation..."
+        Write-Log "========================================" -Level "INFO"
+
         if ($successCount -eq $effectiveTotal) {
-            Write-Log "Patch Status: SUCCESS - Applied $successCount/$effectiveTotal components" -Level "SUCCESS"; Write-Log "Please RESTART your computer to apply changes" -Level "WARNING"
+            Write-Log "Patch Status: SUCCESS - Applied $successCount/$effectiveTotal components" -Level "SUCCESS"
+            Write-Log "Please RESTART your computer to apply changes" -Level "WARNING"
             Write-Log "After reboot: Drives should appear under 'Storage disks' using nvmedisk.sys" -Level "INFO"
-            if ($script:BypassIOStatus -and -not $script:BypassIOStatus.Supported) { Write-Log "NOTE: BypassIO/DirectStorage not supported with Native NVMe - gaming impact possible" -Level "WARNING" }
+
+            if ($script:BypassIOStatus -and -not $script:BypassIOStatus.Supported) {
+                Write-Log "NOTE: BypassIO/DirectStorage not supported with Native NVMe - gaming impact possible" -Level "WARNING"
+            }
+
             Write-AppEventLog -Message "NVMe Driver Patch applied successfully ($successCount/$effectiveTotal components)" -EntryType "Information" -EventId 1001
             Show-ToastNotification -Title "NVMe Patch Applied" -Message "All $effectiveTotal components applied successfully. Restart required." -Type "Success"
-            # Generate verification script
-            $verifyScript = New-VerificationScript; if ($verifyScript) { Write-Log "Verification script created: $verifyScript" -Level "INFO" }
-            Update-Progress -Value 100 -Status "Complete!"; Start-Sleep -Milliseconds 500; Update-Progress -Value 0 -Status ""
-            if (-not $script:Config.NoRestart -and -not $script:Config.SilentMode) { $result = [System.Windows.Forms.MessageBox]::Show("Patch applied successfully ($successCount/$effectiveTotal components).`n`nRestart your computer now to enable the new NVMe driver?`n`n(System will restart in $($script:Config.RestartDelay) seconds if you click Yes)`n`nAfter reboot:`n- Drives will move from 'Disk drives' to 'Storage disks'`n- Driver changes from stornvme.sys to nvmedisk.sys`n- A verification script has been created to confirm", "Installation Complete", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question); if ($result -eq [System.Windows.Forms.DialogResult]::Yes) { Write-Log "Initiating system restart in $($script:Config.RestartDelay) seconds..."; Start-Process "shutdown.exe" -ArgumentList "/r /t $($script:Config.RestartDelay) /c `"NVMe Driver Patch - Restarting in $($script:Config.RestartDelay) seconds. Save your work!`"" } }
+
+            $verifyScript = New-VerificationScript
+            if ($verifyScript) { Write-Log "Verification script created: $verifyScript" -Level "INFO" }
+
+            Update-Progress -Value 100 -Status "Complete!"
+            Start-Sleep -Milliseconds 500
+            Update-Progress -Value 0 -Status ""
+
+            if (-not $script:Config.NoRestart -and -not $script:Config.SilentMode) {
+                $restartMsg = "Patch applied successfully ($successCount/$effectiveTotal components).`n`n"
+                $restartMsg += "Restart your computer now to enable the new NVMe driver?`n`n"
+                $restartMsg += "(System will restart in $($script:Config.RestartDelay) seconds if you click Yes)`n`n"
+                $restartMsg += "After reboot:`n"
+                $restartMsg += "- Drives will move from 'Disk drives' to 'Storage disks'`n"
+                $restartMsg += "- Driver changes from stornvme.sys to nvmedisk.sys`n"
+                $restartMsg += "- A verification script has been created to confirm"
+
+                $result = [System.Windows.Forms.MessageBox]::Show(
+                    $restartMsg, "Installation Complete",
+                    [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                    [System.Windows.Forms.MessageBoxIcon]::Question
+                )
+                if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
+                    Write-Log "Initiating system restart in $($script:Config.RestartDelay) seconds..."
+                    Start-Process "shutdown.exe" -ArgumentList "/r /t $($script:Config.RestartDelay) /c `"NVMe Driver Patch - Restarting in $($script:Config.RestartDelay) seconds. Save your work!`""
+                }
+            }
             return $true
-        } else {
+        }
+        else {
             Write-Log "Patch Status: PARTIAL - Applied $successCount/$effectiveTotal components" -Level "WARNING"
             Write-AppEventLog -Message "NVMe Driver Patch partially applied ($successCount/$effectiveTotal components)" -EntryType "Warning" -EventId 2001
             Show-ToastNotification -Title "NVMe Patch Partial" -Message "$successCount of $effectiveTotal components applied. Check log for details." -Type "Warning"
-            Update-Progress -Value 0 -Status ""; return $false
+            Update-Progress -Value 0 -Status ""
+            return $false
         }
-    } catch { Write-Log "INSTALLATION FAILED: $($_.Exception.Message)" -Level "ERROR"; Write-AppEventLog -Message "NVMe Driver Patch installation failed: $($_.Exception.Message)" -EntryType "Error" -EventId 3001; Update-Progress -Value 0 -Status ""; return $false }
-    finally { if (-not $script:Config.SilentMode) { $script:form.Cursor = [System.Windows.Forms.Cursors]::Default; Set-ButtonsEnabled -Enabled $true; Refresh-StatusDisplay }; Write-Log "========================================" -Level "INFO" }
+    }
+    catch {
+        Write-Log "INSTALLATION FAILED: $($_.Exception.Message)" -Level "ERROR"
+        Write-AppEventLog -Message "NVMe Driver Patch installation failed: $($_.Exception.Message)" -EntryType "Error" -EventId 3001
+        Update-Progress -Value 0 -Status ""
+        return $false
+    }
+    finally {
+        if (-not $script:Config.SilentMode) {
+            $script:form.Cursor = [System.Windows.Forms.Cursors]::Default
+            Set-ButtonsEnabled -Enabled $true
+            Update-StatusDisplay
+        }
+        if ($script:BeforeSnapshot) {
+            $afterSnapshot = Get-PatchSnapshot
+            Show-BeforeAfterComparison -Before $script:BeforeSnapshot -After $afterSnapshot -Operation "Install Patch"
+            $script:BeforeSnapshot = $null
+        }
+        Write-Log "========================================" -Level "INFO"
+    }
 }
 
 function Uninstall-NVMePatch {
-    Write-Log "========================================" -Level "INFO"; Write-Log "STARTING PATCH REMOVAL" -Level "INFO"; Write-Log "========================================" -Level "INFO"
+    Write-Log "========================================" -Level "INFO"
+    Write-Log "STARTING PATCH REMOVAL" -Level "INFO"
+    Write-Log "========================================" -Level "INFO"
     Write-AppEventLog -Message "NVMe Driver Patch removal started" -EntryType "Information" -EventId 1000
-    if (-not $script:Config.SilentMode) { Set-ButtonsEnabled -Enabled $false; $script:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor }
-    Update-Progress -Value 10 -Status "Creating backup..."; Export-RegistryBackup -Description "Pre_Removal"
+    $script:BeforeSnapshot = Get-PatchSnapshot
+
+    if (-not $script:Config.SilentMode) {
+        Set-ButtonsEnabled -Enabled $false
+        $script:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+    }
+
+    Update-Progress -Value 10 -Status "Creating backup..."
+    Export-RegistryBackup -Description "Pre_Removal"
     $removedCount = 0
+
     # Remove all feature flags including optional server key if present
     $allFeatureIDs = [System.Collections.ArrayList]@($script:Config.FeatureIDs)
     [void]$allFeatureIDs.Add($script:Config.ServerFeatureID)
+
     try {
-        Write-Log "Removing registry components..."; Update-Progress -Value 30 -Status "Removing feature flags..."
-        if (Test-Path $script:Config.RegistryPath) { foreach ($id in $allFeatureIDs) { $exists = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue; if ($exists) { try { Remove-ItemProperty -Path $script:Config.RegistryPath -Name $id -Force -ErrorAction Stop; $friendlyName = if ($script:Config.FeatureNames.ContainsKey($id)) { $script:Config.FeatureNames[$id] } else { "Feature Flag" }; Write-Log "  [REMOVED] $id - $friendlyName" -Level "SUCCESS"; $removedCount++ } catch { Write-Log "  [FAIL] Failed to remove $($id): $($_.Exception.Message)" -Level "ERROR" } } else { Write-Log "  [ABSENT] Feature Flag: $id (Already gone)" -Level "INFO" } } }
+        Write-Log "Removing registry components..."
+        Update-Progress -Value 30 -Status "Removing feature flags..."
+
+        if (Test-Path $script:Config.RegistryPath) {
+            foreach ($id in $allFeatureIDs) {
+                $exists = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue
+                if ($exists) {
+                    try {
+                        Remove-ItemProperty -Path $script:Config.RegistryPath -Name $id -Force -ErrorAction Stop
+                        $friendlyName = if ($script:Config.FeatureNames.ContainsKey($id)) { $script:Config.FeatureNames[$id] } else { "Feature Flag" }
+                        Write-Log "  [REMOVED] $id - $friendlyName" -Level "SUCCESS"
+                        $removedCount++
+                    }
+                    catch {
+                        Write-Log "  [FAIL] Failed to remove $($id): $($_.Exception.Message)" -Level "ERROR"
+                    }
+                }
+                else {
+                    Write-Log "  [ABSENT] Feature Flag: $id (Already gone)" -Level "INFO"
+                }
+            }
+        }
+
         Update-Progress -Value 60 -Status "Removing SafeBoot keys..."
-        if (Test-Path $script:Config.SafeBootMinimal) { try { Remove-Item -Path $script:Config.SafeBootMinimal -Force -ErrorAction Stop; Write-Log "  [REMOVED] SafeBoot Minimal" -Level "SUCCESS"; $removedCount++ } catch { Write-Log "  [FAIL] SafeBoot Minimal: $($_.Exception.Message)" -Level "ERROR" } }
-        if (Test-Path $script:Config.SafeBootNetwork) { try { Remove-Item -Path $script:Config.SafeBootNetwork -Force -ErrorAction Stop; Write-Log "  [REMOVED] SafeBoot Network" -Level "SUCCESS"; $removedCount++ } catch { Write-Log "  [FAIL] SafeBoot Network: $($_.Exception.Message)" -Level "ERROR" } }
-        Update-Progress -Value 90 -Status "Validating..."; Write-Log "========================================" -Level "INFO"
-        Write-Log "Patch Status: REMOVED - Removed $removedCount components" -Level "SUCCESS"; Write-Log "After reboot: Drives will return to 'Disk drives' using stornvme.sys" -Level "INFO"; Write-Log "Please RESTART your computer" -Level "WARNING"
+
+        if (Test-Path $script:Config.SafeBootMinimal) {
+            try {
+                Remove-Item -Path $script:Config.SafeBootMinimal -Force -ErrorAction Stop
+                Write-Log "  [REMOVED] SafeBoot Minimal" -Level "SUCCESS"
+                $removedCount++
+            }
+            catch {
+                Write-Log "  [FAIL] SafeBoot Minimal: $($_.Exception.Message)" -Level "ERROR"
+            }
+        }
+
+        if (Test-Path $script:Config.SafeBootNetwork) {
+            try {
+                Remove-Item -Path $script:Config.SafeBootNetwork -Force -ErrorAction Stop
+                Write-Log "  [REMOVED] SafeBoot Network" -Level "SUCCESS"
+                $removedCount++
+            }
+            catch {
+                Write-Log "  [FAIL] SafeBoot Network: $($_.Exception.Message)" -Level "ERROR"
+            }
+        }
+
+        Update-Progress -Value 90 -Status "Validating..."
+        Write-Log "========================================" -Level "INFO"
+        Write-Log "Patch Status: REMOVED - Removed $removedCount components" -Level "SUCCESS"
+        Write-Log "After reboot: Drives will return to 'Disk drives' using stornvme.sys" -Level "INFO"
+        Write-Log "Please RESTART your computer" -Level "WARNING"
         Write-AppEventLog -Message "NVMe Driver Patch removed ($removedCount components)" -EntryType "Information" -EventId 1001
         Show-ToastNotification -Title "NVMe Patch Removed" -Message "Patch components removed. Restart required." -Type "Info"
-        Update-Progress -Value 100 -Status "Complete!"; Start-Sleep -Milliseconds 500; Update-Progress -Value 0 -Status ""; return $true
-    } catch { Write-Log "REMOVAL FAILED: $($_.Exception.Message)" -Level "ERROR"; Write-AppEventLog -Message "NVMe Driver Patch removal failed: $($_.Exception.Message)" -EntryType "Error" -EventId 3001; Update-Progress -Value 0 -Status ""; return $false }
-    finally { if (-not $script:Config.SilentMode) { $script:form.Cursor = [System.Windows.Forms.Cursors]::Default; Set-ButtonsEnabled -Enabled $true; Refresh-StatusDisplay }; Write-Log "========================================" -Level "INFO" }
+
+        Update-Progress -Value 100 -Status "Complete!"
+        Start-Sleep -Milliseconds 500
+        Update-Progress -Value 0 -Status ""
+        return $true
+    }
+    catch {
+        Write-Log "REMOVAL FAILED: $($_.Exception.Message)" -Level "ERROR"
+        Write-AppEventLog -Message "NVMe Driver Patch removal failed: $($_.Exception.Message)" -EntryType "Error" -EventId 3001
+        Update-Progress -Value 0 -Status ""
+        return $false
+    }
+    finally {
+        if (-not $script:Config.SilentMode) {
+            $script:form.Cursor = [System.Windows.Forms.Cursors]::Default
+            Set-ButtonsEnabled -Enabled $true
+            Update-StatusDisplay
+        }
+        if ($script:BeforeSnapshot) {
+            $afterSnapshot = Get-PatchSnapshot
+            Show-BeforeAfterComparison -Before $script:BeforeSnapshot -After $afterSnapshot -Operation "Remove Patch"
+            $script:BeforeSnapshot = $null
+        }
+        Write-Log "========================================" -Level "INFO"
+    }
 }
 
-function Refresh-StatusDisplay {
+function Start-StatusPulse {
+    param([System.Drawing.Color]$TargetColor)
+    $script:PulseTargetColor = $TargetColor
+    $script:PulseStep = 0
+    $script:PulseDirection = 1
+    if ($script:StatusPulseTimer) { $script:StatusPulseTimer.Stop(); $script:StatusPulseTimer.Dispose() }
+    $script:StatusPulseTimer = New-Object System.Windows.Forms.Timer
+    $script:StatusPulseTimer.Interval = 40
+    $script:StatusPulseTimer.Add_Tick({
+        $script:PulseStep += $script:PulseDirection * 8
+        if ($script:PulseStep -ge 100) { $script:PulseDirection = -1; $script:PulseStep = 100 }
+        if ($script:PulseStep -le 0) {
+            $script:PulseStep = 0
+            $this.Stop()
+            $this.Dispose()
+            $script:StatusPulseTimer = $null
+            # Set final color
+            $icon = $script:pnlPatchStatus.Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "icon" }
+            if ($icon) { $icon.BackColor = $script:PulseTargetColor }
+            return
+        }
+        $icon = $script:pnlPatchStatus.Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "icon" }
+        if ($icon) {
+            $t = $script:PulseTargetColor
+            $factor = [Math]::Min($script:PulseStep, 100) / 100.0
+            $bright = [int](255 * $factor)
+            $r = [Math]::Min(255, [int]($t.R + ($bright - $t.R) * $factor * 0.5))
+            $g = [Math]::Min(255, [int]($t.G + ($bright - $t.G) * $factor * 0.5))
+            $b = [Math]::Min(255, [int]($t.B + ($bright - $t.B) * $factor * 0.5))
+            $icon.BackColor = [System.Drawing.Color]::FromArgb($r, $g, $b)
+        }
+    }.GetNewClosure())
+    $script:StatusPulseTimer.Start()
+}
+
+function Update-StatusDisplay {
     $status = Test-PatchStatus
-    if ($script:keyRows) { foreach ($id in $script:Config.FeatureIDs) { if ($script:keyRows.ContainsKey($id)) { $isPresent = ($status.Keys -contains $id); $dot = $script:keyRows[$id].Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "dot" }; if ($dot) { $dot.BackColor = if ($isPresent) { $script:Colors.Success } else { $script:Colors.Danger } } } }; if ($script:keyRows.ContainsKey("SafeBootMinimal")) { $isPresent = ($status.Keys -contains "SafeBootMinimal"); $dot = $script:keyRows["SafeBootMinimal"].Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "dot" }; if ($dot) { $dot.BackColor = if ($isPresent) { $script:Colors.Success } else { $script:Colors.Danger } } }; if ($script:keyRows.ContainsKey("SafeBootNetwork")) { $isPresent = ($status.Keys -contains "SafeBootNetwork"); $dot = $script:keyRows["SafeBootNetwork"].Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "dot" }; if ($dot) { $dot.BackColor = if ($isPresent) { $script:Colors.Success } else { $script:Colors.Danger } } } }
+
+    # Update feature flag dots
+    if ($script:keyRows) {
+        foreach ($id in $script:Config.FeatureIDs) {
+            if ($script:keyRows.ContainsKey($id)) {
+                $isPresent = ($status.Keys -contains $id)
+                $dot = $script:keyRows[$id].Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "dot" }
+                if ($dot) { $dot.BackColor = if ($isPresent) { $script:Colors.Success } else { $script:Colors.Danger } }
+            }
+        }
+
+        foreach ($safeName in @("SafeBootMinimal", "SafeBootNetwork")) {
+            if ($script:keyRows.ContainsKey($safeName)) {
+                $isPresent = ($status.Keys -contains $safeName)
+                $dot = $script:keyRows[$safeName].Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "dot" }
+                if ($dot) { $dot.BackColor = if ($isPresent) { $script:Colors.Success } else { $script:Colors.Danger } }
+            }
+        }
+    }
+
     # Update optional server key dot
-    if ($script:keyRows -and $script:keyRows.ContainsKey("1176759950")) { $serverPresent = $false; try { if (Test-Path $script:Config.RegistryPath) { $sVal = Get-ItemProperty -Path $script:Config.RegistryPath -Name "1176759950" -ErrorAction SilentlyContinue; if ($sVal -and $sVal."1176759950" -eq 1) { $serverPresent = $true } } } catch { }; $dot = $script:keyRows["1176759950"].Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "dot" }; if ($dot) { $dot.BackColor = if ($serverPresent) { $script:Colors.Success } elseif ($script:Config.IncludeServerKey) { $script:Colors.Warning } else { $script:Colors.TextMuted } } }
+    if ($script:keyRows -and $script:keyRows.ContainsKey("1176759950")) {
+        $serverPresent = $false
+        try {
+            if (Test-Path $script:Config.RegistryPath) {
+                $sVal = Get-ItemProperty -Path $script:Config.RegistryPath -Name "1176759950" -ErrorAction SilentlyContinue
+                if ($sVal -and $sVal."1176759950" -eq 1) { $serverPresent = $true }
+            }
+        }
+        catch { <# Server key check non-critical #> }
+
+        $dot = $script:keyRows["1176759950"].Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "dot" }
+        if ($dot) {
+            $dot.BackColor = if ($serverPresent) { $script:Colors.Success }
+                             elseif ($script:Config.IncludeServerKey) { $script:Colors.Warning }
+                             else { $script:Colors.TextMuted }
+        }
+    }
+
     # Update status indicator and buttons based on patch status
-    if ($status.Applied) { if ($script:pnlPatchStatus) { $icon = $script:pnlPatchStatus.Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "icon" }; $label = $script:pnlPatchStatus.Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "status" }; if ($icon) { $icon.BackColor = $script:Colors.Success }; if ($label) { $label.Text = "Patch Applied" } }; if ($script:btnApply) { $script:btnApply.Text = "REINSTALL"; $tag = $script:btnApply.Tag; if ($tag -is [hashtable]) { $tag['Original'] = $script:Colors.SurfaceLight; $tag['Hover'] = $script:Colors.SurfaceHover }; $script:btnApply.BackColor = $script:Colors.SurfaceLight; $tagRemove = $script:btnRemove.Tag; if ($tagRemove -is [hashtable]) { $tagRemove['Original'] = $script:Colors.Danger; $tagRemove['Hover'] = $script:Colors.DangerHover }; $script:btnRemove.BackColor = $script:Colors.Danger } }
-    elseif ($status.Partial) { if ($script:pnlPatchStatus) { $icon = $script:pnlPatchStatus.Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "icon" }; $label = $script:pnlPatchStatus.Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "status" }; if ($icon) { $icon.BackColor = $script:Colors.Warning }; if ($label) { $label.Text = "Partial ($($status.Count)/5)" } } }
-    else { if ($script:pnlPatchStatus) { $icon = $script:pnlPatchStatus.Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "icon" }; $label = $script:pnlPatchStatus.Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "status" }; if ($icon) { $icon.BackColor = $script:Colors.TextMuted }; if ($label) { $label.Text = "Not Applied" } }; if ($script:btnApply) { $script:btnApply.Text = "APPLY PATCH"; $tag = $script:btnApply.Tag; if ($tag -is [hashtable]) { $tag['Original'] = $script:Colors.Success; $tag['Hover'] = $script:Colors.SuccessHover }; $script:btnApply.BackColor = $script:Colors.Success; $tagRemove = $script:btnRemove.Tag; if ($tagRemove -is [hashtable]) { $tagRemove['Original'] = $script:Colors.SurfaceLight; $tagRemove['Hover'] = $script:Colors.SurfaceHover }; $script:btnRemove.BackColor = $script:Colors.SurfaceLight } }
+    if ($script:pnlPatchStatus) {
+        $icon = $script:pnlPatchStatus.Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "icon" }
+        $label = $script:pnlPatchStatus.Controls | Where-Object { (Get-ControlTagValue -Control $_ -Key 'Role') -eq "status" }
+
+        # Determine new state string for change detection
+        $newState = if ($status.Applied) { "Applied" } elseif ($status.Partial) { "Partial" } else { "NotApplied" }
+        $stateChanged = ($null -ne $script:PreviousPatchState -and $script:PreviousPatchState -ne $newState)
+        $script:PreviousPatchState = $newState
+
+        if ($status.Applied) {
+            if ($label) { $label.Text = "Patch Applied" }
+            if ($stateChanged) { Start-StatusPulse -TargetColor $script:Colors.Success }
+            elseif ($icon) { $icon.BackColor = $script:Colors.Success }
+        }
+        elseif ($status.Partial) {
+            if ($label) { $label.Text = "Partial ($($status.Count)/$($status.Total))" }
+            if ($stateChanged) { Start-StatusPulse -TargetColor $script:Colors.Warning }
+            elseif ($icon) { $icon.BackColor = $script:Colors.Warning }
+        }
+        else {
+            if ($label) { $label.Text = "Not Applied" }
+            if ($stateChanged) { Start-StatusPulse -TargetColor $script:Colors.TextMuted }
+            elseif ($icon) { $icon.BackColor = $script:Colors.TextMuted }
+        }
+    }
+
+    # Update button styling based on state
+    if ($status.Applied) {
+        if ($script:btnApply) {
+            $script:btnApply.Text = "REINSTALL"
+            $tag = $script:btnApply.Tag
+            if ($tag -is [hashtable]) { $tag['Original'] = $script:Colors.SurfaceLight; $tag['Hover'] = $script:Colors.SurfaceHover }
+            $script:btnApply.BackColor = $script:Colors.SurfaceLight
+        }
+        if ($script:btnRemove) {
+            $tagRemove = $script:btnRemove.Tag
+            if ($tagRemove -is [hashtable]) { $tagRemove['Original'] = $script:Colors.Danger; $tagRemove['Hover'] = $script:Colors.DangerHover }
+            $script:btnRemove.BackColor = $script:Colors.Danger
+        }
+    }
+    elseif (-not $status.Partial) {
+        if ($script:btnApply) {
+            $script:btnApply.Text = "APPLY PATCH"
+            $tag = $script:btnApply.Tag
+            if ($tag -is [hashtable]) { $tag['Original'] = $script:Colors.Success; $tag['Hover'] = $script:Colors.SuccessHover }
+            $script:btnApply.BackColor = $script:Colors.Success
+        }
+        if ($script:btnRemove) {
+            $tagRemove = $script:btnRemove.Tag
+            if ($tagRemove -is [hashtable]) { $tagRemove['Original'] = $script:Colors.SurfaceLight; $tagRemove['Hover'] = $script:Colors.SurfaceHover }
+            $script:btnRemove.BackColor = $script:Colors.SurfaceLight
+        }
+    }
 }
 
-function Show-ConfirmDialog { param([string]$Title, [string]$Message, [string]$WarningText = "", [bool]$CheckNVMe = $false); if ($script:Config.ForceMode) { return $true }; if ($CheckNVMe -and -not $script:HasNVMeDrives) { $noNVMeResult = [System.Windows.Forms.MessageBox]::Show("NO NVMe DRIVES DETECTED ON THIS SYSTEM!`n`nThis patch only affects NVMe drives using the Windows inbox driver.`nYour system appears to have no NVMe drives.`n`nDo you still want to continue?", "No NVMe Detected", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning); if ($noNVMeResult -ne [System.Windows.Forms.DialogResult]::Yes) { Write-Log "Operation cancelled - No NVMe drives detected" -Level "WARNING"; return $false } }; if ($script:BitLockerEnabled) { $bitlockerResult = [System.Windows.Forms.MessageBox]::Show("BITLOCKER ENCRYPTION DETECTED!`n`nModifying system registry on a BitLocker-encrypted drive may trigger recovery mode on next boot.`n`nMake sure you have your BitLocker recovery key available before proceeding.`n`nContinue?", "BitLocker Warning", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning); if ($bitlockerResult -ne [System.Windows.Forms.DialogResult]::Yes) { Write-Log "Operation cancelled - BitLocker concern" -Level "WARNING"; return $false } }; if ($script:DriverInfo -and $script:DriverInfo.HasThirdParty) { $driverResult = [System.Windows.Forms.MessageBox]::Show("THIRD-PARTY NVMe DRIVER DETECTED!`n`nYour system is using: $($script:DriverInfo.ThirdPartyName)`n`nThis patch only affects the Windows inbox NVMe driver and may have no effect on your system.`n`nContinue anyway?", "Third-Party Driver Warning", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Information); if ($driverResult -ne [System.Windows.Forms.DialogResult]::Yes) { Write-Log "Operation cancelled - Third-party driver" -Level "WARNING"; return $false } }; if ($Title -eq "Apply Patch" -and $script:BuildDetails -and -not $script:BuildDetails.Is24H2OrLater) { $buildResult = [System.Windows.Forms.MessageBox]::Show("OLDER WINDOWS BUILD DETECTED`n`nYour build ($($script:BuildDetails.BuildNumber), $($script:BuildDetails.DisplayVersion)) is older than the recommended 24H2/25H2.`n`nThis patch was designed for Windows 11 24H2 (Build 26100+) and 25H2 (Build 26200+). Results on older builds are unpredictable.`n`nContinue anyway?", "Build Version Warning", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning); if ($buildResult -ne [System.Windows.Forms.DialogResult]::Yes) { Write-Log "Operation cancelled - Older build" -Level "WARNING"; return $false } }; if ($Title -eq "Apply Patch") { [System.Windows.Forms.MessageBox]::Show("DIRECTSTORAGE / GAMING NOTICE`n`nThe Native NVMe driver does NOT currently support BypassIO.`nThis means DirectStorage-enabled games may experience:`n`n- Higher CPU usage during asset loading`n- Potential stuttering in games using DirectStorage`n- Affected titles include games using GPU decompression`n`nIf gaming is your primary use case, you may want to wait for Microsoft to add BypassIO support.`n`nThis is informational only - click OK to continue.", "Gaming Notice", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null }; $fullMessage = $Message; if ($WarningText) { $fullMessage += "`n`nWARNING: $WarningText" }; $result = [System.Windows.Forms.MessageBox]::Show($fullMessage, $Title, [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question); return ($result -eq [System.Windows.Forms.DialogResult]::Yes) }
+function Show-ConfirmDialog {
+    param(
+        [string]$Title,
+        [string]$Message,
+        [string]$WarningText = "",
+        [bool]$CheckNVMe = $false
+    )
+
+    if ($script:Config.ForceMode) { return $true }
+
+    # No NVMe drives warning
+    if ($CheckNVMe -and -not $script:HasNVMeDrives) {
+        $noNVMeResult = [System.Windows.Forms.MessageBox]::Show(
+            "NO NVMe DRIVES DETECTED ON THIS SYSTEM!`n`nThis patch only affects NVMe drives using the Windows inbox driver.`nYour system appears to have no NVMe drives.`n`nDo you still want to continue?",
+            "No NVMe Detected",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        )
+        if ($noNVMeResult -ne [System.Windows.Forms.DialogResult]::Yes) {
+            Write-Log "Operation cancelled - No NVMe drives detected" -Level "WARNING"
+            return $false
+        }
+    }
+
+    # BitLocker warning
+    if ($script:BitLockerEnabled) {
+        $bitlockerResult = [System.Windows.Forms.MessageBox]::Show(
+            "BITLOCKER ENCRYPTION DETECTED!`n`nModifying system registry on a BitLocker-encrypted drive may trigger recovery mode on next boot.`n`nMake sure you have your BitLocker recovery key available before proceeding.`n`nContinue?",
+            "BitLocker Warning",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        )
+        if ($bitlockerResult -ne [System.Windows.Forms.DialogResult]::Yes) {
+            Write-Log "Operation cancelled - BitLocker concern" -Level "WARNING"
+            return $false
+        }
+    }
+
+    # Third-party driver warning
+    if ($script:DriverInfo -and $script:DriverInfo.HasThirdParty) {
+        $driverResult = [System.Windows.Forms.MessageBox]::Show(
+            "THIRD-PARTY NVMe DRIVER DETECTED!`n`nYour system is using: $($script:DriverInfo.ThirdPartyName)`n`nThis patch only affects the Windows inbox NVMe driver and may have no effect on your system.`n`nContinue anyway?",
+            "Third-Party Driver Warning",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        )
+        if ($driverResult -ne [System.Windows.Forms.DialogResult]::Yes) {
+            Write-Log "Operation cancelled - Third-party driver" -Level "WARNING"
+            return $false
+        }
+    }
+
+    # Older build warning (apply only)
+    if ($Title -eq "Apply Patch" -and $script:BuildDetails -and -not $script:BuildDetails.Is24H2OrLater) {
+        $buildResult = [System.Windows.Forms.MessageBox]::Show(
+            "OLDER WINDOWS BUILD DETECTED`n`nYour build ($($script:BuildDetails.BuildNumber), $($script:BuildDetails.DisplayVersion)) is older than the recommended 24H2/25H2.`n`nThis patch was designed for Windows 11 24H2 (Build 26100+) and 25H2 (Build 26200+). Results on older builds are unpredictable.`n`nContinue anyway?",
+            "Build Version Warning",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        )
+        if ($buildResult -ne [System.Windows.Forms.DialogResult]::Yes) {
+            Write-Log "Operation cancelled - Older build" -Level "WARNING"
+            return $false
+        }
+    }
+
+    # DirectStorage / BypassIO gaming notice (apply only)
+    if ($Title -eq "Apply Patch") {
+        [System.Windows.Forms.MessageBox]::Show(
+            "DIRECTSTORAGE / GAMING NOTICE`n`nThe Native NVMe driver does NOT currently support BypassIO.`nThis means DirectStorage-enabled games may experience:`n`n- Higher CPU usage during asset loading`n- Potential stuttering in games using DirectStorage`n- Affected titles include games using GPU decompression`n`nIf gaming is your primary use case, you may want to wait for Microsoft to add BypassIO support.`n`nThis is informational only - click OK to continue.",
+            "Gaming Notice",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        ) | Out-Null
+    }
+
+    # Final confirmation
+    $fullMessage = $Message
+    if ($WarningText) { $fullMessage += "`n`nWARNING: $WarningText" }
+
+    $result = [System.Windows.Forms.MessageBox]::Show(
+        $fullMessage, $Title,
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Question
+    )
+    return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
+}
 
 # ===========================================================================
 # SECTION 17: COMMAND-LINE EXECUTION
@@ -1857,8 +2510,9 @@ if ($Silent) {
     if ($logFile) { Write-Host "Log saved to: $logFile" }
     
     # Cleanup
-    if ($script:AppMutex) { try { $script:AppMutex.ReleaseMutex(); $script:AppMutex.Dispose() } catch { } }
+    if ($script:AppMutex) { try { $script:AppMutex.ReleaseMutex(); $script:AppMutex.Dispose() } catch { <# Mutex cleanup best-effort #> } }
 
+    exit $exitCode
 }
 
 # ===========================================================================
@@ -1893,16 +2547,18 @@ $script:form = New-Object System.Windows.Forms.Form
 $script:form.Text            = "$($script:Config.AppName) v$($script:Config.AppVersion)"
 $script:form.Size            = New-Object System.Drawing.Size($FW, $FH)
 $script:form.StartPosition   = "CenterScreen"
-$script:form.FormBorderStyle = "FixedSingle"
-$script:form.MaximizeBox     = $false
+$script:form.FormBorderStyle = "Sizable"
+$script:form.MinimumSize     = New-Object System.Drawing.Size($FW, 700)
+$script:form.MaximizeBox     = $true
 $script:form.BackColor       = $script:Colors.Background
 $script:form.Font            = New-Object System.Drawing.Font("Segoe UI", 9)
 $script:form.GetType().GetProperty(
     "DoubleBuffered",
     [System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic
 ).SetValue($script:form, $true, $null)
+$script:form.AutoScroll = $true
+$script:form.AutoScrollMargin = New-Object System.Drawing.Size(0, 10)
 
-# Keyboard shortcuts
 # ===================================================================
 #  HEADER
 # ===================================================================
@@ -1962,6 +2618,18 @@ Set-RoundedCorners -Control $lblVersion -Radius 12
 $pnlHeader.Controls.Add($lblVersion)
 
 $script:form.Controls.Add($pnlHeader)
+
+# Loading progress bar (slim marquee bar below header)
+$script:loadingBar = New-Object System.Windows.Forms.ProgressBar
+$script:loadingBar.Location = New-Object System.Drawing.Point(0, $HH)
+$script:loadingBar.Size     = New-Object System.Drawing.Size($FW, 3)
+$script:loadingBar.Style    = [System.Windows.Forms.ProgressBarStyle]::Marquee
+$script:loadingBar.MarqueeAnimationSpeed = 30
+$script:loadingBar.BackColor = $script:Colors.Background
+$script:loadingBar.ForeColor = $script:Colors.Accent
+$script:loadingBar.Visible   = $false
+$script:form.Controls.Add($script:loadingBar)
+$script:loadingBar.BringToFront()
 
 # ===================================================================
 #  LEFT COLUMN  --  CARD 1: DETECTED DRIVES
@@ -2051,6 +2719,7 @@ $cardOverview.Controls.Add($pnlStatusBanner)
 
 # -- Checklist Grid (aligned to $CP) --
 $script:checklistLabels = @{}
+$script:checklistDots = @{}
 
 # Reordered so long-value items are in left column (more width)
 $checkItemsLeft  = @("WindowsVersion", "NVMeDrives",  "BitLocker",         "DriverStatus")
@@ -2089,6 +2758,7 @@ for ($i = 0; $i -lt $checkItemsLeft.Count; $i++) {
     $dp = New-Object System.Drawing.Drawing2D.GraphicsPath; $dp.AddEllipse(0, 0, 8, 8)
     $dot.Region = New-Object System.Drawing.Region($dp); $dp.Dispose()
     Set-ControlTagData -Control $dot -NewData @{ Role = "checkDot"; CheckName = $checkItemsLeft[$i] }
+    $script:checklistDots[$checkItemsLeft[$i]] = $dot
     $cardOverview.Controls.Add($dot)
 
     $lbl = New-Object System.Windows.Forms.Label
@@ -2121,6 +2791,7 @@ for ($i = 0; $i -lt $checkItemsRight.Count; $i++) {
     $dp = New-Object System.Drawing.Drawing2D.GraphicsPath; $dp.AddEllipse(0, 0, 8, 8)
     $dot.Region = New-Object System.Drawing.Region($dp); $dp.Dispose()
     Set-ControlTagData -Control $dot -NewData @{ Role = "checkDot"; CheckName = $checkItemsRight[$i] }
+    $script:checklistDots[$checkItemsRight[$i]] = $dot
     $cardOverview.Controls.Add($dot)
 
     $lbl = New-Object System.Windows.Forms.Label
@@ -2158,14 +2829,16 @@ $script:chkServerKey.Location  = New-Object System.Drawing.Point(($CP + 2), $opt
 $script:chkServerKey.Size      = New-Object System.Drawing.Size(500, 24)
 $script:chkServerKey.Text      = "Include Microsoft Server 2025 key (1176759950, optional)"
 $script:chkServerKey.ForeColor = $script:Colors.TextSecondary
+$script:chkServerKey.BackColor = $script:Colors.CardBackground
 $script:chkServerKey.Font      = New-Object System.Drawing.Font("Segoe UI", 9)
-$script:chkServerKey.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$script:chkServerKey.FlatStyle = [System.Windows.Forms.FlatStyle]::Standard
+$script:chkServerKey.Cursor    = [System.Windows.Forms.Cursors]::Hand
 $script:chkServerKey.Checked   = $script:Config.IncludeServerKey
 $script:chkServerKey.Add_CheckedChanged({
     $script:Config.IncludeServerKey = $this.Checked
     $keyDesc = if ($this.Checked) { "enabled" } else { "disabled" }
     Write-Log "Optional Server 2025 key (1176759950): $keyDesc" -Level "INFO"
-    Refresh-StatusDisplay
+    Update-StatusDisplay
 })
 $cardOverview.Controls.Add($script:chkServerKey)
 
@@ -2415,6 +3088,9 @@ $cardActions.Controls.Add($btnDocs)
 
 $script:form.Controls.Add($cardActions)
 
+# Keyboard accessibility
+$script:form.KeyPreview = $true
+
 # ===================================================================
 #  RIGHT COLUMN  --  CARD 2: ACTIVITY LOG
 # ===================================================================
@@ -2441,9 +3117,37 @@ $script:rtbOutput.BorderStyle = "None"
 $script:rtbOutput.Font        = New-Object System.Drawing.Font("Cascadia Code, Consolas, Courier New", 8.75)
 $script:rtbOutput.ScrollBars  = "Vertical"
 Set-RoundedCorners -Control $script:rtbOutput -Radius 8
+
+# Right-click context menu for log
+$logContextMenu = New-Object System.Windows.Forms.ContextMenuStrip
+$logContextMenu.BackColor = $script:Colors.Surface
+$logContextMenu.ForeColor = $script:Colors.TextPrimary
+$logContextMenu.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$logContextMenu.Renderer = New-Object System.Windows.Forms.ToolStripProfessionalRenderer(
+    (New-Object System.Windows.Forms.ProfessionalColorTable)
+)
+
+$menuCopy = $logContextMenu.Items.Add("Copy Selection")
+$menuCopy.Add_Click({ if ($script:rtbOutput.SelectionLength -gt 0) { [System.Windows.Forms.Clipboard]::SetText($script:rtbOutput.SelectedText) } })
+
+$menuCopyAll = $logContextMenu.Items.Add("Copy All")
+$menuCopyAll.Add_Click({ Copy-LogToClipboard })
+
+$logContextMenu.Items.Add("-") | Out-Null
+
+$menuSaveLog = $logContextMenu.Items.Add("Save Log...")
+$menuSaveLog.Add_Click({ Export-LogFile })
+
+$logContextMenu.Items.Add("-") | Out-Null
+
+$menuClear = $logContextMenu.Items.Add("Clear Log")
+$menuClear.Add_Click({ $script:rtbOutput.Clear(); $script:Config.LogHistory.Clear(); Write-Log "Log cleared" -Level "INFO" })
+
+$script:rtbOutput.ContextMenuStrip = $logContextMenu
+
 $cardLog.Controls.Add($script:rtbOutput)
 
-# Progress bar (aligned to $CP)
+# Progress bar (hidden fallback, kept for compatibility)
 $progY = $logH - 38
 $script:progressBar = New-Object System.Windows.Forms.ProgressBar
 $script:progressBar.Location = New-Object System.Drawing.Point($CP, $progY)
@@ -2452,115 +3156,329 @@ $script:progressBar.Style    = "Continuous"
 $script:progressBar.Visible  = $false
 $cardLog.Controls.Add($script:progressBar)
 
+# Circular progress ring
+$ringSize = 36
+$script:progressRing = New-Object System.Windows.Forms.Panel
+$script:progressRing.Location = New-Object System.Drawing.Point($CP, ($logH - 42))
+$script:progressRing.Size = New-Object System.Drawing.Size($ringSize, $ringSize)
+$script:progressRing.BackColor = [System.Drawing.Color]::Transparent
+$script:progressRing.Visible = $false
+$script:progressRing.Tag = @{ Value = 0 }
+$script:progressRing.GetType().GetProperty("DoubleBuffered", [System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic).SetValue($script:progressRing, $true, $null)
+$script:progressRing.Add_Paint({
+    param($s, $e)
+    $g = $e.Graphics
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $val = 0
+    if ($s.Tag -is [hashtable] -and $s.Tag.ContainsKey('Value')) { $val = $s.Tag['Value'] }
+    $penWidth = 3
+    $rect = New-Object System.Drawing.Rectangle($penWidth, $penWidth, ($s.Width - $penWidth * 2), ($s.Height - $penWidth * 2))
+    # Background track
+    $trackPen = New-Object System.Drawing.Pen($script:Colors.SurfaceLight, $penWidth)
+    $g.DrawEllipse($trackPen, $rect)
+    $trackPen.Dispose()
+    # Progress arc
+    if ($val -gt 0) {
+        $sweepAngle = [int](360 * $val / 100)
+        $arcPen = New-Object System.Drawing.Pen($script:Colors.Accent, $penWidth)
+        $arcPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $arcPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $g.DrawArc($arcPen, $rect, -90, $sweepAngle)
+        $arcPen.Dispose()
+    }
+    # Center percentage text
+    $text = "$val%"
+    $font = New-Object System.Drawing.Font("Segoe UI Semibold", 7)
+    $textSize = $g.MeasureString($text, $font)
+    $textX = ($s.Width - $textSize.Width) / 2
+    $textY = ($s.Height - $textSize.Height) / 2
+    $brush = New-Object System.Drawing.SolidBrush($script:Colors.TextSecondary)
+    $g.DrawString($text, $font, $brush, $textX, $textY)
+    $brush.Dispose()
+    $font.Dispose()
+}.GetNewClosure())
+$cardLog.Controls.Add($script:progressRing)
+
 $script:lblProgress = New-Object System.Windows.Forms.Label
-$script:lblProgress.Location  = New-Object System.Drawing.Point(($CW - $CP - 90), $progY)
-$script:lblProgress.Size      = New-Object System.Drawing.Size(90, 18)
+$script:lblProgress.Location  = New-Object System.Drawing.Point(($CP + $ringSize + 8), ($logH - 36))
+$script:lblProgress.Size      = New-Object System.Drawing.Size(200, 18)
 $script:lblProgress.ForeColor = $script:Colors.TextMuted
 $script:lblProgress.Font      = New-Object System.Drawing.Font("Segoe UI", 8)
-$script:lblProgress.TextAlign = [System.Drawing.ContentAlignment]::MiddleRight
+$script:lblProgress.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
 $script:lblProgress.Visible   = $false
 $cardLog.Controls.Add($script:lblProgress)
 
+$script:cardLog = $cardLog
 $script:form.Controls.Add($cardLog)
 
 # ===================================================================
 #  FOOTER
 # ===================================================================
 
-$footerY = $FH - 44
-$lblFooter = New-Object System.Windows.Forms.Label
-$lblFooter.Text      = "NVMe Driver Patcher v$($script:Config.AppVersion)    |    github.com/SysAdminDoc/win11-nvme-driver-patcher"
-$lblFooter.Location  = New-Object System.Drawing.Point($LX, $footerY)
+$lblFooter = New-Object System.Windows.Forms.LinkLabel
+$footerText = "NVMe Driver Patcher v$($script:Config.AppVersion)    |    github.com/SysAdminDoc/win11-nvme-driver-patcher"
+$lblFooter.Text      = $footerText
+$lblFooter.Location  = New-Object System.Drawing.Point($LX, 10)
 $lblFooter.Size      = New-Object System.Drawing.Size(($FW - $LX * 2), 18)
 $lblFooter.ForeColor = $script:Colors.TextDimmed
+$lblFooter.LinkColor = $script:Colors.Accent
+$lblFooter.ActiveLinkColor = $script:Colors.AccentHover
+$lblFooter.VisitedLinkColor = $script:Colors.Accent
 $lblFooter.Font      = New-Object System.Drawing.Font("Segoe UI", 8)
 $lblFooter.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+$lblFooter.LinkBehavior = [System.Windows.Forms.LinkBehavior]::HoverUnderline
+# Set link area to cover only the GitHub URL portion
+$linkStart = $footerText.IndexOf("github.com")
+if ($linkStart -ge 0) {
+    $linkLen = $footerText.Length - $linkStart
+    $lblFooter.LinkArea = New-Object System.Windows.Forms.LinkArea($linkStart, $linkLen)
+}
+$lblFooter.Add_LinkClicked({ Start-Process $script:Config.GitHubURL })
+$lblFooter.BackColor = $script:Colors.Background
+$script:lblFooter = $lblFooter
 $script:form.Controls.Add($lblFooter)
+$lblFooter.BringToFront()
+
+# Calculate minimum content height for AutoScroll
+$script:MinContentH = $leftBottom + 44
+$script:form.AutoScrollMinSize = New-Object System.Drawing.Size(0, $script:MinContentH)
+
+# Combined form resize handler - layout + tray minimize
+$script:form.Add_Resize({
+    # Minimize to system tray
+    if ($this.WindowState -eq [System.Windows.Forms.FormWindowState]::Minimized) {
+        $this.Hide()
+        $script:trayIcon.Visible = $true
+        $script:trayIcon.ShowBalloonTip(2000, $script:Config.AppName, "Minimized to system tray. Double-click to restore.", [System.Windows.Forms.ToolTipIcon]::Info)
+        return
+    }
+    # Use DisplayRectangle height which accounts for AutoScroll offset
+    $displayH = $this.DisplayRectangle.Height
+    $effectiveH = [Math]::Max($displayH, $script:MinContentH)
+    # Reposition footer
+    if ($script:lblFooter) { $script:lblFooter.Top = $effectiveH - 30 }
+    # Stretch loading bar to form width
+    if ($script:loadingBar) { $script:loadingBar.Width = $this.ClientSize.Width }
+    # Stretch log card to fill available height
+    if ($script:cardLog) {
+        $logTop = $script:cardLog.Top
+        $newLogH = $effectiveH - $logTop - 42
+        if ($newLogH -ge 200) {
+            $script:cardLog.Height = $newLogH
+            if ($script:rtbOutput) {
+                $script:rtbOutput.Height = $newLogH - 100
+            }
+            $progBottom = $newLogH - 42
+            if ($script:progressBar) { $script:progressBar.Top = $progBottom + 4 }
+            if ($script:progressRing) { $script:progressRing.Top = $progBottom }
+            if ($script:lblProgress) { $script:lblProgress.Top = $progBottom + 6 }
+        }
+    }
+}.GetNewClosure())
+
+# ===================================================================
+#  SYSTEM TRAY SUPPORT
+# ===================================================================
+
+$script:trayIcon = New-Object System.Windows.Forms.NotifyIcon
+$script:trayIcon.Icon = [System.Drawing.SystemIcons]::Application
+$script:trayIcon.Text = "$($script:Config.AppName) v$($script:Config.AppVersion)"
+$script:trayIcon.Visible = $false
+
+# Tray context menu
+$trayMenu = New-Object System.Windows.Forms.ContextMenuStrip
+$trayRestore = $trayMenu.Items.Add("Restore")
+$trayRestore.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$trayRestore.Add_Click({
+    $script:form.Show()
+    $script:form.WindowState = [System.Windows.Forms.FormWindowState]::Normal
+    $script:form.Activate()
+    $script:trayIcon.Visible = $false
+})
+$trayMenu.Items.Add("-") | Out-Null
+$trayExit = $trayMenu.Items.Add("Exit")
+$trayExit.Add_Click({ $script:trayIcon.Visible = $false; $script:form.Close() })
+$script:trayIcon.ContextMenuStrip = $trayMenu
+
+# Double-click tray icon to restore
+$script:trayIcon.Add_DoubleClick({
+    $script:form.Show()
+    $script:form.WindowState = [System.Windows.Forms.FormWindowState]::Normal
+    $script:form.Activate()
+    $script:trayIcon.Visible = $false
+})
 
 # ===================================================================
 #  FORM EVENTS
 # ===================================================================
 
 $script:form.Add_Load({
-    # Apply dark scrollbars to controls
+    # Position footer correctly using content-relative coordinates
+    $effectiveH = [Math]::Max($this.DisplayRectangle.Height, $script:MinContentH)
+    if ($script:lblFooter) { $script:lblFooter.Top = $effectiveH - 30 }
+
+    # Apply dark scrollbars to form and controls
+    Set-DarkScrollbar -Control $this
     Set-DarkScrollbar -Control $script:rtbOutput
     if ($script:pnlDrivesContent) { Set-DarkScrollbar -Control $script:pnlDrivesContent }
+})
+
+# Defer heavy preflight checks to background runspace so GUI stays responsive
+$script:form.Add_Shown({
+    $script:form.Refresh()
 
     Write-Log "$($script:Config.AppName) v$($script:Config.AppVersion) started"
     Write-Log "Working directory: $($script:Config.WorkingDir)"
     Write-Log "----------------------------------------"
-
     Write-Log "Running pre-flight checks..."
-    $checks = Invoke-PreflightChecks
+    Set-ButtonsEnabled -Enabled $false
+    if ($script:loadingBar) { $script:loadingBar.Visible = $true }
 
-    # Update checklist labels and dots
-    foreach ($checkName in $checks.Keys) {
-        if ($script:checklistLabels.ContainsKey($checkName)) {
-            $check = $checks[$checkName]
-            $lbl   = $script:checklistLabels[$checkName]
-            $lbl.Text      = $check.Message
-            $lbl.ForeColor = switch ($check.Status) {
-                "Pass"    { $script:Colors.Success }
-                "Warning" { $script:Colors.Warning }
-                "Fail"    { $script:Colors.Danger  }
-                "Info"    { $script:Colors.Accent  }
-                default   { $script:Colors.TextMuted }
+    # Build runspace with all needed function definitions
+    $funcNames = @('Get-WindowsBuildDetails', 'Get-NVMeHealthData', 'Get-SystemDrives',
+                   'Test-BitLockerEnabled', 'Get-NVMeDriverInfo', 'Test-NativeNVMeActive',
+                   'Get-BypassIOStatus', 'Test-PatchStatus', 'Invoke-PreflightChecks')
+    $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+    # No-op Write-Log for background thread
+    $noop = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new(
+        'Write-Log', 'param([string]$Message, [string]$Level = "INFO")')
+    $iss.Commands.Add($noop)
+    foreach ($fn in $funcNames) {
+        $cmd = Get-Command $fn -ErrorAction SilentlyContinue
+        if ($cmd) {
+            $entry = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new($fn, $cmd.Definition)
+            $iss.Commands.Add($entry)
+        }
+    }
+
+    $bgRunspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($iss)
+    $bgRunspace.Open()
+    $bgPS = [PowerShell]::Create()
+    $bgPS.Runspace = $bgRunspace
+
+    $configCopy = $script:Config.Clone()
+    $configCopy.SilentMode = $true
+
+    [void]$bgPS.AddScript({
+        param($cfg)
+        $script:Config = $cfg
+        $checks = Invoke-PreflightChecks
+        return @{
+            Checks           = $checks
+            BuildDetails     = $script:BuildDetails
+            CachedHealth     = $script:CachedHealth
+            CachedDrives     = $script:CachedDrives
+            HasNVMeDrives    = $script:HasNVMeDrives
+            BitLockerEnabled = $script:BitLockerEnabled
+            DriverInfo       = $script:DriverInfo
+            NativeNVMeStatus = $script:NativeNVMeStatus
+            BypassIOStatus   = $script:BypassIOStatus
+        }
+    }).AddParameter('cfg', $configCopy)
+
+    $script:bgHandle = $bgPS.BeginInvoke()
+    $script:bgPS = $bgPS
+    $script:bgRunspace = $bgRunspace
+
+    # Poll for completion with a WinForms Timer
+    $script:preflightTimer = New-Object System.Windows.Forms.Timer
+    $script:preflightTimer.Interval = 100
+    $script:preflightTimer.Add_Tick({
+        if (-not $script:bgHandle.IsCompleted) { return }
+
+        $script:preflightTimer.Stop()
+        $script:preflightTimer.Dispose()
+
+        try {
+            $resultList = $script:bgPS.EndInvoke($script:bgHandle)
+            $r = $resultList[0]
+
+            # Marshal results back to script scope
+            $script:BuildDetails     = $r.BuildDetails
+            $script:CachedHealth     = $r.CachedHealth
+            $script:CachedDrives     = $r.CachedDrives
+            $script:HasNVMeDrives    = $r.HasNVMeDrives
+            $script:BitLockerEnabled = $r.BitLockerEnabled
+            $script:DriverInfo       = $r.DriverInfo
+            $script:NativeNVMeStatus = $r.NativeNVMeStatus
+            $script:BypassIOStatus   = $r.BypassIOStatus
+            $checks                  = $r.Checks
+
+            # Update checklist labels and dots
+            foreach ($checkName in $checks.Keys) {
+                if ($script:checklistLabels.ContainsKey($checkName)) {
+                    $check = $checks[$checkName]
+                    $lbl   = $script:checklistLabels[$checkName]
+                    $lbl.Text      = $check.Message
+                    $lbl.ForeColor = switch ($check.Status) {
+                        "Pass"    { $script:Colors.Success }
+                        "Warning" { $script:Colors.Warning }
+                        "Fail"    { $script:Colors.Danger  }
+                        "Info"    { $script:Colors.Accent  }
+                        default   { $script:Colors.TextMuted }
+                    }
+                    if ($script:ToolTipProvider) {
+                        $script:ToolTipProvider.SetToolTip($lbl, $check.Message)
+                    }
+                }
+
+                if ($script:checklistDots.ContainsKey($checkName)) {
+                    $script:checklistDots[$checkName].BackColor = switch ($checks[$checkName].Status) {
+                        "Pass"    { $script:Colors.Success }
+                        "Warning" { $script:Colors.Warning }
+                        "Fail"    { $script:Colors.Danger  }
+                        "Info"    { $script:Colors.Accent  }
+                        default   { $script:Colors.Neutral }
+                    }
+                }
             }
-            if ($script:ToolTipProvider) {
-                $script:ToolTipProvider.SetToolTip($lbl, $check.Message)
+
+            foreach ($checkName in $checks.Keys) {
+                $check = $checks[$checkName]
+                $level = switch ($check.Status) {
+                    "Pass"    { "SUCCESS" }
+                    "Warning" { "WARNING" }
+                    "Fail"    { "ERROR"   }
+                    "Info"    { "INFO"    }
+                    default   { "INFO"    }
+                }
+                Write-Log "  [$checkName] $($check.Message)" -Level $level
             }
-        }
 
-        $dotControls = $cardOverview.Controls | Where-Object {
-            $t = $_.Tag
-            $t -is [hashtable] -and $t.ContainsKey('Role') -and $t['Role'] -eq 'checkDot' -and $t['CheckName'] -eq $checkName
-        }
-        foreach ($dc in $dotControls) {
-            $dc.BackColor = switch ($checks[$checkName].Status) {
-                "Pass"    { $script:Colors.Success }
-                "Warning" { $script:Colors.Warning }
-                "Fail"    { $script:Colors.Danger  }
-                "Info"    { $script:Colors.Accent  }
-                default   { $script:Colors.Neutral }
+            if ($script:DriverInfo) {
+                $driverText = "Driver: $($script:DriverInfo.CurrentDriver)"
+                if ($script:NativeNVMeStatus -and $script:NativeNVMeStatus.IsActive) {
+                    $driverText = "Active: nvmedisk.sys (Native NVMe)"
+                }
+                $script:lblDriverInfo.Text = $driverText
             }
+
+            Update-DrivesList
+
+            if ($script:BypassIOStatus -and $script:BypassIOStatus.Warning) {
+                Write-Log "  [BypassIO] $($script:BypassIOStatus.Warning)" -Level "WARNING"
+            }
+
+            if ($script:BuildDetails) {
+                Write-Log "  [Build] $($script:BuildDetails.DisplayVersion) (Build $($script:BuildDetails.BuildNumber).$($script:BuildDetails.UBR))" -Level "INFO"
+            }
+
+            Write-Log "----------------------------------------"
+            Update-StatusDisplay
+            Write-Log "----------------------------------------"
+            Write-Log "Ready. Select an action above."
         }
-    }
-
-    foreach ($checkName in $checks.Keys) {
-        $check = $checks[$checkName]
-        $level = switch ($check.Status) {
-            "Pass"    { "SUCCESS" }
-            "Warning" { "WARNING" }
-            "Fail"    { "ERROR"   }
-            "Info"    { "INFO"    }
-            default   { "INFO"    }
+        catch {
+            Write-Log "Pre-flight check error: $($_.Exception.Message)" -Level "ERROR"
         }
-        Write-Log "  [$checkName] $($check.Message)" -Level $level
-    }
-
-    if ($script:DriverInfo) {
-        $driverText = "Driver: $($script:DriverInfo.CurrentDriver)"
-        if ($script:NativeNVMeStatus -and $script:NativeNVMeStatus.IsActive) {
-            $driverText = "Active: nvmedisk.sys (Native NVMe)"
+        finally {
+            if ($script:loadingBar) { $script:loadingBar.Visible = $false }
+            $script:bgPS.Dispose()
+            $script:bgRunspace.Dispose()
+            Set-ButtonsEnabled -Enabled $true
         }
-        $script:lblDriverInfo.Text = $driverText
-    }
-
-    # Populate detected drives list
-    Update-DrivesList
-
-    if ($script:BypassIOStatus -and $script:BypassIOStatus.Warning) {
-        Write-Log "  [BypassIO] $($script:BypassIOStatus.Warning)" -Level "WARNING"
-    }
-
-    if ($script:BuildDetails) {
-        Write-Log "  [Build] $($script:BuildDetails.DisplayVersion) (Build $($script:BuildDetails.BuildNumber).$($script:BuildDetails.UBR))" -Level "INFO"
-    }
-
-    Write-Log "----------------------------------------"
-    Refresh-StatusDisplay
-    Write-Log "----------------------------------------"
-    Write-Log "Ready. Select an action above."
+    }.GetNewClosure())
+    $script:preflightTimer.Start()
 
     Write-AppEventLog -Message "$($script:Config.AppName) v$($script:Config.AppVersion) started" -EntryType "Information" -EventId 1000
 })
@@ -2574,9 +3492,14 @@ $script:form.Add_FormClosing({
 
     Write-AppEventLog -Message "$($script:Config.AppName) closed" -EntryType "Information" -EventId 1000
 
+    if ($script:preflightTimer) { try { $script:preflightTimer.Stop(); $script:preflightTimer.Dispose() } catch { <# Timer cleanup #> } }
+    if ($script:bgPS) { try { $script:bgPS.Dispose() } catch { <# Runspace cleanup #> } }
+    if ($script:bgRunspace) { try { $script:bgRunspace.Dispose() } catch { <# Runspace cleanup #> } }
+    if ($script:trayIcon) { $script:trayIcon.Visible = $false; $script:trayIcon.Dispose() }
+    if ($script:StatusPulseTimer) { $script:StatusPulseTimer.Stop(); $script:StatusPulseTimer.Dispose() }
     if ($script:ToolTipProvider) { $script:ToolTipProvider.Dispose() }
     if ($script:AppMutex) {
-        try { $script:AppMutex.ReleaseMutex(); $script:AppMutex.Dispose() } catch { }
+        try { $script:AppMutex.ReleaseMutex(); $script:AppMutex.Dispose() } catch { <# Mutex cleanup best-effort #> }
     }
 })
 
