@@ -3896,7 +3896,8 @@ $script:form.Add_Load({
     $effectiveH = [Math]::Max($this.DisplayRectangle.Height, $script:MinContentH)
     if ($script:lblFooter) { $script:lblFooter.Top = $effectiveH - 30 }
 
-    # Apply dark scrollbars to controls (matches original v3.0.0 behavior)
+    # Apply dark scrollbars to form and controls
+    Set-DarkScrollbar -Control $this
     Set-DarkScrollbar -Control $script:rtbOutput
     if ($script:pnlDrivesContent) { Set-DarkScrollbar -Control $script:pnlDrivesContent }
 })
