@@ -46,12 +46,13 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 - **Registry backup** export + system restore point creation before any changes
 - **Third-party driver detection** (Samsung, WD, Intel RST, AMD, SK Hynix, Crucial, Phison)
 
-**Diagnostics**
+**Diagnostics & Benchmarking**
+- **Built-in DiskSpd benchmark** -- one-click 4K random read/write test with before/after comparison (auto-downloads [Microsoft DiskSpd](https://github.com/microsoft/diskspd))
 - **Async preflight checks** -- 10 system checks run in a background thread without freezing the GUI
-- **NVMe health badges** -- temperature, wear %, and firmware version per drive
-- **NVMe firmware version display** -- helps identify drives needing firmware updates
+- **NVMe health badges** -- temperature, wear %, firmware version, power-on hours, media errors (hover for details)
 - **BypassIO/DirectStorage** status check with gaming impact warning
 - **Before/after comparison** -- shows exactly what changed after patch/unpatch
+- **Post-reboot verification** -- auto-detects driver activation after reboot and shows confirmation
 - **Diagnostics export** -- full system report for troubleshooting
 - **Post-reboot verification script** -- auto-generated to confirm patch after restart
 - **Windows Event Log** integration for audit trails
