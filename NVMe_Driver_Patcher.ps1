@@ -310,21 +310,21 @@ using System.Windows.Forms;
 
 public class DarkColorTable : ProfessionalColorTable {
     private static Color C(int r, int g, int b) { return Color.FromArgb(r, g, b); }
-    public override Color MenuBorder { get { return C(62, 62, 70); } }
-    public override Color MenuItemBorder { get { return C(62, 62, 70); } }
-    public override Color MenuItemSelected { get { return C(55, 55, 62); } }
-    public override Color MenuItemSelectedGradientBegin { get { return C(55, 55, 62); } }
-    public override Color MenuItemSelectedGradientEnd { get { return C(55, 55, 62); } }
-    public override Color MenuItemPressedGradientBegin { get { return C(42, 42, 48); } }
-    public override Color MenuItemPressedGradientEnd { get { return C(42, 42, 48); } }
-    public override Color MenuStripGradientBegin { get { return C(30, 30, 35); } }
-    public override Color MenuStripGradientEnd { get { return C(30, 30, 35); } }
-    public override Color ToolStripDropDownBackground { get { return C(34, 34, 40); } }
-    public override Color ImageMarginGradientBegin { get { return C(34, 34, 40); } }
-    public override Color ImageMarginGradientMiddle { get { return C(34, 34, 40); } }
-    public override Color ImageMarginGradientEnd { get { return C(34, 34, 40); } }
-    public override Color SeparatorDark { get { return C(52, 52, 60); } }
-    public override Color SeparatorLight { get { return C(42, 42, 48); } }
+    public override Color MenuBorder { get { return C(39, 39, 42); } }
+    public override Color MenuItemBorder { get { return C(39, 39, 42); } }
+    public override Color MenuItemSelected { get { return C(39, 39, 42); } }
+    public override Color MenuItemSelectedGradientBegin { get { return C(39, 39, 42); } }
+    public override Color MenuItemSelectedGradientEnd { get { return C(39, 39, 42); } }
+    public override Color MenuItemPressedGradientBegin { get { return C(24, 24, 27); } }
+    public override Color MenuItemPressedGradientEnd { get { return C(24, 24, 27); } }
+    public override Color MenuStripGradientBegin { get { return C(17, 17, 19); } }
+    public override Color MenuStripGradientEnd { get { return C(17, 17, 19); } }
+    public override Color ToolStripDropDownBackground { get { return C(24, 24, 27); } }
+    public override Color ImageMarginGradientBegin { get { return C(24, 24, 27); } }
+    public override Color ImageMarginGradientMiddle { get { return C(24, 24, 27); } }
+    public override Color ImageMarginGradientEnd { get { return C(24, 24, 27); } }
+    public override Color SeparatorDark { get { return C(39, 39, 42); } }
+    public override Color SeparatorLight { get { return C(24, 24, 27); } }
     public override Color CheckBackground { get { return C(56, 132, 244); } }
     public override Color CheckSelectedBackground { get { return C(80, 152, 255); } }
     public override Color CheckPressedBackground { get { return C(40, 100, 200); } }
@@ -492,21 +492,22 @@ function Get-WindowsThemeMode {
 
 $currentTheme = Get-WindowsThemeMode
 
+# Zinc palette (matches LibreSpot / Tailwind dark)
 $PaletteDark = @{
-    Background    = [System.Drawing.Color]::FromArgb(24, 24, 28)
-    Surface       = [System.Drawing.Color]::FromArgb(30, 30, 35)
-    SurfaceLight  = [System.Drawing.Color]::FromArgb(42, 42, 48)
-    SurfaceHover  = [System.Drawing.Color]::FromArgb(55, 55, 62)
-    CardBackground= [System.Drawing.Color]::FromArgb(34, 34, 40)
-    CardBorder    = [System.Drawing.Color]::FromArgb(52, 52, 60)
-    Border        = [System.Drawing.Color]::FromArgb(62, 62, 70)
-    TextPrimary   = [System.Drawing.Color]::FromArgb(240, 240, 245)
-    TextSecondary = [System.Drawing.Color]::FromArgb(185, 185, 195)
-    TextMuted     = [System.Drawing.Color]::FromArgb(130, 130, 142)
-    TextDimmed    = [System.Drawing.Color]::FromArgb(90, 90, 100)
-    WarningDim    = [System.Drawing.Color]::FromArgb(50, 45, 32)
-    ProgressBack  = [System.Drawing.Color]::FromArgb(52, 52, 60)
-    ChecklistBg   = [System.Drawing.Color]::FromArgb(28, 28, 33)
+    Background    = [System.Drawing.Color]::FromArgb(9, 9, 11)       # zinc-950
+    Surface       = [System.Drawing.Color]::FromArgb(17, 17, 19)     # ~zinc-925
+    SurfaceLight  = [System.Drawing.Color]::FromArgb(24, 24, 27)     # zinc-900
+    SurfaceHover  = [System.Drawing.Color]::FromArgb(39, 39, 42)     # zinc-800
+    CardBackground= [System.Drawing.Color]::FromArgb(17, 17, 19)     # ~zinc-925
+    CardBorder    = [System.Drawing.Color]::FromArgb(39, 39, 42)     # zinc-800
+    Border        = [System.Drawing.Color]::FromArgb(63, 63, 70)     # zinc-700
+    TextPrimary   = [System.Drawing.Color]::FromArgb(250, 250, 250)  # zinc-50
+    TextSecondary = [System.Drawing.Color]::FromArgb(212, 212, 216)  # zinc-300
+    TextMuted     = [System.Drawing.Color]::FromArgb(113, 113, 122)  # zinc-500
+    TextDimmed    = [System.Drawing.Color]::FromArgb(82, 82, 91)     # zinc-600
+    WarningDim    = [System.Drawing.Color]::FromArgb(42, 38, 26)
+    ProgressBack  = [System.Drawing.Color]::FromArgb(39, 39, 42)     # zinc-800
+    ChecklistBg   = [System.Drawing.Color]::FromArgb(13, 13, 16)     # ~zinc-940
 }
 
 $PaletteLight = @{
@@ -543,11 +544,11 @@ $script:Colors.Info          = [System.Drawing.Color]::FromArgb(56, 132, 244)
 $script:Colors.Neutral       = [System.Drawing.Color]::FromArgb(110, 110, 125)
 
 if ($currentTheme -eq "Dark") {
-    $script:Colors.AccentSubtle  = [System.Drawing.Color]::FromArgb(36, 44, 62)
+    $script:Colors.AccentSubtle  = [System.Drawing.Color]::FromArgb(23, 37, 58)
     $script:Colors.Warning       = [System.Drawing.Color]::FromArgb(245, 190, 60)
-    $script:Colors.WarningBg     = [System.Drawing.Color]::FromArgb(52, 48, 34)
-    $script:Colors.SuccessBg     = [System.Drawing.Color]::FromArgb(30, 50, 38)
-    $script:Colors.DangerBg      = [System.Drawing.Color]::FromArgb(55, 34, 36)
+    $script:Colors.WarningBg     = [System.Drawing.Color]::FromArgb(42, 38, 26)
+    $script:Colors.SuccessBg     = [System.Drawing.Color]::FromArgb(10, 38, 24)
+    $script:Colors.DangerBg      = [System.Drawing.Color]::FromArgb(45, 20, 22)
 }
 else {
     $script:Colors.AccentSubtle  = [System.Drawing.Color]::FromArgb(220, 232, 252)
