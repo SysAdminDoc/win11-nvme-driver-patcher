@@ -6,7 +6,7 @@ A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driv
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows11)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-<img width="1027" height="857" alt="NVMe Driver Patcher v3.3.0" src="https://github.com/user-attachments/assets/55e92d30-c7a8-4702-b5e2-3fa1c4691780" />
+![NVMe Driver Patcher Screenshot](screenshot.png)
 
 ## Quick Start
 
@@ -184,8 +184,8 @@ reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\O
 reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f
 reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f
 reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f
-reg delete "HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-8D8D-4B38-B65B-D55B36B7CC71}" /f
-reg delete "HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-8D8D-4B38-B65B-D55B36B7CC71}" /f
+reg delete "HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /f
+reg delete "HKLM\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /f
 ```
 4. Restart
 
