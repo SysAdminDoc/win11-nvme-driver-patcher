@@ -70,9 +70,16 @@
     Export full system diagnostics report for support.
 
 .NOTES
-    Version: 3.5.0
+    Version: 3.6.0
     Author:  Matthew Parker
     Requires: Windows 11 24H2/25H2, Administrator privileges
+
+    CHANGELOG v3.6.0:
+    - Added built-in DiskSpd benchmark (4K random read/write before/after comparison)
+    - Added BENCHMARK button to Actions card for on-demand storage benchmarking
+    - Added enhanced NVMe SMART tooltips (TBW, Power-On Hours, Available Spare)
+    - Added post-reboot patch verification (auto-detects patch applied since last run)
+    - Added GitHub Actions CI/CD workflow for automated releases
 
     CHANGELOG v3.5.0:
     - Added VeraCrypt system encryption detection (hard block - breaks boot)
@@ -326,7 +333,7 @@ if (-not $ExportDiagnostics -and -not $GenerateVerifyScript -and -not $Status) {
 
 $script:Config = @{
     AppName         = "NVMe Driver Patcher"
-    AppVersion      = "3.5.0"
+    AppVersion      = "3.6.0"
     RegistryPath    = "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides"
     FeatureIDs      = @("735209102", "1853569164", "156965516")
     FeatureNames    = @{
@@ -808,6 +815,11 @@ function Get-NVMeHealthData {
                 MediaErrors = 0
                 HealthStatus = $pd.HealthStatus
                 OperationalStatus = $pd.OperationalStatus
+                PowerOnHours = "N/A"
+                ReadErrors = 0
+                WriteErrors = 0
+                AvailableSpare = "N/A"
+                SmartTooltip = ""
             }
             try {
                 $reliability = $pd | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue
@@ -815,9 +827,21 @@ function Get-NVMeHealthData {
                     if ($null -ne $reliability.Temperature) { $info.Temperature = "$($reliability.Temperature)C" }
                     if ($null -ne $reliability.Wear) { $info.Wear = "$([Math]::Max(0, 100 - $reliability.Wear))%" }
                     if ($null -ne $reliability.MediaErrors) { $info.MediaErrors = $reliability.MediaErrors }
+                    if ($null -ne $reliability.PowerOnHours) { $info.PowerOnHours = "$($reliability.PowerOnHours)h" }
+                    if ($null -ne $reliability.ReadErrorsTotal) { $info.ReadErrors = $reliability.ReadErrorsTotal }
+                    if ($null -ne $reliability.WriteErrorsTotal) { $info.WriteErrors = $reliability.WriteErrorsTotal }
                 }
             }
             catch { <# StorageReliabilityCounter not available on all drives #> }
+            # Build rich tooltip
+            $tipParts = [System.Collections.ArrayList]::new()
+            [void]$tipParts.Add("Health: $($info.HealthStatus)")
+            if ($info.Temperature -ne "N/A") { [void]$tipParts.Add("Temp: $($info.Temperature)") }
+            if ($info.Wear -ne "N/A") { [void]$tipParts.Add("Life remaining: $($info.Wear)") }
+            if ($info.PowerOnHours -ne "N/A") { [void]$tipParts.Add("Power-on: $($info.PowerOnHours)") }
+            if ($info.MediaErrors -gt 0) { [void]$tipParts.Add("Media errors: $($info.MediaErrors)") }
+            if ($info.ReadErrors -gt 0) { [void]$tipParts.Add("Read errors: $($info.ReadErrors)") }
+            $info.SmartTooltip = $tipParts -join " | "
             $health[$diskNum] = $info
         }
     }
@@ -1640,6 +1664,250 @@ $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 }
 
 # ===========================================================================
+# SECTION 13B: DISKSPD BENCHMARK
+# ===========================================================================
+
+function Get-DiskSpdPath {
+    $diskSpdDir = Join-Path $script:Config.WorkingDir "DiskSpd"
+    $diskSpdExe = Join-Path $diskSpdDir "diskspd.exe"
+    if (Test-Path $diskSpdExe) { return $diskSpdExe }
+    return $null
+}
+
+function Install-DiskSpd {
+    <#
+    .SYNOPSIS
+        Downloads Microsoft DiskSpd from GitHub releases. Returns path to exe or $null.
+    #>
+    $diskSpdDir = Join-Path $script:Config.WorkingDir "DiskSpd"
+    $diskSpdExe = Join-Path $diskSpdDir "diskspd.exe"
+    if (Test-Path $diskSpdExe) { return $diskSpdExe }
+
+    Write-Log "Downloading Microsoft DiskSpd benchmark tool..." -Level "INFO"
+    try {
+        if (-not (Test-Path $diskSpdDir)) { New-Item -Path $diskSpdDir -ItemType Directory -Force | Out-Null }
+        $zipUrl = "https://github.com/microsoft/diskspd/releases/latest/download/DiskSpd.ZIP"
+        $zipPath = Join-Path $diskSpdDir "DiskSpd.zip"
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
+        Expand-Archive -Path $zipPath -DestinationPath $diskSpdDir -Force
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+        # Find the amd64 exe
+        $exeFound = Get-ChildItem -Path $diskSpdDir -Recurse -Filter "diskspd.exe" |
+            Where-Object { $_.FullName -match "amd64" } | Select-Object -First 1
+        if ($exeFound) {
+            Copy-Item -Path $exeFound.FullName -Destination $diskSpdExe -Force
+            Write-Log "DiskSpd downloaded successfully" -Level "SUCCESS"
+            return $diskSpdExe
+        }
+        # Fallback: any diskspd.exe
+        $exeAny = Get-ChildItem -Path $diskSpdDir -Recurse -Filter "diskspd.exe" | Select-Object -First 1
+        if ($exeAny) {
+            Copy-Item -Path $exeAny.FullName -Destination $diskSpdExe -Force
+            return $diskSpdExe
+        }
+        Write-Log "DiskSpd exe not found in archive" -Level "ERROR"
+    }
+    catch {
+        Write-Log "Failed to download DiskSpd: $($_.Exception.Message)" -Level "ERROR"
+    }
+    return $null
+}
+
+function Invoke-StorageBenchmark {
+    <#
+    .SYNOPSIS
+        Runs a quick 4K random read/write benchmark on the system drive using DiskSpd.
+        Returns hashtable with IOPS, throughput, and latency for read and write.
+    #>
+    param([string]$Label = "benchmark")
+
+    $exe = Install-DiskSpd
+    if (-not $exe) {
+        Write-Log "Cannot run benchmark - DiskSpd unavailable" -Level "ERROR"
+        return $null
+    }
+
+    $testFile = Join-Path $script:Config.WorkingDir "diskspd_test.dat"
+    $results = @{ Label = $Label; Timestamp = (Get-Date).ToString("o"); Read = @{}; Write = @{} }
+
+    try {
+        # 4K Random Read: 4 threads, 16 outstanding IOs, 10 second warmup, 30 second test, 4KB blocks, random
+        Write-Log "Running 4K random read benchmark (30s)..." -Level "INFO"
+        Update-Progress -Value 20 -Status "Benchmarking reads..."
+        $readOutput = & $exe -c128M -d30 -w0 -t4 -o16 -b4K -r -Sh -L $testFile 2>&1 | Out-String
+        $results.Read = Convert-DiskSpdOutput -RawOutput $readOutput -IOType "Read"
+
+        # 4K Random Write: same params but 100% write
+        Write-Log "Running 4K random write benchmark (30s)..." -Level "INFO"
+        Update-Progress -Value 60 -Status "Benchmarking writes..."
+        $writeOutput = & $exe -c128M -d30 -w100 -t4 -o16 -b4K -r -Sh -L $testFile 2>&1 | Out-String
+        $results.Write = Convert-DiskSpdOutput -RawOutput $writeOutput -IOType "Write"
+
+        Update-Progress -Value 0 -Status ""
+    }
+    catch {
+        Write-Log "Benchmark error: $($_.Exception.Message)" -Level "ERROR"
+        Update-Progress -Value 0 -Status ""
+    }
+    finally {
+        Remove-Item $testFile -Force -ErrorAction SilentlyContinue
+    }
+
+    return $results
+}
+
+function Convert-DiskSpdOutput {
+    param([string]$RawOutput, [string]$IOType = "Read")
+    $parsed = @{ IOPS = 0; ThroughputMBs = 0; AvgLatencyMs = 0 }
+    try {
+        # Parse "total:" line from DiskSpd output
+        # Format: total: <bytes> | <IOs> | <MiB/s> | <IOPS> | <AvgLat> ...
+        $lines = $RawOutput -split "`n"
+        foreach ($line in $lines) {
+            if ($line -match '^\s*total:\s*\|') {
+                $parts = $line -split '\|' | ForEach-Object { $_.Trim() }
+                if ($parts.Count -ge 5) {
+                    $parsed.ThroughputMBs = [math]::Round([double]($parts[2] -replace '[^\d.]',''), 2)
+                    $parsed.IOPS = [math]::Round([double]($parts[3] -replace '[^\d.]',''), 0)
+                    $parsed.AvgLatencyMs = [math]::Round([double]($parts[4] -replace '[^\d.]',''), 3)
+                }
+            }
+        }
+    }
+    catch { <# Parsing best-effort #> }
+    return $parsed
+}
+
+function Save-BenchmarkResults {
+    param($Results)
+    if (-not $Results) { return }
+    $benchFile = Join-Path $script:Config.WorkingDir "benchmark_results.json"
+    try {
+        $existing = @()
+        if (Test-Path $benchFile) {
+            $raw = Get-Content $benchFile -Raw -ErrorAction SilentlyContinue
+            if ($raw) { $existing = @(ConvertFrom-Json $raw -ErrorAction SilentlyContinue) }
+        }
+        $existing += $Results
+        # Keep only last 10 results
+        if ($existing.Count -gt 10) { $existing = $existing[-10..-1] }
+        $existing | ConvertTo-Json -Depth 5 | Out-File $benchFile -Encoding UTF8
+        Write-Log "Benchmark results saved" -Level "SUCCESS"
+    }
+    catch {
+        Write-Log "Failed to save benchmark: $($_.Exception.Message)" -Level "WARNING"
+    }
+}
+
+function Get-BenchmarkHistory {
+    $benchFile = Join-Path $script:Config.WorkingDir "benchmark_results.json"
+    if (-not (Test-Path $benchFile)) { return @() }
+    try {
+        $raw = Get-Content $benchFile -Raw
+        return @(ConvertFrom-Json $raw -ErrorAction SilentlyContinue)
+    }
+    catch { return @() }
+}
+
+function Show-BenchmarkComparison {
+    param($Current)
+    if (-not $Current) { return }
+
+    $history = Get-BenchmarkHistory
+    $prev = $history | Where-Object { $_.Label -ne $Current.Label } | Select-Object -Last 1
+
+    Write-Log "" -Level "INFO"
+    Write-Log "============ BENCHMARK RESULTS ============" -Level "INFO"
+    Write-Log "  $($Current.Label) @ $(Get-Date -Format 'HH:mm:ss')" -Level "INFO"
+    Write-Log "  4K Random Read:  $($Current.Read.IOPS) IOPS  |  $($Current.Read.ThroughputMBs) MB/s  |  $($Current.Read.AvgLatencyMs) ms avg" -Level "SUCCESS"
+    Write-Log "  4K Random Write: $($Current.Write.IOPS) IOPS  |  $($Current.Write.ThroughputMBs) MB/s  |  $($Current.Write.AvgLatencyMs) ms avg" -Level "SUCCESS"
+
+    if ($prev) {
+        Write-Log "" -Level "INFO"
+        Write-Log "  --- vs. Previous ($($prev.Label)) ---" -Level "INFO"
+        $readDelta = if ($prev.Read.IOPS -gt 0) { [math]::Round((($Current.Read.IOPS - $prev.Read.IOPS) / $prev.Read.IOPS) * 100, 1) } else { 0 }
+        $writeDelta = if ($prev.Write.IOPS -gt 0) { [math]::Round((($Current.Write.IOPS - $prev.Write.IOPS) / $prev.Write.IOPS) * 100, 1) } else { 0 }
+        $readSign = if ($readDelta -ge 0) { "+" } else { "" }
+        $writeSign = if ($writeDelta -ge 0) { "+" } else { "" }
+        $readLevel = if ($readDelta -gt 0) { "SUCCESS" } elseif ($readDelta -lt 0) { "WARNING" } else { "INFO" }
+        $writeLevel = if ($writeDelta -gt 0) { "SUCCESS" } elseif ($writeDelta -lt 0) { "WARNING" } else { "INFO" }
+        Write-Log "  Read IOPS:  $($prev.Read.IOPS) --> $($Current.Read.IOPS) ($readSign$readDelta%)" -Level $readLevel
+        Write-Log "  Write IOPS: $($prev.Write.IOPS) --> $($Current.Write.IOPS) ($writeSign$writeDelta%)" -Level $writeLevel
+    }
+    Write-Log "===========================================" -Level "INFO"
+}
+
+function Start-GUIBenchmark {
+    Set-ButtonsEnabled -Enabled $false
+    $script:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+
+    $status = Test-PatchStatus
+    $label = if ($status.Applied) { "Post-Patch" } else { "Pre-Patch" }
+
+    Write-Log "Starting storage benchmark ($label)..." -Level "INFO"
+    Write-Log "This will take approximately 60 seconds. Do not use disk-heavy apps." -Level "WARNING"
+
+    $results = Invoke-StorageBenchmark -Label $label
+    if ($results) {
+        Save-BenchmarkResults -Results $results
+        Show-BenchmarkComparison -Current $results
+    }
+
+    $script:form.Cursor = [System.Windows.Forms.Cursors]::Default
+    Set-ButtonsEnabled -Enabled $true
+}
+
+# ===========================================================================
+# SECTION 13C: POST-REBOOT DETECTION
+# ===========================================================================
+
+function Test-PatchAppliedSinceLastRun {
+    <#
+    .SYNOPSIS
+        Checks if the patch state changed since the tool last ran.
+        Compares current state with the saved config's last known state.
+    #>
+    try {
+        $stateFile = Join-Path $script:Config.WorkingDir "last_patch_state.json"
+        $currentStatus = Test-PatchStatus
+        $nativeStatus = Test-NativeNVMeActive
+
+        $currentState = @{
+            Applied = $currentStatus.Applied
+            Count = $currentStatus.Count
+            NativeActive = $nativeStatus.IsActive
+            ActiveDriver = $nativeStatus.ActiveDriver
+        }
+
+        if (Test-Path $stateFile) {
+            $raw = Get-Content $stateFile -Raw -ErrorAction SilentlyContinue
+            $lastState = ConvertFrom-Json $raw -ErrorAction SilentlyContinue
+            # Detect if patch was applied since last run and driver activated
+            if ($lastState -and $lastState.Applied -and -not $lastState.NativeActive -and $currentState.NativeActive) {
+                return @{
+                    Changed = $true
+                    Message = "Native NVMe driver (nvmedisk.sys) is now ACTIVE after reboot"
+                    Driver = $currentState.ActiveDriver
+                }
+            }
+            if ($lastState -and -not $lastState.Applied -and $currentState.Applied) {
+                return @{
+                    Changed = $true
+                    Message = "Patch was applied since last run - reboot to activate"
+                    Driver = $currentState.ActiveDriver
+                }
+            }
+        }
+
+        # Save current state for next comparison
+        $currentState | ConvertTo-Json | Out-File $stateFile -Encoding UTF8
+
+        return @{ Changed = $false }
+    }
+    catch { return @{ Changed = $false } }
+}
+
+# ===========================================================================
 # SECTION 14: PATCH STATUS & VALIDATION
 # ===========================================================================
 
@@ -1897,7 +2165,8 @@ function Update-DrivesList {
                     $wearLbl.ForeColor = if ($wearVal -le 20) { $script:Colors.Danger } elseif ($wearVal -le 50) { $script:Colors.Warning } else { $script:Colors.Success }
                     $wearLbl.BackColor = $script:Colors.SurfaceLight
                     Set-RoundedCorners -Control $wearLbl -Radius 6
-                    if ($script:ToolTipProvider) { $script:ToolTipProvider.SetToolTip($wearLbl, "Drive health remaining") }
+                    $smartTip = if ($hData.SmartTooltip) { $hData.SmartTooltip } else { "Drive health remaining" }
+                    if ($script:ToolTipProvider) { $script:ToolTipProvider.SetToolTip($wearLbl, $smartTip) }
                     $row.Controls.Add($wearLbl)
                     $nextBadgeX += 42
                 }
@@ -2278,6 +2547,8 @@ function Install-NVMePatch {
             Show-BeforeAfterComparison -Before $script:BeforeSnapshot -After $afterSnapshot -Operation "Install Patch"
             $script:BeforeSnapshot = $null
         }
+        # Save state for post-reboot detection
+        try { Test-PatchAppliedSinceLastRun | Out-Null } catch { <# State save best-effort #> }
         Write-Log "========================================" -Level "INFO"
     }
 }
@@ -3239,9 +3510,9 @@ $script:btnRemove = New-ModernButton `
     }
 $cardActions.Controls.Add($script:btnRemove)
 
-# Secondary row
-$secGap  = 14
-$btnSecW = [int](($IW - ($secGap * 2)) / 3)
+# Secondary row (4 buttons)
+$secGap  = 10
+$btnSecW = [int](($IW - ($secGap * 3)) / 4)
 $secBtnY = 124
 
 $script:btnBackup = New-ModernButton `
@@ -3260,9 +3531,20 @@ $script:btnBackup = New-ModernButton `
     }
 $cardActions.Controls.Add($script:btnBackup)
 
-$btnDiag = New-ModernButton `
-    -Text "DIAGNOSTICS" `
+$btnBench = New-ModernButton `
+    -Text "BENCHMARK" `
     -Location (New-Object System.Drawing.Point(($CP + $btnSecW + $secGap), $secBtnY)) `
+    -Size (New-Object System.Drawing.Size($btnSecW, 42)) `
+    -BackColor $script:Colors.AccentSubtle `
+    -HoverColor $script:Colors.SurfaceHover `
+    -ForeColor $script:Colors.Accent `
+    -ToolTip "Run 4K random read/write benchmark (DiskSpd, ~60s)" `
+    -OnClick { Start-GUIBenchmark }
+$cardActions.Controls.Add($btnBench)
+
+$btnDiag = New-ModernButton `
+    -Text "DIAG" `
+    -Location (New-Object System.Drawing.Point(($CP + ($btnSecW + $secGap) * 2), $secBtnY)) `
     -Size (New-Object System.Drawing.Size($btnSecW, 42)) `
     -BackColor $script:Colors.SurfaceLight `
     -HoverColor $script:Colors.SurfaceHover `
@@ -3283,7 +3565,7 @@ $cardActions.Controls.Add($btnDiag)
 
 $btnDocs = New-ModernButton `
     -Text "DOCS" `
-    -Location (New-Object System.Drawing.Point(($CP + ($btnSecW + $secGap) * 2), $secBtnY)) `
+    -Location (New-Object System.Drawing.Point(($CP + ($btnSecW + $secGap) * 3), $secBtnY)) `
     -Size (New-Object System.Drawing.Size($btnSecW, 42)) `
     -BackColor $script:Colors.SurfaceLight `
     -HoverColor $script:Colors.SurfaceHover `
@@ -3700,6 +3982,21 @@ $script:form.Add_Shown({
                 }
             }
             catch { <# Update check is best-effort #> }
+
+            # Post-reboot verification detection
+            try {
+                $rebootCheck = Test-PatchAppliedSinceLastRun
+                if ($rebootCheck.Changed) {
+                    Write-Log "" -Level "INFO"
+                    Write-Log "========== POST-REBOOT VERIFICATION ==========" -Level "SUCCESS"
+                    Write-Log "  $($rebootCheck.Message)" -Level "SUCCESS"
+                    if ($rebootCheck.Driver) { Write-Log "  Active driver: $($rebootCheck.Driver)" -Level "SUCCESS" }
+                    Write-Log "===============================================" -Level "SUCCESS"
+                    Write-Log ""
+                    Show-ToastNotification -Title "NVMe Driver Active" -Message $rebootCheck.Message -Type "Success"
+                }
+            }
+            catch { <# Post-reboot check is best-effort #> }
 
             Write-Log "Ready. Select an action above."
         }
