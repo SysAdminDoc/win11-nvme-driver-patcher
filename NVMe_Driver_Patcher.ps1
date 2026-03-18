@@ -337,21 +337,21 @@ using System.Windows.Forms;
 
 public class DarkColorTable : ProfessionalColorTable {
     private static Color C(int r, int g, int b) { return Color.FromArgb(r, g, b); }
-    public override Color MenuBorder { get { return C(56, 56, 64); } }
-    public override Color MenuItemBorder { get { return C(56, 56, 64); } }
-    public override Color MenuItemSelected { get { return C(48, 48, 56); } }
-    public override Color MenuItemSelectedGradientBegin { get { return C(48, 48, 56); } }
-    public override Color MenuItemSelectedGradientEnd { get { return C(48, 48, 56); } }
-    public override Color MenuItemPressedGradientBegin { get { return C(36, 36, 42); } }
-    public override Color MenuItemPressedGradientEnd { get { return C(36, 36, 42); } }
-    public override Color MenuStripGradientBegin { get { return C(22, 22, 26); } }
-    public override Color MenuStripGradientEnd { get { return C(22, 22, 26); } }
-    public override Color ToolStripDropDownBackground { get { return C(26, 26, 30); } }
-    public override Color ImageMarginGradientBegin { get { return C(26, 26, 30); } }
-    public override Color ImageMarginGradientMiddle { get { return C(26, 26, 30); } }
-    public override Color ImageMarginGradientEnd { get { return C(26, 26, 30); } }
-    public override Color SeparatorDark { get { return C(56, 56, 64); } }
-    public override Color SeparatorLight { get { return C(36, 36, 42); } }
+    public override Color MenuBorder { get { return C(62, 62, 70); } }
+    public override Color MenuItemBorder { get { return C(62, 62, 70); } }
+    public override Color MenuItemSelected { get { return C(55, 55, 62); } }
+    public override Color MenuItemSelectedGradientBegin { get { return C(55, 55, 62); } }
+    public override Color MenuItemSelectedGradientEnd { get { return C(55, 55, 62); } }
+    public override Color MenuItemPressedGradientBegin { get { return C(42, 42, 48); } }
+    public override Color MenuItemPressedGradientEnd { get { return C(42, 42, 48); } }
+    public override Color MenuStripGradientBegin { get { return C(30, 30, 35); } }
+    public override Color MenuStripGradientEnd { get { return C(30, 30, 35); } }
+    public override Color ToolStripDropDownBackground { get { return C(34, 34, 40); } }
+    public override Color ImageMarginGradientBegin { get { return C(34, 34, 40); } }
+    public override Color ImageMarginGradientMiddle { get { return C(34, 34, 40); } }
+    public override Color ImageMarginGradientEnd { get { return C(34, 34, 40); } }
+    public override Color SeparatorDark { get { return C(52, 52, 60); } }
+    public override Color SeparatorLight { get { return C(42, 42, 48); } }
     public override Color CheckBackground { get { return C(56, 132, 244); } }
     public override Color CheckSelectedBackground { get { return C(80, 152, 255); } }
     public override Color CheckPressedBackground { get { return C(40, 100, 200); } }
@@ -520,20 +520,20 @@ function Get-WindowsThemeMode {
 $currentTheme = Get-WindowsThemeMode
 
 $PaletteDark = @{
-    Background    = [System.Drawing.Color]::FromArgb(15, 15, 18)
-    Surface       = [System.Drawing.Color]::FromArgb(22, 22, 26)
-    SurfaceLight  = [System.Drawing.Color]::FromArgb(36, 36, 42)
-    SurfaceHover  = [System.Drawing.Color]::FromArgb(48, 48, 56)
-    CardBackground= [System.Drawing.Color]::FromArgb(26, 26, 30)
-    CardBorder    = [System.Drawing.Color]::FromArgb(44, 44, 52)
-    Border        = [System.Drawing.Color]::FromArgb(56, 56, 64)
-    TextPrimary   = [System.Drawing.Color]::FromArgb(238, 238, 242)
-    TextSecondary = [System.Drawing.Color]::FromArgb(178, 178, 190)
-    TextMuted     = [System.Drawing.Color]::FromArgb(120, 120, 134)
-    TextDimmed    = [System.Drawing.Color]::FromArgb(80, 80, 92)
-    WarningDim    = [System.Drawing.Color]::FromArgb(42, 38, 26)
-    ProgressBack  = [System.Drawing.Color]::FromArgb(44, 44, 52)
-    ChecklistBg   = [System.Drawing.Color]::FromArgb(20, 20, 24)
+    Background    = [System.Drawing.Color]::FromArgb(24, 24, 28)
+    Surface       = [System.Drawing.Color]::FromArgb(30, 30, 35)
+    SurfaceLight  = [System.Drawing.Color]::FromArgb(42, 42, 48)
+    SurfaceHover  = [System.Drawing.Color]::FromArgb(55, 55, 62)
+    CardBackground= [System.Drawing.Color]::FromArgb(34, 34, 40)
+    CardBorder    = [System.Drawing.Color]::FromArgb(52, 52, 60)
+    Border        = [System.Drawing.Color]::FromArgb(62, 62, 70)
+    TextPrimary   = [System.Drawing.Color]::FromArgb(240, 240, 245)
+    TextSecondary = [System.Drawing.Color]::FromArgb(185, 185, 195)
+    TextMuted     = [System.Drawing.Color]::FromArgb(130, 130, 142)
+    TextDimmed    = [System.Drawing.Color]::FromArgb(90, 90, 100)
+    WarningDim    = [System.Drawing.Color]::FromArgb(50, 45, 32)
+    ProgressBack  = [System.Drawing.Color]::FromArgb(52, 52, 60)
+    ChecklistBg   = [System.Drawing.Color]::FromArgb(28, 28, 33)
 }
 
 $PaletteLight = @{
