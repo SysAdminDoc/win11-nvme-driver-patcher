@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v3.6.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract version from script
+        id: version
+        run: |
+          VER=$(grep -oP "AppVersion\s*=\s*\"\K[^\"]*" NVMe_Driver_Patcher.ps1 | head -1)
+          echo "version=$VER" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "NVMe Driver Patcher ${{ steps.tag.outputs.tag }}"
+          body: |
+            ## NVMe Driver Patcher ${{ steps.tag.outputs.tag }}
+
+            Download `NVMe_Driver_Patcher.ps1` below and run as Administrator.
+
+            ```powershell
+            irm https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMe_Driver_Patcher.ps1 -OutFile NVMe_Driver_Patcher.ps1; .\NVMe_Driver_Patcher.ps1
+            ```
+
+            See [CHANGELOG](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/blob/main/NVMe_Driver_Patcher.ps1) in script header for details.
+          files: NVMe_Driver_Patcher.ps1
+          draft: false
+          prerelease: false
