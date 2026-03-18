@@ -235,20 +235,6 @@ function Get-RelaunchArgs {
     return $argList
 }
 
-# If running under PowerShell 7+ (pwsh.exe), re-launch under Windows PowerShell 5.1
-# .NET Core WinForms has broken DWM dark mode and assembly compatibility issues
-if ($PSVersionTable.PSVersion.Major -ge 7) {
-    $argList = Get-RelaunchArgs
-    if (Test-Administrator) {
-        Start-Process powershell.exe -ArgumentList $argList -Wait
-    }
-    else {
-        try { Start-Process powershell.exe -ArgumentList $argList -Verb RunAs }
-        catch { Write-Error "Administrator privileges required." }
-    }
-    exit 0
-}
-
 if (-not (Test-Administrator)) {
     $argList = Get-RelaunchArgs
     try {
@@ -278,7 +264,7 @@ if (-not (Test-Administrator)) {
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-if (-not ([System.Management.Automation.PSTypeName]'DarkTitleBar').Type) {
+if (-not ([System.Management.Automation.PSTypeName]'DarkScrollBar').Type) {
     Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -304,23 +290,6 @@ public class DarkScrollBar {
     public static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
 }
 
-public class DarkTitleBar {
-    [DllImport("dwmapi.dll")]
-    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
-    public static void EnableDarkMode(IntPtr hwnd) {
-        int darkMode = 1;
-        DwmSetWindowAttribute(hwnd, 20, ref darkMode, sizeof(int));
-    }
-
-    public static void SetCaptionColor(IntPtr hwnd, int color) {
-        DwmSetWindowAttribute(hwnd, 35, ref color, sizeof(int));
-    }
-
-    public static void SetBorderColor(IntPtr hwnd, int color) {
-        DwmSetWindowAttribute(hwnd, 34, ref color, sizeof(int));
-    }
-}
 "@
 }
 
@@ -328,14 +297,6 @@ try { [DpiAwareness]::SetProcessDpiAwareness(2) | Out-Null }
 catch { try { [DpiAwareness]::SetProcessDPIAware() | Out-Null } catch {} }
 
 [System.Windows.Forms.Application]::EnableVisualStyles()
-
-# Force dark mode at the process level BEFORE any window is created
-try {
-    $dm = 1
-    # Try attribute 20 first (Windows 11), then 19 (older Win10 builds)
-    $hr = [DarkTitleBar]::DwmSetWindowAttribute([IntPtr]::Zero, 20, [ref]$dm, 4)
-}
-catch {}
 
 # Dark color table for context menus (compiled separately with WinForms reference)
 if (-not ([System.Management.Automation.PSTypeName]'DarkColorTable').Type) {
@@ -3136,24 +3097,6 @@ $script:form.GetType().GetProperty(
 $script:form.AutoScroll = $true
 $script:form.AutoScrollMargin = New-Object System.Drawing.Size(0, 10)
 
-# Apply dark mode as early as possible via HandleCreated event
-$script:form.Add_HandleCreated({
-    $hwnd = $this.Handle
-    try {
-        # DWMWA_USE_IMMERSIVE_DARK_MODE: try attr 20 (Win11), then 19 (Win10 20H1+)
-        $darkVal = 1
-        $hr = [DarkTitleBar]::DwmSetWindowAttribute($hwnd, 20, [ref]$darkVal, 4)
-        if ($hr -ne 0) { [DarkTitleBar]::DwmSetWindowAttribute($hwnd, 19, [ref]$darkVal, 4) | Out-Null }
-        # Caption and border colors
-        $bg = $script:Colors.Background
-        [DarkTitleBar]::SetCaptionColor($hwnd, $bg.R -bor ($bg.G -shl 8) -bor ($bg.B -shl 16))
-        $bd = $script:Colors.CardBorder
-        [DarkTitleBar]::SetBorderColor($hwnd, $bd.R -bor ($bd.G -shl 8) -bor ($bd.B -shl 16))
-    } catch {}
-    # Dark scrollbar theme for form's own AutoScroll bars
-    try { [DarkScrollBar]::SetWindowTheme($hwnd, "DarkMode_Explorer", $null) | Out-Null } catch {}
-}.GetNewClosure())
-
 # ===================================================================
 #  HEADER
 # ===================================================================
@@ -3953,30 +3896,9 @@ $script:form.Add_Load({
     $effectiveH = [Math]::Max($this.DisplayRectangle.Height, $script:MinContentH)
     if ($script:lblFooter) { $script:lblFooter.Top = $effectiveH - 30 }
 
-    # Apply immersive dark mode to window chrome (title bar, borders)
-    try {
-        [DarkTitleBar]::EnableDarkMode($this.Handle)
-        $bg = $script:Colors.Background
-        $bgRef = $bg.R -bor ($bg.G -shl 8) -bor ($bg.B -shl 16)
-        [DarkTitleBar]::SetCaptionColor($this.Handle, $bgRef)
-        $bd = $script:Colors.CardBorder
-        $bdRef = $bd.R -bor ($bd.G -shl 8) -bor ($bd.B -shl 16)
-        [DarkTitleBar]::SetBorderColor($this.Handle, $bdRef)
-    }
-    catch { <# DWM dark mode is Windows 11 only #> }
-
-    # Apply DarkMode_Explorer to ALL scrollable controls (form, RTB, panels)
-    foreach ($ctrl in @($this, $script:rtbOutput, $script:pnlDrivesContent)) {
-        if ($ctrl) {
-            try { [DarkScrollBar]::SetWindowTheme($ctrl.Handle, "DarkMode_Explorer", $null) | Out-Null } catch {}
-        }
-    }
-    # Also walk all child panels that might have scrollbars
-    foreach ($ctrl in $this.Controls) {
-        if ($ctrl -is [System.Windows.Forms.Panel] -and $ctrl.AutoScroll) {
-            try { [DarkScrollBar]::SetWindowTheme($ctrl.Handle, "DarkMode_Explorer", $null) | Out-Null } catch {}
-        }
-    }
+    # Apply dark scrollbars to controls (matches original v3.0.0 behavior)
+    Set-DarkScrollbar -Control $script:rtbOutput
+    if ($script:pnlDrivesContent) { Set-DarkScrollbar -Control $script:pnlDrivesContent }
 })
 
 # Defer heavy preflight checks to background runspace so GUI stays responsive
@@ -4204,20 +4126,6 @@ $script:form.Add_FormClosing({
         try { $script:AppMutex.ReleaseMutex(); $script:AppMutex.Dispose() } catch { <# Mutex cleanup best-effort #> }
     }
 })
-
-# Re-apply dark mode right before ShowDialog as final guarantee
-try {
-    $hwnd = $script:form.Handle
-    $darkVal = 1
-    $hr = [DarkTitleBar]::DwmSetWindowAttribute($hwnd, 20, [ref]$darkVal, 4)
-    if ($hr -ne 0) { [DarkTitleBar]::DwmSetWindowAttribute($hwnd, 19, [ref]$darkVal, 4) | Out-Null }
-    $bg = $script:Colors.Background
-    [DarkTitleBar]::SetCaptionColor($hwnd, $bg.R -bor ($bg.G -shl 8) -bor ($bg.B -shl 16))
-    $bd = $script:Colors.CardBorder
-    [DarkTitleBar]::SetBorderColor($hwnd, $bd.R -bor ($bd.G -shl 8) -bor ($bd.B -shl 16))
-    [DarkScrollBar]::SetWindowTheme($hwnd, "DarkMode_Explorer", $null) | Out-Null
-}
-catch {}
 
 # Run
 [void]$script:form.ShowDialog()
