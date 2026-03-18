@@ -500,16 +500,17 @@ function Test-BitLockerEnabled {
 }
 
 function Test-VeraCryptSystemEncryption {
-    param($CachedDrivers = $null)
+    # Fast detection: check service + EFI path instead of slow Win32_SystemDriver query
     try {
-        $drivers = if ($CachedDrivers) { $CachedDrivers } else { Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue }
-        $vcDriver = $drivers | Where-Object { $_.Name -eq "veracrypt" -or $_.PathName -match "veracrypt" } | Select-Object -First 1
-        if ($vcDriver -and $vcDriver.State -eq "Running") {
-            $vcService = Get-Service -Name "veracrypt" -ErrorAction SilentlyContinue
-            if ($vcService) { return $true }
-            $vcBoot = $drivers | Where-Object { $_.Name -match "veracrypt" -and $_.StartMode -eq "Boot" }
-            if ($vcBoot) { return $true }
+        $svc = Get-Service -Name "veracrypt" -ErrorAction SilentlyContinue
+        if ($svc -and $svc.Status -eq "Running") { return $true }
+        # Check for VeraCrypt boot driver via registry (instant, no CIM)
+        $vcReg = "HKLM:\SYSTEM\CurrentControlSet\Services\veracrypt"
+        if (Test-Path $vcReg) {
+            $start = (Get-ItemProperty -Path $vcReg -Name "Start" -ErrorAction SilentlyContinue).Start
+            if ($start -eq 0) { return $true }  # Boot-start driver
         }
+        # Check EFI
         $efiPath = "$env:SystemDrive\EFI\VeraCrypt"
         if (Test-Path $efiPath -ErrorAction SilentlyContinue) { return $true }
     }
@@ -518,29 +519,20 @@ function Test-VeraCryptSystemEncryption {
 }
 
 function Get-IncompatibleSoftware {
-    param($CachedServices = $null, $CachedDrivers = $null)
+    # Fast detection via Get-Service (instant) instead of slow Win32_Service/Win32_SystemDriver CIM
     $found = [System.Collections.ArrayList]::new()
     try {
-        $services = if ($CachedServices) { $CachedServices } else { Get-CimInstance Win32_Service -ErrorAction SilentlyContinue }
-        $drivers = if ($CachedDrivers) { $CachedDrivers } else { Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue }
-
-        $vc = $services | Where-Object { $_.Name -match "veracrypt" -or $_.PathName -match "veracrypt" }
-        if ($vc) {
+        $allServices = Get-Service -ErrorAction SilentlyContinue
+        if ($allServices | Where-Object { $_.Name -match "veracrypt" }) {
             [void]$found.Add(@{ Name = "VeraCrypt"; Severity = "Critical"; Message = "System encryption breaks boot with nvmedisk.sys" })
         }
-
-        $acronis = $services | Where-Object { $_.Name -match "acronis|AcronisAgent|mms" -or $_.PathName -match "acronis" }
-        if ($acronis) {
+        if ($allServices | Where-Object { $_.Name -match "acronis|AcronisAgent" }) {
             [void]$found.Add(@{ Name = "Acronis"; Severity = "High"; Message = "Backup may not see drives under Storage disks category" })
         }
-
-        $macrium = $services | Where-Object { $_.Name -match "macrium|ReflectService" -or $_.PathName -match "macrium" }
-        if ($macrium) {
+        if ($allServices | Where-Object { $_.Name -match "macrium|ReflectService" }) {
             [void]$found.Add(@{ Name = "Macrium Reflect"; Severity = "Medium"; Message = "May need update for Storage disks compatibility" })
         }
-
-        $vbox = $drivers | Where-Object { $_.Name -match "VBoxDrv|VBoxNet|VBoxUSB" }
-        if ($vbox) {
+        if ($allServices | Where-Object { $_.Name -match "VBox" }) {
             [void]$found.Add(@{ Name = "VirtualBox"; Severity = "Low"; Message = "Storage filter drivers may conflict" })
         }
     }
@@ -549,7 +541,6 @@ function Get-IncompatibleSoftware {
 }
 
 function Get-NVMeDriverInfo {
-    param($CachedSignedDrivers = $null)
     $driverInfo = @{
         HasThirdParty   = $false
         ThirdPartyName  = ""
@@ -560,7 +551,7 @@ function Get-NVMeDriverInfo {
     }
 
     try {
-        $allSignedDrivers = if ($CachedSignedDrivers) { $CachedSignedDrivers } else { Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue }
+        $allSignedDrivers = Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue
         $nvmeDrivers = $allSignedDrivers |
             Where-Object { $_.DeviceClass -eq "SCSIAdapter" -or $_.DeviceName -match "NVMe" }
 
@@ -717,7 +708,6 @@ function Get-SystemDrives {
 }
 
 function Test-NativeNVMeActive {
-    param($CachedDrivers = $null, $CachedPnpEntities = $null, $CachedSignedDrivers = $null)
     $result = @{
         IsActive       = $false
         ActiveDriver   = "Unknown"
@@ -727,8 +717,8 @@ function Test-NativeNVMeActive {
     }
 
     try {
-        $allDrivers = if ($CachedDrivers) { $CachedDrivers } else { Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue }
-        $nvmeDiskDriver = $allDrivers | Where-Object { $_.Name -eq "nvmedisk" -or $_.PathName -match "nvmedisk" } | Select-Object -First 1
+        $nvmeDiskDriver = Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -eq "nvmedisk" -or $_.PathName -match "nvmedisk" }
 
         if ($nvmeDiskDriver -and $nvmeDiskDriver.State -eq "Running") {
             $result.IsActive = $true
@@ -736,8 +726,8 @@ function Test-NativeNVMeActive {
             $result.Details = "Native NVMe driver is running"
         }
 
-        $allPnp = if ($CachedPnpEntities) { $CachedPnpEntities } else { Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue }
-        $storageDiskDevices = $allPnp | Where-Object { $_.ClassGuid -eq "{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" }
+        $storageDiskDevices = Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
+            Where-Object { $_.ClassGuid -eq "{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" }
 
         if ($storageDiskDevices) {
             $result.IsActive = $true
@@ -755,8 +745,8 @@ function Test-NativeNVMeActive {
             }
         }
 
-        $allSigned = if ($CachedSignedDrivers) { $CachedSignedDrivers } else { Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue }
-        $nvmeSignedDrivers = $allSigned | Where-Object { $_.DeviceName -match "NVMe" -or $_.InfName -eq "stornvme.inf" -or $_.InfName -eq "nvmedisk.inf" }
+        $nvmeSignedDrivers = Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue |
+            Where-Object { $_.DeviceName -match "NVMe" -or $_.InfName -eq "stornvme.inf" -or $_.InfName -eq "nvmedisk.inf" }
 
         foreach ($drv in $nvmeSignedDrivers) {
             if ($drv.InfName -eq "nvmedisk.inf") {
@@ -884,37 +874,10 @@ function Invoke-PreflightChecks {
         BypassIO         = @{ Status = "Checking"; Message = "Checking..."; Critical = $false }
     }
 
-    # Cache expensive CIM queries ONCE
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    Write-Log "  Querying system drivers..." -Level "DEBUG"
-    $cimDrivers = try { Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue } catch { @() }
-    Write-Log "  System drivers: $($sw.ElapsedMilliseconds)ms ($($cimDrivers.Count) items)" -Level "DEBUG"
-
-    Write-Log "  Querying services..." -Level "DEBUG"
-    $t = $sw.ElapsedMilliseconds
-    $cimServices = try { Get-CimInstance Win32_Service -ErrorAction SilentlyContinue } catch { @() }
-    Write-Log "  Services: $($sw.ElapsedMilliseconds - $t)ms ($($cimServices.Count) items)" -Level "DEBUG"
-
-    Write-Log "  Querying signed drivers (slow)..." -Level "DEBUG"
-    $t = $sw.ElapsedMilliseconds
-    $cimSignedDrivers = try { Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue } catch { @() }
-    Write-Log "  Signed drivers: $($sw.ElapsedMilliseconds - $t)ms ($($cimSignedDrivers.Count) items)" -Level "DEBUG"
-
-    Write-Log "  Querying PnP entities..." -Level "DEBUG"
-    $t = $sw.ElapsedMilliseconds
-    $cimPnpEntities = try { Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue } catch { @() }
-    Write-Log "  PnP entities: $($sw.ElapsedMilliseconds - $t)ms ($($cimPnpEntities.Count) items)" -Level "DEBUG"
-
-    Write-Log "  CIM cache built in $($sw.ElapsedMilliseconds)ms total" -Level "DEBUG"
-    $script:CimCache = @{
-        Drivers = $cimDrivers
-        Services = $cimServices
-        SignedDrivers = $cimSignedDrivers
-        PnpEntities = $cimPnpEntities
-    }
 
     # Windows Version
-    Write-Log "  [1/10] Checking Windows version..." -Level "DEBUG"
+    Write-Log "  [1/8] Checking Windows version..." -Level "DEBUG"
     try {
         $script:BuildDetails = Get-WindowsBuildDetails
         $buildNumber = $script:BuildDetails.BuildNumber
@@ -935,8 +898,7 @@ function Invoke-PreflightChecks {
     }
 
     # NVMe Drives
-    Write-Log "  [2/10] Scanning drives and health data..." -Level "DEBUG"
-    $script:CachedHealth = Get-NVMeHealthData
+    Write-Log "  [2/8] Scanning drives..." -Level "DEBUG"
     $script:CachedDrives = Get-SystemDrives
     $drives = $script:CachedDrives
     $nvmeCount = ($drives | Where-Object { $_.IsNVMe }).Count
@@ -949,7 +911,7 @@ function Invoke-PreflightChecks {
     }
 
     # BitLocker
-    Write-Log "  [3/10] Checking BitLocker..." -Level "DEBUG"
+    Write-Log "  [3/8] Checking BitLocker..." -Level "DEBUG"
     $script:BitLockerEnabled = Test-BitLockerEnabled
     if ($script:BitLockerEnabled) {
         $script:PreflightChecks.BitLocker = @{ Status = "Warning"; Message = "Encryption active"; Critical = $false }
@@ -959,8 +921,8 @@ function Invoke-PreflightChecks {
     }
 
     # VeraCrypt
-    Write-Log "  [4/10] Checking VeraCrypt..." -Level "DEBUG"
-    $script:VeraCryptDetected = Test-VeraCryptSystemEncryption -CachedDrivers $script:CimCache.Drivers
+    Write-Log "  [4/8] Checking VeraCrypt..." -Level "DEBUG"
+    $script:VeraCryptDetected = Test-VeraCryptSystemEncryption
     if ($script:VeraCryptDetected) {
         $script:PreflightChecks.VeraCrypt = @{ Status = "Fail"; Message = "BLOCKS PATCH - breaks boot"; Critical = $true }
     }
@@ -969,8 +931,8 @@ function Invoke-PreflightChecks {
     }
 
     # Incompatible Software
-    Write-Log "  [5/10] Checking software compatibility..." -Level "DEBUG"
-    $script:IncompatibleSoftware = Get-IncompatibleSoftware -CachedServices $script:CimCache.Services -CachedDrivers $script:CimCache.Drivers
+    Write-Log "  [5/8] Checking software compatibility..." -Level "DEBUG"
+    $script:IncompatibleSoftware = Get-IncompatibleSoftware
     $criticalSw = @($script:IncompatibleSoftware | Where-Object { $_.Severity -eq "Critical" })
     $warnSw = @($script:IncompatibleSoftware | Where-Object { $_.Severity -ne "Critical" })
     if ($criticalSw.Count -gt 0) {
@@ -984,8 +946,8 @@ function Invoke-PreflightChecks {
     }
 
     # Third-party Driver
-    Write-Log "  [6/10] Checking NVMe drivers..." -Level "DEBUG"
-    $script:DriverInfo = Get-NVMeDriverInfo -CachedSignedDrivers $script:CimCache.SignedDrivers
+    Write-Log "  [6/8] Checking NVMe drivers..." -Level "DEBUG"
+    $script:DriverInfo = Get-NVMeDriverInfo
     if ($script:DriverInfo.HasThirdParty) {
         $script:PreflightChecks.ThirdPartyDriver = @{ Status = "Warning"; Message = $script:DriverInfo.ThirdPartyName; Critical = $false }
     }
@@ -994,7 +956,7 @@ function Invoke-PreflightChecks {
     }
 
     # System Protection
-    Write-Log "  [7/10] Checking System Protection..." -Level "DEBUG"
+    Write-Log "  [7/8] Checking System Protection..." -Level "DEBUG"
     try {
         $null = Get-ComputerRestorePoint -ErrorAction SilentlyContinue
         $script:PreflightChecks.SystemProtection = @{ Status = "Pass"; Message = "Available"; Critical = $false }
@@ -1004,8 +966,8 @@ function Invoke-PreflightChecks {
     }
 
     # Native NVMe Driver Activation Status
-    Write-Log "  [8/10] Checking native NVMe driver status..." -Level "DEBUG"
-    $script:NativeNVMeStatus = Test-NativeNVMeActive -CachedDrivers $script:CimCache.Drivers -CachedPnpEntities $script:CimCache.PnpEntities -CachedSignedDrivers $script:CimCache.SignedDrivers
+    Write-Log "  [8/8] Checking native NVMe driver and BypassIO..." -Level "DEBUG"
+    $script:NativeNVMeStatus = Test-NativeNVMeActive
     if ($script:NativeNVMeStatus.IsActive) {
         $script:PreflightChecks.DriverStatus = @{ Status = "Pass"; Message = "nvmedisk.sys active"; Critical = $false }
     }
@@ -1020,7 +982,6 @@ function Invoke-PreflightChecks {
     }
 
     # BypassIO / DirectStorage Status
-    Write-Log "  [9/10] Checking BypassIO / DirectStorage..." -Level "DEBUG"
     $script:BypassIOStatus = Get-BypassIOStatus
     if ($script:BypassIOStatus.Supported) {
         $script:PreflightChecks.BypassIO = @{ Status = "Pass"; Message = "Supported"; Critical = $false }
@@ -1035,7 +996,7 @@ function Invoke-PreflightChecks {
         }
     }
 
-    Write-Log "  [10/10] Pre-flight complete ($($sw.ElapsedMilliseconds)ms)" -Level "DEBUG"
+    Write-Log "  Pre-flight complete ($($sw.ElapsedMilliseconds)ms)" -Level "DEBUG"
     return $script:PreflightChecks
 }
 
@@ -3129,7 +3090,6 @@ $script:window.Add_ContentRendered({
         return @{
             Checks              = $checks
             BuildDetails        = $script:BuildDetails
-            CachedHealth        = $script:CachedHealth
             CachedDrives        = $script:CachedDrives
             HasNVMeDrives       = $script:HasNVMeDrives
             BitLockerEnabled    = $script:BitLockerEnabled
@@ -3160,7 +3120,6 @@ $script:window.Add_ContentRendered({
 
             # Marshal results back to script scope
             $script:BuildDetails        = $r.BuildDetails
-            $script:CachedHealth        = $r.CachedHealth
             $script:CachedDrives        = $r.CachedDrives
             $script:HasNVMeDrives       = $r.HasNVMeDrives
             $script:BitLockerEnabled    = $r.BitLockerEnabled
@@ -3239,6 +3198,8 @@ $script:window.Add_ContentRendered({
                 Write-Log "  [$checkName] $($check.Message)" -Level $level
             }
 
+            # Load health data lazily (after preflight, on UI thread -- not blocking startup)
+            $script:CachedHealth = Get-NVMeHealthData
             Update-DrivesList
 
             # Log firmware versions
