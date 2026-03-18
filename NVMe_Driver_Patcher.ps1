@@ -283,6 +283,27 @@ public class DarkScrollBar {
     [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
     public static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
 }
+
+public class DarkTitleBar {
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    public static void EnableDarkMode(IntPtr hwnd) {
+        // DWMWA_USE_IMMERSIVE_DARK_MODE = 20 (Windows 11 22000+)
+        int darkMode = 1;
+        DwmSetWindowAttribute(hwnd, 20, ref darkMode, sizeof(int));
+    }
+
+    public static void SetCaptionColor(IntPtr hwnd, int color) {
+        // DWMWA_CAPTION_COLOR = 35 (Windows 11 22H2+)
+        DwmSetWindowAttribute(hwnd, 35, ref color, sizeof(int));
+    }
+
+    public static void SetBorderColor(IntPtr hwnd, int color) {
+        // DWMWA_BORDER_COLOR = 34 (Windows 11 22H2+)
+        DwmSetWindowAttribute(hwnd, 34, ref color, sizeof(int));
+    }
+}
 "@ -ErrorAction SilentlyContinue
 
 try { [DpiAwareness]::SetProcessDpiAwareness(2) | Out-Null }
@@ -3819,6 +3840,19 @@ $script:form.Add_Load({
     # Position footer correctly using content-relative coordinates
     $effectiveH = [Math]::Max($this.DisplayRectangle.Height, $script:MinContentH)
     if ($script:lblFooter) { $script:lblFooter.Top = $effectiveH - 30 }
+
+    # Apply immersive dark mode to window chrome (title bar, borders)
+    try {
+        $bg = $script:Colors.Background
+        # Convert RGB to COLORREF (0x00BBGGRR)
+        $bgColorRef = $bg.R -bor ($bg.G -shl 8) -bor ($bg.B -shl 16)
+        [DarkTitleBar]::EnableDarkMode($this.Handle)
+        [DarkTitleBar]::SetCaptionColor($this.Handle, $bgColorRef)
+        $borderBg = $script:Colors.CardBorder
+        $borderColorRef = $borderBg.R -bor ($borderBg.G -shl 8) -bor ($borderBg.B -shl 16)
+        [DarkTitleBar]::SetBorderColor($this.Handle, $borderColorRef)
+    }
+    catch { <# DWM dark mode is Windows 11 only, non-critical #> }
 
     # Apply dark scrollbars to form and controls
     Set-DarkScrollbar -Control $this
