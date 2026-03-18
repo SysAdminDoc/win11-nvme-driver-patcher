@@ -470,20 +470,20 @@ function Get-WindowsThemeMode {
 $currentTheme = Get-WindowsThemeMode
 
 $PaletteDark = @{
-    Background    = [System.Drawing.Color]::FromArgb(24, 24, 28)
-    Surface       = [System.Drawing.Color]::FromArgb(30, 30, 35)
-    SurfaceLight  = [System.Drawing.Color]::FromArgb(42, 42, 48)
-    SurfaceHover  = [System.Drawing.Color]::FromArgb(55, 55, 62)
-    CardBackground= [System.Drawing.Color]::FromArgb(34, 34, 40)
-    CardBorder    = [System.Drawing.Color]::FromArgb(52, 52, 60)
-    Border        = [System.Drawing.Color]::FromArgb(62, 62, 70)
-    TextPrimary   = [System.Drawing.Color]::FromArgb(240, 240, 245)
-    TextSecondary = [System.Drawing.Color]::FromArgb(185, 185, 195)
-    TextMuted     = [System.Drawing.Color]::FromArgb(130, 130, 142)
-    TextDimmed    = [System.Drawing.Color]::FromArgb(90, 90, 100)
-    WarningDim    = [System.Drawing.Color]::FromArgb(50, 45, 32)
-    ProgressBack  = [System.Drawing.Color]::FromArgb(52, 52, 60)
-    ChecklistBg   = [System.Drawing.Color]::FromArgb(28, 28, 33)
+    Background    = [System.Drawing.Color]::FromArgb(15, 15, 18)
+    Surface       = [System.Drawing.Color]::FromArgb(22, 22, 26)
+    SurfaceLight  = [System.Drawing.Color]::FromArgb(36, 36, 42)
+    SurfaceHover  = [System.Drawing.Color]::FromArgb(48, 48, 56)
+    CardBackground= [System.Drawing.Color]::FromArgb(26, 26, 30)
+    CardBorder    = [System.Drawing.Color]::FromArgb(44, 44, 52)
+    Border        = [System.Drawing.Color]::FromArgb(56, 56, 64)
+    TextPrimary   = [System.Drawing.Color]::FromArgb(238, 238, 242)
+    TextSecondary = [System.Drawing.Color]::FromArgb(178, 178, 190)
+    TextMuted     = [System.Drawing.Color]::FromArgb(120, 120, 134)
+    TextDimmed    = [System.Drawing.Color]::FromArgb(80, 80, 92)
+    WarningDim    = [System.Drawing.Color]::FromArgb(42, 38, 26)
+    ProgressBack  = [System.Drawing.Color]::FromArgb(44, 44, 52)
+    ChecklistBg   = [System.Drawing.Color]::FromArgb(20, 20, 24)
 }
 
 $PaletteLight = @{
@@ -2082,6 +2082,34 @@ function Set-RoundedCorners {
     }
 }
 
+function New-DarkContextMenu {
+    param([System.Windows.Forms.ContextMenuStrip]$Menu)
+    $Menu.BackColor = $script:Colors.Surface
+    $Menu.ForeColor = $script:Colors.TextPrimary
+    $Menu.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $Menu.ShowImageMargin = $false
+    # Override the renderer to paint dark backgrounds on menu items
+    $Menu.Renderer = New-Object System.Windows.Forms.ToolStripProfessionalRenderer(
+        (New-Object System.Windows.Forms.ProfessionalColorTable)
+    )
+    # Force dark rendering via item painting
+    $Menu.Add_Opening({
+        foreach ($item in $this.Items) {
+            if ($item -is [System.Windows.Forms.ToolStripMenuItem]) {
+                $item.BackColor = $script:Colors.Surface
+                $item.ForeColor = $script:Colors.TextPrimary
+            }
+        }
+    }.GetNewClosure())
+    foreach ($item in $Menu.Items) {
+        if ($item -is [System.Windows.Forms.ToolStripMenuItem] -or $item -is [System.Windows.Forms.ToolStripItem]) {
+            $item.BackColor = $script:Colors.Surface
+            $item.ForeColor = $script:Colors.TextPrimary
+        }
+    }
+    return $Menu
+}
+
 function Set-DarkScrollbar {
     param([System.Windows.Forms.Control]$Control)
     try { [DarkScrollBar]::SetWindowTheme($Control.Handle, "DarkMode_Explorer", $null) | Out-Null } catch { <# Dark scrollbar theming is cosmetic-only #> }
@@ -3114,15 +3142,35 @@ $pnlHeader.Controls.Add($lblVersion)
 
 $script:form.Controls.Add($pnlHeader)
 
-# Loading progress bar (slim marquee bar below header)
-$script:loadingBar = New-Object System.Windows.Forms.ProgressBar
+# Custom-painted loading bar (replaces ProgressBar to avoid light-theme visual styles)
+$script:loadingBar = New-Object System.Windows.Forms.Panel
 $script:loadingBar.Location = New-Object System.Drawing.Point(0, $HH)
 $script:loadingBar.Size     = New-Object System.Drawing.Size($FW, 3)
-$script:loadingBar.Style    = [System.Windows.Forms.ProgressBarStyle]::Marquee
-$script:loadingBar.MarqueeAnimationSpeed = 30
 $script:loadingBar.BackColor = $script:Colors.Background
-$script:loadingBar.ForeColor = $script:Colors.Accent
 $script:loadingBar.Visible   = $false
+$script:loadingBar.GetType().GetProperty("DoubleBuffered", [System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic).SetValue($script:loadingBar, $true, $null)
+$script:loadingBar.Tag = @{ MarqueePos = 0 }
+$script:loadingBar.Add_Paint({
+    param($s, $e)
+    $g = $e.Graphics
+    $pos = 0; if ($s.Tag -is [hashtable]) { $pos = $s.Tag['MarqueePos'] }
+    $barWidth = [int]($s.Width * 0.25)
+    $brush = New-Object System.Drawing.SolidBrush($script:Colors.Accent)
+    $g.FillRectangle($brush, $pos, 0, $barWidth, $s.Height)
+    $brush.Dispose()
+}.GetNewClosure())
+# Marquee animation timer
+$script:loadingTimer = New-Object System.Windows.Forms.Timer
+$script:loadingTimer.Interval = 20
+$script:loadingTimer.Add_Tick({
+    if (-not $script:loadingBar -or -not $script:loadingBar.Visible) { return }
+    $tag = $script:loadingBar.Tag
+    if ($tag -is [hashtable]) {
+        $tag['MarqueePos'] = ($tag['MarqueePos'] + 4) % ($script:loadingBar.Width + [int]($script:loadingBar.Width * 0.25))
+        if ($tag['MarqueePos'] -gt $script:loadingBar.Width) { $tag['MarqueePos'] = -[int]($script:loadingBar.Width * 0.25) }
+    }
+    $script:loadingBar.Invalidate()
+}.GetNewClosure())
 $script:form.Controls.Add($script:loadingBar)
 $script:loadingBar.BringToFront()
 
@@ -3640,12 +3688,7 @@ Set-RoundedCorners -Control $script:rtbOutput -Radius 8
 
 # Right-click context menu for log
 $logContextMenu = New-Object System.Windows.Forms.ContextMenuStrip
-$logContextMenu.BackColor = $script:Colors.Surface
-$logContextMenu.ForeColor = $script:Colors.TextPrimary
-$logContextMenu.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-$logContextMenu.Renderer = New-Object System.Windows.Forms.ToolStripProfessionalRenderer(
-    (New-Object System.Windows.Forms.ProfessionalColorTable)
-)
+New-DarkContextMenu -Menu $logContextMenu | Out-Null
 
 $menuCopy = $logContextMenu.Items.Add("Copy Selection")
 $menuCopy.Add_Click({ if ($script:rtbOutput.SelectionLength -gt 0) { [System.Windows.Forms.Clipboard]::SetText($script:rtbOutput.SelectedText) } })
@@ -3811,6 +3854,7 @@ $script:trayIcon.Visible = $false
 
 # Tray context menu
 $trayMenu = New-Object System.Windows.Forms.ContextMenuStrip
+New-DarkContextMenu -Menu $trayMenu | Out-Null
 $trayRestore = $trayMenu.Items.Add("Restore")
 $trayRestore.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $trayRestore.Add_Click({
@@ -3869,7 +3913,7 @@ $script:form.Add_Shown({
     Write-Log "----------------------------------------"
     Write-Log "Running pre-flight checks..."
     Set-ButtonsEnabled -Enabled $false
-    if ($script:loadingBar) { $script:loadingBar.Visible = $true }
+    if ($script:loadingBar) { $script:loadingBar.Visible = $true; $script:loadingBar.Tag['MarqueePos'] = 0; $script:loadingTimer.Start() }
 
     # Build runspace with all needed function definitions
     $funcNames = @('Get-WindowsBuildDetails', 'Get-NVMeHealthData', 'Get-SystemDrives',
@@ -4054,7 +4098,7 @@ $script:form.Add_Shown({
             Write-Log "Pre-flight check error: $($_.Exception.Message)" -Level "ERROR"
         }
         finally {
-            if ($script:loadingBar) { $script:loadingBar.Visible = $false }
+            if ($script:loadingBar) { $script:loadingBar.Visible = $false; $script:loadingTimer.Stop() }
             $script:bgPS.Dispose()
             $script:bgRunspace.Dispose()
             Set-ButtonsEnabled -Enabled $true
@@ -4074,6 +4118,7 @@ $script:form.Add_FormClosing({
 
     Write-AppEventLog -Message "$($script:Config.AppName) closed" -EntryType "Information" -EventId 1000
 
+    if ($script:loadingTimer) { try { $script:loadingTimer.Stop(); $script:loadingTimer.Dispose() } catch { <# Timer cleanup #> } }
     if ($script:preflightTimer) { try { $script:preflightTimer.Stop(); $script:preflightTimer.Dispose() } catch { <# Timer cleanup #> } }
     if ($script:bgPS) { try { $script:bgPS.Dispose() } catch { <# Runspace cleanup #> } }
     if ($script:bgRunspace) { try { $script:bgRunspace.Dispose() } catch { <# Runspace cleanup #> } }
