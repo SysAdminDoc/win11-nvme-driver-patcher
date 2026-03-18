@@ -3126,6 +3126,24 @@ $script:form.GetType().GetProperty(
 $script:form.AutoScroll = $true
 $script:form.AutoScrollMargin = New-Object System.Drawing.Size(0, 10)
 
+# Apply dark mode as early as possible via HandleCreated event
+$script:form.Add_HandleCreated({
+    $hwnd = $this.Handle
+    try {
+        # DWMWA_USE_IMMERSIVE_DARK_MODE: try attr 20 (Win11), then 19 (Win10 20H1+)
+        $darkVal = 1
+        $hr = [DarkTitleBar]::DwmSetWindowAttribute($hwnd, 20, [ref]$darkVal, 4)
+        if ($hr -ne 0) { [DarkTitleBar]::DwmSetWindowAttribute($hwnd, 19, [ref]$darkVal, 4) | Out-Null }
+        # Caption and border colors
+        $bg = $script:Colors.Background
+        [DarkTitleBar]::SetCaptionColor($hwnd, $bg.R -bor ($bg.G -shl 8) -bor ($bg.B -shl 16))
+        $bd = $script:Colors.CardBorder
+        [DarkTitleBar]::SetBorderColor($hwnd, $bd.R -bor ($bd.G -shl 8) -bor ($bd.B -shl 16))
+    } catch {}
+    # Dark scrollbar theme for form's own AutoScroll bars
+    try { [DarkScrollBar]::SetWindowTheme($hwnd, "DarkMode_Explorer", $null) | Out-Null } catch {}
+}.GetNewClosure())
+
 # ===================================================================
 #  HEADER
 # ===================================================================
@@ -4177,20 +4195,19 @@ $script:form.Add_FormClosing({
     }
 })
 
-# Apply dark mode to window chrome BEFORE showing (must happen before first WM_PAINT)
-$null = $script:form.Handle  # Force HWND creation
+# Re-apply dark mode right before ShowDialog as final guarantee
 try {
-    [DarkTitleBar]::EnableDarkMode($script:form.Handle)
+    $hwnd = $script:form.Handle
+    $darkVal = 1
+    $hr = [DarkTitleBar]::DwmSetWindowAttribute($hwnd, 20, [ref]$darkVal, 4)
+    if ($hr -ne 0) { [DarkTitleBar]::DwmSetWindowAttribute($hwnd, 19, [ref]$darkVal, 4) | Out-Null }
     $bg = $script:Colors.Background
-    $bgRef = $bg.R -bor ($bg.G -shl 8) -bor ($bg.B -shl 16)
-    [DarkTitleBar]::SetCaptionColor($script:form.Handle, $bgRef)
+    [DarkTitleBar]::SetCaptionColor($hwnd, $bg.R -bor ($bg.G -shl 8) -bor ($bg.B -shl 16))
     $bd = $script:Colors.CardBorder
-    $bdRef = $bd.R -bor ($bd.G -shl 8) -bor ($bd.B -shl 16)
-    [DarkTitleBar]::SetBorderColor($script:form.Handle, $bdRef)
+    [DarkTitleBar]::SetBorderColor($hwnd, $bd.R -bor ($bd.G -shl 8) -bor ($bd.B -shl 16))
+    [DarkScrollBar]::SetWindowTheme($hwnd, "DarkMode_Explorer", $null) | Out-Null
 }
 catch {}
-# Dark scrollbar on form itself (covers the AutoScroll horizontal/vertical bars)
-try { [DarkScrollBar]::SetWindowTheme($script:form.Handle, "DarkMode_Explorer", $null) | Out-Null } catch {}
 
 # Run
 [void]$script:form.ShowDialog()
