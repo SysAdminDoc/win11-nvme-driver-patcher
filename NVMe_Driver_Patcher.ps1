@@ -321,29 +321,40 @@ catch {}
 # Dark color table for context menus (compiled separately with WinForms reference)
 if (-not ([System.Management.Automation.PSTypeName]'DarkColorTable').Type) {
 try {
-    Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @"
+    # Resolve actual assembly paths (works on both PS5.1 and PS7+)
+    $asmRefs = @(
+        ([System.Windows.Forms.Form].Assembly.Location),
+        ([System.Drawing.Color].Assembly.Location)
+    )
+    # On .NET Core/5+, Color is in System.Drawing.Primitives
+    $primAsm = [System.Drawing.Color].Assembly
+    if ($primAsm.Location -and $primAsm.Location -notmatch 'System\.Drawing\.dll$') {
+        $asmRefs += $primAsm.Location
+    }
+    Add-Type -ReferencedAssemblies $asmRefs -TypeDefinition @"
 using System.Drawing;
 using System.Windows.Forms;
 
 public class DarkColorTable : ProfessionalColorTable {
-    public override Color MenuBorder { get { return Color.FromArgb(56, 56, 64); } }
-    public override Color MenuItemBorder { get { return Color.FromArgb(56, 56, 64); } }
-    public override Color MenuItemSelected { get { return Color.FromArgb(48, 48, 56); } }
-    public override Color MenuItemSelectedGradientBegin { get { return Color.FromArgb(48, 48, 56); } }
-    public override Color MenuItemSelectedGradientEnd { get { return Color.FromArgb(48, 48, 56); } }
-    public override Color MenuItemPressedGradientBegin { get { return Color.FromArgb(36, 36, 42); } }
-    public override Color MenuItemPressedGradientEnd { get { return Color.FromArgb(36, 36, 42); } }
-    public override Color MenuStripGradientBegin { get { return Color.FromArgb(22, 22, 26); } }
-    public override Color MenuStripGradientEnd { get { return Color.FromArgb(22, 22, 26); } }
-    public override Color ToolStripDropDownBackground { get { return Color.FromArgb(26, 26, 30); } }
-    public override Color ImageMarginGradientBegin { get { return Color.FromArgb(26, 26, 30); } }
-    public override Color ImageMarginGradientMiddle { get { return Color.FromArgb(26, 26, 30); } }
-    public override Color ImageMarginGradientEnd { get { return Color.FromArgb(26, 26, 30); } }
-    public override Color SeparatorDark { get { return Color.FromArgb(56, 56, 64); } }
-    public override Color SeparatorLight { get { return Color.FromArgb(36, 36, 42); } }
-    public override Color CheckBackground { get { return Color.FromArgb(56, 132, 244); } }
-    public override Color CheckSelectedBackground { get { return Color.FromArgb(80, 152, 255); } }
-    public override Color CheckPressedBackground { get { return Color.FromArgb(40, 100, 200); } }
+    private static Color C(int r, int g, int b) { return Color.FromArgb(r, g, b); }
+    public override Color MenuBorder { get { return C(56, 56, 64); } }
+    public override Color MenuItemBorder { get { return C(56, 56, 64); } }
+    public override Color MenuItemSelected { get { return C(48, 48, 56); } }
+    public override Color MenuItemSelectedGradientBegin { get { return C(48, 48, 56); } }
+    public override Color MenuItemSelectedGradientEnd { get { return C(48, 48, 56); } }
+    public override Color MenuItemPressedGradientBegin { get { return C(36, 36, 42); } }
+    public override Color MenuItemPressedGradientEnd { get { return C(36, 36, 42); } }
+    public override Color MenuStripGradientBegin { get { return C(22, 22, 26); } }
+    public override Color MenuStripGradientEnd { get { return C(22, 22, 26); } }
+    public override Color ToolStripDropDownBackground { get { return C(26, 26, 30); } }
+    public override Color ImageMarginGradientBegin { get { return C(26, 26, 30); } }
+    public override Color ImageMarginGradientMiddle { get { return C(26, 26, 30); } }
+    public override Color ImageMarginGradientEnd { get { return C(26, 26, 30); } }
+    public override Color SeparatorDark { get { return C(56, 56, 64); } }
+    public override Color SeparatorLight { get { return C(36, 36, 42); } }
+    public override Color CheckBackground { get { return C(56, 132, 244); } }
+    public override Color CheckSelectedBackground { get { return C(80, 152, 255); } }
+    public override Color CheckPressedBackground { get { return C(40, 100, 200); } }
 }
 "@
 }
