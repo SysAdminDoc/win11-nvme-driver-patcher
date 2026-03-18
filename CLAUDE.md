@@ -7,39 +7,30 @@ GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driver
 - PowerShell 5.1+, WinForms GUI
 - Single monolithic script (~4040 lines): `NVMe_Driver_Patcher.ps1`
 - `$script:` scope for cross-function state
-- GitHub Actions CI/CD: `.github/workflows/release.yml` (tag push or workflow_dispatch)
+- GitHub Actions CI/CD: `.github/workflows/release.yml`
 
-## Current Version: v3.6.0
+## Current Version: v3.3.0
 
 ## Architecture
 - Async preflight: `[PowerShell]::Create()` + `InitialSessionState` + Timer polling
 - VeraCrypt = hard block (cannot override); BitLocker = auto-suspend
 - Rollback on partial failure; consolidated single confirmation dialog
+- DiskSpd benchmark: auto-downloads, runs 4K random r/w, JSON history, before/after delta
+- Post-reboot detection: saves state to JSON, auto-verifies on next launch
 - GitHub update check via releases API (5s timeout)
-- DiskSpd benchmark: auto-downloads from GitHub, runs 4K random r/w, saves JSON history, shows before/after delta
-- Post-reboot detection: saves patch state to JSON, compares on next launch, shows verification if driver activated
-
-## Build / Run
-```powershell
-.\NVMe_Driver_Patcher.ps1                          # GUI mode (auto-elevates)
-.\NVMe_Driver_Patcher.ps1 -Silent -Apply -NoRestart # Silent mode
-.\NVMe_Driver_Patcher.ps1 -Silent -Status           # Check status
-.\NVMe_Driver_Patcher.ps1 -Silent -Remove            # Remove patch
-```
-
-## Key Functions
-- `Import-Configuration` / `Save-Configuration` - JSON config persistence
-- `Invoke-PreflightChecks` - 10 async system checks
-- `Test-VeraCryptSystemEncryption` / `Get-IncompatibleSoftware` - Safety gates
-- `Install-NVMePatch` / `Uninstall-NVMePatch` - Core ops with rollback + BitLocker suspend
-- `Invoke-StorageBenchmark` / `Start-GUIBenchmark` - DiskSpd 4K random benchmark
-- `Save-BenchmarkResults` / `Show-BenchmarkComparison` - JSON history + delta display
-- `Test-PatchAppliedSinceLastRun` - Post-reboot verification
-- `Test-UpdateAvailable` - GitHub version check
+- SafeBoot GUID: `{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}`
 
 ## Version History
-- v3.6.0: DiskSpd benchmark, enhanced SMART tooltips, post-reboot verification, GitHub Actions CI/CD
-- v3.5.0: VeraCrypt hard block, BitLocker auto-suspend, incompatible software detection, firmware display
-- v3.4.0: GitHub update check, consolidated dialogs, rollback, skip warnings
-- v3.3.0: PSScriptAnalyzer verb fixes, filename cleanup, async preflight
+- v3.3.0: Major update -- VeraCrypt block, BitLocker suspend, compat detection, DiskSpd benchmark, SMART tooltips, post-reboot verify, rollback, consolidated dialogs, update check, CI/CD, PSScriptAnalyzer fixes, async preflight
 - v3.2.0: GDI leak fix, resizable form, tray icon, progress ring, health badges
+- v3.1.0: 12 code quality fixes
+- v3.0.0: Server 2025 key, nvmedisk.sys detection, BypassIO check
+
+## Known Bugs (from audit)
+- DiskSpd output parsing regex expects pipe-delimited "total:" line but DiskSpd uses space-delimited -- benchmarks return 0s
+- DiskSpd blocks GUI for ~60s (runs synchronously on UI thread)
+- CheckBox FlatStyle.Standard leaves white glyph on dark theme
+- Several GDI Region objects not disposed on control recreation
+- $response.body.Length in Test-UpdateAvailable can null-deref
+- Benchmark JSON can corrupt if only 1 entry (PS 5.1 ConvertFrom-Json scalar issue)
+- Locale-dependent decimal separator breaks DiskSpd number parsing
