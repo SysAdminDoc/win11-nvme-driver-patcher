@@ -20,7 +20,7 @@ Or download `NVMe_Driver_Patcher.ps1` from [Releases](https://github.com/SysAdmi
 
 ## What Does This Do?
 
-Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the legacy SCSI translation layer, allowing direct communication with NVMe drives. This driver is available in Windows 11 (24H2+) but disabled by default.
+Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the legacy SCSI translation layer, allowing direct communication with NVMe drives. This driver is available in Windows 11 (24H2+) but disabled by default. Microsoft has stated they are ["absolutely exploring"](https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353) bringing it broadly to the entire Windows codebase.
 
 **This tool enables it via 5 registry components:**
 
@@ -38,21 +38,31 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 
 ## Features
 
-- **Dark/Light theme** auto-detected from Windows settings
-- **Async preflight checks** -- scans system without freezing the GUI
-- **NVMe health badges** -- temperature and wear % per drive via StorageReliabilityCounter
+**Safety**
+- **VeraCrypt hard block** -- detects system encryption and refuses to patch ([breaks boot entirely](https://github.com/veracrypt/VeraCrypt/issues/1640))
+- **Automatic BitLocker suspension** -- suspends BitLocker for one reboot cycle to prevent recovery key prompts
+- **Incompatible software detection** -- warns about Acronis, Macrium, VirtualBox, and other known conflicts
+- **Rollback on partial failure** -- undoes all applied registry keys if patch doesn't complete fully
+- **Registry backup** export + system restore point creation before any changes
+- **Third-party driver detection** (Samsung, WD, Intel RST, AMD, SK Hynix, Crucial, Phison)
+
+**Diagnostics**
+- **Async preflight checks** -- 10 system checks run in a background thread without freezing the GUI
+- **NVMe health badges** -- temperature, wear %, and firmware version per drive
+- **NVMe firmware version display** -- helps identify drives needing firmware updates
+- **BypassIO/DirectStorage** status check with gaming impact warning
 - **Before/after comparison** -- shows exactly what changed after patch/unpatch
-- **System tray minimize** -- double-click to restore, context menu to exit
-- **Toast notifications** -- Windows balloon tips for patch results
-- **Activity log** with right-click context menu (copy, save, clear)
-- **Registry backup** export + system restore point creation
 - **Diagnostics export** -- full system report for troubleshooting
 - **Post-reboot verification script** -- auto-generated to confirm patch after restart
 - **Windows Event Log** integration for audit trails
-- **BitLocker detection** with recovery key warning
-- **Third-party driver detection** (Samsung, WD, Intel RST, AMD, etc.)
-- **BypassIO/DirectStorage** status check with gaming impact warning
-- **Single-instance mutex** -- prevents running multiple copies
+- **GitHub update check** -- notifies you of newer releases on startup
+
+**UI/UX**
+- **Dark/Light theme** auto-detected from Windows settings
+- **System tray minimize** -- double-click to restore, context menu to exit
+- **Toast notifications** -- Windows balloon tips for patch results
+- **Activity log** with right-click context menu (copy, save, clear)
+- **Skip warnings checkbox** -- for experienced users who don't need confirmation dialogs
 - **Silent/CLI mode** for scripting and automation
 
 ## CLI Usage
@@ -96,7 +106,7 @@ All CLI operations require Administrator privileges.
 | **OS** | Windows 11 Build 22000+ (24H2 or 25H2 recommended) |
 | **Privileges** | Administrator (auto-elevation prompt) |
 | **Hardware** | NVMe SSD using Windows inbox driver (`StorNVMe.sys`) |
-| **Update** | October 2025 cumulative update or newer |
+| **Update** | KB5066835 (October 2025 cumulative update) or newer |
 
 ## Windows Version Compatibility
 
@@ -104,8 +114,8 @@ All CLI operations require Administrator privileges.
 |--------------------|-------|---------|
 | 25H2 | 26200+ | Full support, best performance |
 | 24H2 | 26100 | Full support, recommended minimum |
-| 23H2 | 22631 | Partial — feature flags apply but driver may not activate |
-| 22H2 | 22621 | Not recommended — driver not present in base image |
+| 23H2 | 22631 | Partial -- feature flags apply but driver may not activate |
+| 22H2 | 22621 | Not recommended -- driver not present in base image |
 | 21H2 | 22000 | Unsupported |
 
 > The tool will warn you if your build is below 26100 but will not block the patch.
@@ -130,43 +140,61 @@ The patch works with any NVMe drive using the Windows inbox `StorNVMe.sys` drive
 
 | Brand | Notes |
 |-------|-------|
-| Samsung (with Samsung NVMe Driver) | Uses `samsungnvmedriver.sys` — patch has no effect |
+| Samsung (with Samsung NVMe Driver) | Uses `samsungnvmedriver.sys` -- patch has no effect |
 | WD (with WD Dashboard driver) | Uses proprietary driver |
 
-To check which driver your drive uses: **Device Manager → Disk drives → [Your NVMe] → Properties → Driver → Driver Files**
+To check which driver your drive uses: **Device Manager > Disk drives > [Your NVMe] > Properties > Driver > Driver Files**
 
-## Performance Expectations
+## Performance Benchmarks
 
-Microsoft's benchmarks show **~80% IOPS improvement** on Windows Server 2025 with enterprise NVMe drives. Real-world results on Windows 11 consumer hardware are more modest:
+The native NVMe driver delivers significant gains by eliminating the SCSI translation layer. Results vary by SSD model, controller, and workload type.
 
-| Scenario | Expected Improvement |
-|----------|---------------------|
-| Server (synthetic benchmarks) | ~80% IOPS, ~45% CPU reduction |
-| Desktop (real-world workloads) | 10-15% improvement |
-| Gaming | Minimal noticeable difference |
-| Large file transfers | Modest improvement |
+### Independent Benchmark Results
 
-The biggest gains are in high-queue-depth random I/O operations.
+| Source | Test | Improvement |
+|--------|------|-------------|
+| [Tom's Hardware](https://www.tomshardware.com/pc-components/ssds/new-windows-native-nvme-driver-benchmarks-reveal-transformative-performance-gains-up-to-64-89-percent-lightning-fast-random-reads-and-breakthrough-cpu-efficiency) | 4K random read (StorageReview) | **+64.89%** |
+| [Tom's Hardware](https://www.tomshardware.com/pc-components/ssds/windows-11-rockets-ssd-performance-to-new-heights-with-hacked-native-nvme-driver-up-to-85-percent-higher-random-workload-performance-in-some-tests) | Random workloads (consumer SSD) | **Up to +85%** |
+| [StorageReview](https://www.storagereview.com/review/windows-server-native-nvme) | 64K random read latency | **-38.46%** (faster) |
+| [NotebookCheck](https://www.notebookcheck.net/Windows-11-hack-Higher-SSD-speeds-with-new-Microsoft-NVMe-driver.1190489.0.html) | Sequential read / write (PCIe 4.0) | +23% / +30% |
+| [Microsoft](https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353) | 4K random read IOPS (Server) | **+80%**, -45% CPU |
+| [Overclock.net](https://www.overclock.net/threads/enable-native-nvme-driver-in-windows-11-24h2-25h2-with-last-update.1818467/) | IOPS 512b-8KB (Samsung OEM) | **+167%** |
+| CrystalDiskMark (Reddit) | 4K-64Thrd random read/write | +22% / +85% |
+
+### What to Expect
+
+| Workload | Expected Gains |
+|----------|---------------|
+| Random 4K read/write (high queue depth) | **+20% to +85%** -- biggest wins |
+| Sequential read/write | +10% to +30% |
+| Desktop responsiveness (app launches, boot) | Noticeable improvement |
+| Gaming (load times) | Minimal difference |
+| DirectStorage games | **May be worse** (BypassIO not supported) |
+
+> The biggest gains are in high-queue-depth random I/O. Sequential transfers and gaming see more modest improvements. Run your own benchmarks with [CrystalDiskMark](https://crystaldiskmark.org/) or [DiskSpd](https://github.com/microsoft/diskspd) before and after.
+
+## Known Compatibility Issues
+
+The tool automatically detects and warns about these. VeraCrypt is a hard block.
+
+| Software | Issue | Severity | Auto-Detected |
+|----------|-------|----------|---------------|
+| **VeraCrypt** (system encryption) | [Breaks boot entirely](https://github.com/veracrypt/VeraCrypt/issues/1640) | **Critical** | Yes (blocks patch) |
+| **BitLocker** | May trigger recovery key prompt | High | Yes (auto-suspends) |
+| **Acronis True Image** | Drives invisible to backup/restore | High | Yes (warns) |
+| **Macrium Reflect** | May need update for compatibility | Medium | Yes (warns) |
+| Samsung Magician | Cannot detect drives | Medium | No |
+| SSD vendor firmware tools | Firmware updates may fail | Medium | No |
+| Some disk managers | Drives listed twice or missing | Medium | No |
+| DirectStorage games | BypassIO not supported, higher CPU | Low-Medium | Yes (warns) |
+
+If you experience problems, use the **Remove Patch** button (or `-Silent -Remove`) and restart.
 
 ## Scope
 
 **This patch affects ALL NVMe drives** in your system that use the Windows inbox driver (`StorNVMe.sys`), not just the OS drive.
 
 **Exception:** Drives using vendor-specific drivers (e.g., Samsung's proprietary driver) are not affected.
-
-## Known Compatibility Issues
-
-Some third-party software may have issues with Native NVMe:
-
-| Software | Issue |
-|----------|-------|
-| Samsung Magician | May not detect drives |
-| SSD vendor tools | Firmware update tools may fail |
-| Hardware monitoring | Some disk monitoring utilities |
-| Backup software | Rare issues with disk enumeration |
-| DirectStorage games | BypassIO not supported -- higher CPU usage |
-
-If you experience problems, use the **Remove Patch** button (or `-Silent -Remove`) and restart.
 
 ## Troubleshooting
 
@@ -178,7 +206,7 @@ If you experience problems, use the **Remove Patch** button (or `-Silent -Remove
 ### System won't boot after patch
 1. Boot into Windows Recovery Environment
 2. Open Command Prompt
-3. Run the following commands to remove all 5 patch components:
+3. Run the following commands to remove all patch components:
 ```cmd
 reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f
 reg delete "HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f
@@ -196,15 +224,23 @@ This shouldn't happen if you used this tool (SafeBoot keys are included). If it 
 3. Run the same 6 commands from the section above
 4. Restart
 
-## Credits
+## Credits & Sources
 
-- **Ghacks** - [This Registry Hack Unlocks a Faster NVMe Driver in Windows 11](https://www.ghacks.net/2025/12/26/this-registry-hack-unlocks-a-faster-nvme-driver-in-windows-11/)
-- **Microsoft TechCommunity** -- [Native NVMe announcement](https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353)
-- **Whirlpool Forums** -- Discovery of missing SafeBoot keys ([whrl.pl/RgTgVj](https://whrl.pl/RgTgVj))
+- **Microsoft TechCommunity** -- [Announcing Native NVMe in Windows Server 2025](https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353)
+- **Tom's Hardware** -- [Native NVMe Driver Benchmarks: Up to 64.89% Gains](https://www.tomshardware.com/pc-components/ssds/new-windows-native-nvme-driver-benchmarks-reveal-transformative-performance-gains-up-to-64-89-percent-lightning-fast-random-reads-and-breakthrough-cpu-efficiency)
+- **Tom's Hardware** -- [Up to 85% Higher Random Workload Performance](https://www.tomshardware.com/pc-components/ssds/windows-11-rockets-ssd-performance-to-new-heights-with-hacked-native-nvme-driver-up-to-85-percent-higher-random-workload-performance-in-some-tests)
+- **StorageReview** -- [Windows Server 2025 Native NVMe Benchmarks](https://www.storagereview.com/review/windows-server-native-nvme)
+- **NotebookCheck** -- [Higher SSD Speeds with New Microsoft NVMe Driver](https://www.notebookcheck.net/Windows-11-hack-Higher-SSD-speeds-with-new-Microsoft-NVMe-driver.1190489.0.html)
+- **Ghacks** -- [This Registry Hack Unlocks a Faster NVMe Driver in Windows 11](https://www.ghacks.net/2025/12/26/this-registry-hack-unlocks-a-faster-nvme-driver-in-windows-11/)
+- **XDA Developers** -- [Windows 11 Free NVMe Speed Boost](https://www.xda-developers.com/windows-11-nvme-owners-free-speed-boost-enable/)
+- **Overclock.net** -- [Community Testing Thread](https://www.overclock.net/threads/enable-native-nvme-driver-in-windows-11-24h2-25h2-with-last-update.1818467/)
+- **VeraCrypt** -- [Issue #1640: Breaks boot with native NVMe driver](https://github.com/veracrypt/VeraCrypt/issues/1640)
+- **Whirlpool Forums** -- [Discovery of missing SafeBoot keys](https://forums.whirlpool.net.au/archive/9xvvv6y5)
+- **4sysops** -- [Windows Server 2025 Native NVMe Support](https://4sysops.com/archives/windows-server-2025-introduces-native-nvme-support-with-performance-gains-of-up-to-80-percent/)
 
 ## Disclaimer
 
-This tool modifies system registry settings. While safety measures are included (restore points, registry backups, rollback), use at your own risk. Always ensure you have backups before making system changes.
+This tool modifies system registry settings to enable an **experimental, unsupported** feature on Windows 11. While safety measures are included (VeraCrypt detection, BitLocker auto-suspend, restore points, registry backups, rollback on failure), use at your own risk. The native NVMe driver is only officially supported on Windows Server 2025. Always ensure you have backups before making system changes.
 
 ---
 
