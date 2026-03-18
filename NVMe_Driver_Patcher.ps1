@@ -70,9 +70,16 @@
     Export full system diagnostics report for support.
 
 .NOTES
-    Version: 3.3.0
+    Version: 3.4.0
     Author:  Matthew Parker
     Requires: Windows 11 24H2/25H2, Administrator privileges
+
+    CHANGELOG v3.4.0:
+    - Added GitHub update check on startup (non-blocking, shows update notice in log)
+    - Consolidated 5 sequential confirmation dialogs into single comprehensive dialog
+    - Added rollback on partial failure (undoes applied registry keys if not all succeed)
+    - Fixed critical SafeBoot GUID typo in README troubleshooting commands
+    - Added "Skip warnings" checkbox in System Overview options panel
 
     CHANGELOG v3.3.0:
     - Removed version number from script filename (now NVMe_Driver_Patcher.ps1)
@@ -310,7 +317,7 @@ if (-not $ExportDiagnostics -and -not $GenerateVerifyScript -and -not $Status) {
 
 $script:Config = @{
     AppName         = "NVMe Driver Patcher"
-    AppVersion      = "3.3.0"
+    AppVersion      = "3.4.0"
     RegistryPath    = "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides"
     FeatureIDs      = @("735209102", "1853569164", "156965516")
     FeatureNames    = @{
@@ -321,6 +328,7 @@ $script:Config = @{
     }
     ServerFeatureID = "1176759950"
     IncludeServerKey = $false
+    SkipWarnings    = $false
     SafeBootMinimal = "HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"
     SafeBootNetwork = "HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"
     SafeBootValue   = "Storage Disks"
@@ -386,6 +394,7 @@ function Import-Configuration {
             if ($null -ne $savedConfig.WriteEventLog) { $script:Config.WriteEventLog = $savedConfig.WriteEventLog }
             if ($null -ne $savedConfig.RestartDelay) { $script:Config.RestartDelay = $savedConfig.RestartDelay }
             if ($null -ne $savedConfig.IncludeServerKey) { $script:Config.IncludeServerKey = $savedConfig.IncludeServerKey }
+            if ($null -ne $savedConfig.SkipWarnings) { $script:Config.SkipWarnings = $savedConfig.SkipWarnings }
         }
         catch {
             Write-Warning "Failed to load configuration: $($_.Exception.Message)"
@@ -401,6 +410,7 @@ function Save-Configuration {
             WriteEventLog    = $script:Config.WriteEventLog
             RestartDelay     = $script:Config.RestartDelay
             IncludeServerKey = $script:Config.IncludeServerKey
+            SkipWarnings     = $script:Config.SkipWarnings
             LastRun          = (Get-Date).ToString("o")
         }
         $configToSave | ConvertTo-Json | Out-File $script:Config.ConfigFile -Encoding UTF8
@@ -528,6 +538,36 @@ function Write-AppEventLog {
 }
 
 Initialize-EventLogSource
+
+# ===========================================================================
+# SECTION 7B: GITHUB UPDATE CHECK
+# ===========================================================================
+
+$script:UpdateAvailable = $null
+
+function Test-UpdateAvailable {
+    <#
+    .SYNOPSIS
+        Checks GitHub releases API for a newer version. Non-blocking, best-effort.
+        Returns hashtable with Version and URL if update found, $null otherwise.
+    #>
+    try {
+        $apiUrl = "https://api.github.com/repos/SysAdminDoc/win11-nvme-driver-patcher/releases/latest"
+        $response = Invoke-RestMethod -Uri $apiUrl -Method Get -TimeoutSec 5 -ErrorAction Stop
+        $latestTag = $response.tag_name -replace '^v', ''
+        $currentVersion = [version]$script:Config.AppVersion
+        $latestVersion = [version]$latestTag
+        if ($latestVersion -gt $currentVersion) {
+            return @{
+                Version = $latestTag
+                URL     = $response.html_url
+                Notes   = if ($response.body.Length -gt 200) { $response.body.Substring(0, 200) + "..." } else { $response.body }
+            }
+        }
+    }
+    catch { <# Update check is best-effort, never block on failure #> }
+    return $null
+}
 
 # ===========================================================================
 # SECTION 8: TOAST NOTIFICATIONS
@@ -2063,8 +2103,32 @@ function Install-NVMePatch {
         }
         else {
             Write-Log "Patch Status: PARTIAL - Applied $successCount/$effectiveTotal components" -Level "WARNING"
-            Write-AppEventLog -Message "NVMe Driver Patch partially applied ($successCount/$effectiveTotal components)" -EntryType "Warning" -EventId 2001
-            Show-ToastNotification -Title "NVMe Patch Partial" -Message "$successCount of $effectiveTotal components applied. Check log for details." -Type "Warning"
+
+            # Rollback: undo all applied keys to leave system in a clean state
+            Write-Log "Rolling back partial installation to prevent inconsistent state..." -Level "WARNING"
+            Update-Progress -Value 96 -Status "Rolling back..."
+
+            foreach ($applied in $appliedKeys) {
+                try {
+                    if ($applied.Type -eq "Feature") {
+                        Remove-ItemProperty -Path $script:Config.RegistryPath -Name $applied.ID -Force -ErrorAction Stop
+                        $friendlyName = if ($script:Config.FeatureNames.ContainsKey($applied.ID)) { $script:Config.FeatureNames[$applied.ID] } else { "Feature Flag" }
+                        Write-Log "  [ROLLBACK] $($applied.ID) - $friendlyName" -Level "INFO"
+                    }
+                    elseif ($applied.Type -eq "SafeBoot") {
+                        $path = if ($applied.ID -eq "Minimal") { $script:Config.SafeBootMinimal } else { $script:Config.SafeBootNetwork }
+                        Remove-Item -Path $path -Force -ErrorAction Stop
+                        Write-Log "  [ROLLBACK] SafeBoot $($applied.ID)" -Level "INFO"
+                    }
+                }
+                catch {
+                    Write-Log "  [ROLLBACK FAIL] $($applied.Type) $($applied.ID): $($_.Exception.Message)" -Level "ERROR"
+                }
+            }
+
+            Write-Log "Rollback complete - system returned to pre-patch state" -Level "WARNING"
+            Write-AppEventLog -Message "NVMe Driver Patch rolled back after partial failure ($successCount/$effectiveTotal components)" -EntryType "Warning" -EventId 2001
+            Show-ToastNotification -Title "NVMe Patch Failed" -Message "Only $successCount of $effectiveTotal components applied. Changes rolled back." -Type "Warning"
             Update-Progress -Value 0 -Status ""
             return $false
         }
@@ -2332,84 +2396,57 @@ function Show-ConfirmDialog {
         [bool]$CheckNVMe = $false
     )
 
-    if ($script:Config.ForceMode) { return $true }
+    if ($script:Config.ForceMode -or $script:Config.SkipWarnings) { return $true }
 
-    # No NVMe drives warning
+    # Build a single comprehensive message with all relevant warnings
+    $warnings = [System.Collections.ArrayList]::new()
+    $icon = [System.Windows.Forms.MessageBoxIcon]::Question
+
     if ($CheckNVMe -and -not $script:HasNVMeDrives) {
-        $noNVMeResult = [System.Windows.Forms.MessageBox]::Show(
-            "NO NVMe DRIVES DETECTED ON THIS SYSTEM!`n`nThis patch only affects NVMe drives using the Windows inbox driver.`nYour system appears to have no NVMe drives.`n`nDo you still want to continue?",
-            "No NVMe Detected",
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Warning
-        )
-        if ($noNVMeResult -ne [System.Windows.Forms.DialogResult]::Yes) {
-            Write-Log "Operation cancelled - No NVMe drives detected" -Level "WARNING"
-            return $false
-        }
+        [void]$warnings.Add("[!] NO NVMe DRIVES DETECTED - This patch only affects NVMe drives using the Windows inbox driver.")
+        $icon = [System.Windows.Forms.MessageBoxIcon]::Warning
     }
 
-    # BitLocker warning
     if ($script:BitLockerEnabled) {
-        $bitlockerResult = [System.Windows.Forms.MessageBox]::Show(
-            "BITLOCKER ENCRYPTION DETECTED!`n`nModifying system registry on a BitLocker-encrypted drive may trigger recovery mode on next boot.`n`nMake sure you have your BitLocker recovery key available before proceeding.`n`nContinue?",
-            "BitLocker Warning",
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Warning
-        )
-        if ($bitlockerResult -ne [System.Windows.Forms.DialogResult]::Yes) {
-            Write-Log "Operation cancelled - BitLocker concern" -Level "WARNING"
-            return $false
-        }
+        [void]$warnings.Add("[!] BITLOCKER ACTIVE - Registry changes may trigger recovery mode on next boot. Have your recovery key ready.")
+        $icon = [System.Windows.Forms.MessageBoxIcon]::Warning
     }
 
-    # Third-party driver warning
     if ($script:DriverInfo -and $script:DriverInfo.HasThirdParty) {
-        $driverResult = [System.Windows.Forms.MessageBox]::Show(
-            "THIRD-PARTY NVMe DRIVER DETECTED!`n`nYour system is using: $($script:DriverInfo.ThirdPartyName)`n`nThis patch only affects the Windows inbox NVMe driver and may have no effect on your system.`n`nContinue anyway?",
-            "Third-Party Driver Warning",
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Information
-        )
-        if ($driverResult -ne [System.Windows.Forms.DialogResult]::Yes) {
-            Write-Log "Operation cancelled - Third-party driver" -Level "WARNING"
-            return $false
-        }
+        [void]$warnings.Add("[i] THIRD-PARTY DRIVER: $($script:DriverInfo.ThirdPartyName) - This patch only affects the Windows inbox driver and may have no effect.")
     }
 
-    # Older build warning (apply only)
     if ($Title -eq "Apply Patch" -and $script:BuildDetails -and -not $script:BuildDetails.Is24H2OrLater) {
-        $buildResult = [System.Windows.Forms.MessageBox]::Show(
-            "OLDER WINDOWS BUILD DETECTED`n`nYour build ($($script:BuildDetails.BuildNumber), $($script:BuildDetails.DisplayVersion)) is older than the recommended 24H2/25H2.`n`nThis patch was designed for Windows 11 24H2 (Build 26100+) and 25H2 (Build 26200+). Results on older builds are unpredictable.`n`nContinue anyway?",
-            "Build Version Warning",
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Warning
-        )
-        if ($buildResult -ne [System.Windows.Forms.DialogResult]::Yes) {
-            Write-Log "Operation cancelled - Older build" -Level "WARNING"
-            return $false
-        }
+        [void]$warnings.Add("[!] OLDER BUILD: $($script:BuildDetails.DisplayVersion) (Build $($script:BuildDetails.BuildNumber)) - Designed for 24H2+ (Build 26100+). Results may be unpredictable.")
+        $icon = [System.Windows.Forms.MessageBoxIcon]::Warning
     }
 
-    # DirectStorage / BypassIO gaming notice (apply only)
     if ($Title -eq "Apply Patch") {
-        [System.Windows.Forms.MessageBox]::Show(
-            "DIRECTSTORAGE / GAMING NOTICE`n`nThe Native NVMe driver does NOT currently support BypassIO.`nThis means DirectStorage-enabled games may experience:`n`n- Higher CPU usage during asset loading`n- Potential stuttering in games using DirectStorage`n- Affected titles include games using GPU decompression`n`nIf gaming is your primary use case, you may want to wait for Microsoft to add BypassIO support.`n`nThis is informational only - click OK to continue.",
-            "Gaming Notice",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Information
-        ) | Out-Null
+        [void]$warnings.Add("[i] GAMING NOTE: Native NVMe does not support BypassIO. DirectStorage games may have higher CPU usage.")
     }
 
-    # Final confirmation
+    # Build the final dialog message
     $fullMessage = $Message
     if ($WarningText) { $fullMessage += "`n`nWARNING: $WarningText" }
+
+    if ($warnings.Count -gt 0) {
+        $fullMessage += "`n`n--- NOTICES ---`n"
+        $fullMessage += ($warnings -join "`n`n")
+    }
+
+    $fullMessage += "`n`nProceed?"
 
     $result = [System.Windows.Forms.MessageBox]::Show(
         $fullMessage, $Title,
         [System.Windows.Forms.MessageBoxButtons]::YesNo,
-        [System.Windows.Forms.MessageBoxIcon]::Question
+        $icon
     )
-    return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
+
+    if ($result -ne [System.Windows.Forms.DialogResult]::Yes) {
+        Write-Log "Operation cancelled by user" -Level "WARNING"
+        return $false
+    }
+    return $true
 }
 
 # ===========================================================================
@@ -2668,7 +2705,7 @@ $script:form.Controls.Add($cardDrives)
 # ===================================================================
 
 $overviewY = $CT + $drivesH + $CG
-$overviewH = 344
+$overviewH = 372
 $cardOverview = New-CardPanel `
     -Location (New-Object System.Drawing.Point($LX, $overviewY)) `
     -Size     (New-Object System.Drawing.Size($CW, $overviewH)) `
@@ -2842,8 +2879,26 @@ $script:chkServerKey.Add_CheckedChanged({
 })
 $cardOverview.Controls.Add($script:chkServerKey)
 
+# Skip warnings checkbox
+$script:chkSkipWarnings = New-Object System.Windows.Forms.CheckBox
+$script:chkSkipWarnings.Location  = New-Object System.Drawing.Point(($CP + 2), ($optY + 26))
+$script:chkSkipWarnings.Size      = New-Object System.Drawing.Size(500, 24)
+$script:chkSkipWarnings.Text      = "Skip confirmation warnings (experienced users)"
+$script:chkSkipWarnings.ForeColor = $script:Colors.TextSecondary
+$script:chkSkipWarnings.BackColor = $script:Colors.CardBackground
+$script:chkSkipWarnings.Font      = New-Object System.Drawing.Font("Segoe UI", 9)
+$script:chkSkipWarnings.FlatStyle = [System.Windows.Forms.FlatStyle]::Standard
+$script:chkSkipWarnings.Cursor    = [System.Windows.Forms.Cursors]::Hand
+$script:chkSkipWarnings.Checked   = $script:Config.SkipWarnings
+$script:chkSkipWarnings.Add_CheckedChanged({
+    $script:Config.SkipWarnings = $this.Checked
+    $warnDesc = if ($this.Checked) { "skipped" } else { "enabled" }
+    Write-Log "Confirmation warnings: $warnDesc" -Level "INFO"
+})
+$cardOverview.Controls.Add($script:chkSkipWarnings)
+
 # BypassIO note (aligned to $CP)
-$noteY = $optY + 32
+$noteY = $optY + 58
 $lblBypassNote = New-Object System.Windows.Forms.Label
 $lblBypassNote.Location  = New-Object System.Drawing.Point(($CP + 4), $noteY)
 $lblBypassNote.Size      = New-Object System.Drawing.Size(($IW - 8), 34)
@@ -3466,6 +3521,16 @@ $script:form.Add_Shown({
             Write-Log "----------------------------------------"
             Update-StatusDisplay
             Write-Log "----------------------------------------"
+
+            # Non-blocking update check
+            try {
+                $script:UpdateAvailable = Test-UpdateAvailable
+                if ($script:UpdateAvailable) {
+                    Write-Log "UPDATE AVAILABLE: v$($script:UpdateAvailable.Version) -- $($script:Config.GitHubURL)/releases" -Level "WARNING"
+                }
+            }
+            catch { <# Update check is best-effort #> }
+
             Write-Log "Ready. Select an action above."
         }
         catch {
