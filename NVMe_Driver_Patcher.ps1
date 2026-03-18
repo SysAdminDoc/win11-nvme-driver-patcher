@@ -568,10 +568,11 @@ function Test-UpdateAvailable {
         $currentVersion = [version]$script:Config.AppVersion
         $latestVersion = [version]$latestTag
         if ($latestVersion -gt $currentVersion) {
+            $bodyText = if ($response.body) { $response.body } else { "" }
             return @{
                 Version = $latestTag
                 URL     = $response.html_url
-                Notes   = if ($response.body.Length -gt 200) { $response.body.Substring(0, 200) + "..." } else { $response.body }
+                Notes   = if ($bodyText.Length -gt 200) { $bodyText.Substring(0, 200) + "..." } else { $bodyText }
             }
         }
     }
@@ -1683,7 +1684,7 @@ function Install-DiskSpd {
         $zipUrl = "https://github.com/microsoft/diskspd/releases/latest/download/DiskSpd.ZIP"
         $zipPath = Join-Path $diskSpdDir "DiskSpd.zip"
         Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
-        Expand-Archive -Path $zipPath -DestinationPath $diskSpdDir -Force
+        Expand-Archive -Path $zipPath -DestinationPath $diskSpdDir -Force -ErrorAction Stop
         Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
         # Find the amd64 exe
         $exeFound = Get-ChildItem -Path $diskSpdDir -Recurse -Filter "diskspd.exe" |
@@ -1703,6 +1704,8 @@ function Install-DiskSpd {
     }
     catch {
         Write-Log "Failed to download DiskSpd: $($_.Exception.Message)" -Level "ERROR"
+        # Clean up partial downloads
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
     }
     return $null
 }
@@ -1754,16 +1757,29 @@ function Convert-DiskSpdOutput {
     param([string]$RawOutput, [string]$IOType = "Read")
     $parsed = @{ IOPS = 0; ThroughputMBs = 0; AvgLatencyMs = 0 }
     try {
-        # Parse "total:" line from DiskSpd output
-        # Format: total: <bytes> | <IOs> | <MiB/s> | <IOPS> | <AvgLat> ...
+        # DiskSpd output format (with -L flag):
+        # total:   <bytes>  | <IOs> | <MiB/s> | <I/O per s> | <AvgLat> | ...
+        # The line starts with "total:" then bytes, then pipe-separated fields.
+        # Split on | gives: [0]="total: <bytes>", [1]="<IOs>", [2]="<MiB/s>", [3]="<IOPS>", [4]="<AvgLat>"
         $lines = $RawOutput -split "`n"
         foreach ($line in $lines) {
-            if ($line -match '^\s*total:\s*\|') {
+            if ($line -match '^\s*total:') {
                 $parts = $line -split '\|' | ForEach-Object { $_.Trim() }
-                if ($parts.Count -ge 5) {
-                    $parsed.ThroughputMBs = [math]::Round([double]($parts[2] -replace '[^\d.]',''), 2)
-                    $parsed.IOPS = [math]::Round([double]($parts[3] -replace '[^\d.]',''), 0)
-                    $parsed.AvgLatencyMs = [math]::Round([double]($parts[4] -replace '[^\d.]',''), 3)
+                if ($parts.Count -ge 4) {
+                    # Use InvariantCulture to handle locale-dependent decimal separators
+                    $culture = [System.Globalization.CultureInfo]::InvariantCulture
+                    $throughputStr = ($parts[2] -replace '[^\d.,]','') -replace ',','.'
+                    $iopsStr = ($parts[3] -replace '[^\d.,]','') -replace ',','.'
+                    [double]$throughputVal = 0; [double]::TryParse($throughputStr, [System.Globalization.NumberStyles]::Float, $culture, [ref]$throughputVal) | Out-Null
+                    [double]$iopsVal = 0; [double]::TryParse($iopsStr, [System.Globalization.NumberStyles]::Float, $culture, [ref]$iopsVal) | Out-Null
+                    $parsed.ThroughputMBs = [math]::Round($throughputVal, 2)
+                    $parsed.IOPS = [math]::Round($iopsVal, 0)
+                    if ($parts.Count -ge 5) {
+                        $latStr = ($parts[4] -replace '[^\d.,]','') -replace ',','.'
+                        [double]$latVal = 0; [double]::TryParse($latStr, [System.Globalization.NumberStyles]::Float, $culture, [ref]$latVal) | Out-Null
+                        $parsed.AvgLatencyMs = [math]::Round($latVal, 3)
+                    }
+                    break
                 }
             }
         }
@@ -1816,17 +1832,21 @@ function Show-BenchmarkComparison {
     Write-Log "  4K Random Read:  $($Current.Read.IOPS) IOPS  |  $($Current.Read.ThroughputMBs) MB/s  |  $($Current.Read.AvgLatencyMs) ms avg" -Level "SUCCESS"
     Write-Log "  4K Random Write: $($Current.Write.IOPS) IOPS  |  $($Current.Write.ThroughputMBs) MB/s  |  $($Current.Write.AvgLatencyMs) ms avg" -Level "SUCCESS"
 
-    if ($prev) {
+    if ($prev -and $prev.Read -and $prev.Write) {
         Write-Log "" -Level "INFO"
         Write-Log "  --- vs. Previous ($($prev.Label)) ---" -Level "INFO"
-        $readDelta = if ($prev.Read.IOPS -gt 0) { [math]::Round((($Current.Read.IOPS - $prev.Read.IOPS) / $prev.Read.IOPS) * 100, 1) } else { 0 }
-        $writeDelta = if ($prev.Write.IOPS -gt 0) { [math]::Round((($Current.Write.IOPS - $prev.Write.IOPS) / $prev.Write.IOPS) * 100, 1) } else { 0 }
+        $prevReadIOPS = if ($prev.Read.IOPS) { [double]$prev.Read.IOPS } else { 0 }
+        $prevWriteIOPS = if ($prev.Write.IOPS) { [double]$prev.Write.IOPS } else { 0 }
+        $curReadIOPS = if ($Current.Read.IOPS) { [double]$Current.Read.IOPS } else { 0 }
+        $curWriteIOPS = if ($Current.Write.IOPS) { [double]$Current.Write.IOPS } else { 0 }
+        $readDelta = if ($prevReadIOPS -gt 0) { [math]::Round(($curReadIOPS - $prevReadIOPS) / $prevReadIOPS * 100, 1) } else { 0 }
+        $writeDelta = if ($prevWriteIOPS -gt 0) { [math]::Round(($curWriteIOPS - $prevWriteIOPS) / $prevWriteIOPS * 100, 1) } else { 0 }
         $readSign = if ($readDelta -ge 0) { "+" } else { "" }
         $writeSign = if ($writeDelta -ge 0) { "+" } else { "" }
         $readLevel = if ($readDelta -gt 0) { "SUCCESS" } elseif ($readDelta -lt 0) { "WARNING" } else { "INFO" }
         $writeLevel = if ($writeDelta -gt 0) { "SUCCESS" } elseif ($writeDelta -lt 0) { "WARNING" } else { "INFO" }
-        Write-Log "  Read IOPS:  $($prev.Read.IOPS) --> $($Current.Read.IOPS) ($readSign$readDelta%)" -Level $readLevel
-        Write-Log "  Write IOPS: $($prev.Write.IOPS) --> $($Current.Write.IOPS) ($writeSign$writeDelta%)" -Level $writeLevel
+        Write-Log "  Read IOPS:  $prevReadIOPS --> $curReadIOPS ($readSign$readDelta%)" -Level $readLevel
+        Write-Log "  Write IOPS: $prevWriteIOPS --> $curWriteIOPS ($writeSign$writeDelta%)" -Level $writeLevel
     }
     Write-Log "===========================================" -Level "INFO"
 }
@@ -1877,14 +1897,16 @@ function Test-PatchAppliedSinceLastRun {
             $raw = Get-Content $stateFile -Raw -ErrorAction SilentlyContinue
             $lastState = ConvertFrom-Json $raw -ErrorAction SilentlyContinue
             # Detect if patch was applied since last run and driver activated
-            if ($lastState -and $lastState.Applied -and -not $lastState.NativeActive -and $currentState.NativeActive) {
+            $lastNativeActive = if ($null -ne $lastState.NativeActive) { $lastState.NativeActive } else { $false }
+            $lastApplied = if ($null -ne $lastState.Applied) { $lastState.Applied } else { $false }
+            if ($lastState -and $lastApplied -and -not $lastNativeActive -and $currentState.NativeActive) {
                 return @{
                     Changed = $true
                     Message = "Native NVMe driver (nvmedisk.sys) is now ACTIVE after reboot"
                     Driver = $currentState.ActiveDriver
                 }
             }
-            if ($lastState -and -not $lastState.Applied -and $currentState.Applied) {
+            if ($lastState -and -not $lastApplied -and $currentState.Applied) {
                 return @{
                     Changed = $true
                     Message = "Patch was applied since last run - reboot to activate"
@@ -2184,7 +2206,7 @@ function New-CardPanel {
     if ($region) { $card.Region = $region }
     $card.Add_Resize({ $r = Get-ControlTagValue -Control $this -Key 'CornerRadius' -Default 10; $newRegion = Get-RoundedRegion -Width $this.Width -Height $this.Height -Radius $r; if ($newRegion) { $oldRegion = $this.Region; $this.Region = $newRegion; if ($oldRegion) { $oldRegion.Dispose() } } })
     $card.Add_Paint({ param($paintSender, $e); $g = $e.Graphics; $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias; $r = Get-ControlTagValue -Control $paintSender -Key 'CornerRadius' -Default 10; $d = $r * 2; $pen = $null; $borderPath = $null; try { $pen = New-Object System.Drawing.Pen($script:Colors.CardBorder, 1); $rect = New-Object System.Drawing.Rectangle(0, 0, ($paintSender.Width - 1), ($paintSender.Height - 1)); $borderPath = New-Object System.Drawing.Drawing2D.GraphicsPath; $borderPath.AddArc($rect.X, $rect.Y, $d, $d, 180, 90); $borderPath.AddArc($rect.Right - $d, $rect.Y, $d, $d, 270, 90); $borderPath.AddArc($rect.Right - $d, $rect.Bottom - $d, $d, $d, 0, 90); $borderPath.AddArc($rect.X, $rect.Bottom - $d, $d, $d, 90, 90); $borderPath.CloseFigure(); $g.DrawPath($pen, $borderPath) } finally { if ($borderPath) { $borderPath.Dispose() }; if ($pen) { $pen.Dispose() } } })
-    if ($Title) { $titleLabel = New-Object System.Windows.Forms.Label; $titleLabel.Text = $Title.ToUpper(); $titleLabel.Location = New-Object System.Drawing.Point($Padding, 16); $titleLabel.Size = New-Object System.Drawing.Size(($Size.Width - $Padding * 2), 18); $titleLabel.ForeColor = $script:Colors.TextMuted; $titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8.25, [System.Drawing.FontStyle]::Bold); Set-ControlTagData -Control $titleLabel -NewData @{ Role = "cardTitle" }; $card.Controls.Add($titleLabel) }
+    if ($Title) { $titleLabel = New-Object System.Windows.Forms.Label; $titleLabel.Text = $Title.ToUpper(); $titleLabel.Location = New-Object System.Drawing.Point($Padding, 14); $titleLabel.Size = New-Object System.Drawing.Size(($Size.Width - $Padding * 2), 20); $titleLabel.ForeColor = $script:Colors.TextSecondary; $titleLabel.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 8.5); Set-ControlTagData -Control $titleLabel -NewData @{ Role = "cardTitle" }; $card.Controls.Add($titleLabel) }
     return $card
 }
 
@@ -3020,10 +3042,10 @@ $pnlHeader.Location  = New-Object System.Drawing.Point(0, 0)
 $pnlHeader.Size      = New-Object System.Drawing.Size($FW, $HH)
 $pnlHeader.BackColor = $script:Colors.Surface
 
-# Accent bar
+# Accent bar (3px for more visual weight)
 $pnlAccentBar = New-Object System.Windows.Forms.Panel
-$pnlAccentBar.Location  = New-Object System.Drawing.Point(0, ($HH - 2))
-$pnlAccentBar.Size      = New-Object System.Drawing.Size($FW, 2)
+$pnlAccentBar.Dock      = [System.Windows.Forms.DockStyle]::Bottom
+$pnlAccentBar.Size      = New-Object System.Drawing.Size($FW, 3)
 $pnlAccentBar.BackColor = $script:Colors.Accent
 $pnlHeader.Controls.Add($pnlAccentBar)
 
@@ -3032,11 +3054,11 @@ $lblIcon = New-Object System.Windows.Forms.Label
 $lblIcon.Text      = "NVMe"
 $lblIcon.Location  = New-Object System.Drawing.Point(32, 26)
 $lblIcon.Size      = New-Object System.Drawing.Size(76, 48)
-$lblIcon.ForeColor = $script:Colors.Accent
+$lblIcon.ForeColor = [System.Drawing.Color]::White
 $lblIcon.Font      = New-Object System.Drawing.Font("Segoe UI Black", 11)
 $lblIcon.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-$lblIcon.BackColor = $script:Colors.SurfaceLight
-Set-RoundedCorners -Control $lblIcon -Radius 10
+$lblIcon.BackColor = $script:Colors.Accent
+Set-RoundedCorners -Control $lblIcon -Radius 12
 $pnlHeader.Controls.Add($lblIcon)
 
 # Title
@@ -3283,7 +3305,10 @@ $script:chkServerKey.Text      = "Include Microsoft Server 2025 key (1176759950,
 $script:chkServerKey.ForeColor = $script:Colors.TextSecondary
 $script:chkServerKey.BackColor = $script:Colors.CardBackground
 $script:chkServerKey.Font      = New-Object System.Drawing.Font("Segoe UI", 9)
-$script:chkServerKey.FlatStyle = [System.Windows.Forms.FlatStyle]::Standard
+$script:chkServerKey.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$script:chkServerKey.FlatAppearance.BorderColor = $script:Colors.Border
+$script:chkServerKey.FlatAppearance.CheckedBackColor = $script:Colors.Accent
+$script:chkServerKey.FlatAppearance.MouseOverBackColor = $script:Colors.SurfaceHover
 $script:chkServerKey.Cursor    = [System.Windows.Forms.Cursors]::Hand
 $script:chkServerKey.Checked   = $script:Config.IncludeServerKey
 $script:chkServerKey.Add_CheckedChanged({
@@ -3302,7 +3327,10 @@ $script:chkSkipWarnings.Text      = "Skip confirmation warnings (experienced use
 $script:chkSkipWarnings.ForeColor = $script:Colors.TextSecondary
 $script:chkSkipWarnings.BackColor = $script:Colors.CardBackground
 $script:chkSkipWarnings.Font      = New-Object System.Drawing.Font("Segoe UI", 9)
-$script:chkSkipWarnings.FlatStyle = [System.Windows.Forms.FlatStyle]::Standard
+$script:chkSkipWarnings.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$script:chkSkipWarnings.FlatAppearance.BorderColor = $script:Colors.Border
+$script:chkSkipWarnings.FlatAppearance.CheckedBackColor = $script:Colors.Accent
+$script:chkSkipWarnings.FlatAppearance.MouseOverBackColor = $script:Colors.SurfaceHover
 $script:chkSkipWarnings.Cursor    = [System.Windows.Forms.Cursors]::Hand
 $script:chkSkipWarnings.Checked   = $script:Config.SkipWarnings
 $script:chkSkipWarnings.Add_CheckedChanged({
@@ -3504,9 +3532,9 @@ $script:btnRemove = New-ModernButton `
     }
 $cardActions.Controls.Add($script:btnRemove)
 
-# Secondary row (4 buttons)
-$secGap  = 10
-$btnSecW = [int](($IW - ($secGap * 3)) / 4)
+# Secondary row (3 buttons -- Docs link moved to footer)
+$secGap  = 14
+$btnSecW = [int](($IW - ($secGap * 2)) / 3)
 $secBtnY = 124
 
 $script:btnBackup = New-ModernButton `
@@ -3515,7 +3543,7 @@ $script:btnBackup = New-ModernButton `
     -Size (New-Object System.Drawing.Size($btnSecW, 42)) `
     -BackColor $script:Colors.SurfaceLight `
     -HoverColor $script:Colors.SurfaceHover `
-    -ToolTip "Create system restore point" `
+    -ToolTip "Create system restore point + registry backup" `
     -OnClick {
         Set-ButtonsEnabled -Enabled $false
         $script:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
@@ -3537,12 +3565,12 @@ $btnBench = New-ModernButton `
 $cardActions.Controls.Add($btnBench)
 
 $btnDiag = New-ModernButton `
-    -Text "DIAG" `
+    -Text "DIAGNOSTICS" `
     -Location (New-Object System.Drawing.Point(($CP + ($btnSecW + $secGap) * 2), $secBtnY)) `
     -Size (New-Object System.Drawing.Size($btnSecW, 42)) `
     -BackColor $script:Colors.SurfaceLight `
     -HoverColor $script:Colors.SurfaceHover `
-    -ToolTip "Export system diagnostics" `
+    -ToolTip "Export full system diagnostics report" `
     -OnClick {
         $diagFile = Export-SystemDiagnostics
         if ($diagFile) {
@@ -3556,16 +3584,6 @@ $btnDiag = New-ModernButton `
         }
     }
 $cardActions.Controls.Add($btnDiag)
-
-$btnDocs = New-ModernButton `
-    -Text "DOCS" `
-    -Location (New-Object System.Drawing.Point(($CP + ($btnSecW + $secGap) * 3), $secBtnY)) `
-    -Size (New-Object System.Drawing.Size($btnSecW, 42)) `
-    -BackColor $script:Colors.SurfaceLight `
-    -HoverColor $script:Colors.SurfaceHover `
-    -ToolTip "Open documentation" `
-    -OnClick { Start-Process $script:Config.DocumentationURL }
-$cardActions.Controls.Add($btnDocs)
 
 $script:form.Controls.Add($cardActions)
 
@@ -3697,7 +3715,7 @@ $script:form.Controls.Add($cardLog)
 # ===================================================================
 
 $lblFooter = New-Object System.Windows.Forms.LinkLabel
-$footerText = "NVMe Driver Patcher v$($script:Config.AppVersion)    |    github.com/SysAdminDoc/win11-nvme-driver-patcher"
+$footerText = "v$($script:Config.AppVersion)    |    GitHub    |    Docs"
 $lblFooter.Text      = $footerText
 $lblFooter.Location  = New-Object System.Drawing.Point($LX, 10)
 $lblFooter.Size      = New-Object System.Drawing.Size(($FW - $LX * 2), 18)
@@ -3708,13 +3726,17 @@ $lblFooter.VisitedLinkColor = $script:Colors.Accent
 $lblFooter.Font      = New-Object System.Drawing.Font("Segoe UI", 8)
 $lblFooter.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
 $lblFooter.LinkBehavior = [System.Windows.Forms.LinkBehavior]::HoverUnderline
-# Set link area to cover only the GitHub URL portion
-$linkStart = $footerText.IndexOf("github.com")
-if ($linkStart -ge 0) {
-    $linkLen = $footerText.Length - $linkStart
-    $lblFooter.LinkArea = New-Object System.Windows.Forms.LinkArea($linkStart, $linkLen)
-}
-$lblFooter.Add_LinkClicked({ Start-Process $script:Config.GitHubURL })
+# Set link areas for GitHub and Docs
+$ghStart = $footerText.IndexOf("GitHub")
+$docsStart = $footerText.IndexOf("Docs")
+$lblFooter.Links.Clear()
+if ($ghStart -ge 0) { $lblFooter.Links.Add($ghStart, 6, "github") | Out-Null }
+if ($docsStart -ge 0) { $lblFooter.Links.Add($docsStart, 4, "docs") | Out-Null }
+$lblFooter.LinkArea = New-Object System.Windows.Forms.LinkArea(0, 0)
+$lblFooter.Add_LinkClicked({
+    if ($_.Link.LinkData -eq "github") { Start-Process $script:Config.GitHubURL }
+    elseif ($_.Link.LinkData -eq "docs") { Start-Process $script:Config.DocumentationURL }
+})
 $lblFooter.BackColor = $script:Colors.Background
 $script:lblFooter = $lblFooter
 $script:form.Controls.Add($lblFooter)
