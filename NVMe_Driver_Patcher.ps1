@@ -301,8 +301,10 @@ catch { try { [DpiAwareness]::SetProcessDPIAware() | Out-Null } catch {} }
 # Dark color table for context menus (compiled separately with WinForms reference)
 if (-not ([System.Management.Automation.PSTypeName]'DarkColorTable').Type) {
 try {
-    # Script always runs under PS 5.1 (.NET Framework) so simple names work
-    Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @"
+    $asmRefs = @(([System.Windows.Forms.Form].Assembly.Location), ([System.Drawing.Color].Assembly.Location))
+    $primAsm = [System.Drawing.Color].Assembly
+    if ($primAsm.Location -and $primAsm.Location -notmatch 'System\.Drawing\.dll$') { $asmRefs += $primAsm.Location }
+    Add-Type -ReferencedAssemblies $asmRefs -TypeDefinition @"
 using System.Drawing;
 using System.Windows.Forms;
 
