@@ -284,6 +284,27 @@ public class DarkScrollBar {
     public static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
 }
 
+public class DarkColorTable : System.Windows.Forms.ProfessionalColorTable {
+    public override System.Drawing.Color MenuBorder { get { return System.Drawing.Color.FromArgb(56, 56, 64); } }
+    public override System.Drawing.Color MenuItemBorder { get { return System.Drawing.Color.FromArgb(56, 56, 64); } }
+    public override System.Drawing.Color MenuItemSelected { get { return System.Drawing.Color.FromArgb(48, 48, 56); } }
+    public override System.Drawing.Color MenuItemSelectedGradientBegin { get { return System.Drawing.Color.FromArgb(48, 48, 56); } }
+    public override System.Drawing.Color MenuItemSelectedGradientEnd { get { return System.Drawing.Color.FromArgb(48, 48, 56); } }
+    public override System.Drawing.Color MenuItemPressedGradientBegin { get { return System.Drawing.Color.FromArgb(36, 36, 42); } }
+    public override System.Drawing.Color MenuItemPressedGradientEnd { get { return System.Drawing.Color.FromArgb(36, 36, 42); } }
+    public override System.Drawing.Color MenuStripGradientBegin { get { return System.Drawing.Color.FromArgb(22, 22, 26); } }
+    public override System.Drawing.Color MenuStripGradientEnd { get { return System.Drawing.Color.FromArgb(22, 22, 26); } }
+    public override System.Drawing.Color ToolStripDropDownBackground { get { return System.Drawing.Color.FromArgb(26, 26, 30); } }
+    public override System.Drawing.Color ImageMarginGradientBegin { get { return System.Drawing.Color.FromArgb(26, 26, 30); } }
+    public override System.Drawing.Color ImageMarginGradientMiddle { get { return System.Drawing.Color.FromArgb(26, 26, 30); } }
+    public override System.Drawing.Color ImageMarginGradientEnd { get { return System.Drawing.Color.FromArgb(26, 26, 30); } }
+    public override System.Drawing.Color SeparatorDark { get { return System.Drawing.Color.FromArgb(56, 56, 64); } }
+    public override System.Drawing.Color SeparatorLight { get { return System.Drawing.Color.FromArgb(36, 36, 42); } }
+    public override System.Drawing.Color CheckBackground { get { return System.Drawing.Color.FromArgb(56, 132, 244); } }
+    public override System.Drawing.Color CheckSelectedBackground { get { return System.Drawing.Color.FromArgb(80, 152, 255); } }
+    public override System.Drawing.Color CheckPressedBackground { get { return System.Drawing.Color.FromArgb(40, 100, 200); } }
+}
+
 public class DarkTitleBar {
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
@@ -2084,29 +2105,17 @@ function Set-RoundedCorners {
 
 function New-DarkContextMenu {
     param([System.Windows.Forms.ContextMenuStrip]$Menu)
-    $Menu.BackColor = $script:Colors.Surface
+    $Menu.BackColor = $script:Colors.CardBackground
     $Menu.ForeColor = $script:Colors.TextPrimary
     $Menu.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $Menu.ShowImageMargin = $false
-    # Override the renderer to paint dark backgrounds on menu items
     $Menu.Renderer = New-Object System.Windows.Forms.ToolStripProfessionalRenderer(
-        (New-Object System.Windows.Forms.ProfessionalColorTable)
+        (New-Object DarkColorTable)
     )
-    # Force dark rendering via item painting
-    $Menu.Add_Opening({
-        foreach ($item in $this.Items) {
-            if ($item -is [System.Windows.Forms.ToolStripMenuItem]) {
-                $item.BackColor = $script:Colors.Surface
-                $item.ForeColor = $script:Colors.TextPrimary
-            }
-        }
+    $Menu.Add_ItemAdded({
+        $_.Item.BackColor = $script:Colors.CardBackground
+        $_.Item.ForeColor = $script:Colors.TextPrimary
     }.GetNewClosure())
-    foreach ($item in $Menu.Items) {
-        if ($item -is [System.Windows.Forms.ToolStripMenuItem] -or $item -is [System.Windows.Forms.ToolStripItem]) {
-            $item.BackColor = $script:Colors.Surface
-            $item.ForeColor = $script:Colors.TextPrimary
-        }
-    }
     return $Menu
 }
 
@@ -3374,12 +3383,10 @@ $script:chkServerKey.Text      = "Include Microsoft Server 2025 key (1176759950,
 $script:chkServerKey.ForeColor = $script:Colors.TextSecondary
 $script:chkServerKey.BackColor = $script:Colors.CardBackground
 $script:chkServerKey.Font      = New-Object System.Drawing.Font("Segoe UI", 9)
-$script:chkServerKey.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-$script:chkServerKey.FlatAppearance.BorderColor = $script:Colors.Border
-$script:chkServerKey.FlatAppearance.CheckedBackColor = $script:Colors.Accent
-$script:chkServerKey.FlatAppearance.MouseOverBackColor = $script:Colors.SurfaceHover
+$script:chkServerKey.FlatStyle = [System.Windows.Forms.FlatStyle]::System
 $script:chkServerKey.Cursor    = [System.Windows.Forms.Cursors]::Hand
 $script:chkServerKey.Checked   = $script:Config.IncludeServerKey
+try { [DarkScrollBar]::SetWindowTheme($script:chkServerKey.Handle, "DarkMode_Explorer", $null) | Out-Null } catch {}
 $script:chkServerKey.Add_CheckedChanged({
     $script:Config.IncludeServerKey = $this.Checked
     $keyDesc = if ($this.Checked) { "enabled" } else { "disabled" }
@@ -3396,12 +3403,10 @@ $script:chkSkipWarnings.Text      = "Skip confirmation warnings (experienced use
 $script:chkSkipWarnings.ForeColor = $script:Colors.TextSecondary
 $script:chkSkipWarnings.BackColor = $script:Colors.CardBackground
 $script:chkSkipWarnings.Font      = New-Object System.Drawing.Font("Segoe UI", 9)
-$script:chkSkipWarnings.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-$script:chkSkipWarnings.FlatAppearance.BorderColor = $script:Colors.Border
-$script:chkSkipWarnings.FlatAppearance.CheckedBackColor = $script:Colors.Accent
-$script:chkSkipWarnings.FlatAppearance.MouseOverBackColor = $script:Colors.SurfaceHover
+$script:chkSkipWarnings.FlatStyle = [System.Windows.Forms.FlatStyle]::System
 $script:chkSkipWarnings.Cursor    = [System.Windows.Forms.Cursors]::Hand
 $script:chkSkipWarnings.Checked   = $script:Config.SkipWarnings
+try { [DarkScrollBar]::SetWindowTheme($script:chkSkipWarnings.Handle, "DarkMode_Explorer", $null) | Out-Null } catch {}
 $script:chkSkipWarnings.Add_CheckedChanged({
     $script:Config.SkipWarnings = $this.Checked
     $warnDesc = if ($this.Checked) { "skipped" } else { "enabled" }
