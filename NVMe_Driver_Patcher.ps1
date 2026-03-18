@@ -70,47 +70,41 @@
     Export full system diagnostics report for support.
 
 .NOTES
-    Version: 3.6.0
+    Version: 3.3.0
     Author:  Matthew Parker
     Requires: Windows 11 24H2/25H2, Administrator privileges
 
-    CHANGELOG v3.6.0:
+    CHANGELOG v3.3.0:
+    Safety:
+    - Added VeraCrypt system encryption detection (hard block - breaks boot entirely)
+    - Added automatic BitLocker suspension before patching (Suspend-BitLocker -RebootCount 1)
+    - Added incompatible software detection (Acronis, Macrium, VeraCrypt, VirtualBox)
+    - Added rollback on partial failure (undoes applied registry keys if not all succeed)
+    - Consolidated 5 sequential confirmation dialogs into single comprehensive dialog
+    - Added "Skip warnings" checkbox in System Overview options panel
+    - Fixed critical SafeBoot GUID typo in README troubleshooting commands
+    Diagnostics & Benchmarking:
     - Added built-in DiskSpd benchmark (4K random read/write before/after comparison)
     - Added BENCHMARK button to Actions card for on-demand storage benchmarking
     - Added enhanced NVMe SMART tooltips (TBW, Power-On Hours, Available Spare)
-    - Added post-reboot patch verification (auto-detects patch applied since last run)
-    - Added GitHub Actions CI/CD workflow for automated releases
-
-    CHANGELOG v3.5.0:
-    - Added VeraCrypt system encryption detection (hard block - breaks boot)
-    - Added incompatible software detection (Acronis, Macrium, VeraCrypt, VirtualBox)
-    - Added automatic BitLocker suspension before patching (Suspend-BitLocker)
     - Added NVMe firmware version display per drive
-    - Added VeraCrypt and Encryption preflight checks to checklist grid
-    - Updated performance data based on latest benchmarks (Tom's Hardware, StorageReview)
-    - Updated README with benchmark sources, expanded compatibility tables
-
-    CHANGELOG v3.4.0:
-    - Added GitHub update check on startup (non-blocking, shows update notice in log)
-    - Consolidated 5 sequential confirmation dialogs into single comprehensive dialog
-    - Added rollback on partial failure (undoes applied registry keys if not all succeed)
-    - Fixed critical SafeBoot GUID typo in README troubleshooting commands
-    - Added "Skip warnings" checkbox in System Overview options panel
-
-    CHANGELOG v3.3.0:
+    - Added post-reboot patch verification (auto-detects driver activation since last run)
+    - Added GitHub update check on startup (non-blocking, 5s timeout)
+    - Added VeraCrypt and Compatibility preflight checks to checklist grid
+    Code Quality:
     - Removed version number from script filename (now NVMe_Driver_Patcher.ps1)
-    - Renamed Import-Configuration to Import-Configuration (PSScriptAnalyzer compliance)
-    - Renamed Update-StatusDisplay to Update-StatusDisplay (PSScriptAnalyzer compliance)
+    - Renamed Load-Configuration to Import-Configuration (PSScriptAnalyzer compliance)
+    - Renamed Refresh-StatusDisplay to Update-StatusDisplay (PSScriptAnalyzer compliance)
     - Removed AcceptButton (Enter triggered patch unexpectedly)
     - Fixed invalid CheckBox FlatAppearance properties
     - Merged duplicate resize handlers into one
-    - Moved preflight checks from Add_Load to Add_Shown
     - Made preflight checks fully async using [PowerShell]::Create() + BeginInvoke() + Timer polling
     - Fixed footer link visibility (BackColor + BringToFront)
     - Added runspace/timer cleanup in FormClosing
     - Added slim marquee loading bar below header during preflight scanning
-    - Enabled form AutoScroll with dark scrollbar theming (SetWindowTheme DarkMode_Explorer)
-    - Resize handler uses DisplayRectangle.Height + MinContentH for AutoScroll compatibility
+    - Enabled form AutoScroll with dark scrollbar theming
+    - Added GitHub Actions CI/CD workflow for automated releases
+    - Fixed $diskId: variable interpolation bug causing script crash on launch
 
     CHANGELOG v3.2.0:
     - Fixed GDI Region memory leak in Update-DrivesList (dot indicators)
@@ -333,7 +327,7 @@ if (-not $ExportDiagnostics -and -not $GenerateVerifyScript -and -not $Status) {
 
 $script:Config = @{
     AppName         = "NVMe Driver Patcher"
-    AppVersion      = "3.6.0"
+    AppVersion      = "3.3.0"
     RegistryPath    = "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides"
     FeatureIDs      = @("735209102", "1853569164", "156965516")
     FeatureNames    = @{
@@ -3950,7 +3944,7 @@ $script:form.Add_Shown({
             # Log firmware versions
             if ($script:DriverInfo -and $script:DriverInfo.FirmwareVersions.Count -gt 0) {
                 foreach ($diskId in $script:DriverInfo.FirmwareVersions.Keys) {
-                    Write-Log "  [Firmware] Disk $diskId: $($script:DriverInfo.FirmwareVersions[$diskId])" -Level "INFO"
+                    Write-Log "  [Firmware] Disk ${diskId}: $($script:DriverInfo.FirmwareVersions[$diskId])" -Level "INFO"
                 }
             }
 
