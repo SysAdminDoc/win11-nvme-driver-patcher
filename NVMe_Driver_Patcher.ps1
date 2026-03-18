@@ -70,9 +70,18 @@
     Export full system diagnostics report for support.
 
 .NOTES
-    Version: 3.4.0
+    Version: 3.5.0
     Author:  Matthew Parker
     Requires: Windows 11 24H2/25H2, Administrator privileges
+
+    CHANGELOG v3.5.0:
+    - Added VeraCrypt system encryption detection (hard block - breaks boot)
+    - Added incompatible software detection (Acronis, Macrium, VeraCrypt, VirtualBox)
+    - Added automatic BitLocker suspension before patching (Suspend-BitLocker)
+    - Added NVMe firmware version display per drive
+    - Added VeraCrypt and Encryption preflight checks to checklist grid
+    - Updated performance data based on latest benchmarks (Tom's Hardware, StorageReview)
+    - Updated README with benchmark sources, expanded compatibility tables
 
     CHANGELOG v3.4.0:
     - Added GitHub update check on startup (non-blocking, shows update notice in log)
@@ -317,7 +326,7 @@ if (-not $ExportDiagnostics -and -not $GenerateVerifyScript -and -not $Status) {
 
 $script:Config = @{
     AppName         = "NVMe Driver Patcher"
-    AppVersion      = "3.4.0"
+    AppVersion      = "3.5.0"
     RegistryPath    = "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides"
     FeatureIDs      = @("735209102", "1853569164", "156965516")
     FeatureNames    = @{
@@ -646,6 +655,73 @@ function Test-BitLockerEnabled {
     return $false
 }
 
+function Test-VeraCryptSystemEncryption {
+    <#
+    .SYNOPSIS
+        Detects VeraCrypt system partition encryption. This is a HARD BLOCK --
+        enabling nvmedisk.sys with VeraCrypt system encryption breaks boot entirely.
+        See: https://github.com/veracrypt/VeraCrypt/issues/1640
+    #>
+    try {
+        # Check for VeraCrypt driver
+        $vcDriver = Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -eq "veracrypt" -or $_.PathName -match "veracrypt" }
+        if ($vcDriver -and $vcDriver.State -eq "Running") {
+            # Check if system drive is encrypted (VeraCrypt boot loader present)
+            $vcService = Get-Service -Name "veracrypt" -ErrorAction SilentlyContinue
+            if ($vcService) { return $true }
+            # Also check for VeraCrypt boot driver
+            $vcBoot = Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match "veracrypt" -and $_.StartMode -eq "Boot" }
+            if ($vcBoot) { return $true }
+        }
+        # Check for VeraCrypt EFI boot loader
+        $efiPath = "$env:SystemDrive\EFI\VeraCrypt"
+        if (Test-Path $efiPath -ErrorAction SilentlyContinue) { return $true }
+    }
+    catch { <# VeraCrypt detection best-effort #> }
+    return $false
+}
+
+function Get-IncompatibleSoftware {
+    <#
+    .SYNOPSIS
+        Detects installed software known to be incompatible with the native NVMe driver.
+        Returns array of hashtables with Name, Severity, and Message.
+    #>
+    $found = [System.Collections.ArrayList]::new()
+    try {
+        $services = Get-CimInstance Win32_Service -ErrorAction SilentlyContinue
+        $drivers = Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue
+
+        # VeraCrypt (Critical - breaks boot)
+        $vc = $services | Where-Object { $_.Name -match "veracrypt" -or $_.PathName -match "veracrypt" }
+        if ($vc) {
+            [void]$found.Add(@{ Name = "VeraCrypt"; Severity = "Critical"; Message = "System encryption breaks boot with nvmedisk.sys" })
+        }
+
+        # Acronis (High - drives invisible to backup)
+        $acronis = $services | Where-Object { $_.Name -match "acronis|AcronisAgent|mms" -or $_.PathName -match "acronis" }
+        if ($acronis) {
+            [void]$found.Add(@{ Name = "Acronis"; Severity = "High"; Message = "Backup may not see drives under Storage disks category" })
+        }
+
+        # Macrium Reflect (Medium - may need update)
+        $macrium = $services | Where-Object { $_.Name -match "macrium|ReflectService" -or $_.PathName -match "macrium" }
+        if ($macrium) {
+            [void]$found.Add(@{ Name = "Macrium Reflect"; Severity = "Medium"; Message = "May need update for Storage disks compatibility" })
+        }
+
+        # VirtualBox (Medium - storage filter driver conflicts)
+        $vbox = $drivers | Where-Object { $_.Name -match "VBoxDrv|VBoxNet|VBoxUSB" }
+        if ($vbox) {
+            [void]$found.Add(@{ Name = "VirtualBox"; Severity = "Low"; Message = "Storage filter drivers may conflict" })
+        }
+    }
+    catch { <# Software detection best-effort #> }
+    return $found
+}
+
 function Get-NVMeDriverInfo {
     $driverInfo = @{
         HasThirdParty   = $false
@@ -653,6 +729,7 @@ function Get-NVMeDriverInfo {
         InboxVersion    = ""
         CurrentDriver   = ""
         QueueDepth      = "Unknown"
+        FirmwareVersions = @{}
     }
     
     try {
@@ -700,11 +777,22 @@ function Get-NVMeDriverInfo {
             }
         }
         catch { <# Queue depth registry key may not exist #> }
+
+        # Collect firmware versions per NVMe drive
+        try {
+            $physDisks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.BusType -eq "NVMe" }
+            foreach ($pd in $physDisks) {
+                if ($pd.FirmwareVersion) {
+                    $driverInfo.FirmwareVersions["$($pd.DeviceId)"] = $pd.FirmwareVersion
+                }
+            }
+        }
+        catch { <# Firmware version collection best-effort #> }
     }
     catch {
         $driverInfo.CurrentDriver = "Unable to detect"
     }
-    
+
     return $driverInfo
 }
 
@@ -954,6 +1042,8 @@ $script:PreviousPatchState = $null
 # Global state
 $script:HasNVMeDrives = $false
 $script:BitLockerEnabled = $false
+$script:VeraCryptDetected = $false
+$script:IncompatibleSoftware = @()
 $script:DriverInfo = $null
 $script:NativeNVMeStatus = $null
 $script:BypassIOStatus = $null
@@ -972,7 +1062,9 @@ function Invoke-PreflightChecks {
         AdminPrivileges  = @{ Status = "Pass"; Message = "Administrator"; Critical = $true }
         NVMeDrives       = @{ Status = "Checking"; Message = "Checking..."; Critical = $false }
         BitLocker        = @{ Status = "Checking"; Message = "Checking..."; Critical = $false }
+        VeraCrypt        = @{ Status = "Checking"; Message = "Checking..."; Critical = $true }
         ThirdPartyDriver = @{ Status = "Checking"; Message = "Checking..."; Critical = $false }
+        Compatibility    = @{ Status = "Checking"; Message = "Checking..."; Critical = $false }
         SystemProtection = @{ Status = "Checking"; Message = "Checking..."; Critical = $false }
         DriverStatus     = @{ Status = "Checking"; Message = "Checking..."; Critical = $false }
         BypassIO         = @{ Status = "Checking"; Message = "Checking..."; Critical = $false }
@@ -1020,6 +1112,29 @@ function Invoke-PreflightChecks {
         $script:PreflightChecks.BitLocker = @{ Status = "Pass"; Message = "Not detected"; Critical = $false }
     }
     
+    # VeraCrypt (Critical - breaks boot entirely)
+    $script:VeraCryptDetected = Test-VeraCryptSystemEncryption
+    if ($script:VeraCryptDetected) {
+        $script:PreflightChecks.VeraCrypt = @{ Status = "Fail"; Message = "BLOCKS PATCH - breaks boot"; Critical = $true }
+    }
+    else {
+        $script:PreflightChecks.VeraCrypt = @{ Status = "Pass"; Message = "Not detected"; Critical = $true }
+    }
+
+    # Incompatible Software
+    $script:IncompatibleSoftware = Get-IncompatibleSoftware
+    $criticalSw = @($script:IncompatibleSoftware | Where-Object { $_.Severity -eq "Critical" })
+    $warnSw = @($script:IncompatibleSoftware | Where-Object { $_.Severity -ne "Critical" })
+    if ($criticalSw.Count -gt 0) {
+        $script:PreflightChecks.Compatibility = @{ Status = "Fail"; Message = ($criticalSw | ForEach-Object { $_.Name }) -join ", "; Critical = $false }
+    }
+    elseif ($warnSw.Count -gt 0) {
+        $script:PreflightChecks.Compatibility = @{ Status = "Warning"; Message = ($warnSw | ForEach-Object { $_.Name }) -join ", "; Critical = $false }
+    }
+    else {
+        $script:PreflightChecks.Compatibility = @{ Status = "Pass"; Message = "No conflicts"; Critical = $false }
+    }
+
     # Third-party Driver
     $script:DriverInfo = Get-NVMeDriverInfo
     if ($script:DriverInfo.HasThirdParty) {
@@ -1980,6 +2095,19 @@ function Install-NVMePatch {
     }
 
     try {
+        # Step 0: Suspend BitLocker if active (prevents recovery key prompt on reboot)
+        if ($script:BitLockerEnabled) {
+            Write-Log "Suspending BitLocker for one reboot cycle..." -Level "INFO"
+            try {
+                Suspend-BitLocker -MountPoint "$env:SystemDrive" -RebootCount 1 -ErrorAction Stop
+                Write-Log "BitLocker suspended - will auto-resume after reboot" -Level "SUCCESS"
+            }
+            catch {
+                Write-Log "Could not suspend BitLocker: $($_.Exception.Message)" -Level "WARNING"
+                Write-Log "Have your BitLocker recovery key ready before rebooting" -Level "WARNING"
+            }
+        }
+
         # Step 1: Backup
         Write-Log "Step 1/3: Creating system backup..."
         $restoreOK = New-SafeRestorePoint -Description "Pre-NVMe-Driver-Patch"
@@ -2396,6 +2524,21 @@ function Show-ConfirmDialog {
         [bool]$CheckNVMe = $false
     )
 
+    # VeraCrypt hard block -- cannot be skipped, even with Force
+    if ($Title -eq "Apply Patch" -and $script:VeraCryptDetected) {
+        Write-Log "BLOCKED: VeraCrypt system encryption detected - nvmedisk.sys breaks VeraCrypt boot" -Level "ERROR"
+        Write-Log "See: https://github.com/veracrypt/VeraCrypt/issues/1640" -Level "ERROR"
+        if (-not $script:Config.SilentMode) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "CANNOT APPLY PATCH`n`nVeraCrypt system encryption detected. Enabling the native NVMe driver (nvmedisk.sys) breaks VeraCrypt boot entirely.`n`nThis is a known critical incompatibility (VeraCrypt Issue #1640).`n`nYou must either:`n- Decrypt your system drive with VeraCrypt first, OR`n- Wait for a VeraCrypt update that supports nvmedisk.sys`n`nThis block cannot be overridden.",
+                "VeraCrypt Incompatibility",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error
+            ) | Out-Null
+        }
+        return $false
+    }
+
     if ($script:Config.ForceMode -or $script:Config.SkipWarnings) { return $true }
 
     # Build a single comprehensive message with all relevant warnings
@@ -2408,8 +2551,15 @@ function Show-ConfirmDialog {
     }
 
     if ($script:BitLockerEnabled) {
-        [void]$warnings.Add("[!] BITLOCKER ACTIVE - Registry changes may trigger recovery mode on next boot. Have your recovery key ready.")
+        [void]$warnings.Add("[!] BITLOCKER ACTIVE - Will be automatically suspended for one reboot to prevent recovery key prompt.")
         $icon = [System.Windows.Forms.MessageBoxIcon]::Warning
+    }
+
+    # Incompatible software warnings
+    foreach ($sw in $script:IncompatibleSoftware) {
+        if ($sw.Severity -ne "Critical") {
+            [void]$warnings.Add("[i] $($sw.Name): $($sw.Message)")
+        }
     }
 
     if ($script:DriverInfo -and $script:DriverInfo.HasThirdParty) {
@@ -2705,7 +2855,7 @@ $script:form.Controls.Add($cardDrives)
 # ===================================================================
 
 $overviewY = $CT + $drivesH + $CG
-$overviewH = 372
+$overviewH = 400
 $cardOverview = New-CardPanel `
     -Location (New-Object System.Drawing.Point($LX, $overviewY)) `
     -Size     (New-Object System.Drawing.Size($CW, $overviewH)) `
@@ -2759,10 +2909,10 @@ $script:checklistLabels = @{}
 $script:checklistDots = @{}
 
 # Reordered so long-value items are in left column (more width)
-$checkItemsLeft  = @("WindowsVersion", "NVMeDrives",  "BitLocker",         "DriverStatus")
-$checkNamesLeft  = @("Build",          "NVMe",        "BitLocker",         "Driver")
-$checkItemsRight = @("ThirdPartyDriver",   "SystemProtection",  "BypassIO")
-$checkNamesRight = @("3rd Party",          "Sys Prot.",          "BypassIO")
+$checkItemsLeft  = @("WindowsVersion", "NVMeDrives",  "BitLocker",         "VeraCrypt",       "DriverStatus")
+$checkNamesLeft  = @("Build",          "NVMe",        "BitLocker",         "VeraCrypt",       "Driver")
+$checkItemsRight = @("ThirdPartyDriver",   "Compatibility",     "SystemProtection",  "BypassIO")
+$checkNamesRight = @("3rd Party",          "Compat.",           "Sys Prot.",          "BypassIO")
 
 $gridTop = 116
 
@@ -2851,7 +3001,7 @@ for ($i = 0; $i -lt $checkItemsRight.Count; $i++) {
 }
 
 # -- Divider (aligned to $CP) --
-$divY = $gridTop + (4 * $RH) + 10
+$divY = $gridTop + (5 * $RH) + 10
 $divider1 = New-Object System.Windows.Forms.Panel
 $divider1.Location  = New-Object System.Drawing.Point($CP, $divY)
 $divider1.Size      = New-Object System.Drawing.Size($IW, 1)
@@ -3391,7 +3541,8 @@ $script:form.Add_Shown({
 
     # Build runspace with all needed function definitions
     $funcNames = @('Get-WindowsBuildDetails', 'Get-NVMeHealthData', 'Get-SystemDrives',
-                   'Test-BitLockerEnabled', 'Get-NVMeDriverInfo', 'Test-NativeNVMeActive',
+                   'Test-BitLockerEnabled', 'Test-VeraCryptSystemEncryption', 'Get-IncompatibleSoftware',
+                   'Get-NVMeDriverInfo', 'Test-NativeNVMeActive',
                    'Get-BypassIOStatus', 'Test-PatchStatus', 'Invoke-PreflightChecks')
     $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
     # No-op Write-Log for background thread
@@ -3423,11 +3574,13 @@ $script:form.Add_Shown({
             BuildDetails     = $script:BuildDetails
             CachedHealth     = $script:CachedHealth
             CachedDrives     = $script:CachedDrives
-            HasNVMeDrives    = $script:HasNVMeDrives
-            BitLockerEnabled = $script:BitLockerEnabled
-            DriverInfo       = $script:DriverInfo
-            NativeNVMeStatus = $script:NativeNVMeStatus
-            BypassIOStatus   = $script:BypassIOStatus
+            HasNVMeDrives       = $script:HasNVMeDrives
+            BitLockerEnabled    = $script:BitLockerEnabled
+            VeraCryptDetected   = $script:VeraCryptDetected
+            IncompatibleSoftware = $script:IncompatibleSoftware
+            DriverInfo          = $script:DriverInfo
+            NativeNVMeStatus    = $script:NativeNVMeStatus
+            BypassIOStatus      = $script:BypassIOStatus
         }
     }).AddParameter('cfg', $configCopy)
 
@@ -3453,7 +3606,9 @@ $script:form.Add_Shown({
             $script:CachedHealth     = $r.CachedHealth
             $script:CachedDrives     = $r.CachedDrives
             $script:HasNVMeDrives    = $r.HasNVMeDrives
-            $script:BitLockerEnabled = $r.BitLockerEnabled
+            $script:BitLockerEnabled    = $r.BitLockerEnabled
+            $script:VeraCryptDetected   = $r.VeraCryptDetected
+            $script:IncompatibleSoftware = $r.IncompatibleSoftware
             $script:DriverInfo       = $r.DriverInfo
             $script:NativeNVMeStatus = $r.NativeNVMeStatus
             $script:BypassIOStatus   = $r.BypassIOStatus
@@ -3509,6 +3664,21 @@ $script:form.Add_Shown({
             }
 
             Update-DrivesList
+
+            # Log firmware versions
+            if ($script:DriverInfo -and $script:DriverInfo.FirmwareVersions.Count -gt 0) {
+                foreach ($diskId in $script:DriverInfo.FirmwareVersions.Keys) {
+                    Write-Log "  [Firmware] Disk $diskId: $($script:DriverInfo.FirmwareVersions[$diskId])" -Level "INFO"
+                }
+            }
+
+            # Log incompatible software
+            if ($script:IncompatibleSoftware -and $script:IncompatibleSoftware.Count -gt 0) {
+                foreach ($sw in $script:IncompatibleSoftware) {
+                    $swLevel = if ($sw.Severity -eq "Critical") { "ERROR" } else { "WARNING" }
+                    Write-Log "  [Compat] $($sw.Name) ($($sw.Severity)): $($sw.Message)" -Level $swLevel
+                }
+            }
 
             if ($script:BypassIOStatus -and $script:BypassIOStatus.Warning) {
                 Write-Log "  [BypassIO] $($script:BypassIOStatus.Warning)" -Level "WARNING"
