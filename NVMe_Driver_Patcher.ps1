@@ -259,14 +259,15 @@ if (-not (Test-Administrator)) {
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-Add-Type -TypeDefinition @"
+if (-not ([System.Management.Automation.PSTypeName]'DarkTitleBar').Type) {
+    Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 
 public class DpiAwareness {
     [DllImport("user32.dll")]
     public static extern bool SetProcessDPIAware();
-    
+
     [DllImport("shcore.dll")]
     public static extern int SetProcessDpiAwareness(int awareness);
 }
@@ -274,7 +275,7 @@ public class DpiAwareness {
 public class ToastHelper {
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
-    
+
     [DllImport("user32.dll")]
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 }
@@ -289,30 +290,38 @@ public class DarkTitleBar {
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
     public static void EnableDarkMode(IntPtr hwnd) {
-        // DWMWA_USE_IMMERSIVE_DARK_MODE = 20 (Windows 11 22000+)
         int darkMode = 1;
         DwmSetWindowAttribute(hwnd, 20, ref darkMode, sizeof(int));
     }
 
     public static void SetCaptionColor(IntPtr hwnd, int color) {
-        // DWMWA_CAPTION_COLOR = 35 (Windows 11 22H2+)
         DwmSetWindowAttribute(hwnd, 35, ref color, sizeof(int));
     }
 
     public static void SetBorderColor(IntPtr hwnd, int color) {
-        // DWMWA_BORDER_COLOR = 34 (Windows 11 22H2+)
         DwmSetWindowAttribute(hwnd, 34, ref color, sizeof(int));
     }
 }
-"@ -ErrorAction SilentlyContinue
+"@
+}
 
 try { [DpiAwareness]::SetProcessDpiAwareness(2) | Out-Null }
-catch { try { [DpiAwareness]::SetProcessDPIAware() | Out-Null } catch { <# DPI awareness optional #> } }
+catch { try { [DpiAwareness]::SetProcessDPIAware() | Out-Null } catch {} }
 
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
-# Dark color table for context menus (must be compiled after assemblies load)
-Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @"
+# Force dark mode at the process level BEFORE any window is created
+try {
+    $dm = 1
+    # Try attribute 20 first (Windows 11), then 19 (older Win10 builds)
+    $hr = [DarkTitleBar]::DwmSetWindowAttribute([IntPtr]::Zero, 20, [ref]$dm, 4)
+}
+catch {}
+
+# Dark color table for context menus (compiled separately with WinForms reference)
+if (-not ([System.Management.Automation.PSTypeName]'DarkColorTable').Type) {
+try {
+    Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @"
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -336,7 +345,10 @@ public class DarkColorTable : ProfessionalColorTable {
     public override Color CheckSelectedBackground { get { return Color.FromArgb(80, 152, 255); } }
     public override Color CheckPressedBackground { get { return Color.FromArgb(40, 100, 200); } }
 }
-"@ -ErrorAction SilentlyContinue
+"@
+}
+catch { <# DarkColorTable compile failed - menus will use fallback colors #> }
+}
 
 # ===========================================================================
 # SECTION 3: SINGLE INSTANCE MUTEX
@@ -3904,21 +3916,28 @@ $script:form.Add_Load({
 
     # Apply immersive dark mode to window chrome (title bar, borders)
     try {
-        $bg = $script:Colors.Background
-        # Convert RGB to COLORREF (0x00BBGGRR)
-        $bgColorRef = $bg.R -bor ($bg.G -shl 8) -bor ($bg.B -shl 16)
         [DarkTitleBar]::EnableDarkMode($this.Handle)
-        [DarkTitleBar]::SetCaptionColor($this.Handle, $bgColorRef)
-        $borderBg = $script:Colors.CardBorder
-        $borderColorRef = $borderBg.R -bor ($borderBg.G -shl 8) -bor ($borderBg.B -shl 16)
-        [DarkTitleBar]::SetBorderColor($this.Handle, $borderColorRef)
+        $bg = $script:Colors.Background
+        $bgRef = $bg.R -bor ($bg.G -shl 8) -bor ($bg.B -shl 16)
+        [DarkTitleBar]::SetCaptionColor($this.Handle, $bgRef)
+        $bd = $script:Colors.CardBorder
+        $bdRef = $bd.R -bor ($bd.G -shl 8) -bor ($bd.B -shl 16)
+        [DarkTitleBar]::SetBorderColor($this.Handle, $bdRef)
     }
-    catch { <# DWM dark mode is Windows 11 only, non-critical #> }
+    catch { <# DWM dark mode is Windows 11 only #> }
 
-    # Apply dark scrollbars to form and controls
-    Set-DarkScrollbar -Control $this
-    Set-DarkScrollbar -Control $script:rtbOutput
-    if ($script:pnlDrivesContent) { Set-DarkScrollbar -Control $script:pnlDrivesContent }
+    # Apply DarkMode_Explorer to ALL scrollable controls (form, RTB, panels)
+    foreach ($ctrl in @($this, $script:rtbOutput, $script:pnlDrivesContent)) {
+        if ($ctrl) {
+            try { [DarkScrollBar]::SetWindowTheme($ctrl.Handle, "DarkMode_Explorer", $null) | Out-Null } catch {}
+        }
+    }
+    # Also walk all child panels that might have scrollbars
+    foreach ($ctrl in $this.Controls) {
+        if ($ctrl -is [System.Windows.Forms.Panel] -and $ctrl.AutoScroll) {
+            try { [DarkScrollBar]::SetWindowTheme($ctrl.Handle, "DarkMode_Explorer", $null) | Out-Null } catch {}
+        }
+    }
 })
 
 # Defer heavy preflight checks to background runspace so GUI stays responsive
