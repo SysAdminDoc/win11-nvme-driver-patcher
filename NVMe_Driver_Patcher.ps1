@@ -4177,6 +4177,21 @@ $script:form.Add_FormClosing({
     }
 })
 
+# Apply dark mode to window chrome BEFORE showing (must happen before first WM_PAINT)
+$null = $script:form.Handle  # Force HWND creation
+try {
+    [DarkTitleBar]::EnableDarkMode($script:form.Handle)
+    $bg = $script:Colors.Background
+    $bgRef = $bg.R -bor ($bg.G -shl 8) -bor ($bg.B -shl 16)
+    [DarkTitleBar]::SetCaptionColor($script:form.Handle, $bgRef)
+    $bd = $script:Colors.CardBorder
+    $bdRef = $bd.R -bor ($bd.G -shl 8) -bor ($bd.B -shl 16)
+    [DarkTitleBar]::SetBorderColor($script:form.Handle, $bdRef)
+}
+catch {}
+# Dark scrollbar on form itself (covers the AutoScroll horizontal/vertical bars)
+try { [DarkScrollBar]::SetWindowTheme($script:form.Handle, "DarkMode_Explorer", $null) | Out-Null } catch {}
+
 # Run
 [void]$script:form.ShowDialog()
 $script:form.Dispose()
