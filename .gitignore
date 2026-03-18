@@ -1,0 +1,19 @@
+# Logs and diagnostics
+*.log
+*_autosave.txt
+*_silent.txt
+NVMe_Patcher_Log_*.txt
+NVMe_Diagnostics_*.txt
+
+# Registry backups
+*.reg
+
+# Config
+config.json
+
+# Backup copies
+*.bak
+*.ps1.bak
+
+# Old versioned scripts
+NVMe_Driver_Patcher_v*.ps1

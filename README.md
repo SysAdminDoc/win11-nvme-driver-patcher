@@ -1,23 +1,22 @@
 # NVMe Driver Patcher for Windows 11
 
-A tool to make it easier to enable the experimental Windows Server 2025 Native NVMe storage driver on Windows 11. 
+A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driver (nvmedisk.sys) on Windows 11, replacing the legacy SCSI translation layer for improved NVMe performance.
 
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue?logo=powershell)
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows11)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-<img width="1027" height="857" alt="2026-02-01 04_27_56-NVMe Driver Patcher v3 0 0" src="https://github.com/user-attachments/assets/55e92d30-c7a8-4702-b5e2-3fa1c4691780" />
-
+<img width="1027" height="857" alt="NVMe Driver Patcher v3.3.0" src="https://github.com/user-attachments/assets/55e92d30-c7a8-4702-b5e2-3fa1c4691780" />
 
 ## Quick Start
 
-**One-line run** (Run as Administrator in PowerShell):
+**One-line install** (Run as Administrator in PowerShell):
 
 ```powershell
-irm https://raw.githubusercontent.com/SysAdminDoc/win11-nvme-driver-patcher/refs/heads/main/NVMe_Driver_Patcher_v3.0.0.ps1 | iex
+irm https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMe_Driver_Patcher.ps1 -OutFile NVMe_Driver_Patcher.ps1; .\NVMe_Driver_Patcher.ps1
 ```
 
-Or download `NVMe_Driver_Patcher.ps1` and right-click → **Run with PowerShell**.
+Or download `NVMe_Driver_Patcher.ps1` from [Releases](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases) and right-click > **Run with PowerShell**.
 
 ## What Does This Do?
 
@@ -27,14 +26,68 @@ Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the 
 
 | Component | Purpose |
 |-----------|---------|
-| Feature Flag `735209102` | Primary driver enable |
-| Feature Flag `1853569164` | Extended functionality |
-| Feature Flag `156965516` | Performance optimizations |
-| Feature Flag `1176759950` | Microsoft official Server 2025 key |
-| SafeBoot Minimal Key | Prevents boot failure in Safe Mode |
+| Feature Flag `735209102` | NativeNVMeStackForGeClient - Primary driver enable |
+| Feature Flag `1853569164` | UxAccOptimization - Extended functionality |
+| Feature Flag `156965516` | Standalone_Future - Performance optimizations |
+| SafeBoot Minimal Key | Prevents INACCESSIBLE_BOOT_DEVICE BSOD in Safe Mode |
 | SafeBoot Network Key | Safe Mode with Networking support |
 
-> ⚠️ **Important:** The SafeBoot keys are critical. Without them, your system cannot boot into Safe Mode after enabling Native NVMe. Many manual guides omit these keys — this tool includes them automatically.
+Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be included via checkbox.
+
+> **Important:** The SafeBoot keys are critical. Without them, your system cannot boot into Safe Mode after enabling Native NVMe. Many manual guides omit these keys -- this tool includes them automatically.
+
+## Features
+
+- **Dark/Light theme** auto-detected from Windows settings
+- **Async preflight checks** -- scans system without freezing the GUI
+- **NVMe health badges** -- temperature and wear % per drive via StorageReliabilityCounter
+- **Before/after comparison** -- shows exactly what changed after patch/unpatch
+- **System tray minimize** -- double-click to restore, context menu to exit
+- **Toast notifications** -- Windows balloon tips for patch results
+- **Activity log** with right-click context menu (copy, save, clear)
+- **Registry backup** export + system restore point creation
+- **Diagnostics export** -- full system report for troubleshooting
+- **Post-reboot verification script** -- auto-generated to confirm patch after restart
+- **Windows Event Log** integration for audit trails
+- **BitLocker detection** with recovery key warning
+- **Third-party driver detection** (Samsung, WD, Intel RST, AMD, etc.)
+- **BypassIO/DirectStorage** status check with gaming impact warning
+- **Single-instance mutex** -- prevents running multiple copies
+- **Silent/CLI mode** for scripting and automation
+
+## CLI Usage
+
+All CLI operations require Administrator privileges.
+
+```powershell
+# Check patch status (exit code: 0=applied, 1=not applied, 2=partial)
+.\NVMe_Driver_Patcher.ps1 -Silent -Status
+
+# Apply the patch silently without restart prompt
+.\NVMe_Driver_Patcher.ps1 -Silent -Apply -NoRestart
+
+# Apply with force (skip NVMe drive check)
+.\NVMe_Driver_Patcher.ps1 -Silent -Apply -Force
+
+# Remove the patch silently
+.\NVMe_Driver_Patcher.ps1 -Silent -Remove
+
+# Export system diagnostics report
+.\NVMe_Driver_Patcher.ps1 -ExportDiagnostics
+
+# Generate post-reboot verification script
+.\NVMe_Driver_Patcher.ps1 -GenerateVerifyScript
+```
+
+**Exit Codes (Silent Mode):**
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success / Patch Applied |
+| 1 | Failure / Patch Not Applied |
+| 2 | Partial / No NVMe drives |
+| 3 | Invalid parameters |
+| 4 | Elevation required |
 
 ## Requirements
 
@@ -111,14 +164,15 @@ Some third-party software may have issues with Native NVMe:
 | SSD vendor tools | Firmware update tools may fail |
 | Hardware monitoring | Some disk monitoring utilities |
 | Backup software | Rare issues with disk enumeration |
+| DirectStorage games | BypassIO not supported -- higher CPU usage |
 
-If you experience problems, use the **Remove Patch** button and restart.
+If you experience problems, use the **Remove Patch** button (or `-Silent -Remove`) and restart.
 
 ## Troubleshooting
 
 ### "No NVMe drives detected"
 - Your drives may use vendor-specific drivers
-- Check Device Manager → Disk drives → Properties → Driver
+- Check Device Manager > Disk drives > Properties > Driver
 - If using Samsung/WD proprietary drivers, this patch won't help
 
 ### System won't boot after patch
@@ -145,16 +199,15 @@ This shouldn't happen if you used this tool (SafeBoot keys are included). If it 
 ## Credits
 
 - **Ghacks** - [This Registry Hack Unlocks a Faster NVMe Driver in Windows 11](https://www.ghacks.net/2025/12/26/this-registry-hack-unlocks-a-faster-nvme-driver-in-windows-11/)
-- **Microsoft TechCommunity** — [Native NVMe announcement](https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353)
-- **Whirlpool Forums** — Discovery of missing SafeBoot keys ([whrl.pl/RgTgVj](https://whrl.pl/RgTgVj))
-- **Community Contributors** — Testing and feedback
+- **Microsoft TechCommunity** -- [Native NVMe announcement](https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353)
+- **Whirlpool Forums** -- Discovery of missing SafeBoot keys ([whrl.pl/RgTgVj](https://whrl.pl/RgTgVj))
 
 ## Disclaimer
 
-This tool modifies system registry settings. While safety measures are included, use at your own risk. Always ensure you have backups before making system changes. The author is not responsible for any damage to your system.
+This tool modifies system registry settings. While safety measures are included (restore points, registry backups, rollback), use at your own risk. Always ensure you have backups before making system changes.
 
 ---
 
 <p align="center">
-  <b>Made with ☕ by <a href="https://www.buymeacoffee.com/mattcreatingthings">SysAdminDoc</a></b>
+  <b>Made with coffee by <a href="https://github.com/SysAdminDoc">SysAdminDoc</a></b>
 </p>
