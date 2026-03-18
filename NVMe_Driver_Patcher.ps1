@@ -284,27 +284,6 @@ public class DarkScrollBar {
     public static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
 }
 
-public class DarkColorTable : System.Windows.Forms.ProfessionalColorTable {
-    public override System.Drawing.Color MenuBorder { get { return System.Drawing.Color.FromArgb(56, 56, 64); } }
-    public override System.Drawing.Color MenuItemBorder { get { return System.Drawing.Color.FromArgb(56, 56, 64); } }
-    public override System.Drawing.Color MenuItemSelected { get { return System.Drawing.Color.FromArgb(48, 48, 56); } }
-    public override System.Drawing.Color MenuItemSelectedGradientBegin { get { return System.Drawing.Color.FromArgb(48, 48, 56); } }
-    public override System.Drawing.Color MenuItemSelectedGradientEnd { get { return System.Drawing.Color.FromArgb(48, 48, 56); } }
-    public override System.Drawing.Color MenuItemPressedGradientBegin { get { return System.Drawing.Color.FromArgb(36, 36, 42); } }
-    public override System.Drawing.Color MenuItemPressedGradientEnd { get { return System.Drawing.Color.FromArgb(36, 36, 42); } }
-    public override System.Drawing.Color MenuStripGradientBegin { get { return System.Drawing.Color.FromArgb(22, 22, 26); } }
-    public override System.Drawing.Color MenuStripGradientEnd { get { return System.Drawing.Color.FromArgb(22, 22, 26); } }
-    public override System.Drawing.Color ToolStripDropDownBackground { get { return System.Drawing.Color.FromArgb(26, 26, 30); } }
-    public override System.Drawing.Color ImageMarginGradientBegin { get { return System.Drawing.Color.FromArgb(26, 26, 30); } }
-    public override System.Drawing.Color ImageMarginGradientMiddle { get { return System.Drawing.Color.FromArgb(26, 26, 30); } }
-    public override System.Drawing.Color ImageMarginGradientEnd { get { return System.Drawing.Color.FromArgb(26, 26, 30); } }
-    public override System.Drawing.Color SeparatorDark { get { return System.Drawing.Color.FromArgb(56, 56, 64); } }
-    public override System.Drawing.Color SeparatorLight { get { return System.Drawing.Color.FromArgb(36, 36, 42); } }
-    public override System.Drawing.Color CheckBackground { get { return System.Drawing.Color.FromArgb(56, 132, 244); } }
-    public override System.Drawing.Color CheckSelectedBackground { get { return System.Drawing.Color.FromArgb(80, 152, 255); } }
-    public override System.Drawing.Color CheckPressedBackground { get { return System.Drawing.Color.FromArgb(40, 100, 200); } }
-}
-
 public class DarkTitleBar {
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
@@ -331,6 +310,33 @@ try { [DpiAwareness]::SetProcessDpiAwareness(2) | Out-Null }
 catch { try { [DpiAwareness]::SetProcessDPIAware() | Out-Null } catch { <# DPI awareness optional #> } }
 
 [System.Windows.Forms.Application]::EnableVisualStyles()
+
+# Dark color table for context menus (must be compiled after assemblies load)
+Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @"
+using System.Drawing;
+using System.Windows.Forms;
+
+public class DarkColorTable : ProfessionalColorTable {
+    public override Color MenuBorder { get { return Color.FromArgb(56, 56, 64); } }
+    public override Color MenuItemBorder { get { return Color.FromArgb(56, 56, 64); } }
+    public override Color MenuItemSelected { get { return Color.FromArgb(48, 48, 56); } }
+    public override Color MenuItemSelectedGradientBegin { get { return Color.FromArgb(48, 48, 56); } }
+    public override Color MenuItemSelectedGradientEnd { get { return Color.FromArgb(48, 48, 56); } }
+    public override Color MenuItemPressedGradientBegin { get { return Color.FromArgb(36, 36, 42); } }
+    public override Color MenuItemPressedGradientEnd { get { return Color.FromArgb(36, 36, 42); } }
+    public override Color MenuStripGradientBegin { get { return Color.FromArgb(22, 22, 26); } }
+    public override Color MenuStripGradientEnd { get { return Color.FromArgb(22, 22, 26); } }
+    public override Color ToolStripDropDownBackground { get { return Color.FromArgb(26, 26, 30); } }
+    public override Color ImageMarginGradientBegin { get { return Color.FromArgb(26, 26, 30); } }
+    public override Color ImageMarginGradientMiddle { get { return Color.FromArgb(26, 26, 30); } }
+    public override Color ImageMarginGradientEnd { get { return Color.FromArgb(26, 26, 30); } }
+    public override Color SeparatorDark { get { return Color.FromArgb(56, 56, 64); } }
+    public override Color SeparatorLight { get { return Color.FromArgb(36, 36, 42); } }
+    public override Color CheckBackground { get { return Color.FromArgb(56, 132, 244); } }
+    public override Color CheckSelectedBackground { get { return Color.FromArgb(80, 152, 255); } }
+    public override Color CheckPressedBackground { get { return Color.FromArgb(40, 100, 200); } }
+}
+"@ -ErrorAction SilentlyContinue
 
 # ===========================================================================
 # SECTION 3: SINGLE INSTANCE MUTEX
@@ -2105,16 +2111,22 @@ function Set-RoundedCorners {
 
 function New-DarkContextMenu {
     param([System.Windows.Forms.ContextMenuStrip]$Menu)
-    $Menu.BackColor = $script:Colors.CardBackground
-    $Menu.ForeColor = $script:Colors.TextPrimary
+    $bgColor = $script:Colors.CardBackground
+    $fgColor = $script:Colors.TextPrimary
+    $Menu.BackColor = $bgColor
+    $Menu.ForeColor = $fgColor
     $Menu.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $Menu.ShowImageMargin = $false
-    $Menu.Renderer = New-Object System.Windows.Forms.ToolStripProfessionalRenderer(
-        (New-Object DarkColorTable)
-    )
+    try {
+        $darkTable = New-Object DarkColorTable
+        $Menu.Renderer = New-Object System.Windows.Forms.ToolStripProfessionalRenderer($darkTable)
+    }
+    catch {
+        <# DarkColorTable compilation failed; fall back to manual colors only #>
+    }
     $Menu.Add_ItemAdded({
-        $_.Item.BackColor = $script:Colors.CardBackground
-        $_.Item.ForeColor = $script:Colors.TextPrimary
+        param($sender, $e)
+        try { $e.Item.BackColor = $bgColor; $e.Item.ForeColor = $fgColor } catch {}
     }.GetNewClosure())
     return $Menu
 }
