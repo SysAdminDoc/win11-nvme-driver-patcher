@@ -5,20 +5,19 @@ GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driver
 
 ## Tech Stack
 - PowerShell 5.1+, WinForms GUI
-- Single monolithic script (~3800 lines): `NVMe_Driver_Patcher.ps1`
+- Single monolithic script (~4040 lines): `NVMe_Driver_Patcher.ps1`
 - `$script:` scope for cross-function state
+- GitHub Actions CI/CD: `.github/workflows/release.yml` (tag push or workflow_dispatch)
 
-## Current Version: v3.5.0
+## Current Version: v3.6.0
 
 ## Architecture
-- Async preflight: `[PowerShell]::Create()` with `InitialSessionState` + `SessionStateFunctionEntry`, polled by `System.Windows.Forms.Timer`
-- Background runspace gets no-op Write-Log and SilentMode=true to avoid UI thread refs
-- Results marshalled via hashtable
-- Rollback on partial failure undoes all applied registry keys
-- GitHub update check via releases API (5s timeout, best-effort, non-blocking)
-- Single consolidated confirmation dialog replaces old 5-dialog chain
-- VeraCrypt detection is a hard block (cannot be overridden, even with -Force)
-- BitLocker auto-suspension via Suspend-BitLocker before patching
+- Async preflight: `[PowerShell]::Create()` + `InitialSessionState` + Timer polling
+- VeraCrypt = hard block (cannot override); BitLocker = auto-suspend
+- Rollback on partial failure; consolidated single confirmation dialog
+- GitHub update check via releases API (5s timeout)
+- DiskSpd benchmark: auto-downloads from GitHub, runs 4K random r/w, saves JSON history, shows before/after delta
+- Post-reboot detection: saves patch state to JSON, compares on next launch, shows verification if driver activated
 
 ## Build / Run
 ```powershell
@@ -31,24 +30,16 @@ GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driver
 ## Key Functions
 - `Import-Configuration` / `Save-Configuration` - JSON config persistence
 - `Invoke-PreflightChecks` - 10 async system checks
-- `Test-VeraCryptSystemEncryption` - Hard block detection
-- `Get-IncompatibleSoftware` - Acronis, Macrium, VirtualBox, VeraCrypt detection
-- `Install-NVMePatch` / `Uninstall-NVMePatch` - Core patch ops with rollback + BitLocker suspend
-- `Update-StatusDisplay` - Refreshes all UI elements
-- `Test-UpdateAvailable` - GitHub releases API version check
-- `Show-ConfirmDialog` - Single consolidated confirmation with all warnings
-- `Export-SystemDiagnostics` / `New-VerificationScript` - Reporting
-
-## Gotchas
-- WinForms (not WPF) - different theming from MavenWinUtil
-- No emoji/unicode in PowerShell (CLAUDE.md global rule)
-- SafeBoot GUID: `{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}` (was wrong in README before v3.4.0)
-- `$script:Config` hashtable mixes constants, prefs, and runtime state (tech debt)
+- `Test-VeraCryptSystemEncryption` / `Get-IncompatibleSoftware` - Safety gates
+- `Install-NVMePatch` / `Uninstall-NVMePatch` - Core ops with rollback + BitLocker suspend
+- `Invoke-StorageBenchmark` / `Start-GUIBenchmark` - DiskSpd 4K random benchmark
+- `Save-BenchmarkResults` / `Show-BenchmarkComparison` - JSON history + delta display
+- `Test-PatchAppliedSinceLastRun` - Post-reboot verification
+- `Test-UpdateAvailable` - GitHub version check
 
 ## Version History
-- v3.5.0: VeraCrypt hard block, incompatible software detection, BitLocker auto-suspend, firmware display, updated benchmarks/README with sources
-- v3.4.0: GitHub update check, consolidated dialogs, rollback, skip warnings, SafeBoot GUID fix
-- v3.3.0: PSScriptAnalyzer verb fixes, filename cleanup, async preflight, AutoScroll
+- v3.6.0: DiskSpd benchmark, enhanced SMART tooltips, post-reboot verification, GitHub Actions CI/CD
+- v3.5.0: VeraCrypt hard block, BitLocker auto-suspend, incompatible software detection, firmware display
+- v3.4.0: GitHub update check, consolidated dialogs, rollback, skip warnings
+- v3.3.0: PSScriptAnalyzer verb fixes, filename cleanup, async preflight
 - v3.2.0: GDI leak fix, resizable form, tray icon, progress ring, health badges
-- v3.1.0: 12 code quality fixes
-- v3.0.0: Server 2025 key, nvmedisk.sys detection, BypassIO check
