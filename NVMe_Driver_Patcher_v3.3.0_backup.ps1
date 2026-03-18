@@ -221,8 +221,7 @@ function Test-Administrator {
     return $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-# Build argument list for re-launch (used by both elevation and PS7->PS5.1 redirect)
-function Get-RelaunchArgs {
+if (-not (Test-Administrator)) {
     $argList = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
     if ($Silent) { $argList += " -Silent" }
     if ($Apply) { $argList += " -Apply" }
@@ -232,25 +231,7 @@ function Get-RelaunchArgs {
     if ($Force) { $argList += " -Force" }
     if ($ExportDiagnostics) { $argList += " -ExportDiagnostics" }
     if ($GenerateVerifyScript) { $argList += " -GenerateVerifyScript" }
-    return $argList
-}
-
-# If running under PowerShell 7+ (pwsh.exe), re-launch under Windows PowerShell 5.1
-# .NET Core WinForms has broken DWM dark mode and assembly compatibility issues
-if ($PSVersionTable.PSVersion.Major -ge 7) {
-    $argList = Get-RelaunchArgs
-    if (Test-Administrator) {
-        Start-Process powershell.exe -ArgumentList $argList -Wait
-    }
-    else {
-        try { Start-Process powershell.exe -ArgumentList $argList -Verb RunAs }
-        catch { Write-Error "Administrator privileges required." }
-    }
-    exit 0
-}
-
-if (-not (Test-Administrator)) {
-    $argList = Get-RelaunchArgs
+    
     try {
         Start-Process powershell.exe -ArgumentList $argList -Verb RunAs
     }
@@ -340,8 +321,17 @@ catch {}
 # Dark color table for context menus (compiled separately with WinForms reference)
 if (-not ([System.Management.Automation.PSTypeName]'DarkColorTable').Type) {
 try {
-    # Script always runs under PS 5.1 (.NET Framework) so simple names work
-    Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @"
+    # Resolve actual assembly paths (works on both PS5.1 and PS7+)
+    $asmRefs = @(
+        ([System.Windows.Forms.Form].Assembly.Location),
+        ([System.Drawing.Color].Assembly.Location)
+    )
+    # On .NET Core/5+, Color is in System.Drawing.Primitives
+    $primAsm = [System.Drawing.Color].Assembly
+    if ($primAsm.Location -and $primAsm.Location -notmatch 'System\.Drawing\.dll$') {
+        $asmRefs += $primAsm.Location
+    }
+    Add-Type -ReferencedAssemblies $asmRefs -TypeDefinition @"
 using System.Drawing;
 using System.Windows.Forms;
 
