@@ -17,3 +17,15 @@ config.json
 
 # Old versioned scripts
 NVMe_Driver_Patcher_v*.ps1
+
+# .NET build output
+bin/
+obj/
+*.user
+*.suo
+.vs/
+publish/
+
+# NuGet
+packages/
+*.nupkg

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v3.6.0)'
+        description: 'Release tag (e.g. v4.0.0)'
         required: true
 
 permissions:
@@ -15,13 +15,19 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
       - name: Determine tag
         id: tag
+        shell: bash
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
@@ -29,11 +35,11 @@ jobs:
             echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Extract version from script
-        id: version
-        run: |
-          VER=$(grep -oP "AppVersion\s*=\s*\"\K[^\"]*" NVMe_Driver_Patcher.ps1 | head -1)
-          echo "version=$VER" >> $GITHUB_OUTPUT
+      - name: Build GUI (self-contained single file)
+        run: dotnet publish src/NVMeDriverPatcher -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish/gui
+
+      - name: Build CLI (self-contained single file)
+        run: dotnet publish src/NVMeDriverPatcher.Cli -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish/cli
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -43,13 +49,28 @@ jobs:
           body: |
             ## NVMe Driver Patcher ${{ steps.tag.outputs.tag }}
 
-            Download `NVMe_Driver_Patcher.ps1` below and run as Administrator.
+            ### Downloads
+            - **NVMeDriverPatcher.exe** - Compiled GUI application (run as Administrator)
+            - **NVMeDriverPatcher.Cli.exe** - Command-line interface
+            - **NVMe_Driver_Patcher.ps1** - PowerShell script (v3.5.2, legacy)
 
+            ### Quick Start (GUI)
+            Download `NVMeDriverPatcher.exe` and run. Administrator elevation is automatic.
+
+            ### Quick Start (CLI)
+            ```
+            NVMeDriverPatcher.Cli.exe status
+            NVMeDriverPatcher.Cli.exe apply
+            NVMeDriverPatcher.Cli.exe remove
+            ```
+
+            ### PowerShell (legacy)
             ```powershell
             irm https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMe_Driver_Patcher.ps1 -OutFile NVMe_Driver_Patcher.ps1; .\NVMe_Driver_Patcher.ps1
             ```
-
-            See [CHANGELOG](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/blob/main/NVMe_Driver_Patcher.ps1) in script header for details.
-          files: NVMe_Driver_Patcher.ps1
+          files: |
+            publish/gui/NVMeDriverPatcher.exe
+            publish/cli/NVMeDriverPatcher.Cli.exe
+            NVMe_Driver_Patcher.ps1
           draft: false
           prerelease: false
