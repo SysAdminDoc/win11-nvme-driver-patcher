@@ -1,0 +1,354 @@
+<Window x:Class="NVMeDriverPatcher.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:NVMeDriverPatcher.ViewModels"
+        Title="NVMe Driver Patcher" Height="850" Width="1100"
+        WindowStyle="None" ResizeMode="CanResizeWithGrip" AllowsTransparency="True"
+        Background="#00000000" WindowStartupLocation="CenterScreen"
+        MinHeight="650" MinWidth="900">
+
+    <Grid Margin="16">
+        <Border CornerRadius="12" Background="{StaticResource BgDarkest}" BorderBrush="{StaticResource Border}" BorderThickness="1" ClipToBounds="False">
+            <Border.Effect><DropShadowEffect BlurRadius="28" ShadowDepth="0" Opacity="0.5" Color="#000000"/></Border.Effect>
+            <Grid ClipToBounds="True">
+                <!-- Top accent gradient -->
+                <Border Height="2" VerticalAlignment="Top" CornerRadius="12,12,0,0" Panel.ZIndex="2">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="#FF0c2d5e" Offset="0"/>
+                            <GradientStop Color="#FF3b82f6" Offset="0.35"/>
+                            <GradientStop Color="#FF60a5fa" Offset="0.55"/>
+                            <GradientStop Color="#FF0c2d5e" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- TITLE BAR -->
+                    <Border Grid.Row="0" Background="{StaticResource BgDarkest}" Padding="24,16,24,0" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                        <Grid>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                <Border Width="36" Height="36" CornerRadius="8" Background="#FF1e3a5f" Margin="0,0,14,0" VerticalAlignment="Center">
+                                    <TextBlock Text="NVMe" Foreground="{StaticResource Accent}" FontSize="9" FontWeight="Black" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="NVMe Driver Patcher" Foreground="{StaticResource TextPrimary}" FontSize="17" FontWeight="Bold"/>
+                                    <TextBlock Text="Enable Server 2025 Native NVMe on Windows 11" Foreground="{StaticResource TextDim}" FontSize="10" Margin="0,-1,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                                <!-- Update badge -->
+                                <Border CornerRadius="10" Background="{StaticResource YellowBg}" Padding="10,4" Margin="0,0,8,0"
+                                        VerticalAlignment="Center" Cursor="Hand"
+                                        Visibility="{Binding UpdateAvailable, Converter={StaticResource BoolVis}}"
+                                        MouseLeftButtonUp="UpdateBadge_Click"
+                                        ToolTip="{Binding UpdateTooltip}">
+                                    <TextBlock Text="{Binding UpdateVersionText}" Foreground="{StaticResource Yellow}" FontSize="10" FontWeight="SemiBold"/>
+                                </Border>
+                                <!-- Version -->
+                                <Border CornerRadius="10" Background="{StaticResource BgMedium}" Padding="10,4" Margin="0,0,12,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding VersionText}" Foreground="{StaticResource Accent}" FontSize="10" FontWeight="SemiBold"/>
+                                </Border>
+                                <Button Content="&#x2013;" Width="32" Height="28" Click="Minimize_Click" Style="{StaticResource SecondaryButton}" Padding="0" FontWeight="Bold"/>
+                                <Button x:Name="CloseBtn" Content="&#x2715;" Width="32" Height="28" Click="Close_Click" Margin="4,0,0,0">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="b" Background="Transparent" CornerRadius="6">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="b" Property="Background" Value="#FFdc2626"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <Button.Foreground><SolidColorBrush Color="#FF52525b"/></Button.Foreground>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- CONTENT -->
+                    <Border Grid.Row="1" Margin="24,14,24,24">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="360"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="*" MinWidth="300"/>
+                            </Grid.ColumnDefinitions>
+                            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                                          Background="Transparent" Cursor="SizeWE" ShowsPreview="True"/>
+
+                            <!-- LEFT COLUMN -->
+                            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                                <StackPanel>
+                                    <!-- PATCH STATUS -->
+                                    <Border Background="{StaticResource BgDark}" CornerRadius="10" Padding="20,16" BorderBrush="{StaticResource Border}" BorderThickness="1" Margin="0,0,0,12">
+                                        <Grid>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Ellipse Width="12" Height="12" Margin="0,0,12,0"
+                                                         Fill="{Binding StatusColor, Converter={StaticResource StrToBrush}}"/>
+                                                <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding DriverLabelText}" Foreground="{StaticResource TextDim}" FontSize="10" HorizontalAlignment="Right"/>
+                                                <TextBlock Text="{Binding BenchLabelText}" Foreground="{StaticResource TextDimmer}" FontSize="9" HorizontalAlignment="Right"
+                                                           Visibility="{Binding BenchLabelVisible, Converter={StaticResource BoolVis}}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- ACTIONS -->
+                                    <Border Background="{StaticResource BgDark}" CornerRadius="10" Padding="20,16" BorderBrush="{StaticResource Border}" BorderThickness="1" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="ACTIONS" Foreground="{StaticResource TextDim}" FontSize="10" FontWeight="Bold" Margin="0,0,0,12"/>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                                <Button Content="{Binding ApplyButtonText}" Grid.Column="0" Background="{StaticResource GreenBg}"
+                                                        Style="{StaticResource ActionButton}" IsEnabled="{Binding ApplyEnabled}"
+                                                        Command="{Binding ApplyPatchCommand}"/>
+                                                <Button Content="REMOVE PATCH" Grid.Column="2" Style="{StaticResource OutlinedActionButton}"
+                                                        IsEnabled="{Binding RemoveEnabled}" Command="{Binding RemovePatchCommand}"/>
+                                            </Grid>
+                                            <Grid Margin="0,10,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition/><ColumnDefinition Width="8"/>
+                                                    <ColumnDefinition/><ColumnDefinition Width="8"/>
+                                                    <ColumnDefinition/><ColumnDefinition Width="8"/>
+                                                    <ColumnDefinition/>
+                                                </Grid.ColumnDefinitions>
+                                                <Button Content="BACKUP" Grid.Column="0" Style="{StaticResource SecondaryButton}" IsEnabled="{Binding ButtonsEnabled}" Command="{Binding RunBackupCommand}"/>
+                                                <Button Content="BENCHMARK" Grid.Column="2" Style="{StaticResource SecondaryButton}" IsEnabled="{Binding ButtonsEnabled}" Command="{Binding RunBenchmarkCommand}">
+                                                    <Button.Foreground><SolidColorBrush Color="#FF3b82f6"/></Button.Foreground>
+                                                </Button>
+                                                <Button Content="DIAGNOSTICS" Grid.Column="4" Style="{StaticResource SecondaryButton}" IsEnabled="{Binding ButtonsEnabled}" Command="{Binding ExportDiagnosticsCommand}"/>
+                                                <Button Content="RECOVERY KIT" Grid.Column="6" Style="{StaticResource SecondaryButton}" IsEnabled="{Binding ButtonsEnabled}" Command="{Binding ExportRecoveryKitCommand}">
+                                                    <Button.Foreground><SolidColorBrush Color="#FFf59e0b"/></Button.Foreground>
+                                                </Button>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- SYSTEM OVERVIEW (Preflight) -->
+                                    <Border Background="{StaticResource BgDark}" CornerRadius="10" Padding="20,16" BorderBrush="{StaticResource Border}" BorderThickness="1" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="SYSTEM OVERVIEW" Foreground="{StaticResource TextDim}" FontSize="10" FontWeight="Bold" Margin="0,0,0,12"/>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                                <ItemsControl Grid.Column="0" ItemsSource="{Binding LeftChecks}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                                                <Ellipse Width="6" Height="6" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                                         Fill="{Binding Color, Converter={StaticResource StrToBrush}}"/>
+                                                                <TextBlock Text="{Binding Label}" Foreground="{StaticResource TextMuted}" FontSize="11" Width="70"/>
+                                                                <TextBlock Text="{Binding Message}" FontSize="11"
+                                                                           Foreground="{Binding Color, Converter={StaticResource StrToBrush}}"
+                                                                           ToolTip="{Binding Tooltip}"/>
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <ItemsControl Grid.Column="1" ItemsSource="{Binding RightChecks}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                                                <Ellipse Width="6" Height="6" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                                         Fill="{Binding Color, Converter={StaticResource StrToBrush}}"/>
+                                                                <TextBlock Text="{Binding Label}" Foreground="{StaticResource TextMuted}" FontSize="11" Width="70"/>
+                                                                <TextBlock Text="{Binding Message}" FontSize="11"
+                                                                           Foreground="{Binding Color, Converter={StaticResource StrToBrush}}"
+                                                                           ToolTip="{Binding Tooltip}"/>
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </Grid>
+
+                                            <Border Height="1" Background="{StaticResource Border}" Margin="0,12"/>
+                                            <CheckBox Content="Include Microsoft Server 2025 key (1176759950)" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding IncludeServerKey}"/>
+                                            <CheckBox Content="Skip confirmation warnings (experienced users)" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding SkipWarnings}"/>
+                                            <TextBlock Text="Tip: Enable the Server 2025 key for full activation (new I/O scheduler + driver). Without it, results may be inconsistent." Foreground="{StaticResource Accent}" FontSize="10" FontStyle="Italic" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                            <TextBlock Text="Note: Native NVMe does not yet support BypassIO. DirectStorage games may see higher CPU usage." Foreground="#FFa16207" FontSize="10" FontStyle="Italic" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                                            <Border Height="1" Background="{StaticResource Border}" Margin="0,10,0,8"/>
+                                            <TextBlock Text="{Binding SettingsPanelVisible, Converter={StaticResource SettingsToggle}}" Foreground="{StaticResource TextDim}" FontSize="10" FontWeight="Bold" Cursor="Hand" Margin="0,0,0,4"
+                                                       MouseLeftButtonUp="SettingsToggle_Click"/>
+                                            <StackPanel Visibility="{Binding SettingsPanelVisible, Converter={StaticResource BoolVis}}">
+                                                <CheckBox Content="Auto-save log on exit" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding AutoSaveLog}"/>
+                                                <CheckBox Content="Show toast notifications" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding EnableToasts}"/>
+                                                <CheckBox Content="Write to Windows Event Log" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding WriteEventLog}"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                    <TextBlock Text="Restart delay (seconds):" Foreground="{StaticResource TextSecondary}" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                                    <TextBox Text="{Binding RestartDelayText, UpdateSourceTrigger=LostFocus}" Width="50" Height="24"
+                                                             Style="{StaticResource DarkTextBox}" VerticalContentAlignment="Center"/>
+                                                </StackPanel>
+                                                <Button Content="Open Data Folder" Style="{StaticResource SecondaryButton}" Height="28" FontSize="10"
+                                                        HorizontalAlignment="Left" Margin="0,8,0,0" Command="{Binding OpenDataFolderCommand}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- REGISTRY COMPONENTS -->
+                                    <Border Background="{StaticResource BgDark}" CornerRadius="10" Padding="20,16" BorderBrush="{StaticResource Border}" BorderThickness="1" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="REGISTRY COMPONENTS" Foreground="{StaticResource TextDim}" FontSize="10" FontWeight="Bold" Margin="0,0,0,10"/>
+                                            <TextBlock Text="FEATURE FLAGS" Foreground="{StaticResource TextDimmer}" FontSize="9" FontWeight="Bold" Margin="0,0,0,6"/>
+                                            <ItemsControl ItemsSource="{Binding RegistryFlags}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,3">
+                                                            <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,10,0"
+                                                                     Fill="{Binding DotColor, Converter={StaticResource StrToBrush}}"/>
+                                                            <TextBlock Text="{Binding Id}" Foreground="{StaticResource TextPrimary}" FontSize="11" FontFamily="Cascadia Code,Consolas" Width="100"/>
+                                                            <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextDim}" FontSize="10"/>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <Border Height="1" Background="{StaticResource Border}" Margin="0,10"/>
+                                            <TextBlock Text="SAFE MODE SUPPORT (CRITICAL)" Foreground="{StaticResource TextDimmer}" FontSize="9" FontWeight="Bold" Margin="0,0,0,6"/>
+                                            <ItemsControl ItemsSource="{Binding SafeBootFlags}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,3">
+                                                            <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,10,0"
+                                                                     Fill="{Binding DotColor, Converter={StaticResource StrToBrush}}"/>
+                                                            <TextBlock Text="{Binding Id}" Foreground="{StaticResource TextPrimary}" FontSize="11" FontFamily="Cascadia Code,Consolas" Width="100"/>
+                                                            <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextDim}" FontSize="10"/>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- DETECTED DRIVES -->
+                                    <Border Background="{StaticResource BgDark}" CornerRadius="10" Padding="20,16" BorderBrush="{StaticResource Border}" BorderThickness="1">
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                <TextBlock Text="DETECTED DRIVES" Foreground="{StaticResource TextDim}" FontSize="10" FontWeight="Bold"/>
+                                                <TextBlock Text="  green = NVMe    gray = other    NATIVE/LEGACY = driver status" Foreground="{StaticResource TextDimmer}" FontSize="9" Margin="10,1,0,0"/>
+                                            </StackPanel>
+                                            <ItemsControl ItemsSource="{Binding Drives}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,3">
+                                                            <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,10,0"
+                                                                     Fill="{Binding DotColor, Converter={StaticResource StrToBrush}}"/>
+                                                            <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextPrimary}" FontSize="11" Width="200" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding Size}" Foreground="#FFa1a1aa" FontSize="11" Width="60" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                                            <Border CornerRadius="4" Padding="8,2" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                                    Background="{Binding BusPillBg, Converter={StaticResource StrToBrush}}">
+                                                                <TextBlock Text="{Binding BusType}" FontSize="10" FontWeight="SemiBold"
+                                                                           Foreground="{Binding BusPillFg, Converter={StaticResource StrToBrush}}"/>
+                                                            </Border>
+                                                            <Border CornerRadius="4" Padding="6,2" Margin="0,0,6,0" Background="{StaticResource YellowBg}" VerticalAlignment="Center"
+                                                                    Visibility="{Binding IsBoot, Converter={StaticResource BoolVis}}">
+                                                                <TextBlock Text="BOOT" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource Yellow}"/>
+                                                            </Border>
+                                                            <Border CornerRadius="4" Padding="6,2" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                                    Visibility="{Binding ShowDriverBadge, Converter={StaticResource BoolVis}}"
+                                                                    Background="{Binding DriverBadgeBg, Converter={StaticResource StrToBrush}}">
+                                                                <TextBlock Text="{Binding DriverBadgeText}" FontSize="9" FontWeight="SemiBold"
+                                                                           Foreground="{Binding DriverBadgeFg, Converter={StaticResource StrToBrush}}"/>
+                                                            </Border>
+                                                            <Border CornerRadius="4" Padding="6,2" Margin="0,0,4,0" Background="{StaticResource BgMedium}" VerticalAlignment="Center"
+                                                                    Visibility="{Binding ShowTemp, Converter={StaticResource BoolVis}}" ToolTip="Drive temperature">
+                                                                <TextBlock Text="{Binding Temperature}" FontSize="9" FontWeight="SemiBold"
+                                                                           Foreground="{Binding TempColor, Converter={StaticResource StrToBrush}}"/>
+                                                            </Border>
+                                                            <Border CornerRadius="4" Padding="6,2" Background="{StaticResource BgMedium}" VerticalAlignment="Center"
+                                                                    Visibility="{Binding ShowWear, Converter={StaticResource BoolVis}}" ToolTip="{Binding SmartTooltip}">
+                                                                <TextBlock Text="{Binding Wear}" FontSize="9" FontWeight="SemiBold"
+                                                                           Foreground="{Binding WearColor, Converter={StaticResource StrToBrush}}"/>
+                                                            </Border>
+                                                            <!-- Firmware -->
+                                                            <Border CornerRadius="4" Padding="6,2" Background="{StaticResource BgMedium}" VerticalAlignment="Center"
+                                                                    Visibility="{Binding ShowFirmware, Converter={StaticResource BoolVis}}"
+                                                                    ToolTip="Firmware version">
+                                                                <TextBlock Text="{Binding Firmware}" FontSize="9" Foreground="{StaticResource TextDim}"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- RIGHT COLUMN: Activity Log -->
+                            <Border Grid.Column="2" Background="{StaticResource BgDark}" CornerRadius="10" Padding="20,16" BorderBrush="{StaticResource Border}" BorderThickness="1">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid Grid.Row="0" Margin="0,0,0,10">
+                                        <TextBlock Text="ACTIVITY LOG" Foreground="{StaticResource TextDim}" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                            <Button Content="Copy" Style="{StaticResource SecondaryButton}" Height="22" FontSize="10" Padding="8,0" Margin="0,0,6,0" Command="{Binding CopyLogCommand}"/>
+                                            <Button Content="Export" Style="{StaticResource SecondaryButton}" Height="22" FontSize="10" Padding="8,0" Command="{Binding ExportLogCommand}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <Border Grid.Row="1" Background="#FF0d0d10" CornerRadius="8" Padding="12,10">
+                                        <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
+                                            <TextBox x:Name="LogOutput" Text="{Binding LogText, Mode=OneWay}" Foreground="#FFa1a1aa" FontSize="11"
+                                                     FontFamily="Cascadia Code,Consolas,Courier New" TextWrapping="Wrap" IsReadOnly="True"
+                                                     Background="Transparent" BorderThickness="0" IsTabStop="False"
+                                                     SelectionBrush="{StaticResource BgLight}" CaretBrush="Transparent" Padding="0"
+                                                     TextChanged="LogOutput_TextChanged">
+                                                <TextBox.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="Copy Selection" Click="CopySelection_Click"/>
+                                                        <MenuItem Header="Select All" Click="SelectAll_Click"/>
+                                                        <Separator/>
+                                                        <MenuItem Header="Copy Entire Log" Command="{Binding CopyLogCommand}"/>
+                                                        <MenuItem Header="Clear Log" Click="ClearLog_Click"/>
+                                                    </ContextMenu>
+                                                </TextBox.ContextMenu>
+                                            </TextBox>
+                                        </ScrollViewer>
+                                    </Border>
+                                    <StackPanel Grid.Row="2" Margin="0,12,0,0">
+                                        <ProgressBar Height="6" Value="{Binding ProgressValue}" Foreground="{StaticResource Accent}"
+                                                     Template="{StaticResource RoundProgress}"
+                                                     Visibility="{Binding ProgressVisible, Converter={StaticResource BoolVis}}"/>
+                                        <TextBlock Text="{Binding ProgressText}" Foreground="{StaticResource TextDim}" FontSize="10" Margin="0,6,0,0"
+                                                   Visibility="{Binding ProgressVisible, Converter={StaticResource BoolVis}}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- FOOTER -->
+                    <Border Grid.Row="1" VerticalAlignment="Bottom" Margin="24,0,24,8">
+                        <Grid>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Foreground="{StaticResource TextDimmer}" FontSize="10">
+                                    <Hyperlink Foreground="{StaticResource TextDim}" TextDecorations="None" FontSize="10" Cursor="Hand" Click="GitHub_Click">GitHub</Hyperlink>
+                                </TextBlock>
+                                <TextBlock Text="  |  " Foreground="{StaticResource BgLight}" FontSize="10"/>
+                                <TextBlock Foreground="{StaticResource TextDimmer}" FontSize="10">
+                                    <Hyperlink Foreground="{StaticResource TextDim}" TextDecorations="None" FontSize="10" Cursor="Hand" Click="Docs_Click">Docs</Hyperlink>
+                                </TextBlock>
+                            </StackPanel>
+                            <Button Content="Refresh" HorizontalAlignment="Right" Style="{StaticResource SecondaryButton}" Height="22" FontSize="10" Padding="10,0"
+                                    Command="{Binding RefreshCommand}" IsEnabled="{Binding ButtonsEnabled}"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
