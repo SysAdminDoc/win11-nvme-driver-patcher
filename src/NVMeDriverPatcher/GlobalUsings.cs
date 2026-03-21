@@ -1,0 +1,9 @@
+global using Application = System.Windows.Application;
+global using Clipboard = System.Windows.Clipboard;
+global using MessageBox = System.Windows.MessageBox;
+global using Path = System.IO.Path;
+global using File = System.IO.File;
+global using Directory = System.IO.Directory;
+global using Brush = System.Windows.Media.Brush;
+global using UserControl = System.Windows.Controls.UserControl;
+global using ComboBoxItem = System.Windows.Controls.ComboBoxItem;
