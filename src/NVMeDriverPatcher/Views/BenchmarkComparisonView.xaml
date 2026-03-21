@@ -1,0 +1,54 @@
+<UserControl x:Class="NVMeDriverPatcher.Views.BenchmarkComparisonView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF">
+
+    <Border Background="#FF111113" CornerRadius="10" Padding="20,16" BorderBrush="#FF1a1a1e" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="200"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="BENCHMARK COMPARISON" Foreground="#FF52525b" FontSize="10" FontWeight="Bold" Margin="0,0,0,12"/>
+
+            <!-- Summary cards -->
+            <Grid Grid.Row="1" Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+                <!-- Read IOPS card -->
+                <Border Grid.Column="0" Background="#FF0d0d10" CornerRadius="8" Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="4K Random Read" Foreground="#FF71717a" FontSize="10"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock x:Name="ReadIopsValue" Text="-" Foreground="#FF3b82f6" FontSize="22" FontWeight="Bold"/>
+                            <TextBlock Text=" IOPS" Foreground="#FF52525b" FontSize="12" VerticalAlignment="Bottom" Margin="0,0,0,3"/>
+                        </StackPanel>
+                        <TextBlock x:Name="ReadDelta" Foreground="#FF71717a" FontSize="10" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Border>
+                <!-- Write IOPS card -->
+                <Border Grid.Column="2" Background="#FF0d0d10" CornerRadius="8" Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="4K Random Write" Foreground="#FF71717a" FontSize="10"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock x:Name="WriteIopsValue" Text="-" Foreground="#FFf59e0b" FontSize="22" FontWeight="Bold"/>
+                            <TextBlock Text=" IOPS" Foreground="#FF52525b" FontSize="12" VerticalAlignment="Bottom" Margin="0,0,0,3"/>
+                        </StackPanel>
+                        <TextBlock x:Name="WriteDelta" Foreground="#FF71717a" FontSize="10" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Chart -->
+            <lvc:CartesianChart x:Name="BenchChart" Grid.Row="2"
+                                Series="{Binding BenchSeries}"
+                                XAxes="{Binding BenchXAxes}"
+                                YAxes="{Binding BenchYAxes}"
+                                TooltipPosition="Hidden"
+                                LegendPosition="Hidden"/>
+        </Grid>
+    </Border>
+</UserControl>

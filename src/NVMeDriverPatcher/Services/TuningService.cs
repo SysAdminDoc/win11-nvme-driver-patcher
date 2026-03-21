@@ -1,0 +1,226 @@
+using Microsoft.Win32;
+using NVMeDriverPatcher.Models;
+
+namespace NVMeDriverPatcher.Services;
+
+/// <summary>
+/// Service for reading and writing StorNVMe driver parameters via the registry.
+/// Target: HKLM\SYSTEM\CurrentControlSet\Services\stornvme\Parameters\Device
+/// Changes take effect after a reboot or device re-enumeration.
+/// </summary>
+public static class TuningService
+{
+    /// <summary>
+    /// Reads all tunable StorNVMe parameters from the registry into a TuningProfile.
+    /// Returns a profile with null values for any parameters not explicitly set.
+    /// </summary>
+    public static TuningProfile GetCurrentParameters()
+    {
+        var profile = new TuningProfile
+        {
+            Name = "Current",
+            Description = "Values currently set in the registry"
+        };
+
+        try
+        {
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var key = hklm.OpenSubKey(TuningProfile.RegistrySubKey);
+
+            if (key is null)
+                return profile;
+
+            profile.QueueDepth = ReadDword(key, TuningProfile.Key_QueueDepth);
+            profile.NvmeMaxReadSplit = ReadDword(key, TuningProfile.Key_MaxReadSplit);
+            profile.NvmeMaxWriteSplit = ReadDword(key, TuningProfile.Key_MaxWriteSplit);
+            profile.IoSubmissionQueueCount = ReadDword(key, TuningProfile.Key_IoSubmissionQueueCount);
+            profile.IdlePowerTimeout = ReadDword(key, TuningProfile.Key_IdlePowerTimeout);
+            profile.StandbyPowerTimeout = ReadDword(key, TuningProfile.Key_StandbyPowerTimeout);
+        }
+        catch
+        {
+            // Registry access failed; return profile with all nulls
+        }
+
+        return profile;
+    }
+
+    /// <summary>
+    /// Applies all non-null values from a TuningProfile to the StorNVMe registry parameters.
+    /// Creates the registry key path if it does not exist.
+    /// </summary>
+    /// <param name="profile">The profile to apply.</param>
+    /// <param name="log">Optional logging callback.</param>
+    /// <returns>True if all values were written successfully.</returns>
+    public static bool ApplyProfile(TuningProfile profile, Action<string>? log = null)
+    {
+        try
+        {
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var key = hklm.CreateSubKey(TuningProfile.RegistrySubKey);
+
+            if (key is null)
+            {
+                log?.Invoke("[ERROR] Failed to open/create StorNVMe parameters registry key");
+                return false;
+            }
+
+            log?.Invoke($"Applying tuning profile: {profile.Name}");
+            int applied = 0;
+            int failed = 0;
+
+            void WriteIfSet(string name, int? value)
+            {
+                if (value is null) return;
+                try
+                {
+                    key.SetValue(name, value.Value, RegistryValueKind.DWord);
+                    var verify = key.GetValue(name);
+                    if (verify is int v && v == value.Value)
+                    {
+                        log?.Invoke($"  [OK] {name} = {value.Value}");
+                        applied++;
+                    }
+                    else
+                    {
+                        log?.Invoke($"  [FAIL] {name} - verification mismatch");
+                        failed++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    log?.Invoke($"  [FAIL] {name} - {ex.Message}");
+                    failed++;
+                }
+            }
+
+            WriteIfSet(TuningProfile.Key_QueueDepth, profile.QueueDepth);
+            WriteIfSet(TuningProfile.Key_MaxReadSplit, profile.NvmeMaxReadSplit);
+            WriteIfSet(TuningProfile.Key_MaxWriteSplit, profile.NvmeMaxWriteSplit);
+            WriteIfSet(TuningProfile.Key_IoSubmissionQueueCount, profile.IoSubmissionQueueCount);
+            WriteIfSet(TuningProfile.Key_IdlePowerTimeout, profile.IdlePowerTimeout);
+            WriteIfSet(TuningProfile.Key_StandbyPowerTimeout, profile.StandbyPowerTimeout);
+
+            log?.Invoke($"Tuning complete: {applied} applied, {failed} failed");
+            EventLogService.Write($"StorNVMe tuning profile '{profile.Name}' applied ({applied} parameters)");
+
+            return failed == 0;
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[ERROR] Failed to apply tuning profile: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Reads a single StorNVMe parameter value from the registry.
+    /// </summary>
+    /// <param name="name">Registry value name (e.g., "IoQueueDepth").</param>
+    /// <returns>The DWORD value, or null if not set.</returns>
+    public static int? GetParameter(string name)
+    {
+        try
+        {
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var key = hklm.OpenSubKey(TuningProfile.RegistrySubKey);
+            return ReadDword(key, name);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Writes a single StorNVMe parameter value to the registry.
+    /// </summary>
+    /// <param name="name">Registry value name.</param>
+    /// <param name="value">DWORD value to set.</param>
+    /// <returns>True if the write succeeded and was verified.</returns>
+    public static bool SetParameter(string name, int value)
+    {
+        try
+        {
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var key = hklm.CreateSubKey(TuningProfile.RegistrySubKey);
+
+            if (key is null)
+                return false;
+
+            key.SetValue(name, value, RegistryValueKind.DWord);
+            var verify = key.GetValue(name);
+            return verify is int v && v == value;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Removes a single StorNVMe parameter from the registry, reverting it to the driver default.
+    /// </summary>
+    /// <param name="name">Registry value name to remove.</param>
+    /// <returns>True if the value was removed or was already absent.</returns>
+    public static bool RemoveParameter(string name)
+    {
+        try
+        {
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var key = hklm.OpenSubKey(TuningProfile.RegistrySubKey, writable: true);
+
+            if (key is null)
+                return true; // Key doesn't exist, parameter is already absent
+
+            key.DeleteValue(name, throwOnMissingValue: false);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Removes all tuning parameters, reverting StorNVMe to driver defaults.
+    /// </summary>
+    /// <param name="log">Optional logging callback.</param>
+    /// <returns>True if all removals succeeded.</returns>
+    public static bool ResetToDefaults(Action<string>? log = null)
+    {
+        log?.Invoke("Resetting StorNVMe parameters to driver defaults...");
+        bool allOk = true;
+
+        string[] allKeys =
+        [
+            TuningProfile.Key_QueueDepth,
+            TuningProfile.Key_MaxReadSplit,
+            TuningProfile.Key_MaxWriteSplit,
+            TuningProfile.Key_IoSubmissionQueueCount,
+            TuningProfile.Key_IdlePowerTimeout,
+            TuningProfile.Key_StandbyPowerTimeout
+        ];
+
+        foreach (string name in allKeys)
+        {
+            if (RemoveParameter(name))
+                log?.Invoke($"  [OK] Removed {name}");
+            else
+            {
+                log?.Invoke($"  [FAIL] Could not remove {name}");
+                allOk = false;
+            }
+        }
+
+        log?.Invoke(allOk ? "Reset complete" : "Reset completed with errors");
+        return allOk;
+    }
+
+    private static int? ReadDword(RegistryKey? key, string name)
+    {
+        if (key is null) return null;
+        var val = key.GetValue(name);
+        return val is int intVal ? intVal : null;
+    }
+}
