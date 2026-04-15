@@ -29,3 +29,4 @@ publish/
 # NuGet
 packages/
 *.nupkg
+CLAUDE.md
