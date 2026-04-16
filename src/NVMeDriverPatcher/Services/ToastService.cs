@@ -13,6 +13,14 @@ public static class ToastService
     {
         if (!enabled) return;
 
+        // NotifyIcon and DispatcherTimer must run on the UI thread
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(() => Show(title, message, type, enabled));
+            return;
+        }
+
         try
         {
             var icon = new System.Windows.Forms.NotifyIcon
