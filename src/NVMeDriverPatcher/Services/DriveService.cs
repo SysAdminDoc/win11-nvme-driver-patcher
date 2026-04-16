@@ -167,8 +167,9 @@ public static class DriveService
                 // StorageReliabilityCounter via CIM
                 try
                 {
+                    var objectId = (pd["ObjectId"]?.ToString() ?? "").Replace("'", "''");
                     using var relSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
-                        $"ASSOCIATORS OF {{MSFT_PhysicalDisk.ObjectId='{pd["ObjectId"]}'}} WHERE AssocClass=MSFT_PhysicalDiskToStorageReliabilityCounter");
+                        $"ASSOCIATORS OF {{MSFT_PhysicalDisk.ObjectId='{objectId}'}} WHERE AssocClass=MSFT_PhysicalDiskToStorageReliabilityCounter");
                     foreach (ManagementObject rel in relSearch.Get())
                     {
                         var temp = rel["Temperature"];
@@ -314,7 +315,8 @@ public static class DriveService
             var os = search.Get().Cast<ManagementObject>().FirstOrDefault();
             if (os is not null)
             {
-                details.BuildNumber = int.Parse(os["BuildNumber"]?.ToString() ?? "0");
+                int.TryParse(os["BuildNumber"]?.ToString(), out var buildNum);
+                details.BuildNumber = buildNum;
                 details.Caption = os["Caption"]?.ToString() ?? "";
             }
 

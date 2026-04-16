@@ -90,12 +90,22 @@ public static class HotSwapService
                 if (volumes.Count > 0)
                 {
                     log?.Invoke("Step 2/4: Dismounting volumes...");
+                    bool allDismounted = true;
                     foreach (string vol in volumes)
                     {
                         if (DismountVolume(vol))
                             log?.Invoke($"  [OK] Dismounted {vol}");
                         else
-                            log?.Invoke($"  [WARNING] Could not dismount {vol} - may have open handles");
+                        {
+                            log?.Invoke($"  [FAIL] Could not dismount {vol} - open handles present");
+                            allDismounted = false;
+                        }
+                    }
+                    if (!allDismounted)
+                    {
+                        result.ErrorMessage = "ABORTED: One or more volumes could not be dismounted. Close all files on this drive and retry.";
+                        log?.Invoke($"[ERROR] {result.ErrorMessage}");
+                        return result;
                     }
                 }
                 else

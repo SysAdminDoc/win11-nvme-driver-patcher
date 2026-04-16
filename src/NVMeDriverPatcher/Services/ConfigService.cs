@@ -61,7 +61,11 @@ public static class ConfigService
                 LastRun = DateTime.Now.ToString("o")
             };
             var json = JsonSerializer.Serialize(toSave, JsonOptions);
-            File.WriteAllText(config.ConfigFile, json);
+
+            // Atomic write: write to temp file, then rename to prevent corruption on crash
+            var tempFile = config.ConfigFile + ".tmp";
+            File.WriteAllText(tempFile, json);
+            File.Move(tempFile, config.ConfigFile, overwrite: true);
         }
         catch { /* Config save best-effort */ }
     }

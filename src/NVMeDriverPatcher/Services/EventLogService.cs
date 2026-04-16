@@ -5,8 +5,8 @@ namespace NVMeDriverPatcher.Services;
 
 public static class EventLogService
 {
-    private static bool _initialized;
-    private static bool _enabled = true;
+    private static volatile bool _initialized;
+    private static volatile bool _enabled = true;
 
     public static void Initialize(bool enabled)
     {
@@ -21,13 +21,16 @@ public static class EventLogService
         }
         catch
         {
-            _enabled = false;
+            // SourceExists/CreateEventSource require admin — don't permanently disable,
+            // just mark not initialized. Write() will try WriteEntry directly which
+            // succeeds if the source was previously registered.
+            _initialized = false;
         }
     }
 
     public static void Write(string message, EventLogEntryType entryType = EventLogEntryType.Information, int eventId = 1000)
     {
-        if (!_enabled || !_initialized) return;
+        if (!_enabled) return;
         try
         {
             EventLog.WriteEntry(AppConfig.EventLogSourceName, message, entryType, eventId);
