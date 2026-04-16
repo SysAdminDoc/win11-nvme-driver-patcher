@@ -87,7 +87,7 @@ public class TuningProfile
     /// Performance profile: maximizes throughput and IOPS.
     /// Best for desktop workstations and gaming PCs with adequate cooling.
     /// </summary>
-    public static TuningProfile Performance => new()
+    public static TuningProfile Performance { get; } = new()
     {
         Name = "Performance",
         Description = "Maximum throughput and IOPS. Disables power management. Best for desktops with good cooling.",
@@ -103,7 +103,7 @@ public class TuningProfile
     /// Balanced profile: Windows defaults with minor tuning.
     /// Good all-around for most systems.
     /// </summary>
-    public static TuningProfile Balanced => new()
+    public static TuningProfile Balanced { get; } = new()
     {
         Name = "Balanced",
         Description = "Windows defaults with standard power management. Safe for all systems.",
@@ -119,7 +119,7 @@ public class TuningProfile
     /// PowerSave profile: reduces queue depth and enables aggressive power management.
     /// Best for laptops and battery-powered devices.
     /// </summary>
-    public static TuningProfile PowerSave => new()
+    public static TuningProfile PowerSave { get; } = new()
     {
         Name = "Power Save",
         Description = "Reduced queue depth with aggressive power management. Best for laptops on battery.",
@@ -131,8 +131,10 @@ public class TuningProfile
         StandbyPowerTimeout = 2000
     };
 
+    private static readonly TuningProfile[] _presets = [Performance, Balanced, PowerSave];
+
     /// <summary>
     /// Returns all built-in presets for UI enumeration.
     /// </summary>
-    public static TuningProfile[] GetPresets() => [Performance, Balanced, PowerSave];
+    public static TuningProfile[] GetPresets() => _presets;
 }

@@ -50,23 +50,33 @@ public static class PatchService
 
         try
         {
-            // Step 0: Suspend BitLocker
+            // Step 0: Suspend BitLocker — MUST succeed before touching drivers
             if (bitLockerEnabled)
             {
                 log?.Invoke("Suspending BitLocker for one reboot cycle...");
                 try
                 {
-                    var psi = new ProcessStartInfo("manage-bde", $"-protectors -disable {Environment.GetEnvironmentVariable("SystemDrive")} -RebootCount 1")
+                    var sysDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? "C:";
+                    var psi = new ProcessStartInfo("manage-bde", $"-protectors -disable {sysDrive} -RebootCount 1")
                     {
                         UseShellExecute = false,
                         CreateNoWindow = true
                     };
-                    Process.Start(psi)?.WaitForExit(30000);
+                    using var proc = Process.Start(psi);
+                    bool exited = proc?.WaitForExit(30000) ?? false;
+                    if (!exited || proc?.ExitCode != 0)
+                    {
+                        log?.Invoke("[ERROR] BitLocker suspension FAILED - aborting to prevent boot failure");
+                        EventLogService.Write("Patch aborted: BitLocker suspension failed", EventLogEntryType.Error, 3002);
+                        return result;
+                    }
                     log?.Invoke("[SUCCESS] BitLocker suspended - will auto-resume after reboot");
                 }
                 catch (Exception ex)
                 {
-                    log?.Invoke($"[WARNING] Could not suspend BitLocker: {ex.Message}");
+                    log?.Invoke($"[ERROR] BitLocker suspension FAILED: {ex.Message} - aborting");
+                    EventLogService.Write($"Patch aborted: BitLocker exception: {ex.Message}", EventLogEntryType.Error, 3002);
+                    return result;
                 }
             }
 
@@ -206,7 +216,7 @@ public static class PatchService
     {
         var result = new PatchOperationResult();
         result.BeforeSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
-        try { DataService.SaveSnapshot(result.BeforeSnapshot, "Before patch removal", isPrePatch: false); } catch { }
+        try { DataService.SaveSnapshot(result.BeforeSnapshot, "Before patch removal", isPrePatch: true); } catch { }
 
         log?.Invoke("========================================");
         log?.Invoke("STARTING PATCH REMOVAL");
@@ -302,7 +312,7 @@ public static class PatchService
 
         progress?.Invoke(0, "");
         result.AfterSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
-        try { DataService.SaveSnapshot(result.AfterSnapshot, "After patch removal", isPrePatch: true); } catch { }
+        try { DataService.SaveSnapshot(result.AfterSnapshot, "After patch removal", isPrePatch: false); } catch { }
         return result;
     }
 
@@ -340,14 +350,15 @@ public static class PatchService
     {
         try
         {
+            var safeDesc = description.Replace("'", "''");
             var psi = new ProcessStartInfo("powershell.exe",
-                $"-NoProfile -Command \"Checkpoint-Computer -Description '{description}' -RestorePointType 'MODIFY_SETTINGS' -ErrorAction Stop\"")
+                $"-NoProfile -Command \"Checkpoint-Computer -Description '{safeDesc}' -RestorePointType 'MODIFY_SETTINGS' -ErrorAction Stop\"")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardError = true
             };
-            var proc = Process.Start(psi);
+            using var proc = Process.Start(psi);
             proc?.WaitForExit(60000);
             if (proc?.ExitCode == 0)
                 log?.Invoke("[SUCCESS] System restore point created");
@@ -362,12 +373,13 @@ public static class PatchService
 
     public static void InitiateRestart(int delaySeconds)
     {
+        delaySeconds = Math.Clamp(delaySeconds, 0, 3600);
         var psi = new ProcessStartInfo("shutdown.exe",
             $"/r /t {delaySeconds} /c \"NVMe Driver Patch - Restarting in {delaySeconds} seconds. Save your work!\"")
         {
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        Process.Start(psi);
+        using var proc = Process.Start(psi);
     }
 }

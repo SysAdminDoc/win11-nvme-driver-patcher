@@ -7,17 +7,23 @@ namespace NVMeDriverPatcher.Converters;
 
 public class StatusToColorConverter : IValueConverter
 {
-    private static readonly BrushConverter BC = new();
+    private static readonly SolidColorBrush PassBrush = Freeze(new SolidColorBrush(Color.FromRgb(0x22, 0xc5, 0x5e)));
+    private static readonly SolidColorBrush WarningBrush = Freeze(new SolidColorBrush(Color.FromRgb(0xf5, 0x9e, 0x0b)));
+    private static readonly SolidColorBrush FailBrush = Freeze(new SolidColorBrush(Color.FromRgb(0xef, 0x44, 0x44)));
+    private static readonly SolidColorBrush InfoBrush = Freeze(new SolidColorBrush(Color.FromRgb(0x3b, 0x82, 0xf6)));
+    private static readonly SolidColorBrush DefaultBrush = Freeze(new SolidColorBrush(Color.FromRgb(0x71, 0x71, 0x7a)));
+
+    private static SolidColorBrush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
 
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         return value switch
         {
-            CheckStatus.Pass => (Brush)BC.ConvertFromString("#FF22c55e")!,
-            CheckStatus.Warning => (Brush)BC.ConvertFromString("#FFf59e0b")!,
-            CheckStatus.Fail => (Brush)BC.ConvertFromString("#FFef4444")!,
-            CheckStatus.Info => (Brush)BC.ConvertFromString("#FF3b82f6")!,
-            _ => (Brush)BC.ConvertFromString("#FF71717a")!
+            CheckStatus.Pass => PassBrush,
+            CheckStatus.Warning => WarningBrush,
+            CheckStatus.Fail => FailBrush,
+            CheckStatus.Info => InfoBrush,
+            _ => DefaultBrush
         };
     }
 

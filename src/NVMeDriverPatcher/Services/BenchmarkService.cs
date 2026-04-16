@@ -68,28 +68,33 @@ public static class BenchmarkService
         var exe = await InstallDiskSpdAsync(workingDir, log);
         if (exe is null) return null;
 
-        // Find NVMe drive to benchmark
+        // Find a partition on an NVMe drive to benchmark
         string benchDir = workingDir;
         try
         {
-            using var search = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
-                "SELECT * FROM MSFT_Partition WHERE DriveLetter!=0");
             using var diskSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
-                "SELECT * FROM MSFT_PhysicalDisk WHERE BusType=17");
-            var nvmeDisk = diskSearch.Get().Cast<ManagementObject>().FirstOrDefault();
-            if (nvmeDisk is not null)
+                "SELECT DeviceId FROM MSFT_PhysicalDisk WHERE BusType=17");
+            var nvmeDiskIds = diskSearch.Get().Cast<ManagementObject>()
+                .Select(d => d["DeviceId"]?.ToString() ?? "").Where(id => id.Length > 0).ToList();
+
+            if (nvmeDiskIds.Count > 0)
             {
-                // Get first partition with a drive letter on any NVMe disk
-                foreach (ManagementObject part in search.Get())
+                // Get partitions that belong to an NVMe disk
+                using var partSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
+                    "SELECT DiskNumber, DriveLetter FROM MSFT_Partition WHERE DriveLetter!=0");
+                foreach (ManagementObject part in partSearch.Get())
                 {
+                    var diskNum = part["DiskNumber"]?.ToString() ?? "";
+                    if (!nvmeDiskIds.Contains(diskNum)) continue;
+
                     var letter = part["DriveLetter"];
-                    if (letter is not null and not (char)'\0')
+                    if (letter is char ch && ch != '\0')
                     {
-                        var nvmeRoot = $"{(char)letter}:\\";
+                        var nvmeRoot = $"{ch}:\\";
                         var nvmeTempDir = Path.Combine(nvmeRoot, "NVMePatcher_Bench");
                         Directory.CreateDirectory(nvmeTempDir);
                         benchDir = nvmeTempDir;
-                        log?.Invoke($"Benchmarking NVMe drive: {nvmeRoot}");
+                        log?.Invoke($"Benchmarking NVMe drive: {nvmeRoot} (Disk {diskNum})");
                         break;
                     }
                 }
@@ -140,7 +145,8 @@ public static class BenchmarkService
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        using var proc = Process.Start(psi)!;
+        using var proc = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start DiskSpd process");
         var output = await proc.StandardOutput.ReadToEndAsync();
         await proc.WaitForExitAsync();
         return output;

@@ -21,7 +21,7 @@ public class AppConfig
     public const string DocumentationURL = "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353";
     public const string GitHubApiReleasesUrl = "https://api.github.com/repos/SysAdminDoc/win11-nvme-driver-patcher/releases/latest";
 
-    public static readonly string[] FeatureIDs = ["735209102", "1853569164", "156965516"];
+    public static IReadOnlyList<string> FeatureIDs { get; } = ["735209102", "1853569164", "156965516"];
 
     public static readonly Dictionary<string, string> FeatureNames = new()
     {
@@ -35,7 +35,12 @@ public class AppConfig
     public bool AutoSaveLog { get; set; } = true;
     public bool EnableToasts { get; set; } = true;
     public bool WriteEventLog { get; set; } = true;
-    public int RestartDelay { get; set; } = 30;
+    private int _restartDelay = 30;
+    public int RestartDelay
+    {
+        get => _restartDelay;
+        set => _restartDelay = Math.Clamp(value, 0, 3600);
+    }
     public bool IncludeServerKey { get; set; }
     public bool SkipWarnings { get; set; }
     public string? LastRun { get; set; }
