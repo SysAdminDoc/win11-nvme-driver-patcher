@@ -39,6 +39,9 @@ public class AppConfig
     public bool IncludeServerKey { get; set; }
     public bool SkipWarnings { get; set; }
     public string? LastRun { get; set; }
+    public string? LastRecoveryKitPath { get; set; }
+    public string? LastDiagnosticsPath { get; set; }
+    public string? LastVerificationScriptPath { get; set; }
 
     [JsonIgnore]
     public string WorkingDir { get; set; } = string.Empty;
