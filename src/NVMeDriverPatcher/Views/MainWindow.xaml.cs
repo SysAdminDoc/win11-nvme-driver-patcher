@@ -46,9 +46,16 @@ public partial class MainWindow : Window
 
     private async void OnContentRendered(object? sender, EventArgs e)
     {
-        await _vm.RunPreflightAsync();
-        RefreshBenchmarkWorkspace();
-        await RefreshTelemetryWorkspaceAsync();
+        try
+        {
+            await _vm.RunPreflightAsync();
+            RefreshBenchmarkWorkspace();
+            await RefreshTelemetryWorkspaceAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[OnContentRendered] {ex}");
+        }
     }
 
     private bool ShowConfirmDialog(string title, string message)
@@ -70,11 +77,9 @@ public partial class MainWindow : Window
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
-    private void UpdateBadge_Click(object sender, MouseButtonEventArgs e) => _vm.OpenUpdateUrlCommand.Execute(null);
+
     private void GitHub_Click(object sender, RoutedEventArgs e) => _vm.OpenGitHubCommand.Execute(null);
     private void Docs_Click(object sender, RoutedEventArgs e) => _vm.OpenDocsCommand.Execute(null);
-
-    private void SettingsToggle_Click(object sender, MouseButtonEventArgs e) => _vm.ToggleSettingsCommand.Execute(null);
 
     private void LogOutput_TextChanged(object sender, TextChangedEventArgs e)
     {
@@ -109,20 +114,27 @@ public partial class MainWindow : Window
 
     private async void WorkspaceTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!ReferenceEquals(e.Source, WorkspaceTabs))
-            return;
-
-        switch (WorkspaceTabs.SelectedIndex)
+        try
         {
-            case 1:
-                RefreshBenchmarkWorkspace();
-                break;
-            case 2:
-                await RefreshTelemetryWorkspaceAsync();
-                break;
-            case 3:
-                _vm.RefreshRecoveryAssetsCommand.Execute(null);
-                break;
+            if (!ReferenceEquals(e.Source, WorkspaceTabs))
+                return;
+
+            switch (WorkspaceTabs.SelectedIndex)
+            {
+                case 1:
+                    RefreshBenchmarkWorkspace();
+                    break;
+                case 2:
+                    await RefreshTelemetryWorkspaceAsync();
+                    break;
+                case 3:
+                    _vm.RefreshRecoveryAssetsCommand.Execute(null);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[WorkspaceTabs_SelectionChanged] {ex}");
         }
     }
 
@@ -215,13 +227,21 @@ public partial class MainWindow : Window
 
     private async void RefreshTelemetry_Click(object sender, RoutedEventArgs e)
     {
-        await RefreshTelemetryWorkspaceAsync();
+        try { await RefreshTelemetryWorkspaceAsync(); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[RefreshTelemetry_Click] {ex}"); }
     }
 
     private async void TelemetryPanel_DriveSelected(int driveNumber)
     {
-        _selectedTelemetryDriveNumber = driveNumber;
-        await RefreshTelemetryDataAsync(driveNumber);
+        try
+        {
+            _selectedTelemetryDriveNumber = driveNumber;
+            await RefreshTelemetryDataAsync(driveNumber);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[TelemetryPanel_DriveSelected] {ex}");
+        }
     }
 
     private async Task RefreshTelemetryWorkspaceAsync()

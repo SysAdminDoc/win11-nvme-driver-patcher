@@ -10,7 +10,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>NVMeDriverPatcher</AssemblyName>
     <RootNamespace>NVMeDriverPatcher</RootNamespace>
-    <ApplicationIcon>nvme.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
     <Version>4.0.0</Version>
     <AssemblyVersion>4.0.0.0</AssemblyVersion>
     <FileVersion>4.0.0.0</FileVersion>
