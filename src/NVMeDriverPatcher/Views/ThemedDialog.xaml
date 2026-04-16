@@ -6,19 +6,19 @@
         Background="Transparent"
         ResizeMode="NoResize"
         SizeToContent="WidthAndHeight"
-        MinWidth="420"
-        MaxWidth="620"
+        MinWidth="440"
+        MaxWidth="660"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Topmost="True"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
-    <Border Margin="14"
+    <Border Margin="18"
             Padding="0"
             Background="{StaticResource WindowCanvasBrush}"
             BorderBrush="{StaticResource BorderLight}"
             BorderThickness="1"
-            CornerRadius="22">
+            CornerRadius="24">
         <Border.Effect>
             <StaticResource ResourceKey="WindowShadow"/>
         </Border.Effect>
@@ -31,46 +31,64 @@
             </Grid.RowDefinitions>
 
             <Border x:Name="HeaderAccentBar"
-                    Height="3"
+                    Height="4"
                     VerticalAlignment="Top"
                     Background="{StaticResource Accent}"
-                    CornerRadius="22,22,0,0"
+                    CornerRadius="24,24,0,0"
                     Panel.ZIndex="3"/>
 
             <Border Grid.Row="0"
-                    Padding="22,18"
+                    Padding="26,22"
                     Background="{StaticResource HeroSurfaceBrush}"
-                    CornerRadius="22,22,0,0">
+                    CornerRadius="24,24,0,0">
                 <StackPanel>
                     <TextBlock x:Name="DlgEyebrow" Text="Confirmation" Style="{StaticResource SectionEyebrow}"/>
                     <TextBlock x:Name="DlgTitle"
                                Margin="0,8,0,0"
-                               FontSize="22"
+                               FontSize="24"
                                FontWeight="SemiBold"
                                Foreground="{StaticResource TextPrimary}"/>
                 </StackPanel>
             </Border>
 
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="24,24,24,18">
-                <Canvas x:Name="IconCanvas" Width="32" Height="32" Margin="0,0,16,0" VerticalAlignment="Top"/>
-                <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto">
+            <Grid Grid.Row="1" Margin="26,24,26,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Width="44"
+                        Height="44"
+                        Background="{StaticResource InsetCardBrush}"
+                        BorderBrush="{StaticResource Border}"
+                        BorderThickness="1"
+                        CornerRadius="22"
+                        VerticalAlignment="Top">
+                    <Canvas x:Name="IconCanvas" Width="32" Height="32" Margin="6"/>
+                </Border>
+
+                <ScrollViewer Grid.Column="2" MaxHeight="420" VerticalScrollBarVisibility="Auto">
                     <TextBlock x:Name="DlgMessage"
-                               MaxWidth="500"
-                               FontSize="13"
+                               MaxWidth="520"
+                               FontSize="13.5"
+                               LineHeight="21"
                                Foreground="{StaticResource TextSecondary}"
                                TextWrapping="Wrap"/>
                 </ScrollViewer>
-            </StackPanel>
+            </Grid>
 
-            <StackPanel Grid.Row="2"
-                        Orientation="Horizontal"
-                        HorizontalAlignment="Right"
-                        Margin="24,0,24,22">
+            <Border Grid.Row="2"
+                    BorderBrush="{StaticResource Border}"
+                    BorderThickness="0,1,0,0"
+                    Padding="26,16,26,24">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="BtnNo"
                         Content="Cancel"
                         Width="96"
                         Margin="0,0,10,0"
                         Style="{StaticResource SecondaryButton}"
+                        AutomationProperties.Name="Cancel dialog"
                         IsCancel="True"
                         Visibility="Collapsed"
                         Click="BtnNo_Click"/>
@@ -79,6 +97,7 @@
                         Width="108"
                         Margin="0,0,10,0"
                         Style="{StaticResource ActionButton}"
+                        AutomationProperties.Name="Confirm dialog"
                         IsDefault="True"
                         Visibility="Collapsed"
                         Click="BtnYes_Click"/>
@@ -86,11 +105,13 @@
                         Content="OK"
                         Width="92"
                         Style="{StaticResource ActionButton}"
+                        AutomationProperties.Name="Acknowledge dialog"
                         IsDefault="True"
                         IsCancel="True"
                         Visibility="Collapsed"
                         Click="BtnOK_Click"/>
-            </StackPanel>
+                </StackPanel>
+            </Border>
         </Grid>
     </Border>
 </Window>

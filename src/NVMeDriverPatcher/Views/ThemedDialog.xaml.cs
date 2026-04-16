@@ -24,7 +24,7 @@ public partial class ThemedDialog : Window
         Window? owner = null)
     {
         var dlg = new ThemedDialog();
-        dlg.DlgTitle.Text = title;
+        dlg.DlgTitle.Text = string.IsNullOrWhiteSpace(title) ? "NVMe Driver Patcher" : title;
         dlg.DlgMessage.Text = message;
 
         if (buttons == DialogButtons.YesNo)
@@ -47,8 +47,16 @@ public partial class ThemedDialog : Window
             DialogIcon.Question => "#FF3b82f6",
             _ => "#FF3b82f6"
         };
+        var actionSurface = icon switch
+        {
+            DialogIcon.Error => "#FF3E1A1F",
+            DialogIcon.Warning => "#FF4A3516",
+            DialogIcon.Question => "#FF133256",
+            _ => "#FF133256"
+        };
         var bc = new BrushConverter();
         var iconBrush = (System.Windows.Media.Brush)bc.ConvertFromString(iconColor)!;
+        var surfaceBrush = (System.Windows.Media.Brush)bc.ConvertFromString(actionSurface)!;
         dlg.DlgEyebrow.Text = icon switch
         {
             DialogIcon.Error => "Stop",
@@ -58,6 +66,10 @@ public partial class ThemedDialog : Window
         };
         dlg.DlgEyebrow.Foreground = iconBrush;
         dlg.HeaderAccentBar.Background = iconBrush;
+        dlg.BtnYes.Background = surfaceBrush;
+        dlg.BtnYes.BorderBrush = iconBrush;
+        dlg.BtnOK.Background = surfaceBrush;
+        dlg.BtnOK.BorderBrush = iconBrush;
 
         var ellipse = new Ellipse { Width = 28, Height = 28, Fill = iconBrush, Opacity = 0.15 };
         dlg.IconCanvas.Children.Add(ellipse);
@@ -102,13 +114,6 @@ public partial class ThemedDialog : Window
 
     protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
     {
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.C)
-        {
-            Clipboard.SetText($"{DlgTitle.Text}{Environment.NewLine}{Environment.NewLine}{DlgMessage.Text}");
-            e.Handled = true;
-            return;
-        }
-
         base.OnPreviewKeyDown(e);
     }
 

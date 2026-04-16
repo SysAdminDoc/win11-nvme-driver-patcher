@@ -3,218 +3,227 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF">
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="180"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="180"/>
-        </Grid.RowDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,0,4,0">
+            <StackPanel>
+                <TextBlock Text="Drive Telemetry" Style="{StaticResource SectionEyebrow}"/>
+                <TextBlock Text="Inspect one NVMe drive at a time, capture a fresh snapshot, and compare it against the local trend instead of relying on a single point in time."
+                           Margin="0,8,0,0"
+                           Style="{StaticResource BodyCopy}"/>
+            </StackPanel>
 
-        <StackPanel>
-            <TextBlock Text="Drive Telemetry" Style="{StaticResource SectionEyebrow}"/>
-            <TextBlock Text="Inspect one NVMe drive at a time and review thermal or endurance history."
-                       Margin="0,8,0,0"
-                       Style="{StaticResource BodyCopy}"/>
+            <Border Margin="0,18,0,0" Style="{StaticResource InsetCard}">
+                <StackPanel>
+                    <TextBlock Text="Telemetry Source" Style="{StaticResource SectionEyebrow}"/>
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="Drive"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontWeight="SemiBold"/>
+                        <ComboBox x:Name="DriveSelector"
+                                  Grid.Column="1"
+                                  Width="280"
+                                  Margin="14,0,0,0"
+                                  HorizontalAlignment="Left"
+                                  Style="{StaticResource DarkComboBox}"
+                                  AutomationProperties.Name="Select NVMe drive for telemetry"
+                                  SelectionChanged="DriveSelector_Changed"/>
+                    </Grid>
+
+                    <TextBlock x:Name="TelemetryStatusText"
+                               Margin="0,14,0,0"
+                               Foreground="{StaticResource TextDim}"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               Text="Choose an NVMe drive to capture a fresh health snapshot and review recent history."/>
+                </StackPanel>
+            </Border>
+
+            <UniformGrid Columns="3" Margin="0,18,0,0">
+                <Border Style="{StaticResource MetricCard}" Margin="0,0,12,0">
+                    <StackPanel>
+                        <TextBlock Text="Snapshot Source" Style="{StaticResource SectionEyebrow}"/>
+                        <TextBlock x:Name="TelemetrySourceValue"
+                                   Margin="0,8,0,0"
+                                   Foreground="{StaticResource Accent}"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock x:Name="TelemetrySourceDetail"
+                                   Margin="0,8,0,0"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource MetricCard}" Margin="0,0,12,0">
+                    <StackPanel>
+                        <TextBlock Text="History Coverage" Style="{StaticResource SectionEyebrow}"/>
+                        <TextBlock x:Name="TelemetryHistoryValue"
+                                   Margin="0,8,0,0"
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock x:Name="TelemetryHistoryDetail"
+                                   Margin="0,8,0,0"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource MetricCard}">
+                    <StackPanel>
+                        <TextBlock Text="Trend Outlook" Style="{StaticResource SectionEyebrow}"/>
+                        <TextBlock x:Name="TelemetryTrendValue"
+                                   Margin="0,8,0,0"
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock x:Name="TelemetryTrendDetail"
+                                   Margin="0,8,0,0"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+
+            <UniformGrid Columns="4" Margin="0,18,0,0">
+                <Border Style="{StaticResource InsetCard}" Margin="0,0,12,0">
+                    <StackPanel>
+                        <TextBlock Text="Temperature" Style="{StaticResource SectionEyebrow}"/>
+                        <TextBlock x:Name="TempValue"
+                                   Text="-"
+                                   Margin="0,10,0,0"
+                                   Foreground="{StaticResource Green}"
+                                   FontSize="28"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="Current thermal reading"
+                                   Margin="0,6,0,0"
+                                   Foreground="{StaticResource TextDim}"
+                                   FontSize="11"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource InsetCard}" Margin="0,0,12,0">
+                    <StackPanel>
+                        <TextBlock Text="Life Remaining" Style="{StaticResource SectionEyebrow}"/>
+                        <TextBlock x:Name="WearValue"
+                                   Text="-"
+                                   Margin="0,10,0,0"
+                                   Foreground="{StaticResource Green}"
+                                   FontSize="28"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="Estimated endurance left"
+                                   Margin="0,6,0,0"
+                                   Foreground="{StaticResource TextDim}"
+                                   FontSize="11"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource InsetCard}" Margin="0,0,12,0">
+                    <StackPanel>
+                        <TextBlock Text="Power-On Hours" Style="{StaticResource SectionEyebrow}"/>
+                        <TextBlock x:Name="PohValue"
+                                   Text="-"
+                                   Margin="0,10,0,0"
+                                   Foreground="{StaticResource Accent}"
+                                   FontSize="28"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="Controller lifetime usage"
+                                   Margin="0,6,0,0"
+                                   Foreground="{StaticResource TextDim}"
+                                   FontSize="11"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource InsetCard}">
+                    <StackPanel>
+                        <TextBlock Text="Media Errors" Style="{StaticResource SectionEyebrow}"/>
+                        <TextBlock x:Name="ErrorsValue"
+                                   Text="-"
+                                   Margin="0,10,0,0"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="28"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="Reported controller errors"
+                                   Margin="0,6,0,0"
+                                   Foreground="{StaticResource TextDim}"
+                                   FontSize="11"/>
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+
+            <Border Margin="0,18,0,0" Style="{StaticResource InsetCard}">
+                <StackPanel>
+                    <TextBlock Text="Temperature History" Style="{StaticResource SectionEyebrow}"/>
+                    <TextBlock Text="Thermal drift matters more than one peak reading, so this chart leans on saved local samples across the last seven days."
+                               Margin="0,8,0,0"
+                               Style="{StaticResource BodyCopy}"/>
+                    <Grid Height="220" Margin="0,16,0,0">
+                        <lvc:CartesianChart x:Name="TempChart"
+                                            TooltipPosition="Hidden"
+                                            LegendPosition="Hidden"/>
+                        <Border x:Name="TempHistoryPlaceholder"
+                                Background="#66070B13"
+                                CornerRadius="14"
+                                Visibility="Collapsed">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="No temperature history yet"
+                                           Foreground="{StaticResource TextPrimary}"
+                                           FontSize="18"
+                                           FontWeight="SemiBold"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="Poll this drive again later to build a usable local trend instead of relying on a single thermal snapshot."
+                                           Margin="0,8,0,0"
+                                           Style="{StaticResource BodyCopy}"
+                                           TextAlignment="Center"
+                                           MaxWidth="360"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Margin="0,18,0,0" Style="{StaticResource InsetCard}">
+                <StackPanel>
+                    <TextBlock Text="Wear History" Style="{StaticResource SectionEyebrow}"/>
+                    <TextBlock Text="Endurance moves slowly, so this history becomes more useful over time as additional saved samples make change easier to spot."
+                               Margin="0,8,0,0"
+                               Style="{StaticResource BodyCopy}"/>
+                    <Grid Height="220" Margin="0,16,0,0">
+                        <lvc:CartesianChart x:Name="WearChart"
+                                            TooltipPosition="Hidden"
+                                            LegendPosition="Hidden"/>
+                        <Border x:Name="WearHistoryPlaceholder"
+                                Background="#66070B13"
+                                CornerRadius="14"
+                                Visibility="Collapsed">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="No endurance history yet"
+                                           Foreground="{StaticResource TextPrimary}"
+                                           FontSize="18"
+                                           FontWeight="SemiBold"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="Wear usually changes gradually, so this chart fills out over time as more local samples are stored."
+                                           Margin="0,8,0,0"
+                                           Style="{StaticResource BodyCopy}"
+                                           TextAlignment="Center"
+                                           MaxWidth="360"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+            </Border>
         </StackPanel>
-
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,18,0,0">
-            <TextBlock Text="Drive"
-                       Foreground="{StaticResource TextSecondary}"
-                       FontWeight="SemiBold"
-                       VerticalAlignment="Center"/>
-            <ComboBox x:Name="DriveSelector"
-                      Width="240"
-                      Height="28"
-                      Margin="12,0,0,0"
-                      FontSize="12"
-                      SelectionChanged="DriveSelector_Changed"/>
-        </StackPanel>
-
-        <TextBlock x:Name="TelemetryStatusText"
-                   Grid.Row="2"
-                   Margin="0,12,0,0"
-                   Foreground="{StaticResource TextDim}"
-                   Text="Choose an NVMe drive to capture a fresh health snapshot and review recent history."
-                   TextWrapping="Wrap"/>
-
-        <UniformGrid Grid.Row="3"
-                     Columns="3"
-                     Margin="0,18,0,0">
-            <Border Style="{StaticResource InsetCard}" Margin="0,0,10,0">
-                <StackPanel>
-                    <TextBlock Text="Snapshot Source" Style="{StaticResource SectionEyebrow}"/>
-                    <TextBlock x:Name="TelemetrySourceValue"
-                               Margin="0,8,0,0"
-                               Foreground="{StaticResource Accent}"
-                               FontSize="16"
-                               FontWeight="SemiBold"
-                               TextWrapping="Wrap"/>
-                    <TextBlock x:Name="TelemetrySourceDetail"
-                               Margin="0,8,0,0"
-                               Foreground="{StaticResource TextSecondary}"
-                               FontSize="12"
-                               TextWrapping="Wrap"/>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource InsetCard}" Margin="0,0,10,0">
-                <StackPanel>
-                    <TextBlock Text="History Coverage" Style="{StaticResource SectionEyebrow}"/>
-                    <TextBlock x:Name="TelemetryHistoryValue"
-                               Margin="0,8,0,0"
-                               Foreground="{StaticResource TextPrimary}"
-                               FontSize="16"
-                               FontWeight="SemiBold"
-                               TextWrapping="Wrap"/>
-                    <TextBlock x:Name="TelemetryHistoryDetail"
-                               Margin="0,8,0,0"
-                               Foreground="{StaticResource TextSecondary}"
-                               FontSize="12"
-                               TextWrapping="Wrap"/>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource InsetCard}">
-                <StackPanel>
-                    <TextBlock Text="Trend Outlook" Style="{StaticResource SectionEyebrow}"/>
-                    <TextBlock x:Name="TelemetryTrendValue"
-                               Margin="0,8,0,0"
-                               Foreground="{StaticResource TextPrimary}"
-                               FontSize="16"
-                               FontWeight="SemiBold"
-                               TextWrapping="Wrap"/>
-                    <TextBlock x:Name="TelemetryTrendDetail"
-                               Margin="0,8,0,0"
-                               Foreground="{StaticResource TextSecondary}"
-                               FontSize="12"
-                               TextWrapping="Wrap"/>
-                </StackPanel>
-            </Border>
-        </UniformGrid>
-
-        <Grid Grid.Row="4" Margin="0,18,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition/>
-            </Grid.ColumnDefinitions>
-
-            <Border Grid.Column="0" Style="{StaticResource InsetCard}">
-                <StackPanel>
-                    <TextBlock Text="Temperature" Style="{StaticResource SectionEyebrow}" HorizontalAlignment="Center"/>
-                    <TextBlock x:Name="TempValue"
-                               Text="-"
-                               Margin="0,10,0,0"
-                               HorizontalAlignment="Center"
-                               Foreground="{StaticResource Green}"
-                               FontSize="26"
-                               FontWeight="SemiBold"/>
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Column="2" Style="{StaticResource InsetCard}">
-                <StackPanel>
-                    <TextBlock Text="Life Remaining" Style="{StaticResource SectionEyebrow}" HorizontalAlignment="Center"/>
-                    <TextBlock x:Name="WearValue"
-                               Text="-"
-                               Margin="0,10,0,0"
-                               HorizontalAlignment="Center"
-                               Foreground="{StaticResource Green}"
-                               FontSize="26"
-                               FontWeight="SemiBold"/>
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Column="4" Style="{StaticResource InsetCard}">
-                <StackPanel>
-                    <TextBlock Text="Power-On Hours" Style="{StaticResource SectionEyebrow}" HorizontalAlignment="Center"/>
-                    <TextBlock x:Name="PohValue"
-                               Text="-"
-                               Margin="0,10,0,0"
-                               HorizontalAlignment="Center"
-                               Foreground="{StaticResource Accent}"
-                               FontSize="26"
-                               FontWeight="SemiBold"/>
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Column="6" Style="{StaticResource InsetCard}">
-                <StackPanel>
-                    <TextBlock Text="Media Errors" Style="{StaticResource SectionEyebrow}" HorizontalAlignment="Center"/>
-                    <TextBlock x:Name="ErrorsValue"
-                               Text="-"
-                               Margin="0,10,0,0"
-                               HorizontalAlignment="Center"
-                               Foreground="{StaticResource TextSecondary}"
-                               FontSize="26"
-                               FontWeight="SemiBold"/>
-                </StackPanel>
-            </Border>
-        </Grid>
-
-        <TextBlock Grid.Row="5"
-                   Margin="0,8,0,6"
-                   VerticalAlignment="Top"
-                   Text="Temperature History"
-                   Style="{StaticResource SectionEyebrow}"/>
-        <Grid Grid.Row="6">
-            <lvc:CartesianChart x:Name="TempChart"
-                                Margin="0,0,0,0"
-                                TooltipPosition="Hidden"
-                                LegendPosition="Hidden"/>
-            <Border x:Name="TempHistoryPlaceholder"
-                    Background="#5509090B"
-                    CornerRadius="14"
-                    Visibility="Collapsed">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <TextBlock Text="No temperature history yet"
-                               Foreground="{StaticResource TextPrimary}"
-                               FontSize="18"
-                               FontWeight="SemiBold"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="Poll this drive again later to build a local thermal trend instead of relying on a single snapshot."
-                               Margin="0,8,0,0"
-                               Style="{StaticResource BodyCopy}"
-                               TextAlignment="Center"
-                               MaxWidth="340"/>
-                </StackPanel>
-            </Border>
-        </Grid>
-
-        <TextBlock Grid.Row="7"
-                   Margin="0,16,0,6"
-                   Text="Wear History"
-                   Style="{StaticResource SectionEyebrow}"/>
-        <Grid Grid.Row="8">
-            <lvc:CartesianChart x:Name="WearChart"
-                                TooltipPosition="Hidden"
-                                LegendPosition="Hidden"/>
-            <Border x:Name="WearHistoryPlaceholder"
-                    Background="#5509090B"
-                    CornerRadius="14"
-                    Visibility="Collapsed">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <TextBlock Text="No endurance history yet"
-                               Foreground="{StaticResource TextPrimary}"
-                               FontSize="18"
-                               FontWeight="SemiBold"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="Wear usually changes slowly, so this card fills out over time as more local samples are saved."
-                               Margin="0,8,0,0"
-                               Style="{StaticResource BodyCopy}"
-                               TextAlignment="Center"
-                               MaxWidth="340"/>
-                </StackPanel>
-            </Border>
-        </Grid>
-    </Grid>
+    </ScrollViewer>
 </UserControl>
