@@ -1939,9 +1939,8 @@
 
                                 <ProgressBar Margin="0,22,0,0"
                                              Height="8"
-                                             IsIndeterminate="True"
                                              Foreground="{StaticResource Accent}"
-                                             Template="{StaticResource RoundProgress}"/>
+                                             Template="{StaticResource RoundProgressIndeterminate}"/>
 
                                 <UniformGrid Columns="3" Margin="0,22,0,0">
                                     <Border Margin="0,0,10,0" Style="{StaticResource InsetCard}">

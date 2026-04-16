@@ -59,6 +59,14 @@
     <DropShadowEffect x:Key="WindowShadow" BlurRadius="40" ShadowDepth="0" Opacity="0.55" Color="#FF000000"/>
     <DropShadowEffect x:Key="SurfaceShadow" BlurRadius="20" ShadowDepth="0" Opacity="0.14" Color="#FF000000"/>
 
+    <Style x:Key="FocusHidden" TargetType="Control">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style TargetType="Window">
         <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
         <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
@@ -126,6 +134,7 @@
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -196,6 +205,7 @@
         <Setter Property="Background" Value="{StaticResource Accent}"/>
         <Setter Property="BorderBrush" Value="{StaticResource AccentHover}"/>
         <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -243,6 +253,7 @@
         <Setter Property="Background" Value="{StaticResource BgMedium}"/>
         <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
         <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -300,6 +311,7 @@
         <Setter Property="FontSize" Value="12.5"/>
         <Setter Property="Margin" Value="0,8,0,0"/>
         <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
@@ -362,6 +374,43 @@
         </Grid>
     </ControlTemplate>
 
+    <ControlTemplate x:Key="RoundProgressIndeterminate" TargetType="ProgressBar">
+        <Border Height="8"
+                Background="{StaticResource BgLight}"
+                BorderBrush="{StaticResource Border}"
+                BorderThickness="1"
+                CornerRadius="999"
+                ClipToBounds="True">
+            <Border x:Name="Slider"
+                    Width="120"
+                    Height="8"
+                    HorizontalAlignment="Left"
+                    Background="{TemplateBinding Foreground}"
+                    CornerRadius="999"
+                    RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="SliderTranslate"/>
+                </Border.RenderTransform>
+            </Border>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsVisible" Value="True">
+                <Trigger.EnterActions>
+                    <BeginStoryboard>
+                        <Storyboard RepeatBehavior="Forever">
+                            <DoubleAnimation Storyboard.TargetName="SliderTranslate"
+                                             Storyboard.TargetProperty="X"
+                                             From="-120"
+                                             To="600"
+                                             Duration="0:0:1.6"
+                                             AutoReverse="False"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </Trigger.EnterActions>
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
     <Style TargetType="ToolTip">
         <Setter Property="Background" Value="{StaticResource BgMedium}"/>
         <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
@@ -388,41 +437,82 @@
     </Style>
 
     <Style TargetType="ScrollBar">
-        <Setter Property="Width" Value="12"/>
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ScrollBar">
-                    <Grid Background="Transparent" Width="{TemplateBinding Width}">
-                        <Track x:Name="PART_Track" IsDirectionReversed="True">
-                            <Track.DecreaseRepeatButton>
-                                <RepeatButton Command="ScrollBar.LineUpCommand" Opacity="0" Focusable="False"/>
-                            </Track.DecreaseRepeatButton>
-                            <Track.Thumb>
-                                <Thumb>
-                                    <Thumb.Template>
-                                        <ControlTemplate TargetType="Thumb">
-                                            <Border x:Name="thumb"
-                                                    Margin="3,2"
-                                                    Background="{StaticResource BorderLight}"
-                                                    CornerRadius="999"/>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="thumb" Property="Background" Value="{StaticResource AccentSoft}"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Thumb.Template>
-                                </Thumb>
-                            </Track.Thumb>
-                            <Track.IncreaseRepeatButton>
-                                <RepeatButton Command="ScrollBar.LineDownCommand" Opacity="0" Focusable="False"/>
-                            </Track.IncreaseRepeatButton>
-                        </Track>
-                    </Grid>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+        <Setter Property="Focusable" Value="False"/>
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Vertical">
+                <Setter Property="Width" Value="12"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ScrollBar">
+                            <Grid Background="Transparent" Width="{TemplateBinding Width}">
+                                <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                    <Track.DecreaseRepeatButton>
+                                        <RepeatButton Command="ScrollBar.LineUpCommand" Opacity="0" Focusable="False"/>
+                                    </Track.DecreaseRepeatButton>
+                                    <Track.Thumb>
+                                        <Thumb>
+                                            <Thumb.Template>
+                                                <ControlTemplate TargetType="Thumb">
+                                                    <Border x:Name="thumb"
+                                                            Margin="3,2"
+                                                            Background="{StaticResource BorderLight}"
+                                                            CornerRadius="999"/>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="thumb" Property="Background" Value="{StaticResource AccentSoft}"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Thumb.Template>
+                                        </Thumb>
+                                    </Track.Thumb>
+                                    <Track.IncreaseRepeatButton>
+                                        <RepeatButton Command="ScrollBar.LineDownCommand" Opacity="0" Focusable="False"/>
+                                    </Track.IncreaseRepeatButton>
+                                </Track>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Height" Value="12"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ScrollBar">
+                            <Grid Background="Transparent" Height="{TemplateBinding Height}">
+                                <Track x:Name="PART_Track" IsDirectionReversed="False">
+                                    <Track.DecreaseRepeatButton>
+                                        <RepeatButton Command="ScrollBar.LineLeftCommand" Opacity="0" Focusable="False"/>
+                                    </Track.DecreaseRepeatButton>
+                                    <Track.Thumb>
+                                        <Thumb>
+                                            <Thumb.Template>
+                                                <ControlTemplate TargetType="Thumb">
+                                                    <Border x:Name="thumb"
+                                                            Margin="2,3"
+                                                            Background="{StaticResource BorderLight}"
+                                                            CornerRadius="999"/>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="thumb" Property="Background" Value="{StaticResource AccentSoft}"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Thumb.Template>
+                                        </Thumb>
+                                    </Track.Thumb>
+                                    <Track.IncreaseRepeatButton>
+                                        <RepeatButton Command="ScrollBar.LineRightCommand" Opacity="0" Focusable="False"/>
+                                    </Track.IncreaseRepeatButton>
+                                </Track>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="DarkTextBox" TargetType="TextBox">
@@ -435,6 +525,7 @@
         <Setter Property="Padding" Value="12,9"/>
         <Setter Property="FontSize" Value="12.5"/>
         <Setter Property="MinHeight" Value="40"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
@@ -466,6 +557,7 @@
         <Setter Property="Height" Value="32"/>
         <Setter Property="Foreground" Value="{StaticResource Accent}"/>
         <Setter Property="Background" Value="{StaticResource BgLight}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Slider">
@@ -485,9 +577,21 @@
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
                                             <Grid>
-                                                <Ellipse Fill="{StaticResource TextPrimary}" Stroke="{StaticResource Accent}" StrokeThickness="2"/>
+                                                <Ellipse x:Name="focusRing"
+                                                         Width="26" Height="26"
+                                                         Fill="Transparent"
+                                                         Stroke="{StaticResource Focus}"
+                                                         StrokeThickness="2"
+                                                         Opacity="0"/>
+                                                <Ellipse x:Name="bg" Fill="{StaticResource TextPrimary}" Stroke="{StaticResource Accent}" StrokeThickness="2"/>
                                                 <Ellipse Width="6" Height="6" Fill="{StaticResource Accent}"/>
                                             </Grid>
+                                            <ControlTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding IsKeyboardFocused, RelativeSource={RelativeSource AncestorType=Slider}}" Value="True">
+                                                    <Setter TargetName="focusRing" Property="Opacity" Value="1"/>
+                                                    <Setter TargetName="bg" Property="Stroke" Value="{StaticResource Focus}"/>
+                                                </DataTrigger>
+                                            </ControlTemplate.Triggers>
                                         </ControlTemplate>
                                     </Thumb.Template>
                                 </Thumb>
@@ -548,6 +652,7 @@
         <Setter Property="FontSize" Value="12.5"/>
         <Setter Property="MinHeight" Value="40"/>
         <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItem}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBox">
@@ -665,6 +770,7 @@
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="Padding" Value="16,11"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TabItem">
@@ -698,6 +804,9 @@
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="border" Property="Background" Value="{StaticResource BgMedium}"/>
                             <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource Focus}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5"/>
