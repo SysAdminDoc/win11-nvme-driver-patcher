@@ -34,6 +34,9 @@ public static class ConfigService
             config.RestartDelay = saved.RestartDelay;
             config.IncludeServerKey = saved.IncludeServerKey;
             config.SkipWarnings = saved.SkipWarnings;
+            config.LastRecoveryKitPath = saved.LastRecoveryKitPath;
+            config.LastDiagnosticsPath = saved.LastDiagnosticsPath;
+            config.LastVerificationScriptPath = saved.LastVerificationScriptPath;
         }
         catch { /* Config load best-effort */ }
 
@@ -52,6 +55,9 @@ public static class ConfigService
                 config.RestartDelay,
                 config.IncludeServerKey,
                 config.SkipWarnings,
+                config.LastRecoveryKitPath,
+                config.LastDiagnosticsPath,
+                config.LastVerificationScriptPath,
                 LastRun = DateTime.Now.ToString("o")
             };
             var json = JsonSerializer.Serialize(toSave, JsonOptions);

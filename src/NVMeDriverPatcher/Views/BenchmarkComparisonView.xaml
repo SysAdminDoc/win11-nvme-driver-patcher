@@ -3,52 +3,120 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF">
 
-    <Border Background="#FF111113" CornerRadius="10" Padding="20,16" BorderBrush="#FF1a1a1e" BorderThickness="1">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
         <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <TextBlock Text="Benchmark Comparison"
+                           Style="{StaticResource SectionEyebrow}"/>
+                <TextBlock Text="Compare current results against the previous run to see whether this machine benefited from the driver change."
+                           Margin="0,8,0,0"
+                           Style="{StaticResource BodyCopy}"/>
+                <TextBlock x:Name="BenchmarkContextText"
+                           Margin="0,10,0,0"
+                           Foreground="{StaticResource TextDim}"
+                           FontSize="11"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <Border Grid.Column="1"
+                    Padding="12,10"
+                    Background="{StaticResource BgMedium}"
+                    BorderBrush="{StaticResource Border}"
+                    BorderThickness="1"
+                    CornerRadius="12">
+                <StackPanel>
+                    <TextBlock Text="Runs" Style="{StaticResource SectionEyebrow}" HorizontalAlignment="Right"/>
+                    <TextBlock x:Name="RunCountValue"
+                               Margin="0,6,0,0"
+                               HorizontalAlignment="Right"
+                               Foreground="{StaticResource Accent}"
+                               FontSize="22"
+                               FontWeight="SemiBold"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="1" Margin="0,18,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource InsetCard}">
+                <StackPanel>
+                    <TextBlock Text="4K Random Read" Style="{StaticResource SectionEyebrow}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <TextBlock x:Name="ReadIopsValue"
+                                   Text="-"
+                                   Foreground="{StaticResource Accent}"
+                                   FontSize="28"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text=" IOPS"
+                                   Margin="4,0,0,4"
+                                   VerticalAlignment="Bottom"
+                                   Foreground="{StaticResource TextDim}"
+                                   FontSize="12"/>
+                    </StackPanel>
+                    <TextBlock x:Name="ReadDelta"
+                               Margin="0,8,0,0"
+                               Foreground="{StaticResource TextMuted}"
+                               FontSize="12"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource InsetCard}">
+                <StackPanel>
+                    <TextBlock Text="4K Random Write" Style="{StaticResource SectionEyebrow}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <TextBlock x:Name="WriteIopsValue"
+                                   Text="-"
+                                   Foreground="{StaticResource Yellow}"
+                                   FontSize="28"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text=" IOPS"
+                                   Margin="4,0,0,4"
+                                   VerticalAlignment="Bottom"
+                                   Foreground="{StaticResource TextDim}"
+                                   FontSize="12"/>
+                    </StackPanel>
+                    <TextBlock x:Name="WriteDelta"
+                               Margin="0,8,0,0"
+                               Foreground="{StaticResource TextMuted}"
+                               FontSize="12"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="0,18,0,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="200"/>
+                <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0" Text="BENCHMARK COMPARISON" Foreground="#FF52525b" FontSize="10" FontWeight="Bold" Margin="0,0,0,12"/>
+            <Border Style="{StaticResource InsetCard}">
+                <TextBlock x:Name="BenchmarkSummaryText"
+                           Foreground="{StaticResource TextSecondary}"
+                           FontSize="12"
+                           TextWrapping="Wrap"/>
+            </Border>
 
-            <!-- Summary cards -->
-            <Grid Grid.Row="1" Margin="0,0,0,12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/>
-                </Grid.ColumnDefinitions>
-                <!-- Read IOPS card -->
-                <Border Grid.Column="0" Background="#FF0d0d10" CornerRadius="8" Padding="16,12">
-                    <StackPanel>
-                        <TextBlock Text="4K Random Read" Foreground="#FF71717a" FontSize="10"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                            <TextBlock x:Name="ReadIopsValue" Text="-" Foreground="#FF3b82f6" FontSize="22" FontWeight="Bold"/>
-                            <TextBlock Text=" IOPS" Foreground="#FF52525b" FontSize="12" VerticalAlignment="Bottom" Margin="0,0,0,3"/>
-                        </StackPanel>
-                        <TextBlock x:Name="ReadDelta" Foreground="#FF71717a" FontSize="10" Margin="0,2,0,0"/>
-                    </StackPanel>
-                </Border>
-                <!-- Write IOPS card -->
-                <Border Grid.Column="2" Background="#FF0d0d10" CornerRadius="8" Padding="16,12">
-                    <StackPanel>
-                        <TextBlock Text="4K Random Write" Foreground="#FF71717a" FontSize="10"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                            <TextBlock x:Name="WriteIopsValue" Text="-" Foreground="#FFf59e0b" FontSize="22" FontWeight="Bold"/>
-                            <TextBlock Text=" IOPS" Foreground="#FF52525b" FontSize="12" VerticalAlignment="Bottom" Margin="0,0,0,3"/>
-                        </StackPanel>
-                        <TextBlock x:Name="WriteDelta" Foreground="#FF71717a" FontSize="10" Margin="0,2,0,0"/>
-                    </StackPanel>
-                </Border>
-            </Grid>
-
-            <!-- Chart -->
-            <lvc:CartesianChart x:Name="BenchChart" Grid.Row="2"
-                                Series="{Binding BenchSeries}"
-                                XAxes="{Binding BenchXAxes}"
-                                YAxes="{Binding BenchYAxes}"
-                                TooltipPosition="Hidden"
-                                LegendPosition="Hidden"/>
+            <Border Grid.Row="1" Margin="0,14,0,0" Style="{StaticResource InsetCard}">
+                <lvc:CartesianChart x:Name="BenchChart"
+                                    TooltipPosition="Hidden"
+                                    LegendPosition="Hidden"/>
+            </Border>
         </Grid>
-    </Border>
+    </Grid>
 </UserControl>

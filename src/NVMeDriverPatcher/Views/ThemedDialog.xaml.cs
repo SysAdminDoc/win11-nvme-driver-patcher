@@ -16,6 +16,7 @@ public partial class ThemedDialog : Window
     private ThemedDialog()
     {
         InitializeComponent();
+        Loaded += (_, _) => FocusPrimaryAction();
     }
 
     public static string Show(string message, string title = "NVMe Driver Patcher",
@@ -48,6 +49,15 @@ public partial class ThemedDialog : Window
         };
         var bc = new BrushConverter();
         var iconBrush = (System.Windows.Media.Brush)bc.ConvertFromString(iconColor)!;
+        dlg.DlgEyebrow.Text = icon switch
+        {
+            DialogIcon.Error => "Stop",
+            DialogIcon.Warning => "Warning",
+            DialogIcon.Question => "Confirmation",
+            _ => "Information"
+        };
+        dlg.DlgEyebrow.Foreground = iconBrush;
+        dlg.HeaderAccentBar.Background = iconBrush;
 
         var ellipse = new Ellipse { Width = 28, Height = 28, Fill = iconBrush, Opacity = 0.15 };
         dlg.IconCanvas.Children.Add(ellipse);
@@ -88,5 +98,35 @@ public partial class ThemedDialog : Window
     {
         if (e.LeftButton == MouseButtonState.Pressed)
             DragMove();
+    }
+
+    protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
+    {
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.C)
+        {
+            Clipboard.SetText($"{DlgTitle.Text}{Environment.NewLine}{Environment.NewLine}{DlgMessage.Text}");
+            e.Handled = true;
+            return;
+        }
+
+        base.OnPreviewKeyDown(e);
+    }
+
+    private void FocusPrimaryAction()
+    {
+        if (BtnYes.Visibility == Visibility.Visible)
+        {
+            BtnYes.Focus();
+            return;
+        }
+
+        if (BtnOK.Visibility == Visibility.Visible)
+        {
+            BtnOK.Focus();
+            return;
+        }
+
+        if (BtnNo.Visibility == Visibility.Visible)
+            BtnNo.Focus();
     }
 }

@@ -19,6 +19,8 @@ public partial class App : Application
             return;
         }
 
+        try { Services.DataService.Initialize(); } catch { /* Best-effort local data store */ }
+
         base.OnStartup(e);
     }
 
