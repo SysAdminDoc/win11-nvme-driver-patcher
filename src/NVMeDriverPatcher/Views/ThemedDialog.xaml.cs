@@ -112,11 +112,6 @@ public partial class ThemedDialog : Window
             DragMove();
     }
 
-    protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
-    {
-        base.OnPreviewKeyDown(e);
-    }
-
     private void FocusPrimaryAction()
     {
         if (BtnYes.Visibility == Visibility.Visible)
