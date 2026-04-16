@@ -45,6 +45,30 @@ public static class TuningService
         return profile;
     }
 
+    // Safe bounds for StorNVMe parameters — values outside these can cause BSOD or instability
+    private static readonly Dictionary<string, (int Min, int Max)> ParameterBounds = new()
+    {
+        [TuningProfile.Key_QueueDepth] = (1, 256),
+        [TuningProfile.Key_MaxReadSplit] = (1, 4096),
+        [TuningProfile.Key_MaxWriteSplit] = (1, 4096),
+        [TuningProfile.Key_IoSubmissionQueueCount] = (0, 256),
+        [TuningProfile.Key_IdlePowerTimeout] = (0, 60000),
+        [TuningProfile.Key_StandbyPowerTimeout] = (0, 60000)
+    };
+
+    private static bool ValidateParameter(string name, int value, Action<string>? log = null)
+    {
+        if (ParameterBounds.TryGetValue(name, out var bounds))
+        {
+            if (value < bounds.Min || value > bounds.Max)
+            {
+                log?.Invoke($"  [BLOCKED] {name} = {value} is outside safe range [{bounds.Min}..{bounds.Max}]");
+                return false;
+            }
+        }
+        return true;
+    }
+
     /// <summary>
     /// Applies all non-null values from a TuningProfile to the StorNVMe registry parameters.
     /// Creates the registry key path if it does not exist.
@@ -72,6 +96,7 @@ public static class TuningService
             void WriteIfSet(string name, int? value)
             {
                 if (value is null) return;
+                if (!ValidateParameter(name, value.Value, log)) { failed++; return; }
                 try
                 {
                     key.SetValue(name, value.Value, RegistryValueKind.DWord);
@@ -140,6 +165,8 @@ public static class TuningService
     /// <returns>True if the write succeeded and was verified.</returns>
     public static bool SetParameter(string name, int value)
     {
+        if (!ValidateParameter(name, value)) return false;
+
         try
         {
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);

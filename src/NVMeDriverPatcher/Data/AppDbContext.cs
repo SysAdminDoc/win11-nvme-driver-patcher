@@ -14,7 +14,15 @@ public class AppDbContext : DbContext
             Models.AppConfig.GetWorkingDir(),
             "nvmepatcher.db");
 
-        optionsBuilder.UseSqlite($"Data Source={dbPath}");
+        var connStr = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+        {
+            DataSource = dbPath,
+            Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadWriteCreate,
+            Cache = Microsoft.Data.Sqlite.SqliteCacheMode.Shared,
+            DefaultTimeout = 5
+        }.ToString();
+
+        optionsBuilder.UseSqlite(connStr);
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -40,5 +48,6 @@ public class AppDbContext : DbContext
     {
         using var db = new AppDbContext();
         db.Database.EnsureCreated();
+        db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
     }
 }
