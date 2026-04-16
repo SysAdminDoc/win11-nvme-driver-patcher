@@ -63,7 +63,7 @@ public partial class BenchmarkComparisonView : UserControl
             {
                 Values = readValues,
                 Name = "Read IOPS",
-                Fill = new SolidColorPaint(new SKColor(59, 130, 246)),
+                Fill = new SolidColorPaint(new SKColor(105, 174, 255)),
                 MaxBarWidth = 24,
                 Padding = 4
             },
@@ -71,7 +71,7 @@ public partial class BenchmarkComparisonView : UserControl
             {
                 Values = writeValues,
                 Name = "Write IOPS",
-                Fill = new SolidColorPaint(new SKColor(245, 158, 11)),
+                Fill = new SolidColorPaint(new SKColor(255, 200, 108)),
                 MaxBarWidth = 24,
                 Padding = 4
             }
@@ -82,9 +82,9 @@ public partial class BenchmarkComparisonView : UserControl
             new Axis
             {
                 Labels = labels,
-                LabelsPaint = new SolidColorPaint(new SKColor(113, 113, 122)),
+                LabelsPaint = new SolidColorPaint(new SKColor(131, 147, 173)),
                 TextSize = 10,
-                SeparatorsPaint = new SolidColorPaint(new SKColor(39, 39, 42))
+                SeparatorsPaint = new SolidColorPaint(new SKColor(34, 49, 70))
             }
         };
 
@@ -92,9 +92,9 @@ public partial class BenchmarkComparisonView : UserControl
         {
             new Axis
             {
-                LabelsPaint = new SolidColorPaint(new SKColor(113, 113, 122)),
+                LabelsPaint = new SolidColorPaint(new SKColor(131, 147, 173)),
                 TextSize = 10,
-                SeparatorsPaint = new SolidColorPaint(new SKColor(26, 26, 30)),
+                SeparatorsPaint = new SolidColorPaint(new SKColor(34, 49, 70)),
                 MinLimit = 0
             }
         };
@@ -111,8 +111,8 @@ public partial class BenchmarkComparisonView : UserControl
     {
         var bc = new System.Windows.Media.BrushConverter();
         return current >= prev
-            ? (System.Windows.Media.SolidColorBrush)bc.ConvertFromString("#FF22c55e")!
-            : (System.Windows.Media.SolidColorBrush)bc.ConvertFromString("#FFef4444")!;
+            ? (System.Windows.Media.SolidColorBrush)bc.ConvertFromString("#FF50DD9D")!
+            : (System.Windows.Media.SolidColorBrush)bc.ConvertFromString("#FFFF8585")!;
     }
 
     private static string FormatTimestamp(string rawTimestamp)
