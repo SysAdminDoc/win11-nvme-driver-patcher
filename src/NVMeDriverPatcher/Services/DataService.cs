@@ -120,4 +120,14 @@ public static class DataService
             .OrderBy(t => t.Timestamp)
             .ToList();
     }
+
+    public static TelemetryRecord? GetLatestTelemetry(int driveNumber)
+    {
+        using var db = new AppDbContext();
+
+        return db.Telemetry
+            .Where(t => t.DriveNumber == driveNumber)
+            .OrderByDescending(t => t.Timestamp)
+            .FirstOrDefault();
+    }
 }

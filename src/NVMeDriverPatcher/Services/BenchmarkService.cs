@@ -197,6 +197,13 @@ public static class BenchmarkService
             File.WriteAllText(benchFile, JsonSerializer.Serialize(existing, JsonOptions));
         }
         catch { }
+
+        try
+        {
+            if (result.Read.IOPS > 0 || result.Write.IOPS > 0)
+                DataService.SaveBenchmark(result);
+        }
+        catch { }
     }
 
     public static List<BenchmarkResult> GetHistory(string workingDir)
