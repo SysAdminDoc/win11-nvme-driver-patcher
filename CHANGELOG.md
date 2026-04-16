@@ -2,7 +2,7 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
-## [v4.0.0] - %Y->- (HEAD -> main, origin/main, origin/HEAD)
+## [v4.0.0] - 2026-04-15
 
 - NVMe Driver Patcher v4.0.0 -- C# WPF port with telemetry, tuning, and charts
 - Speed up preflight: drop CIM cache, use fast service checks, lazy health
