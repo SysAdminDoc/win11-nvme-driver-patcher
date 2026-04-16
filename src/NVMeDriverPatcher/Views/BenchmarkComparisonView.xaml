@@ -7,6 +7,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -17,9 +18,8 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel>
-                <TextBlock Text="Benchmark Comparison"
-                           Style="{StaticResource SectionEyebrow}"/>
-                <TextBlock Text="Compare current results against the previous run to see whether this machine benefited from the driver change."
+                <TextBlock Text="Benchmark Comparison" Style="{StaticResource SectionEyebrow}"/>
+                <TextBlock Text="Compare the current result against the previous run so the patch decision stays grounded in this machine’s actual behavior."
                            Margin="0,8,0,0"
                            Style="{StaticResource BodyCopy}"/>
                 <TextBlock x:Name="BenchmarkContextText"
@@ -30,93 +30,94 @@
             </StackPanel>
 
             <Border Grid.Column="1"
-                    Padding="12,10"
+                    Padding="14,12"
                     Background="{StaticResource BgMedium}"
-                    BorderBrush="{StaticResource Border}"
+                    BorderBrush="{StaticResource BorderLight}"
                     BorderThickness="1"
-                    CornerRadius="12">
+                    CornerRadius="14">
                 <StackPanel>
-                    <TextBlock Text="Runs" Style="{StaticResource SectionEyebrow}" HorizontalAlignment="Right"/>
+                    <TextBlock Text="Saved Runs" Style="{StaticResource SectionEyebrow}" HorizontalAlignment="Right"/>
                     <TextBlock x:Name="RunCountValue"
-                               Margin="0,6,0,0"
+                               Margin="0,8,0,0"
                                HorizontalAlignment="Right"
                                Foreground="{StaticResource Accent}"
-                               FontSize="22"
+                               FontSize="24"
                                FontWeight="SemiBold"/>
                 </StackPanel>
             </Border>
         </Grid>
 
-        <Grid Grid.Row="1" Margin="0,18,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition/>
-                <ColumnDefinition Width="12"/>
-                <ColumnDefinition/>
-            </Grid.ColumnDefinitions>
-
-            <Border Grid.Column="0" Style="{StaticResource InsetCard}">
+        <UniformGrid Grid.Row="1" Columns="2" Margin="0,18,0,0">
+            <Border Style="{StaticResource MetricCard}" Margin="0,0,12,0">
                 <StackPanel>
                     <TextBlock Text="4K Random Read" Style="{StaticResource SectionEyebrow}"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                         <TextBlock x:Name="ReadIopsValue"
                                    Text="-"
                                    Foreground="{StaticResource Accent}"
-                                   FontSize="28"
+                                   FontSize="30"
                                    FontWeight="SemiBold"/>
                         <TextBlock Text=" IOPS"
-                                   Margin="4,0,0,4"
+                                   Margin="6,0,0,4"
                                    VerticalAlignment="Bottom"
                                    Foreground="{StaticResource TextDim}"
                                    FontSize="12"/>
                     </StackPanel>
                     <TextBlock x:Name="ReadDelta"
-                               Margin="0,8,0,0"
+                               Margin="0,10,0,0"
                                Foreground="{StaticResource TextMuted}"
-                               FontSize="12"/>
+                               FontSize="12"
+                               TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
 
-            <Border Grid.Column="2" Style="{StaticResource InsetCard}">
+            <Border Style="{StaticResource MetricCard}">
                 <StackPanel>
                     <TextBlock Text="4K Random Write" Style="{StaticResource SectionEyebrow}"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                         <TextBlock x:Name="WriteIopsValue"
                                    Text="-"
                                    Foreground="{StaticResource Yellow}"
-                                   FontSize="28"
+                                   FontSize="30"
                                    FontWeight="SemiBold"/>
                         <TextBlock Text=" IOPS"
-                                   Margin="4,0,0,4"
+                                   Margin="6,0,0,4"
                                    VerticalAlignment="Bottom"
                                    Foreground="{StaticResource TextDim}"
                                    FontSize="12"/>
                     </StackPanel>
                     <TextBlock x:Name="WriteDelta"
-                               Margin="0,8,0,0"
+                               Margin="0,10,0,0"
                                Foreground="{StaticResource TextMuted}"
-                               FontSize="12"/>
+                               FontSize="12"
+                               TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
-        </Grid>
+        </UniformGrid>
 
-        <Grid Grid.Row="2" Margin="0,18,0,0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <Border Style="{StaticResource InsetCard}">
+        <Border Grid.Row="2" Margin="0,18,0,0" Style="{StaticResource InsetCard}">
+            <StackPanel>
+                <TextBlock Text="Interpretation" Style="{StaticResource SectionEyebrow}"/>
                 <TextBlock x:Name="BenchmarkSummaryText"
+                           Margin="0,8,0,0"
                            Foreground="{StaticResource TextSecondary}"
                            FontSize="12"
                            TextWrapping="Wrap"/>
-            </Border>
+            </StackPanel>
+        </Border>
 
-            <Border Grid.Row="1" Margin="0,14,0,0" Style="{StaticResource InsetCard}">
+        <Border Grid.Row="3" Margin="0,18,0,0" Style="{StaticResource InsetCard}">
+            <StackPanel>
+                <TextBlock Text="Trend View" Style="{StaticResource SectionEyebrow}"/>
+                <TextBlock Text="Use the chart to sanity-check whether the latest run moved in the direction you expected instead of reacting to one headline number."
+                           Margin="0,8,0,0"
+                           Style="{StaticResource BodyCopy}"/>
                 <lvc:CartesianChart x:Name="BenchChart"
+                                    Height="260"
+                                    Margin="0,16,0,0"
                                     TooltipPosition="Hidden"
                                     LegendPosition="Hidden"/>
-            </Border>
-        </Grid>
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>

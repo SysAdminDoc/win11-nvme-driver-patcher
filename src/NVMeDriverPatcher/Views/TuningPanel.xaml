@@ -3,29 +3,22 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Margin="0,0,4,0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-
+        <StackPanel Margin="0,0,4,0">
             <StackPanel>
                 <TextBlock Text="StorNVMe Tuning" Style="{StaticResource SectionEyebrow}"/>
-                <TextBlock Text="Adjust queue behavior and power-management knobs when you want to go beyond the default patch experience."
+                <TextBlock Text="Adjust queue behavior and power-management controls only when you want to go beyond the default patch experience. Treat each change like an experiment you should be able to explain and verify."
                            Margin="0,8,0,0"
                            Style="{StaticResource BodyCopy}"/>
             </StackPanel>
 
-            <Border Grid.Row="1" Margin="0,18,0,0" Style="{StaticResource InsetCard}">
+            <Border Margin="0,18,0,0" Style="{StaticResource InsetCard}">
                 <StackPanel>
                     <TextBlock Text="Preset Profiles" Style="{StaticResource SectionEyebrow}"/>
-                    <TextBlock Text="Start with a preset so the tuning intent is clear, then adjust only what this machine actually needs."
+                    <TextBlock Text="Start with a preset so the tuning intent is obvious, then move into custom values only when this machine needs something more specific."
                                Margin="0,8,0,0"
                                Style="{StaticResource BodyCopy}"/>
 
-                    <WrapPanel Margin="0,14,0,0">
+                    <WrapPanel Margin="0,16,0,0">
                         <Button x:Name="BtnPerformance"
                                 Content="Performance"
                                 Click="Profile_Click"
@@ -46,18 +39,18 @@
                                 Margin="0,0,0,10"/>
                     </WrapPanel>
 
-                    <Border Margin="0,6,0,0"
-                            Padding="16,14"
+                    <Border Margin="0,8,0,0"
+                            Padding="18,16"
                             Background="{StaticResource AccentBg}"
                             BorderBrush="{StaticResource BorderLight}"
                             BorderThickness="1"
-                            CornerRadius="14">
+                            CornerRadius="16">
                         <StackPanel>
                             <TextBlock Text="Preset Summary" Style="{StaticResource SectionEyebrow}"/>
                             <TextBlock x:Name="ProfileTitleText"
                                        Margin="0,8,0,0"
                                        Foreground="{StaticResource Accent}"
-                                       FontSize="18"
+                                       FontSize="20"
                                        FontWeight="SemiBold"/>
                             <TextBlock x:Name="ProfileDescriptionText"
                                        Margin="0,8,0,0"
@@ -65,33 +58,33 @@
                             <TextBlock x:Name="ProfileImpactText"
                                        Margin="0,10,0,0"
                                        Foreground="{StaticResource TextDim}"
-                                       FontSize="11"
+                                       FontSize="11.5"
                                        TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="2" Margin="0,18,0,0" Style="{StaticResource InsetCard}">
+            <Border Margin="0,18,0,0" Style="{StaticResource InsetCard}">
                 <StackPanel>
                     <TextBlock Text="Custom Parameters" Style="{StaticResource SectionEyebrow}"/>
-                    <TextBlock Text="Each override writes directly to the StorNVMe registry parameters. Keep changes deliberate and validate after reboot."
+                    <TextBlock Text="Each override writes directly to StorNVMe registry parameters. Make changes one dimension at a time so it stays obvious what helped, what hurt, and what should be rolled back."
                                Margin="0,8,0,0"
                                Style="{StaticResource BodyCopy}"/>
 
                     <StackPanel Margin="0,18,0,0">
-                        <Grid Margin="0,0,0,16">
+                        <Grid Margin="0,0,0,18">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="220"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="86"/>
+                                <ColumnDefinition Width="92"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Text="Queue Depth" Foreground="{StaticResource TextSecondary}" FontWeight="SemiBold"/>
-                                <TextBlock Text="Higher values increase outstanding I/O for throughput-heavy systems."
+                                <TextBlock Text="Higher values increase outstanding I/O and usually favor throughput-heavy desktops."
                                            Margin="0,4,0,0"
                                            Foreground="{StaticResource TextDim}"
-                                           FontSize="11"
+                                           FontSize="11.5"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                             <Slider x:Name="SliderQueueDepth"
@@ -111,18 +104,18 @@
                                        FontWeight="SemiBold"/>
                         </Grid>
 
-                        <Grid Margin="0,0,0,16">
+                        <Grid Margin="0,0,0,18">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="220"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="86"/>
+                                <ColumnDefinition Width="92"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Text="Max Read Split" Foreground="{StaticResource TextSecondary}" FontWeight="SemiBold"/>
                                 <TextBlock Text="Larger reads favor throughput while smaller splits can improve latency balance."
                                            Margin="0,4,0,0"
                                            Foreground="{StaticResource TextDim}"
-                                           FontSize="11"
+                                           FontSize="11.5"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                             <Slider x:Name="SliderReadSplit"
@@ -142,18 +135,18 @@
                                        FontWeight="SemiBold"/>
                         </Grid>
 
-                        <Grid Margin="0,0,0,16">
+                        <Grid Margin="0,0,0,18">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="220"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="86"/>
+                                <ColumnDefinition Width="92"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Text="Max Write Split" Foreground="{StaticResource TextSecondary}" FontWeight="SemiBold"/>
-                                <TextBlock Text="Use larger write batches for desktop burst performance and smaller ones for tighter control."
+                                <TextBlock Text="Use larger write batches for burst throughput and smaller ones for tighter control."
                                            Margin="0,4,0,0"
                                            Foreground="{StaticResource TextDim}"
-                                           FontSize="11"
+                                           FontSize="11.5"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                             <Slider x:Name="SliderWriteSplit"
@@ -173,18 +166,18 @@
                                        FontWeight="SemiBold"/>
                         </Grid>
 
-                        <Grid Margin="0,0,0,16">
+                        <Grid Margin="0,0,0,18">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="220"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="86"/>
+                                <ColumnDefinition Width="92"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Text="I/O Submission Queues" Foreground="{StaticResource TextSecondary}" FontWeight="SemiBold"/>
                                 <TextBlock Text="0 keeps Windows automatic queue allocation. Override it only when you have a clear reason to cap or expand parallelism."
                                            Margin="0,4,0,0"
                                            Foreground="{StaticResource TextDim}"
-                                           FontSize="11"
+                                           FontSize="11.5"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                             <Slider x:Name="SliderQueueCount"
@@ -204,18 +197,18 @@
                                        FontWeight="SemiBold"/>
                         </Grid>
 
-                        <Grid Margin="0,0,0,16">
+                        <Grid Margin="0,0,0,18">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="220"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="86"/>
+                                <ColumnDefinition Width="92"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Text="Idle Power Timeout" Foreground="{StaticResource TextSecondary}" FontWeight="SemiBold"/>
-                                <TextBlock Text="0 disables idle power-down. Lower values enter low-power states sooner, while higher values stay performance-biased."
+                                <TextBlock Text="0 disables idle power-down. Lower values favor faster power saving, while higher values stay more performance-biased."
                                            Margin="0,4,0,0"
                                            Foreground="{StaticResource TextDim}"
-                                           FontSize="11"
+                                           FontSize="11.5"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                             <Slider x:Name="SliderIdlePowerTimeout"
@@ -237,16 +230,16 @@
 
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="220"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="86"/>
+                                <ColumnDefinition Width="92"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Text="Standby Power Timeout" Foreground="{StaticResource TextSecondary}" FontWeight="SemiBold"/>
-                                <TextBlock Text="0 leaves deeper standby disabled. Higher values can save more power, but they may add wake latency on some controllers."
+                                <TextBlock Text="0 keeps deeper standby disabled. Higher values can save more power, but they may add wake latency on some controllers."
                                            Margin="0,4,0,0"
                                            Foreground="{StaticResource TextDim}"
-                                           FontSize="11"
+                                           FontSize="11.5"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                             <Slider x:Name="SliderStandbyPowerTimeout"
@@ -268,12 +261,12 @@
                     </StackPanel>
 
                     <Border Margin="0,18,0,0"
-                            Padding="14,12"
+                            Padding="16,14"
                             Background="{StaticResource YellowBg}"
                             BorderBrush="{StaticResource Border}"
                             BorderThickness="1"
-                            CornerRadius="12">
-                        <TextBlock Text="Queue count 0 means automatic queue allocation, and timeout values of 0 disable that power-saving path. Benchmark after each reboot so you can tell whether a change actually helped."
+                            CornerRadius="14">
+                        <TextBlock Text="Queue count 0 means automatic queue allocation, and timeout values of 0 disable that power-saving path. Benchmark after each reboot so the change earns its keep."
                                    Foreground="{StaticResource TextPrimary}"
                                    FontSize="12"
                                    TextWrapping="Wrap"/>
@@ -281,70 +274,77 @@
                 </StackPanel>
             </Border>
 
-            <StackPanel Grid.Row="3" Margin="0,18,0,0">
-                <Border Margin="0,0,0,14"
-                        Padding="16,14"
-                        Style="{StaticResource InsetCard}">
-                    <Grid>
+            <Border Margin="0,18,0,0" Style="{StaticResource InsetCard}">
+                <StackPanel>
+                    <TextBlock Text="Apply Plan" Style="{StaticResource SectionEyebrow}"/>
+                    <TextBlock Text="Review what is active now, what will be written next, and whether the change is still small enough to understand after a reboot."
+                               Margin="0,8,0,0"
+                               Style="{StaticResource BodyCopy}"/>
+
+                    <Grid Margin="0,18,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition/>
                             <ColumnDefinition Width="14"/>
                             <ColumnDefinition/>
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel>
-                            <TextBlock Text="Current Baseline" Style="{StaticResource SectionEyebrow}"/>
-                            <TextBlock x:Name="CurrentConfigText"
-                                       Margin="0,8,0,0"
-                                       Foreground="{StaticResource TextSecondary}"
-                                       FontSize="12"
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
+                        <Border Style="{StaticResource MetricCard}">
+                            <StackPanel>
+                                <TextBlock Text="Current Baseline" Style="{StaticResource SectionEyebrow}"/>
+                                <TextBlock x:Name="CurrentConfigText"
+                                           Margin="0,8,0,0"
+                                           Foreground="{StaticResource TextSecondary}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
 
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="Pending Write" Style="{StaticResource SectionEyebrow}"/>
-                            <TextBlock x:Name="PendingConfigText"
-                                       Margin="0,8,0,0"
-                                       Foreground="{StaticResource TextSecondary}"
-                                       FontSize="12"
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
+                        <Border Grid.Column="2" Style="{StaticResource MetricCard}">
+                            <StackPanel>
+                                <TextBlock Text="Pending Write" Style="{StaticResource SectionEyebrow}"/>
+                                <TextBlock x:Name="PendingConfigText"
+                                           Margin="0,8,0,0"
+                                           Foreground="{StaticResource TextSecondary}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
                     </Grid>
-                </Border>
 
-                <StackPanel Orientation="Horizontal">
-                    <Button x:Name="BtnApplyTuning"
-                            Content="Apply Tuning"
-                            Click="ApplyTuning_Click"
-                            Style="{StaticResource ActionButton}"
-                            Margin="0,0,10,0"/>
-                    <Button x:Name="BtnResetTuning"
-                            Content="Reset to Defaults"
-                            Click="ResetTuning_Click"
-                            Style="{StaticResource OutlinedActionButton}"/>
-                </StackPanel>
-
-                <Border x:Name="TuningStatusCard"
-                        Margin="0,14,0,0"
-                        Padding="16,14"
-                        Style="{StaticResource InsetCard}">
-                    <StackPanel>
-                        <TextBlock Text="Registry Write Status" Style="{StaticResource SectionEyebrow}"/>
-                        <TextBlock x:Name="TuningStatus"
-                                   Margin="0,8,0,0"
-                                   Foreground="{StaticResource TextDim}"
-                                   FontSize="13"
-                                   FontWeight="SemiBold"
-                                   TextWrapping="Wrap"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+                        <Button x:Name="BtnApplyTuning"
+                                Content="Apply Tuning"
+                                Click="ApplyTuning_Click"
+                                Style="{StaticResource ActionButton}"
+                                Margin="0,0,10,0"/>
+                        <Button x:Name="BtnResetTuning"
+                                Content="Reset to Defaults"
+                                Click="ResetTuning_Click"
+                                Style="{StaticResource OutlinedActionButton}"/>
                     </StackPanel>
-                </Border>
 
-                <TextBlock Text="Changes take effect after a reboot. Performance favors throughput, Balanced stays closest to Windows defaults, and Power Save is better suited to battery-sensitive systems."
-                           Margin="0,12,0,0"
-                           Foreground="{StaticResource TextDim}"
-                           FontSize="11"
-                           TextWrapping="Wrap"/>
-            </StackPanel>
-        </Grid>
+                    <Border x:Name="TuningStatusCard"
+                            Margin="0,16,0,0"
+                            Padding="16,14"
+                            Style="{StaticResource InsetCard}">
+                        <StackPanel>
+                            <TextBlock Text="Registry Write Status" Style="{StaticResource SectionEyebrow}"/>
+                            <TextBlock x:Name="TuningStatus"
+                                       Margin="0,8,0,0"
+                                       Foreground="{StaticResource TextDim}"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Changes take effect after a reboot. Performance favors throughput, Balanced stays closest to Windows defaults, and Power Save is better suited to battery-sensitive systems."
+                               Margin="0,12,0,0"
+                               Foreground="{StaticResource TextDim}"
+                               FontSize="11.5"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
     </ScrollViewer>
 </UserControl>
