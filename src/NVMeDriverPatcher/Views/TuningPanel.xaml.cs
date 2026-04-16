@@ -62,6 +62,9 @@ public partial class TuningPanel : UserControl
 
     private TuningProfile CreateProfileFromSliders()
     {
+        if (!AreControlsReady())
+            return TuningProfile.Balanced;
+
         return new TuningProfile
         {
             Name = "Custom",
@@ -76,6 +79,9 @@ public partial class TuningPanel : UserControl
 
     private void UpdateLabels()
     {
+        if (!AreControlsReady())
+            return;
+
         QueueDepthValue.Text = ((int)SliderQueueDepth.Value).ToString();
         ReadSplitValue.Text = ((int)SliderReadSplit.Value).ToString();
         WriteSplitValue.Text = ((int)SliderWriteSplit.Value).ToString();
@@ -88,7 +94,7 @@ public partial class TuningPanel : UserControl
 
     private void Slider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_suppressEvents)
+        if (_suppressEvents || !IsLoaded || !AreControlsReady())
             return;
 
         UpdateLabels();
@@ -177,6 +183,14 @@ public partial class TuningPanel : UserControl
 
     private void UpdateProfileSummary()
     {
+        if (!AreControlsReady()
+            || ProfileTitleText is null
+            || ProfileDescriptionText is null
+            || ProfileImpactText is null)
+        {
+            return;
+        }
+
         var profile = CreateProfileFromSliders();
         var matchedPreset = FindMatchingPreset(profile);
 
@@ -203,6 +217,14 @@ public partial class TuningPanel : UserControl
 
     private void UpdateChangeSummary()
     {
+        if (!AreControlsReady()
+            || CurrentConfigText is null
+            || PendingConfigText is null
+            || BtnApplyTuning is null)
+        {
+            return;
+        }
+
         var pendingProfile = CreateProfileFromSliders();
         int changedSettingCount = CountDifferences(_loadedProfile, pendingProfile);
         var baselinePreset = FindMatchingPreset(_loadedProfile);
@@ -239,9 +261,9 @@ public partial class TuningPanel : UserControl
 
     private void SetButtonState(System.Windows.Controls.Button button, bool isActive)
     {
-        button.Background = ResolveBrush(isActive ? "AccentBg" : "BgMedium", isActive ? "#FF0C2D5E" : "#FF131318");
-        button.BorderBrush = ResolveBrush(isActive ? "Accent" : "Border", isActive ? "#FF60A5FA" : "#FF25252C");
-        button.Foreground = ResolveBrush(isActive ? "Accent" : "TextSecondary", isActive ? "#FF60A5FA" : "#FFD4D4D8");
+        button.Background = ResolveBrush(isActive ? "AccentBg" : "BgMedium", isActive ? "#FF102845" : "#FF131C29");
+        button.BorderBrush = ResolveBrush(isActive ? "Accent" : "Border", isActive ? "#FF69AEFF" : "#FF213146");
+        button.Foreground = ResolveBrush(isActive ? "Accent" : "TextSecondary", isActive ? "#FF69AEFF" : "#FFD9E4F4");
     }
 
     private void SetStatus(string message, string tone)
@@ -250,29 +272,29 @@ public partial class TuningPanel : UserControl
 
         TuningStatus.Foreground = tone switch
         {
-            "success" => ResolveBrush("Green", "#FF22C55E"),
-            "warning" => ResolveBrush("Yellow", "#FFF59E0B"),
-            "danger" => ResolveBrush("Red", "#FFEF4444"),
-            "info" => ResolveBrush("Accent", "#FF60A5FA"),
-            _ => ResolveBrush("TextDim", "#FFA1B0C8")
+            "success" => ResolveBrush("Green", "#FF50DD9D"),
+            "warning" => ResolveBrush("Yellow", "#FFFFC86C"),
+            "danger" => ResolveBrush("Red", "#FFFF8585"),
+            "info" => ResolveBrush("Accent", "#FF69AEFF"),
+            _ => ResolveBrush("TextDim", "#FF8393AD")
         };
 
         TuningStatusCard.Background = tone switch
         {
-            "success" => ResolveBrush("GreenBg", "#120B2919"),
-            "warning" => ResolveBrush("YellowBg", "#14F59E0B"),
-            "danger" => ResolveBrush("RedBg", "#14EF4444"),
-            "info" => ResolveBrush("AccentBg", "#180C2D5E"),
-            _ => ResolveBrush("SurfaceInset", "#FF0F1014")
+            "success" => ResolveBrush("GreenBg", "#FF13392C"),
+            "warning" => ResolveBrush("YellowBg", "#FF3A2A11"),
+            "danger" => ResolveBrush("RedBg", "#FF3A1A1D"),
+            "info" => ResolveBrush("AccentBg", "#FF102845"),
+            _ => ResolveBrush("SurfaceInset", "#FF09111B")
         };
 
         TuningStatusCard.BorderBrush = tone switch
         {
-            "success" => ResolveBrush("Green", "#FF22C55E"),
-            "warning" => ResolveBrush("Yellow", "#FFF59E0B"),
-            "danger" => ResolveBrush("Red", "#FFEF4444"),
-            "info" => ResolveBrush("Accent", "#FF60A5FA"),
-            _ => ResolveBrush("Border", "#FF25252C")
+            "success" => ResolveBrush("Green", "#FF50DD9D"),
+            "warning" => ResolveBrush("Yellow", "#FFFFC86C"),
+            "danger" => ResolveBrush("Red", "#FFFF8585"),
+            "info" => ResolveBrush("Accent", "#FF69AEFF"),
+            _ => ResolveBrush("Border", "#FF213146")
         };
     }
 
@@ -280,6 +302,22 @@ public partial class TuningPanel : UserControl
     {
         return TryFindResource(resourceKey) as Brush
             ?? (Brush)BrushConverter.ConvertFromString(fallbackHex)!;
+    }
+
+    private bool AreControlsReady()
+    {
+        return SliderQueueDepth is not null
+            && SliderReadSplit is not null
+            && SliderWriteSplit is not null
+            && SliderQueueCount is not null
+            && SliderIdlePowerTimeout is not null
+            && SliderStandbyPowerTimeout is not null
+            && QueueDepthValue is not null
+            && ReadSplitValue is not null
+            && WriteSplitValue is not null
+            && QueueCountValue is not null
+            && IdlePowerValue is not null
+            && StandbyPowerValue is not null;
     }
 
     private string BuildPendingStatusMessage()

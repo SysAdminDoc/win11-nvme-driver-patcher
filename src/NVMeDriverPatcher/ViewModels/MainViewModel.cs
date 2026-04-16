@@ -33,7 +33,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _buttonsEnabled;
     [ObservableProperty] private bool _applyEnabled;
     [ObservableProperty] private bool _removeEnabled;
-    [ObservableProperty] private string _applyButtonText = "APPLY PATCH";
+    [ObservableProperty] private string _applyButtonText = "Apply Patch";
     [ObservableProperty] private int _progressValue;
     [ObservableProperty] private string _progressText = "";
     [ObservableProperty] private bool _progressVisible;
@@ -396,30 +396,30 @@ public partial class MainViewModel : ObservableObject
 
         if (status.Applied)
         {
-            StatusText = "Patch Applied";
+            StatusText = "Patch applied";
             StatusColor = "#FF22c55e";
-            ApplyButtonText = "REINSTALL";
+            ApplyButtonText = "Reinstall Patch";
             RemoveEnabled = true;
         }
         else if (status.Partial)
         {
-            StatusText = $"Partial ({status.Count}/{status.Total})";
+            StatusText = $"Patch incomplete ({status.Count}/{status.Total})";
             StatusColor = "#FFf59e0b";
-            ApplyButtonText = "REPAIR PATCH";
+            ApplyButtonText = "Repair Patch";
             RemoveEnabled = true;
         }
         else
         {
-            StatusText = "Not Applied";
+            StatusText = "Not applied";
             StatusColor = "#FF71717a";
-            ApplyButtonText = "APPLY PATCH";
+            ApplyButtonText = "Apply Patch";
             RemoveEnabled = false;
         }
 
         if (_preflight?.NativeNVMeStatus?.IsActive == true)
             DriverLabelText = "Active: nvmedisk.sys (Native NVMe)";
         else if (_preflight?.DriverInfo is not null)
-            DriverLabelText = $"Driver: {_preflight.DriverInfo.CurrentDriver}";
+            DriverLabelText = $"Current driver: {_preflight.DriverInfo.CurrentDriver}";
     }
 
     private void UpdateOverviewSummary()
