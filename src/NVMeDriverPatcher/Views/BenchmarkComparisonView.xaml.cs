@@ -18,6 +18,9 @@ public partial class BenchmarkComparisonView : UserControl
     {
         if (history.Count == 0)
         {
+            RunCountValue.Text = "0";
+            BenchmarkContextText.Text = "No benchmark runs recorded yet.";
+            BenchmarkSummaryText.Text = "Capture a baseline before you change drivers, then run the benchmark again afterward to validate the outcome on this exact machine.";
             ReadIopsValue.Text = "-";
             WriteIopsValue.Text = "-";
             ReadDelta.Text = "";
@@ -27,6 +30,8 @@ public partial class BenchmarkComparisonView : UserControl
         }
 
         var latest = history[^1];
+        RunCountValue.Text = history.Count.ToString();
+        BenchmarkContextText.Text = $"Latest run: {latest.Label} • {FormatTimestamp(latest.Timestamp)}";
         ReadIopsValue.Text = latest.Read.IOPS.ToString("N0");
         WriteIopsValue.Text = latest.Write.IOPS.ToString("N0");
 
@@ -37,9 +42,18 @@ public partial class BenchmarkComparisonView : UserControl
             ReadDelta.Foreground = DeltaBrush(prev.Read.IOPS, latest.Read.IOPS);
             WriteDelta.Text = FormatDelta(prev.Write.IOPS, latest.Write.IOPS);
             WriteDelta.Foreground = DeltaBrush(prev.Write.IOPS, latest.Write.IOPS);
+            BenchmarkSummaryText.Text = $"Comparing {latest.Label} against the previous run shows whether the most recent change helped sustained 4K random performance or simply shifted the tradeoff.";
+        }
+        else
+        {
+            ReadDelta.Text = "Baseline captured";
+            ReadDelta.Foreground = DeltaBrush(1, 1);
+            WriteDelta.Text = "Run another benchmark after a driver change to compare.";
+            WriteDelta.Foreground = DeltaBrush(1, 1);
+            BenchmarkSummaryText.Text = "This first run is your baseline. Capture another run after applying or removing the patch so the comparison view can show direction, not just raw numbers.";
         }
 
-        var labels = history.Select(h => h.Label).ToArray();
+        var labels = history.Select((h, index) => $"{h.Label}\n{BuildAxisSubLabel(h.Timestamp, index)}").ToArray();
         var readValues = history.Select(h => h.Read.IOPS).ToArray();
         var writeValues = history.Select(h => h.Write.IOPS).ToArray();
 
@@ -90,7 +104,7 @@ public partial class BenchmarkComparisonView : UserControl
     {
         if (prev <= 0) return "";
         var pct = Math.Round((current - prev) / prev * 100, 1);
-        return $"vs prev: {(pct >= 0 ? "+" : "")}{pct}%";
+        return $"vs previous run: {(pct >= 0 ? "+" : "")}{pct}%";
     }
 
     private static System.Windows.Media.SolidColorBrush DeltaBrush(double prev, double current)
@@ -99,5 +113,19 @@ public partial class BenchmarkComparisonView : UserControl
         return current >= prev
             ? (System.Windows.Media.SolidColorBrush)bc.ConvertFromString("#FF22c55e")!
             : (System.Windows.Media.SolidColorBrush)bc.ConvertFromString("#FFef4444")!;
+    }
+
+    private static string FormatTimestamp(string rawTimestamp)
+    {
+        return DateTime.TryParse(rawTimestamp, out var timestamp)
+            ? timestamp.ToString("g")
+            : "time unavailable";
+    }
+
+    private static string BuildAxisSubLabel(string rawTimestamp, int index)
+    {
+        return DateTime.TryParse(rawTimestamp, out var timestamp)
+            ? timestamp.ToString("MM/dd HH:mm")
+            : $"Run {index + 1}";
     }
 }

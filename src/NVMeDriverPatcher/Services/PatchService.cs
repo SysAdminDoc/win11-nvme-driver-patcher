@@ -28,6 +28,7 @@ public static class PatchService
     {
         var result = new PatchOperationResult();
         result.BeforeSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
+        try { DataService.SaveSnapshot(result.BeforeSnapshot, "Before patch install", isPrePatch: true); } catch { }
 
         log?.Invoke("========================================");
         log?.Invoke("STARTING PATCH INSTALLATION");
@@ -183,6 +184,16 @@ public static class PatchService
 
         progress?.Invoke(0, "");
         result.AfterSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
+        try
+        {
+            var description = result.Success
+                ? "After patch install"
+                : result.WasRolledBack
+                    ? "After failed install rollback"
+                    : "After patch install attempt";
+            DataService.SaveSnapshot(result.AfterSnapshot, description, isPrePatch: false);
+        }
+        catch { }
         return result;
     }
 
@@ -195,6 +206,7 @@ public static class PatchService
     {
         var result = new PatchOperationResult();
         result.BeforeSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
+        try { DataService.SaveSnapshot(result.BeforeSnapshot, "Before patch removal", isPrePatch: false); } catch { }
 
         log?.Invoke("========================================");
         log?.Invoke("STARTING PATCH REMOVAL");
@@ -290,6 +302,7 @@ public static class PatchService
 
         progress?.Invoke(0, "");
         result.AfterSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
+        try { DataService.SaveSnapshot(result.AfterSnapshot, "After patch removal", isPrePatch: true); } catch { }
         return result;
     }
 
