@@ -19,22 +19,29 @@ public static class DataService
 
     public static void SaveBenchmark(BenchmarkResult result)
     {
-        using var db = new AppDbContext();
-
-        var record = new BenchmarkRecord
+        try
         {
-            Label = result.Label,
-            Timestamp = DateTime.TryParse(result.Timestamp, out var ts) ? ts : DateTime.Now,
-            ReadIOPS = result.Read.IOPS,
-            ReadThroughputMBs = result.Read.ThroughputMBs,
-            ReadLatencyMs = result.Read.AvgLatencyMs,
-            WriteIOPS = result.Write.IOPS,
-            WriteThroughputMBs = result.Write.ThroughputMBs,
-            WriteLatencyMs = result.Write.AvgLatencyMs
-        };
+            using var db = new AppDbContext();
 
-        db.Benchmarks.Add(record);
-        db.SaveChanges();
+            var record = new BenchmarkRecord
+            {
+                Label = result.Label,
+                Timestamp = DateTime.TryParse(result.Timestamp, out var ts) ? ts : DateTime.Now,
+                ReadIOPS = result.Read.IOPS,
+                ReadThroughputMBs = result.Read.ThroughputMBs,
+                ReadLatencyMs = result.Read.AvgLatencyMs,
+                WriteIOPS = result.Write.IOPS,
+                WriteThroughputMBs = result.Write.ThroughputMBs,
+                WriteLatencyMs = result.Write.AvgLatencyMs
+            };
+
+            db.Benchmarks.Add(record);
+            db.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DataService] SaveBenchmark failed: {ex.Message}");
+        }
     }
 
     public static List<BenchmarkRecord> GetBenchmarkHistory(int limit = 50)
@@ -49,24 +56,31 @@ public static class DataService
 
     public static void SaveSnapshot(PatchSnapshot snapshot, string description, bool isPrePatch)
     {
-        using var db = new AppDbContext();
-
-        var record = new SnapshotRecord
+        try
         {
-            Timestamp = DateTime.TryParse(snapshot.Timestamp, out var ts) ? ts : DateTime.Now,
-            Description = description,
-            RegistryStateJson = JsonSerializer.Serialize(snapshot.Components, _jsonOpts),
-            PatchStatusJson = JsonSerializer.Serialize(new
-            {
-                snapshot.Status.Applied,
-                snapshot.Status.Partial,
-                snapshot.Status.Count
-            }, _jsonOpts),
-            IsPrePatch = isPrePatch
-        };
+            using var db = new AppDbContext();
 
-        db.Snapshots.Add(record);
-        db.SaveChanges();
+            var record = new SnapshotRecord
+            {
+                Timestamp = DateTime.TryParse(snapshot.Timestamp, out var ts) ? ts : DateTime.Now,
+                Description = description,
+                RegistryStateJson = JsonSerializer.Serialize(snapshot.Components, _jsonOpts),
+                PatchStatusJson = JsonSerializer.Serialize(new
+                {
+                    snapshot.Status.Applied,
+                    snapshot.Status.Partial,
+                    snapshot.Status.Count
+                }, _jsonOpts),
+                IsPrePatch = isPrePatch
+            };
+
+            db.Snapshots.Add(record);
+            db.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DataService] SaveSnapshot failed: {ex.Message}");
+        }
     }
 
     public static List<SnapshotRecord> GetSnapshots()
@@ -89,24 +103,31 @@ public static class DataService
         int mediaErrors,
         int unsafeShutdowns)
     {
-        using var db = new AppDbContext();
-
-        var record = new TelemetryRecord
+        try
         {
-            DriveNumber = driveNumber,
-            Timestamp = DateTime.Now,
-            TemperatureCelsius = temperatureCelsius,
-            AvailableSparePercent = availableSparePercent,
-            PercentageUsed = percentageUsed,
-            DataUnitsRead = dataUnitsRead,
-            DataUnitsWritten = dataUnitsWritten,
-            PowerOnHours = powerOnHours,
-            MediaErrors = mediaErrors,
-            UnsafeShutdowns = unsafeShutdowns
-        };
+            using var db = new AppDbContext();
 
-        db.Telemetry.Add(record);
-        db.SaveChanges();
+            var record = new TelemetryRecord
+            {
+                DriveNumber = driveNumber,
+                Timestamp = DateTime.Now,
+                TemperatureCelsius = temperatureCelsius,
+                AvailableSparePercent = availableSparePercent,
+                PercentageUsed = percentageUsed,
+                DataUnitsRead = dataUnitsRead,
+                DataUnitsWritten = dataUnitsWritten,
+                PowerOnHours = powerOnHours,
+                MediaErrors = mediaErrors,
+                UnsafeShutdowns = unsafeShutdowns
+            };
+
+            db.Telemetry.Add(record);
+            db.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DataService] SaveTelemetry failed: {ex.Message}");
+        }
     }
 
     public static List<TelemetryRecord> GetTelemetryHistory(int driveNumber, TimeSpan window)
