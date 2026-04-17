@@ -20,6 +20,9 @@ public static class BenchmarkService
 
     public static async Task<string?> InstallDiskSpdAsync(string workingDir, Action<string>? log = null)
     {
+        if (string.IsNullOrEmpty(workingDir))
+            return null;
+
         var diskSpdDir = Path.Combine(workingDir, "DiskSpd");
         var diskSpdExe = Path.Combine(diskSpdDir, "diskspd.exe");
         if (File.Exists(diskSpdExe)) return diskSpdExe;
@@ -31,21 +34,23 @@ public static class BenchmarkService
             var zipUrl = "https://github.com/microsoft/diskspd/releases/latest/download/DiskSpd.ZIP";
             var zipPath = Path.Combine(diskSpdDir, "DiskSpd.zip");
 
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+            client.DefaultRequestHeaders.UserAgent.ParseAdd($"NVMeDriverPatcher/{Models.AppConfig.AppVersion}");
             var bytes = await client.GetByteArrayAsync(zipUrl);
             await File.WriteAllBytesAsync(zipPath, bytes);
 
             ZipFile.ExtractToDirectory(zipPath, diskSpdDir, overwriteFiles: true);
-            File.Delete(zipPath);
+            try { File.Delete(zipPath); } catch { }
 
-            // Find amd64 version
-            var found = Directory.GetFiles(diskSpdDir, "diskspd.exe", SearchOption.AllDirectories)
-                .FirstOrDefault(f => f.Contains("amd64", StringComparison.OrdinalIgnoreCase))
-                ?? Directory.GetFiles(diskSpdDir, "diskspd.exe", SearchOption.AllDirectories).FirstOrDefault();
+            // Prefer amd64 (we're a 64-bit process), but fall back to anything we can find.
+            var allExes = Directory.GetFiles(diskSpdDir, "diskspd.exe", SearchOption.AllDirectories);
+            var found = allExes.FirstOrDefault(f => f.Contains("amd64", StringComparison.OrdinalIgnoreCase))
+                ?? allExes.FirstOrDefault();
 
             if (found is not null)
             {
-                File.Copy(found, diskSpdExe, overwrite: true);
+                if (!string.Equals(found, diskSpdExe, StringComparison.OrdinalIgnoreCase))
+                    File.Copy(found, diskSpdExe, overwrite: true);
                 log?.Invoke("DiskSpd downloaded successfully");
                 return diskSpdExe;
             }
@@ -72,30 +77,52 @@ public static class BenchmarkService
         string benchDir = workingDir;
         try
         {
-            using var diskSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
-                "SELECT DeviceId FROM MSFT_PhysicalDisk WHERE BusType=17");
-            var nvmeDiskIds = diskSearch.Get().Cast<ManagementObject>()
-                .Select(d => d["DeviceId"]?.ToString() ?? "").Where(id => id.Length > 0).ToList();
+            var nvmeDiskIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var diskSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
+                "SELECT DeviceId FROM MSFT_PhysicalDisk WHERE BusType=17"))
+            using (var diskCollection = diskSearch.Get())
+            {
+                foreach (var raw in diskCollection)
+                {
+                    if (raw is not ManagementObject d) continue;
+                    using (d)
+                    {
+                        var id = d["DeviceId"]?.ToString();
+                        if (!string.IsNullOrEmpty(id)) nvmeDiskIds.Add(id);
+                    }
+                }
+            }
 
             if (nvmeDiskIds.Count > 0)
             {
-                // Get partitions that belong to an NVMe disk
                 using var partSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
                     "SELECT DiskNumber, DriveLetter FROM MSFT_Partition WHERE DriveLetter!=0");
-                foreach (ManagementObject part in partSearch.Get())
+                using var partCollection = partSearch.Get();
+                foreach (var raw in partCollection)
                 {
-                    var diskNum = part["DiskNumber"]?.ToString() ?? "";
-                    if (!nvmeDiskIds.Contains(diskNum)) continue;
-
-                    var letter = part["DriveLetter"];
-                    if (letter is char ch && ch != '\0')
+                    if (raw is not ManagementObject part) continue;
+                    using (part)
                     {
-                        var nvmeRoot = $"{ch}:\\";
-                        var nvmeTempDir = Path.Combine(nvmeRoot, "NVMePatcher_Bench");
-                        Directory.CreateDirectory(nvmeTempDir);
-                        benchDir = nvmeTempDir;
-                        log?.Invoke($"Benchmarking NVMe drive: {nvmeRoot} (Disk {diskNum})");
-                        break;
+                        var diskNum = part["DiskNumber"]?.ToString();
+                        if (string.IsNullOrEmpty(diskNum) || !nvmeDiskIds.Contains(diskNum)) continue;
+
+                        var letter = part["DriveLetter"];
+                        if (letter is char ch && char.IsLetter(ch))
+                        {
+                            var nvmeRoot = $"{ch}:\\";
+                            var nvmeTempDir = Path.Combine(nvmeRoot, "NVMePatcher_Bench");
+                            try
+                            {
+                                Directory.CreateDirectory(nvmeTempDir);
+                                benchDir = nvmeTempDir;
+                                log?.Invoke($"Benchmarking NVMe drive: {nvmeRoot} (Disk {diskNum})");
+                            }
+                            catch (Exception dirEx)
+                            {
+                                log?.Invoke($"[WARNING] Could not stage benchmark directory on {nvmeRoot}: {dirEx.Message}. Falling back to working folder.");
+                            }
+                            break;
+                        }
                     }
                 }
             }
@@ -107,13 +134,11 @@ public static class BenchmarkService
 
         try
         {
-            // Read test
             log?.Invoke("Running 4K random read benchmark (30s)...");
             progress?.Invoke(20, "Benchmarking reads...");
             var readOutput = await RunDiskSpd(exe, $"-c128M -d30 -w0 -t4 -o16 -b4K -r -Sh -L \"{testFile}\"");
             result.Read = ParseDiskSpdOutput(readOutput);
 
-            // Write test
             log?.Invoke("Running 4K random write benchmark (30s)...");
             progress?.Invoke(60, "Benchmarking writes...");
             var writeOutput = await RunDiskSpd(exe, $"-c128M -d30 -w100 -t4 -o16 -b4K -r -Sh -L \"{testFile}\"");
@@ -125,8 +150,10 @@ public static class BenchmarkService
         }
         finally
         {
-            try { File.Delete(testFile); } catch { }
-            if (benchDir != workingDir)
+            try { if (File.Exists(testFile)) File.Delete(testFile); } catch { }
+            // Only blow away the staging directory we created — never the user's working folder.
+            if (!string.Equals(benchDir, workingDir, StringComparison.OrdinalIgnoreCase) &&
+                benchDir.EndsWith("NVMePatcher_Bench", StringComparison.OrdinalIgnoreCase))
             {
                 try { Directory.Delete(benchDir, true); } catch { }
             }
@@ -147,9 +174,23 @@ public static class BenchmarkService
         };
         using var proc = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start DiskSpd process");
-        var output = await proc.StandardOutput.ReadToEndAsync();
-        await proc.WaitForExitAsync();
-        return output;
+
+        // Read stdout AND stderr in parallel — diskspd will deadlock if stderr fills its pipe
+        // buffer while we're only reading stdout.
+        var outputTask = proc.StandardOutput.ReadToEndAsync();
+        var errorTask = proc.StandardError.ReadToEndAsync();
+        // 90s ceiling: 30s read + overhead + 30s write + overhead. If diskspd hangs, kill it.
+        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(120));
+        try
+        {
+            await proc.WaitForExitAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            try { proc.Kill(true); } catch { }
+            throw new InvalidOperationException("DiskSpd timed out after 120 seconds.");
+        }
+        return await outputTask;
     }
 
     public static BenchmarkMetrics ParseDiskSpdOutput(string rawOutput)
@@ -188,19 +229,39 @@ public static class BenchmarkService
 
     public static void SaveResults(string workingDir, BenchmarkResult result)
     {
+        if (string.IsNullOrEmpty(workingDir) || result is null) return;
+
         var benchFile = Path.Combine(workingDir, "benchmark_results.json");
         try
         {
             var existing = new List<BenchmarkResult>();
             if (File.Exists(benchFile))
             {
-                var json = File.ReadAllText(benchFile);
-                var parsed = JsonSerializer.Deserialize<List<BenchmarkResult>>(json, JsonOptions);
-                if (parsed is not null) existing = parsed;
+                try
+                {
+                    var json = File.ReadAllText(benchFile);
+                    var parsed = JsonSerializer.Deserialize<List<BenchmarkResult>>(json, JsonOptions);
+                    if (parsed is not null) existing = parsed;
+                }
+                catch
+                {
+                    // Corrupt file — preserve it for forensics, then start fresh.
+                    try { File.Move(benchFile, benchFile + ".corrupt", overwrite: true); } catch { }
+                }
             }
             existing.Add(result);
             if (existing.Count > 10) existing = existing.Skip(existing.Count - 10).ToList();
-            File.WriteAllText(benchFile, JsonSerializer.Serialize(existing, JsonOptions));
+
+            // Atomic write so a crash mid-save doesn't truncate the history file.
+            var tempFile = benchFile + ".tmp";
+            using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var sw = new StreamWriter(fs, new System.Text.UTF8Encoding(false)))
+            {
+                sw.Write(JsonSerializer.Serialize(existing, JsonOptions));
+                sw.Flush();
+                fs.Flush(flushToDisk: true);
+            }
+            File.Move(tempFile, benchFile, overwrite: true);
         }
         catch { }
 
@@ -214,12 +275,15 @@ public static class BenchmarkService
 
     public static List<BenchmarkResult> GetHistory(string workingDir)
     {
+        if (string.IsNullOrEmpty(workingDir)) return [];
         var benchFile = Path.Combine(workingDir, "benchmark_results.json");
         if (!File.Exists(benchFile)) return [];
         try
         {
             var json = File.ReadAllText(benchFile);
-            return JsonSerializer.Deserialize<List<BenchmarkResult>>(json, JsonOptions) ?? [];
+            var parsed = JsonSerializer.Deserialize<List<BenchmarkResult>>(json, JsonOptions);
+            // Guard against null entries from a manually-edited JSON file.
+            return parsed?.Where(r => r is not null).ToList() ?? [];
         }
         catch { return []; }
     }

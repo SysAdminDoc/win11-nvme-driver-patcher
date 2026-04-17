@@ -17,6 +17,18 @@ public partial class ThemedDialog : Window
     {
         InitializeComponent();
         Loaded += (_, _) => FocusPrimaryAction();
+        // Esc closes the dialog. For OK-only, Esc returns "OK" (acknowledged). For Yes/No,
+        // Esc returns "No" via the BtnNo IsCancel binding. Backstop in case both are hidden.
+        PreviewKeyDown += (_, ev) =>
+        {
+            if (ev.Key == System.Windows.Input.Key.Escape)
+            {
+                if (BtnNo.Visibility == Visibility.Visible) Result = "No";
+                else if (BtnOK.Visibility == Visibility.Visible) Result = "OK";
+                Close();
+                ev.Handled = true;
+            }
+        };
     }
 
     public static string Show(string message, string title = "NVMe Driver Patcher",
@@ -25,7 +37,7 @@ public partial class ThemedDialog : Window
     {
         var dlg = new ThemedDialog();
         dlg.DlgTitle.Text = string.IsNullOrWhiteSpace(title) ? "NVMe Driver Patcher" : title;
-        dlg.DlgMessage.Text = message;
+        dlg.DlgMessage.Text = message ?? string.Empty;
 
         if (buttons == DialogButtons.YesNo)
         {
@@ -55,8 +67,14 @@ public partial class ThemedDialog : Window
             _ => "#FF133256"
         };
         var bc = new BrushConverter();
-        var iconBrush = (System.Windows.Media.Brush)bc.ConvertFromString(iconColor)!;
-        var surfaceBrush = (System.Windows.Media.Brush)bc.ConvertFromString(actionSurface)!;
+        // Defensive: BrushConverter.ConvertFromString can throw on a malformed color string.
+        // The literals here are static, but keep this resilient against future refactors.
+        System.Windows.Media.Brush iconBrush;
+        System.Windows.Media.Brush surfaceBrush;
+        try { iconBrush = (System.Windows.Media.Brush)bc.ConvertFromString(iconColor)!; }
+        catch { iconBrush = System.Windows.Media.Brushes.DodgerBlue; }
+        try { surfaceBrush = (System.Windows.Media.Brush)bc.ConvertFromString(actionSurface)!; }
+        catch { surfaceBrush = System.Windows.Media.Brushes.Black; }
         dlg.DlgEyebrow.Text = icon switch
         {
             DialogIcon.Error => "Stop",
@@ -108,8 +126,9 @@ public partial class ThemedDialog : Window
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.LeftButton == MouseButtonState.Pressed)
-            DragMove();
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        try { DragMove(); }
+        catch (InvalidOperationException) { /* not in a draggable state */ }
     }
 
     private void FocusPrimaryAction()
