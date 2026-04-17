@@ -145,6 +145,40 @@
                                     <TextBlock Text="{Binding StatusSummaryText}"
                                                Margin="0,10,0,0"
                                                Style="{StaticResource BodyCopy}"/>
+
+                                    <Border Margin="0,14,0,0"
+                                            Padding="14,12"
+                                            Background="{StaticResource YellowBg}"
+                                            BorderBrush="{StaticResource Border}"
+                                            BorderThickness="1"
+                                            CornerRadius="12"
+                                            Visibility="{Binding ShowViVeToolFallbackBadge, Converter={StaticResource BoolVis}}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="Registry override blocked by Windows"
+                                                           Foreground="{StaticResource Yellow}"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"/>
+                                                <TextBlock Text="Your last patch applied the feature flags, but Windows is still using the legacy driver. This is the Feb/Mar 2026 Microsoft block. The ViVeTool fallback writes to a different feature store that still works."
+                                                           Margin="0,6,0,0"
+                                                           Foreground="{StaticResource TextSecondary}"
+                                                           FontSize="12"
+                                                           TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1"
+                                                    Content="Try ViVeTool Fallback"
+                                                    Margin="14,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    ToolTip="Downloads ViVeTool from its official GitHub release, caches it in this app's tools folder, then applies feature IDs 60786016 and 48433719. Requires a restart."
+                                                    IsEnabled="{Binding ButtonsEnabled}"
+                                                    Command="{Binding ApplyViVeToolFallbackCommand}"/>
+                                        </Grid>
+                                    </Border>
                                 </StackPanel>
 
                                 <WrapPanel Grid.Row="2" Margin="0,24,0,0">
@@ -838,6 +872,27 @@
                                                            Margin="0,8,0,0"
                                                            Style="{StaticResource BodyCopy}"/>
 
+                                                <TextBlock Text="Install Mode"
+                                                           Margin="0,16,0,6"
+                                                           Foreground="{StaticResource TextPrimary}"
+                                                           FontSize="12.5"
+                                                           FontWeight="SemiBold"/>
+                                                <RadioButton Content="Safe Mode (recommended) — primary flag only"
+                                                             Style="{StaticResource DarkRadioButton}"
+                                                             GroupName="PatchProfile"
+                                                             ToolTip="Writes just 735209102 plus Safe Boot entries. Swaps the driver with the lowest crash risk."
+                                                             IsChecked="{Binding IsSafeModeSelected}"/>
+                                                <RadioButton Content="Full Mode — all three feature flags"
+                                                             Style="{StaticResource DarkRadioButton}"
+                                                             GroupName="PatchProfile"
+                                                             ToolTip="Adds 1853569164 (UxAccOptimization) and 156965516 (Standalone_Future). Higher peak performance on some drives, higher BSOD risk on others."
+                                                             IsChecked="{Binding IsFullModeSelected}"/>
+                                                <TextBlock Text="{Binding PatchProfileHelpText}"
+                                                           Margin="0,8,0,0"
+                                                           Foreground="{StaticResource TextMuted}"
+                                                           FontSize="11.5"
+                                                           TextWrapping="Wrap"/>
+
                                                 <CheckBox Content="Include Microsoft Server 2025 compatibility key"
                                                           Style="{StaticResource DarkCheckBox}"
                                                           IsChecked="{Binding IncludeServerKey}"/>
@@ -851,7 +906,7 @@
                                                         BorderBrush="{StaticResource BorderLight}"
                                                         BorderThickness="1"
                                                         CornerRadius="12">
-                                                    <TextBlock Text="Including the Server 2025 key is recommended when you want the new I/O scheduler to activate consistently."
+                                                    <TextBlock Text="Safe Mode is the community-recommended default for 2026. The Server 2025 key is optional and mostly relevant on server SKUs — leave it off unless you know you need it."
                                                                Foreground="{StaticResource TextSecondary}"
                                                                FontSize="12"
                                                                TextWrapping="Wrap"/>
@@ -863,7 +918,7 @@
                                                         BorderBrush="{StaticResource Border}"
                                                         BorderThickness="1"
                                                         CornerRadius="12">
-                                                    <TextBlock Text="Native NVMe does not currently support BypassIO, so DirectStorage workloads may shift more work onto the CPU."
+                                                    <TextBlock Text="Heads-up for gamers: nvmedisk.sys does not honor BypassIO, so DirectStorage titles fall back to the slower path. Skip the patch on your gaming rig, or keep a one-click removal ready."
                                                                Foreground="{StaticResource Yellow}"
                                                                FontSize="12"
                                                                TextWrapping="Wrap"/>
@@ -1807,6 +1862,13 @@
                                                                     AutomationProperties.Name="Export diagnostics report"
                                                                     IsEnabled="{Binding ButtonsEnabled}"
                                                                     Command="{Binding ExportDiagnosticsCommand}"/>
+                                                            <Button Content="Support Bundle (ZIP)"
+                                                                    Margin="0,10,0,0"
+                                                                    Style="{StaticResource SecondaryButton}"
+                                                                    ToolTip="Bundle the diagnostics report, config, crash logs, recent registry backups, and SQLite database into a single shareable zip."
+                                                                    AutomationProperties.Name="Export support bundle zip"
+                                                                    IsEnabled="{Binding ButtonsEnabled}"
+                                                                    Command="{Binding ExportSupportBundleCommand}"/>
                                                         </StackPanel>
                                                     </Grid>
                                                 </Border>
