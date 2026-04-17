@@ -13,6 +13,10 @@ public class PatchOperationResult
     public PatchSnapshot? AfterSnapshot { get; set; }
     public bool NeedsRestart { get; set; }
     public bool WasRolledBack { get; set; }
+    // Set to false when Rollback itself couldn't reverse every write — the caller must warn
+    // the user and point them at the pre-patch backup / System Restore. Meaningful only when
+    // WasRolledBack is true.
+    public bool RollbackFullyReversed { get; set; } = true;
 }
 
 public static class PatchService
@@ -66,16 +70,16 @@ public static class PatchService
         var appliedKeys = new List<(string Type, string ID)>();
         int successCount = 0;
 
-        // Defensive: AppConfig.FeatureIDs is intentionally an IReadOnlyList but if a future
-        // refactor makes it null somehow we'd NRE deep inside the loop. Treat as empty.
-        var featureIDsToApply = AppConfig.FeatureIDs is null
-            ? new List<string>()
-            : new List<string>(AppConfig.FeatureIDs);
-        int effectiveTotal = AppConfig.TotalComponents;
-        if (config?.IncludeServerKey == true)
+        // Profile-driven key set. Safe = primary flag only (community-recommended default —
+        // the extended flags are correlated with BSOD reports). Full = all three.
+        var profile = config?.PatchProfile ?? PatchProfile.Safe;
+        bool includeServer = config?.IncludeServerKey == true;
+        var featureIDsToApply = new List<string>(AppConfig.GetFeatureIDsForProfile(profile));
+        int effectiveTotal = AppConfig.GetTotalComponents(profile, includeServer);
+        log?.Invoke($"Mode: {profile.ToString().ToUpperInvariant()} ({(profile == PatchProfile.Safe ? "primary flag only" : "primary + extended flags")})");
+        if (includeServer)
         {
             featureIDsToApply.Add(AppConfig.ServerFeatureID);
-            effectiveTotal++;
             log?.Invoke("Including optional Microsoft Server 2025 key (1176759950)");
         }
         result.TotalExpected = effectiveTotal;
@@ -139,37 +143,86 @@ public static class PatchService
                 }
             }
 
-            // SafeBoot Minimal
+            // SafeBoot Minimal — track in appliedKeys ONLY after we've confirmed the write took.
+            // If CreateSubKey succeeds but SetValue fails, the empty subkey is still present and
+            // must still be tracked for rollback so we don't leak it. We register it pre-SetValue
+            // for that reason.
             try
             {
-                using var safeMin = hklm.CreateSubKey(AppConfig.SafeBootMinimalPath);
-                safeMin?.SetValue("", AppConfig.SafeBootValue);
-                var val = safeMin?.GetValue("") as string;
-                if (val == AppConfig.SafeBootValue)
+                bool safeMinKeyCreated = false;
+                using (var safeMin = hklm.CreateSubKey(AppConfig.SafeBootMinimalPath))
                 {
-                    log?.Invoke("  [OK] SafeBoot Minimal Support");
-                    successCount++;
-                    appliedKeys.Add(("SafeBoot", "Minimal"));
+                    if (safeMin is not null)
+                    {
+                        safeMinKeyCreated = true;
+                        appliedKeys.Add(("SafeBoot", "Minimal"));
+                        safeMin.SetValue("", AppConfig.SafeBootValue);
+                        var val = safeMin.GetValue("") as string;
+                        if (val == AppConfig.SafeBootValue)
+                        {
+                            log?.Invoke("  [OK] SafeBoot Minimal Support");
+                            successCount++;
+                        }
+                        else
+                        {
+                            log?.Invoke("  [FAIL] SafeBoot Minimal Support (write verify failed)");
+                        }
+                    }
+                    else
+                    {
+                        log?.Invoke("  [FAIL] SafeBoot Minimal Support (CreateSubKey returned null)");
+                    }
                 }
-                else log?.Invoke("  [FAIL] SafeBoot Minimal Support");
+                if (!safeMinKeyCreated)
+                {
+                    // CreateSubKey didn't actually land — don't pretend we need to roll it back.
+                }
             }
-            catch (Exception ex) { log?.Invoke($"  [FAIL] SafeBoot Minimal: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                log?.Invoke($"  [FAIL] SafeBoot Minimal: {ex.Message}");
+                // If we made it past CreateSubKey before throwing, the subkey may still exist;
+                // ensure rollback is registered so it doesn't leak.
+                try { using var probe = hklm.OpenSubKey(AppConfig.SafeBootMinimalPath); if (probe is not null && !appliedKeys.Contains(("SafeBoot", "Minimal"))) appliedKeys.Add(("SafeBoot", "Minimal")); } catch { }
+            }
 
-            // SafeBoot Network
+            // SafeBoot Network — same pattern.
             try
             {
-                using var safeNet = hklm.CreateSubKey(AppConfig.SafeBootNetworkPath);
-                safeNet?.SetValue("", AppConfig.SafeBootValue);
-                var val = safeNet?.GetValue("") as string;
-                if (val == AppConfig.SafeBootValue)
+                bool safeNetKeyCreated = false;
+                using (var safeNet = hklm.CreateSubKey(AppConfig.SafeBootNetworkPath))
                 {
-                    log?.Invoke("  [OK] SafeBoot Network Support");
-                    successCount++;
-                    appliedKeys.Add(("SafeBoot", "Network"));
+                    if (safeNet is not null)
+                    {
+                        safeNetKeyCreated = true;
+                        appliedKeys.Add(("SafeBoot", "Network"));
+                        safeNet.SetValue("", AppConfig.SafeBootValue);
+                        var val = safeNet.GetValue("") as string;
+                        if (val == AppConfig.SafeBootValue)
+                        {
+                            log?.Invoke("  [OK] SafeBoot Network Support");
+                            successCount++;
+                        }
+                        else
+                        {
+                            log?.Invoke("  [FAIL] SafeBoot Network Support (write verify failed)");
+                        }
+                    }
+                    else
+                    {
+                        log?.Invoke("  [FAIL] SafeBoot Network Support (CreateSubKey returned null)");
+                    }
                 }
-                else log?.Invoke("  [FAIL] SafeBoot Network Support");
+                if (!safeNetKeyCreated)
+                {
+                    // See note above.
+                }
             }
-            catch (Exception ex) { log?.Invoke($"  [FAIL] SafeBoot Network: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                log?.Invoke($"  [FAIL] SafeBoot Network: {ex.Message}");
+                try { using var probe = hklm.OpenSubKey(AppConfig.SafeBootNetworkPath); if (probe is not null && !appliedKeys.Contains(("SafeBoot", "Network"))) appliedKeys.Add(("SafeBoot", "Network")); } catch { }
+            }
 
             // Flush registry to disk so a hard power cycle before reboot doesn't lose the writes.
             try { overrides.Flush(); } catch { }
@@ -195,12 +248,24 @@ public static class PatchService
                 log?.Invoke("[WARNING] Rolling back partial installation...");
                 progress?.Invoke(96, "Rolling back...");
 
-                Rollback(hklm, appliedKeys, log);
+                bool rollbackFullyReversed = Rollback(hklm, appliedKeys, log);
                 result.WasRolledBack = true;
+                result.RollbackFullyReversed = rollbackFullyReversed;
 
-                log?.Invoke("[WARNING] Rollback complete - system returned to pre-patch state");
-                EventLogService.Write($"NVMe Driver Patch rolled back after partial failure ({successCount}/{effectiveTotal})",
-                    EventLogEntryType.Warning, 2001);
+                if (rollbackFullyReversed)
+                {
+                    log?.Invoke("[WARNING] Rollback complete - system returned to pre-patch state");
+                    EventLogService.Write($"NVMe Driver Patch rolled back after partial failure ({successCount}/{effectiveTotal})",
+                        EventLogEntryType.Warning, 2001);
+                }
+                else
+                {
+                    log?.Invoke("[ERROR] Rollback INCOMPLETE - some writes could not be reversed");
+                    log?.Invoke("[ERROR] Use the pre-patch registry backup or System Restore to recover");
+                    EventLogService.Write(
+                        $"NVMe Driver Patch rollback INCOMPLETE after partial failure ({successCount}/{effectiveTotal}). Some registry keys may remain set; consult the registry backup.",
+                        EventLogEntryType.Error, 3003);
+                }
             }
         }
         catch (Exception ex)
@@ -427,7 +492,11 @@ public static class PatchService
         return result;
     }
 
-    private static void Rollback(RegistryKey hklm, List<(string Type, string ID)> appliedKeys, Action<string>? log)
+    // Returns true only when every registered write was reversed. A partial rollback is a
+    // dangerous state — the user thinks the system is back to pre-patch but some keys are
+    // still present. Callers MUST act on the false return by warning the user and pointing
+    // them at the recovery kit / restore point.
+    private static bool Rollback(RegistryKey hklm, List<(string Type, string ID)> appliedKeys, Action<string>? log)
     {
         // Open the overrides key once so we don't keep re-acquiring a writable handle (and so a
         // single Flush() at the end is cheap and authoritative).
@@ -438,6 +507,8 @@ public static class PatchService
         }
         catch { /* Continue — per-key open below will surface the issue if needed */ }
 
+        bool allReversed = true;
+
         foreach (var (type, id) in appliedKeys)
         {
             try
@@ -447,7 +518,19 @@ public static class PatchService
                     var key = overrides ?? hklm.OpenSubKey(AppConfig.RegistrySubKey, writable: true);
                     key?.DeleteValue(id, throwOnMissingValue: false);
                     string friendlyName = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn : "Feature Flag";
-                    log?.Invoke($"  [ROLLBACK] {id} - {friendlyName}");
+                    // Verify the value is really gone — a silent no-op would leave a leak.
+                    if (key is not null)
+                    {
+                        if (key.GetValue(id) is not null)
+                        {
+                            log?.Invoke($"  [ROLLBACK FAIL] {id} - {friendlyName} still present after DeleteValue");
+                            allReversed = false;
+                        }
+                        else
+                        {
+                            log?.Invoke($"  [ROLLBACK] {id} - {friendlyName}");
+                        }
+                    }
                     if (key is not null && !ReferenceEquals(key, overrides)) key.Dispose();
                 }
                 else if (type == "SafeBoot")
@@ -456,19 +539,43 @@ public static class PatchService
                         ? @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal"
                         : @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network";
                     using var parent = hklm.OpenSubKey(parentPath, writable: true);
-                    try { parent?.DeleteSubKeyTree(AppConfig.SafeBootGuid, throwOnMissingSubKey: false); }
-                    catch (System.Security.SecurityException) { /* Permission denied; nothing else to do */ }
+                    if (parent is null)
+                    {
+                        log?.Invoke($"  [ROLLBACK SKIP] SafeBoot {id} — parent key unavailable");
+                        // Can't verify; err on the side of reporting failure so the caller warns.
+                        allReversed = false;
+                        continue;
+                    }
+                    try { parent.DeleteSubKeyTree(AppConfig.SafeBootGuid, throwOnMissingSubKey: false); }
+                    catch (System.Security.SecurityException)
+                    {
+                        log?.Invoke($"  [ROLLBACK FAIL] SafeBoot {id} — permission denied");
+                        allReversed = false;
+                        continue;
+                    }
+                    // Verify the subkey is really gone.
+                    using (var probe = parent.OpenSubKey(AppConfig.SafeBootGuid))
+                    {
+                        if (probe is not null)
+                        {
+                            log?.Invoke($"  [ROLLBACK FAIL] SafeBoot {id} subkey still present after delete");
+                            allReversed = false;
+                            continue;
+                        }
+                    }
                     log?.Invoke($"  [ROLLBACK] SafeBoot {id}");
                 }
             }
             catch (Exception ex)
             {
                 log?.Invoke($"  [ROLLBACK FAIL] {type} {id}: {ex.Message}");
+                allReversed = false;
             }
         }
 
         try { overrides?.Flush(); } catch { }
         try { overrides?.Dispose(); } catch { }
+        return allReversed;
     }
 
     private static void CreateRestorePoint(string description, Action<string>? log)

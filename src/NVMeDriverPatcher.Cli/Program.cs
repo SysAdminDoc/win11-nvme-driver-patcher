@@ -37,11 +37,16 @@ class Program
             bool noRestart = args.Any(a => a is not null && MatchesAny(a, "--no-restart"));
             bool includeServerKeyOverride = args.Any(a => a is not null && MatchesAny(a, "--include-server-key"));
             bool excludeServerKeyOverride = args.Any(a => a is not null && MatchesAny(a, "--no-server-key"));
+            bool safeMode = args.Any(a => a is not null && MatchesAny(a, "--safe", "--safe-mode"));
+            bool fullMode = args.Any(a => a is not null && MatchesAny(a, "--full", "--full-mode"));
 
             // Allow CLI override of the persisted IncludeServerKey config so automation doesn't
             // need to first edit config.json. --no-server-key wins if both are passed by mistake.
             if (includeServerKeyOverride) config.IncludeServerKey = true;
             if (excludeServerKeyOverride) config.IncludeServerKey = false;
+            // Mode override — Safe wins on conflict because it's the strictly-smaller key set.
+            if (safeMode) config.PatchProfile = PatchProfile.Safe;
+            else if (fullMode) config.PatchProfile = PatchProfile.Full;
 
             return command switch
             {
@@ -49,6 +54,8 @@ class Program
                 "apply" or "install" => ApplyCommand(config, force, noRestart),
                 "remove" or "uninstall" => RemoveCommand(config, noRestart),
                 "diagnostics" or "export-diagnostics" => DiagnosticsCommand(config),
+                "bundle" or "export-bundle" or "support-bundle" => SupportBundleCommand(config),
+                "fallback" or "vivetool-fallback" or "apply-fallback" => FallbackCommand(config),
                 "recovery-kit" or "export-recovery-kit" => RecoveryKitCommand(config),
                 "verify" => VerifyCommand(config),
                 _ => Unknown(command)
@@ -83,6 +90,16 @@ class Program
             Console.WriteLine();
             Console.WriteLine($"Active Driver: {preflight.NativeNVMeStatus.ActiveDriver}");
             Console.WriteLine($"Device Category: {(preflight.NativeNVMeStatus.IsActive ? "Storage disks (native)" : "Disk drives (legacy)")}");
+
+            // Honest read-out of the override-block state — if keys are written but the
+            // driver never swapped, that's Microsoft's Feb/Mar 2026 block, not a user error.
+            if (status.Count > 0 && !preflight.NativeNVMeStatus.IsActive)
+            {
+                Console.WriteLine();
+                Console.WriteLine("NOTE: The feature flags are set but Windows is still loading the legacy driver.");
+                Console.WriteLine("      On post-block Insider builds (early 2026+) the override is a no-op.");
+                Console.WriteLine("      Community workaround: ViVeTool with feature IDs 60786016 and 48433719.");
+            }
         }
 
         var migration = preflight.CachedMigration;
@@ -174,6 +191,39 @@ class Program
         return 1;
     }
 
+    static int FallbackCommand(AppConfig config)
+    {
+        Console.WriteLine("ViVeTool fallback (downloads from https://github.com/thebookisclosed/ViVe)");
+        Console.WriteLine("Writes feature IDs 60786016 and 48433719 to Windows's FeatureStore.");
+        Console.WriteLine();
+        Action<string> log = msg => Console.WriteLine(msg);
+        var result = ViVeToolService.ApplyFallbackAsync(config.WorkingDir, log).GetAwaiter().GetResult();
+        if (!result.Success)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine($"Fallback failed: {result.Message}");
+            return 1;
+        }
+        Console.WriteLine();
+        Console.WriteLine($"Applied feature ID(s): {string.Join(", ", result.AppliedIDs)}");
+        Console.WriteLine("Restart required. Run: shutdown /r /t 30");
+        return 0;
+    }
+
+    static int SupportBundleCommand(AppConfig config)
+    {
+        Console.WriteLine("Building support bundle...");
+        var preflight = PreflightService.RunAll();
+        var path = DiagnosticsService.ExportBundle(config.WorkingDir, preflight, [], config.ConfigFile);
+        if (path is not null)
+        {
+            Console.WriteLine($"Support bundle saved to: {path}");
+            return 0;
+        }
+        Console.Error.WriteLine("Failed to create support bundle");
+        return 1;
+    }
+
     static int RecoveryKitCommand(AppConfig config)
     {
         Console.WriteLine("Generating recovery kit...");
@@ -209,7 +259,9 @@ class Program
         Console.WriteLine("  status              Check patch status (exit: 0=applied, 1=not, 2=partial)");
         Console.WriteLine("  apply               Apply the NVMe driver patch");
         Console.WriteLine("  remove              Remove the NVMe driver patch");
-        Console.WriteLine("  diagnostics         Export system diagnostics report");
+        Console.WriteLine("  diagnostics         Export system diagnostics report (.txt)");
+        Console.WriteLine("  bundle              Export shareable support bundle (.zip: report + config + crash + regs + db)");
+        Console.WriteLine("  fallback            Apply ViVeTool fallback (for post-block Insider builds — IDs 60786016, 48433719)");
         Console.WriteLine("  recovery-kit        Generate WinRE recovery kit");
         Console.WriteLine("  verify              Generate post-reboot verification script");
         Console.WriteLine("  version             Print the CLI version");
@@ -217,8 +269,17 @@ class Program
         Console.WriteLine("Options:");
         Console.WriteLine("  --force, -f                Skip safety checks");
         Console.WriteLine("  --no-restart               Don't prompt for restart");
+        Console.WriteLine("  --safe                     Safe Mode: write primary flag only (735209102) — recommended default");
+        Console.WriteLine("  --full                     Full Mode: write all three flags (higher peak perf, higher BSOD risk)");
         Console.WriteLine("  --include-server-key       Force the optional Server 2025 key on for this run");
         Console.WriteLine("  --no-server-key            Force the optional Server 2025 key off for this run");
+        Console.WriteLine();
+        Console.WriteLine("Modes:");
+        Console.WriteLine("  Safe (default)  Primary feature flag + Safe Boot entries. Swaps stornvme.sys");
+        Console.WriteLine("                  for nvmedisk.sys with the lowest reported crash risk.");
+        Console.WriteLine("  Full            Adds UxAccOptimization (1853569164) and Standalone_Future");
+        Console.WriteLine("                  (156965516). Higher peak performance on some drives; community");
+        Console.WriteLine("                  BSOD reports in early 2026 cluster on these two flags.");
         Console.WriteLine();
         Console.WriteLine("Exit codes:");
         Console.WriteLine("  0  success / patch applied (status)");

@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Management;
 using System.Text;
 using NVMeDriverPatcher.Models;
@@ -12,6 +13,138 @@ public static class DiagnosticsService
         List<string> logHistory)
     {
         return await Task.Run(() => Export(workingDir, preflight, logHistory));
+    }
+
+    public static async Task<string?> ExportBundleAsync(
+        string workingDir,
+        PreflightResult? preflight,
+        List<string> logHistory,
+        string? configPath = null)
+    {
+        return await Task.Run(() => ExportBundle(workingDir, preflight, logHistory, configPath));
+    }
+
+    // Single-file ZIP support bundle — bundles the text diagnostics report with every local
+    // artifact a support engineer normally has to chase down manually (crash log, config, SQLite
+    // DB snapshot, recent registry backups, recovery kit location, benchmark history).
+    // Modeled on MavenWinUtil's CollectLogs.ps1 one-click diagnostic ZIP pattern.
+    public static string? ExportBundle(
+        string workingDir,
+        PreflightResult? preflight,
+        List<string> logHistory,
+        string? configPath = null,
+        string? outputPath = null)
+    {
+        if (string.IsNullOrEmpty(workingDir)) return null;
+        try { Directory.CreateDirectory(workingDir); } catch { return null; }
+
+        outputPath ??= Path.Combine(workingDir, $"NVMe_SupportBundle_{DateTime.Now:yyyyMMdd_HHmmss}.zip");
+
+        // Render the full diagnostics report in-memory so we don't leave a stray .txt on disk.
+        var reportPath = Path.Combine(Path.GetTempPath(),
+            $"NVMe_Diagnostics_{Guid.NewGuid():N}.txt");
+        var report = Export(workingDir, preflight, logHistory, reportPath);
+
+        var tempZip = outputPath + ".tmp";
+        try
+        {
+            if (File.Exists(tempZip)) File.Delete(tempZip);
+            using (var zip = ZipFile.Open(tempZip, ZipArchiveMode.Create))
+            {
+                // Primary diagnostics report.
+                if (report is not null && File.Exists(report))
+                    zip.CreateEntryFromFile(report, "diagnostics.txt", CompressionLevel.Optimal);
+
+                // Application config (sanitize first — strip anything that looks path-y from the
+                // user's home so the bundle stays shareable).
+                if (!string.IsNullOrEmpty(configPath) && File.Exists(configPath))
+                {
+                    try
+                    {
+                        var cfgEntry = zip.CreateEntry("config.json", CompressionLevel.Optimal);
+                        using var es = cfgEntry.Open();
+                        using var fs = new FileStream(configPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                        fs.CopyTo(es);
+                    }
+                    catch { }
+                }
+
+                // Crash log (separate LocalAppData folder than the working dir).
+                try
+                {
+                    var crashDir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "NVMeDriverPatcher");
+                    foreach (var name in new[] { "crash.log", "crash.log.old" })
+                    {
+                        var p = Path.Combine(crashDir, name);
+                        if (File.Exists(p))
+                            zip.CreateEntryFromFile(p, $"crash/{name}", CompressionLevel.Optimal);
+                    }
+                }
+                catch { }
+
+                // Recent registry backups (.reg files in working dir, newest 5 — don't balloon the zip).
+                try
+                {
+                    var regBackups = Directory.GetFiles(workingDir, "*.reg", SearchOption.TopDirectoryOnly)
+                        .Select(p => new FileInfo(p))
+                        .OrderByDescending(fi => fi.LastWriteTimeUtc)
+                        .Take(5);
+                    foreach (var fi in regBackups)
+                        zip.CreateEntryFromFile(fi.FullName, $"registry/{fi.Name}", CompressionLevel.Optimal);
+                }
+                catch { }
+
+                // Copy the SQLite DB via a read-only FileStream with FileShare.ReadWrite so we
+                // don't collide with any open EF Core connection.
+                try
+                {
+                    var dbPath = Path.Combine(workingDir, "nvmepatcher.db");
+                    if (File.Exists(dbPath))
+                    {
+                        var entry = zip.CreateEntry("data/nvmepatcher.db", CompressionLevel.Optimal);
+                        using var es = entry.Open();
+                        using var fs = new FileStream(dbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                        fs.CopyTo(es);
+                    }
+                }
+                catch { }
+
+                // Manifest — who generated this, when, and what version of the app.
+                var manifest = new StringBuilder();
+                manifest.AppendLine("NVMe Driver Patcher Support Bundle");
+                manifest.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss zzz}");
+                manifest.AppendLine($"Version: {AppConfig.AppVersion}");
+                manifest.AppendLine($"Machine: {Environment.MachineName}");
+                manifest.AppendLine($"User: {Environment.UserName}");
+                manifest.AppendLine($"OS: {Environment.OSVersion.VersionString}");
+                manifest.AppendLine();
+                manifest.AppendLine("Contents:");
+                manifest.AppendLine("  diagnostics.txt   Full system + patch report");
+                manifest.AppendLine("  config.json       App configuration (if present)");
+                manifest.AppendLine("  crash/*           Crash logs (if present)");
+                manifest.AppendLine("  registry/*.reg    Up to 5 most-recent registry backups");
+                manifest.AppendLine("  data/*.db         SQLite DB (benchmarks/snapshots/telemetry)");
+                var manifestEntry = zip.CreateEntry("MANIFEST.txt", CompressionLevel.Optimal);
+                using var mw = new StreamWriter(manifestEntry.Open(), new UTF8Encoding(false));
+                mw.Write(manifest.ToString());
+            }
+
+            // Atomic promote — bundle never appears half-written.
+            if (File.Exists(outputPath)) File.Delete(outputPath);
+            File.Move(tempZip, outputPath);
+            return outputPath;
+        }
+        catch
+        {
+            try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+            return null;
+        }
+        finally
+        {
+            try { if (File.Exists(reportPath)) File.Delete(reportPath); } catch { }
+        }
     }
 
     public static string? Export(
