@@ -13,6 +13,11 @@ on:
 permissions:
   contents: write
 
+# Don't let two release runs for the same tag race each other (e.g. tag-push + manual dispatch).
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: windows-latest
@@ -30,16 +35,42 @@ jobs:
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+            tag="${{ github.event.inputs.tag }}"
           else
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            tag="${GITHUB_REF#refs/tags/}"
           fi
+          # Strip optional leading "v" so the version comparison stays consistent with AppConfig.AppVersion.
+          version="${tag#v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore
+        run: |
+          dotnet restore src/NVMeDriverPatcher/NVMeDriverPatcher.csproj
+          dotnet restore src/NVMeDriverPatcher.Cli/NVMeDriverPatcher.Cli.csproj
 
       - name: Build GUI (self-contained single file)
-        run: dotnet publish src/NVMeDriverPatcher -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish/gui
+        run: dotnet publish src/NVMeDriverPatcher -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:Version=${{ steps.tag.outputs.version }} -p:AssemblyVersion=${{ steps.tag.outputs.version }}.0 -p:FileVersion=${{ steps.tag.outputs.version }}.0 -o publish/gui
 
       - name: Build CLI (self-contained single file)
-        run: dotnet publish src/NVMeDriverPatcher.Cli -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish/cli
+        run: dotnet publish src/NVMeDriverPatcher.Cli -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:Version=${{ steps.tag.outputs.version }} -p:AssemblyVersion=${{ steps.tag.outputs.version }}.0 -p:FileVersion=${{ steps.tag.outputs.version }}.0 -o publish/cli
+
+      - name: Generate SHA256 checksums
+        shell: pwsh
+        run: |
+          $files = @(
+            'publish/gui/NVMeDriverPatcher.exe',
+            'publish/cli/NVMeDriverPatcher.Cli.exe',
+            'NVMe_Driver_Patcher.ps1'
+          )
+          $lines = foreach ($f in $files) {
+            if (Test-Path $f) {
+              $hash = (Get-FileHash -Algorithm SHA256 -Path $f).Hash.ToLower()
+              $name = Split-Path $f -Leaf
+              "$hash  $name"
+            }
+          }
+          $lines | Out-File -FilePath 'publish/SHA256SUMS.txt' -Encoding ascii
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -50,9 +81,10 @@ jobs:
             ## NVMe Driver Patcher ${{ steps.tag.outputs.tag }}
 
             ### Downloads
-            - **NVMeDriverPatcher.exe** - Compiled GUI application (run as Administrator)
-            - **NVMeDriverPatcher.Cli.exe** - Command-line interface
-            - **NVMe_Driver_Patcher.ps1** - PowerShell script (v3.5.2, legacy)
+            - **NVMeDriverPatcher.exe** — Compiled GUI application (run as Administrator)
+            - **NVMeDriverPatcher.Cli.exe** — Command-line interface
+            - **NVMe_Driver_Patcher.ps1** — PowerShell script (legacy)
+            - **SHA256SUMS.txt** — Verify downloads with `Get-FileHash <file> -Algorithm SHA256`
 
             ### Quick Start (GUI)
             Download `NVMeDriverPatcher.exe` and run. Administrator elevation is automatic.
@@ -62,6 +94,7 @@ jobs:
             NVMeDriverPatcher.Cli.exe status
             NVMeDriverPatcher.Cli.exe apply
             NVMeDriverPatcher.Cli.exe remove
+            NVMeDriverPatcher.Cli.exe version
             ```
 
             ### PowerShell (legacy)
@@ -71,6 +104,8 @@ jobs:
           files: |
             publish/gui/NVMeDriverPatcher.exe
             publish/cli/NVMeDriverPatcher.Cli.exe
+            publish/SHA256SUMS.txt
             NVMe_Driver_Patcher.ps1
           draft: false
           prerelease: false
+          fail_on_unmatched_files: true

@@ -130,6 +130,10 @@ public partial class MainViewModel : ObservableObject
 
     private PreflightResult? _preflight;
     private readonly List<string> _logHistory = [];
+    // Guards _logHistory against torn writes when Log() is called from background threads
+    // (PatchService.Install runs in Task.Run). Without this, concurrent Add() calls can
+    // corrupt the underlying array and crash later reads with IndexOutOfRangeException.
+    private readonly object _logHistoryLock = new();
 
     public MainViewModel()
     {
@@ -150,9 +154,16 @@ public partial class MainViewModel : ObservableObject
 
     public void Log(string message, string level = "INFO")
     {
+        if (message is null) message = string.Empty;
+        if (level is null) level = "INFO";
+
         var timestamp = DateTime.Now.ToString("HH:mm:ss");
         var entry = $"[{timestamp}] [{level}] {message}";
-        _logHistory.Add(entry);
+
+        lock (_logHistoryLock)
+        {
+            _logHistory.Add(entry);
+        }
 
         try
         {
@@ -176,7 +187,7 @@ public partial class MainViewModel : ObservableObject
     public void ClearLog()
     {
         LogEntries.Clear();
-        _logHistory.Clear();
+        lock (_logHistoryLock) { _logHistory.Clear(); }
         LogEntryCount = 0;
         LogSuccessCount = 0;
         LogWarningCount = 0;
@@ -184,6 +195,13 @@ public partial class MainViewModel : ObservableObject
         LatestActivityText = "Log cleared. New activity will appear here.";
         UpdateActivitySummary();
         OnPropertyChanged(nameof(LogText));
+    }
+
+    // Thread-safe snapshot for callers that need to enumerate the full audit trail
+    // (export, autosave-on-close, diagnostics report).
+    private List<string> SnapshotLogHistory()
+    {
+        lock (_logHistoryLock) { return new List<string>(_logHistory); }
     }
 
     public async Task RunPreflightAsync()
@@ -199,10 +217,23 @@ public partial class MainViewModel : ObservableObject
         EventLogService.Initialize(Config.WriteEventLog);
         EventLogService.Write($"{AppConfig.AppName} v{AppConfig.AppVersion} started");
 
-        _preflight = await PreflightService.RunAllAsync(msg => Log(msg, "DEBUG"));
-
-        Application.Current?.Dispatcher.Invoke(() =>
+        try
         {
+            _preflight = await PreflightService.RunAllAsync(msg => Log(msg, "DEBUG"));
+        }
+        catch (Exception ex)
+        {
+            // RunAllAsync is supposed to never throw because all check exceptions are wrapped,
+            // but a fatal WMI/COM teardown can still escape. Keep the UI usable instead of
+            // sticking on "Loading..." forever.
+            Log($"Preflight failed catastrophically: {ex.Message}", "ERROR");
+            _preflight = new PreflightResult();
+        }
+
+        try
+        {
+            Application.Current?.Dispatcher.Invoke(() =>
+            {
             // Map checks to UI
             LeftChecks.Clear();
             RightChecks.Clear();
@@ -315,7 +346,22 @@ public partial class MainViewModel : ObservableObject
             IsLoading = false;
             ButtonsEnabled = true;
             ApplyEnabled = PreflightService.AllCriticalPassed(_preflight.Checks) && !_preflight.VeraCryptDetected;
-        });
+            });
+        }
+        catch (Exception ex)
+        {
+            // Recover the UI even if any of the post-preflight rendering blew up.
+            Log($"Failed to render preflight results: {ex.Message}", "ERROR");
+            try
+            {
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    IsLoading = false;
+                    ButtonsEnabled = true;
+                });
+            }
+            catch { }
+        }
     }
 
     private void UpdateDrivesList()
@@ -832,12 +878,20 @@ public partial class MainViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(Config.LastDiagnosticsPath) && File.Exists(Config.LastDiagnosticsPath))
             return Config.LastDiagnosticsPath;
 
-        if (!Directory.Exists(Config.WorkingDir))
+        if (string.IsNullOrEmpty(Config.WorkingDir) || !Directory.Exists(Config.WorkingDir))
             return null;
 
-        return Directory.GetFiles(Config.WorkingDir, "NVMe_Diagnostics_*.txt", SearchOption.TopDirectoryOnly)
-            .OrderByDescending(File.GetLastWriteTime)
-            .FirstOrDefault();
+        try
+        {
+            return Directory.GetFiles(Config.WorkingDir, "NVMe_Diagnostics_*.txt", SearchOption.TopDirectoryOnly)
+                .OrderByDescending(File.GetLastWriteTime)
+                .FirstOrDefault();
+        }
+        catch
+        {
+            // Folder enumeration can transiently throw if the user is moving files around.
+            return null;
+        }
     }
 
     private void UpdateChangePlan()
@@ -1296,33 +1350,73 @@ public partial class MainViewModel : ObservableObject
         PreferenceSummaryText = $"{toastSummary} {auditSummary} {autosaveSummary} {restartSummary}";
     }
 
+    // Persist settings shortly after a change so a crash before normal close doesn't lose the
+    // user's preferences. Trailing-edge throttle: a rapid burst of toggles only writes once at
+    // the end. Avoids hammering disk while still being durable.
+    private System.Windows.Threading.DispatcherTimer? _settingsSaveDebouncer;
+    private void DebouncedSaveSettings()
+    {
+        if (Application.Current is null) return;
+        if (_settingsSaveDebouncer is null)
+        {
+            _settingsSaveDebouncer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(750)
+            };
+            _settingsSaveDebouncer.Tick += (_, _) =>
+            {
+                _settingsSaveDebouncer?.Stop();
+                try
+                {
+                    SyncConfigFromUI();
+                    ConfigService.Save(Config);
+                }
+                catch { /* Best-effort */ }
+            };
+        }
+        _settingsSaveDebouncer.Stop();
+        _settingsSaveDebouncer.Start();
+    }
+
     partial void OnIncludeServerKeyChanged(bool value)
     {
         UpdateOptionsSummary();
         UpdateChangePlan();
+        DebouncedSaveSettings();
     }
 
     partial void OnSkipWarningsChanged(bool value)
     {
         UpdateOptionsSummary();
         UpdateChangePlan();
+        DebouncedSaveSettings();
     }
 
     partial void OnAutoSaveLogChanged(bool value)
     {
         UpdateActivitySummary();
         UpdatePreferenceSummary();
+        DebouncedSaveSettings();
     }
 
-    partial void OnEnableToastsChanged(bool value) => UpdatePreferenceSummary();
+    partial void OnEnableToastsChanged(bool value)
+    {
+        UpdatePreferenceSummary();
+        DebouncedSaveSettings();
+    }
 
     partial void OnWriteEventLogChanged(bool value)
     {
         UpdateActivitySummary();
         UpdatePreferenceSummary();
+        DebouncedSaveSettings();
     }
 
-    partial void OnRestartDelayTextChanged(string value) => UpdatePreferenceSummary();
+    partial void OnRestartDelayTextChanged(string value)
+    {
+        UpdatePreferenceSummary();
+        DebouncedSaveSettings();
+    }
     partial void OnButtonsEnabledChanged(bool value) => UpdateRecommendedActions();
     partial void OnApplyEnabledChanged(bool value) => UpdateRecommendedActions();
     partial void OnIsLoadingChanged(bool value) => UpdateRecommendedActions();
@@ -1342,27 +1436,44 @@ public partial class MainViewModel : ObservableObject
 
             if (File.Exists(stateFile))
             {
-                var raw = File.ReadAllText(stateFile);
-                using var doc = JsonDocument.Parse(raw);
-                var root = doc.RootElement;
-                bool lastApplied = root.TryGetProperty("Applied", out var ap) && ap.GetBoolean();
-                bool lastNativeActive = root.TryGetProperty("NativeActive", out var na) && na.GetBoolean();
-
-                if (lastApplied && !lastNativeActive && currentState.NativeActive)
+                try
                 {
-                    Log("========== POST-REBOOT VERIFICATION ==========", "SUCCESS");
-                    Log("  Native NVMe driver (nvmedisk.sys) is now ACTIVE after reboot", "SUCCESS");
-                    if (_preflight?.CachedMigration is not null)
+                    var raw = File.ReadAllText(stateFile);
+                    using var doc = JsonDocument.Parse(raw);
+                    var root = doc.RootElement;
+                    bool lastApplied = root.TryGetProperty("Applied", out var ap) && ap.ValueKind == JsonValueKind.True;
+                    bool lastNativeActive = root.TryGetProperty("NativeActive", out var na) && na.ValueKind == JsonValueKind.True;
+
+                    if (lastApplied && !lastNativeActive && currentState.NativeActive)
                     {
-                        foreach (var d in _preflight.CachedMigration.Migrated) Log($"    + {d}", "SUCCESS");
-                        foreach (var d in _preflight.CachedMigration.Legacy) Log($"    - {d} (still legacy)", "WARNING");
+                        Log("========== POST-REBOOT VERIFICATION ==========", "SUCCESS");
+                        Log("  Native NVMe driver (nvmedisk.sys) is now ACTIVE after reboot", "SUCCESS");
+                        if (_preflight?.CachedMigration is not null)
+                        {
+                            foreach (var d in _preflight.CachedMigration.Migrated) Log($"    + {d}", "SUCCESS");
+                            foreach (var d in _preflight.CachedMigration.Legacy) Log($"    - {d} (still legacy)", "WARNING");
+                        }
+                        Log("===============================================", "SUCCESS");
+                        ToastService.Show("NVMe Driver Active", "Native NVMe driver is now active", ToastType.Success, Config.EnableToasts);
                     }
-                    Log("===============================================", "SUCCESS");
-                    ToastService.Show("NVMe Driver Active", "Native NVMe driver is now active", ToastType.Success, Config.EnableToasts);
+                }
+                catch
+                {
+                    // Corrupt state file — quietly recreate. Don't surface as a user-facing error.
                 }
             }
 
-            File.WriteAllText(stateFile, JsonSerializer.Serialize(currentState));
+            // Atomic write: a power loss between WriteAllText and disk flush could leave a
+            // zero-byte state file, which would break the next post-reboot detection silently.
+            var tempFile = stateFile + ".tmp";
+            using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var sw = new StreamWriter(fs, new System.Text.UTF8Encoding(false)))
+            {
+                sw.Write(JsonSerializer.Serialize(currentState));
+                sw.Flush();
+                fs.Flush(flushToDisk: true);
+            }
+            File.Move(tempFile, stateFile, overwrite: true);
         }
         catch { }
     }
@@ -1405,7 +1516,15 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task ApplyPatch()
     {
-        if (_preflight?.VeraCryptDetected == true)
+        if (_preflight is null)
+        {
+            // Should never happen because the button is disabled until preflight finishes,
+            // but if it does we'd rather refuse than dereference null and crash.
+            Log("Preflight not yet complete. Waiting before apply.", "WARNING");
+            return;
+        }
+
+        if (_preflight.VeraCryptDetected)
         {
             Log("[ERROR] BLOCKED: VeraCrypt system encryption detected", "ERROR");
             InfoDialog?.Invoke("VeraCrypt Incompatibility",
@@ -1427,12 +1546,12 @@ public partial class MainViewModel : ObservableObject
 
         var result = await Task.Run(() => PatchService.Install(
             Config,
-            _preflight?.BitLockerEnabled ?? false,
-            _preflight?.VeraCryptDetected ?? false,
-            _preflight?.NativeNVMeStatus,
-            _preflight?.BypassIOStatus,
+            _preflight.BitLockerEnabled,
+            _preflight.VeraCryptDetected,
+            _preflight.NativeNVMeStatus,
+            _preflight.BypassIOStatus,
             msg => Log(msg),
-            (val, text) => Application.Current?.Dispatcher.Invoke(() => SetProgress(val, text))));
+            (val, text) => Application.Current?.Dispatcher.BeginInvoke(() => SetProgress(val, text))));
 
         Application.Current?.Dispatcher.Invoke(() =>
         {
@@ -1442,7 +1561,7 @@ public partial class MainViewModel : ObservableObject
             UpdateOverviewSummary();
             UpdateOperationalHistory();
             ButtonsEnabled = true;
-            ApplyEnabled = PreflightService.AllCriticalPassed(_preflight!.Checks) && !_preflight.VeraCryptDetected;
+            ApplyEnabled = PreflightService.AllCriticalPassed(_preflight.Checks) && !_preflight.VeraCryptDetected;
 
             if (result.Success)
             {
@@ -1472,7 +1591,12 @@ public partial class MainViewModel : ObservableObject
                 if (ConfirmDialog?.Invoke("Installation Complete", restartMsg) == true)
                 {
                     Log($"Initiating system restart in {Config.RestartDelay} seconds...");
-                    PatchService.InitiateRestart(Config.RestartDelay);
+                    if (!PatchService.InitiateRestart(Config.RestartDelay, m => Log(m, "ERROR")))
+                    {
+                        InfoDialog?.Invoke("Restart Could Not Be Scheduled",
+                            "Windows did not accept the restart request. Save your work and use Start > Power > Restart manually.",
+                            DialogIcon.Warning);
+                    }
                 }
             }
             else if (result.WasRolledBack)
@@ -1501,7 +1625,7 @@ public partial class MainViewModel : ObservableObject
             _preflight?.NativeNVMeStatus,
             _preflight?.BypassIOStatus,
             msg => Log(msg),
-            (val, text) => Application.Current?.Dispatcher.Invoke(() => SetProgress(val, text))));
+            (val, text) => Application.Current?.Dispatcher.BeginInvoke(() => SetProgress(val, text))));
 
         Application.Current?.Dispatcher.Invoke(() =>
         {
@@ -1523,7 +1647,12 @@ public partial class MainViewModel : ObservableObject
                 if (ConfirmDialog?.Invoke("Removal Complete", restartMsg) == true)
                 {
                     Log($"Initiating system restart in {Config.RestartDelay} seconds...");
-                    PatchService.InitiateRestart(Config.RestartDelay);
+                    if (!PatchService.InitiateRestart(Config.RestartDelay, m => Log(m, "ERROR")))
+                    {
+                        InfoDialog?.Invoke("Restart Could Not Be Scheduled",
+                            "Windows did not accept the restart request. Save your work and use Start > Power > Restart manually.",
+                            DialogIcon.Warning);
+                    }
                 }
             }
         });
@@ -1565,7 +1694,7 @@ public partial class MainViewModel : ObservableObject
         var result = await BenchmarkService.RunBenchmarkAsync(
             Config.WorkingDir, label,
             msg => Log(msg),
-            (val, text) => Application.Current?.Dispatcher.Invoke(() => SetProgress(val, text)));
+            (val, text) => Application.Current?.Dispatcher.BeginInvoke(() => SetProgress(val, text)));
 
         if (result is not null)
         {
@@ -1601,7 +1730,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task ExportDiagnostics()
     {
-        var path = await DiagnosticsService.ExportAsync(Config.WorkingDir, _preflight, _logHistory);
+        var path = await DiagnosticsService.ExportAsync(Config.WorkingDir, _preflight, SnapshotLogHistory());
         if (path is not null)
         {
             Config.LastDiagnosticsPath = path;
@@ -1643,27 +1772,66 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void CopyLog()
     {
-        if (_logHistory.Count == 0) return;
-        Clipboard.SetText(string.Join("\r\n", _logHistory));
-        Log("Log copied to clipboard", "SUCCESS");
+        var snapshot = SnapshotLogHistory();
+        if (snapshot.Count == 0) return;
+        try
+        {
+            Clipboard.SetText(string.Join("\r\n", snapshot));
+            Log("Log copied to clipboard", "SUCCESS");
+        }
+        catch (Exception ex)
+        {
+            // Clipboard occasionally throws COMException when another app holds the lock.
+            Log($"Failed to copy log: {ex.Message}", "ERROR");
+        }
     }
 
     [RelayCommand]
     private void ExportLog()
     {
-        if (_logHistory.Count == 0) return;
-        var path = Path.Combine(Config.WorkingDir, $"NVMe_Patcher_Log_{DateTime.Now:yyyyMMdd_HHmmss}_manual.txt");
-        File.WriteAllLines(path, _logHistory);
-        Log($"Log exported: {path}", "SUCCESS");
-        InfoDialog?.Invoke("Log Exported", $"Log saved to:\n{path}", DialogIcon.Information);
+        var snapshot = SnapshotLogHistory();
+        if (snapshot.Count == 0) return;
+        try
+        {
+            if (!Directory.Exists(Config.WorkingDir))
+                Directory.CreateDirectory(Config.WorkingDir);
+            var path = Path.Combine(Config.WorkingDir, $"NVMe_Patcher_Log_{DateTime.Now:yyyyMMdd_HHmmss}_manual.txt");
+            File.WriteAllLines(path, snapshot);
+            Log($"Log exported: {path}", "SUCCESS");
+            InfoDialog?.Invoke("Log Exported", $"Log saved to:\n{path}", DialogIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to export log: {ex.Message}", "ERROR");
+            InfoDialog?.Invoke("Log Export Failed",
+                $"The log could not be saved:\n{ex.Message}",
+                DialogIcon.Error);
+        }
     }
+
+    private int _refreshInFlight; // 0 = idle, 1 = a refresh is in flight
 
     [RelayCommand]
     private async Task Refresh()
     {
-        Log("----------------------------------------");
-        Log("Refreshing system checks...");
-        await RunPreflightAsync();
+        // Block re-entrant Refresh: clicking the button repeatedly was kicking off concurrent
+        // PreflightService.RunAllAsync executions that fought over the WMI queries and the
+        // _preflight field. Only one refresh runs at a time.
+        if (System.Threading.Interlocked.CompareExchange(ref _refreshInFlight, 1, 0) != 0)
+        {
+            Log("Refresh already in progress.", "WARNING");
+            return;
+        }
+        try
+        {
+            Log("----------------------------------------");
+            Log("Refreshing system checks...");
+            await RunPreflightAsync();
+        }
+        finally
+        {
+            System.Threading.Interlocked.Exchange(ref _refreshInFlight, 0);
+        }
     }
 
     [RelayCommand]
@@ -1683,7 +1851,31 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void OpenDataFolder() => Process.Start("explorer.exe", Config.WorkingDir);
+    private void OpenDataFolder()
+    {
+        // Make sure the folder exists before asking Explorer to open it — otherwise users
+        // get a confusing "Windows can't find <path>" shell error rather than a clear message.
+        try
+        {
+            if (string.IsNullOrEmpty(Config.WorkingDir))
+            {
+                InfoDialog?.Invoke("Working Folder Unknown",
+                    "The working folder path is not set. Try restarting the app.",
+                    DialogIcon.Warning);
+                return;
+            }
+            if (!Directory.Exists(Config.WorkingDir))
+                Directory.CreateDirectory(Config.WorkingDir);
+            Process.Start("explorer.exe", Config.WorkingDir);
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to open working folder: {ex.Message}", "ERROR");
+            InfoDialog?.Invoke("Could Not Open Folder",
+                $"Windows refused to open the working folder:\n{Config.WorkingDir}\n\n{ex.Message}",
+                DialogIcon.Error);
+        }
+    }
 
     [RelayCommand]
     private void RefreshRecoveryAssets()
@@ -1703,11 +1895,21 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        Process.Start(new ProcessStartInfo
+        try
         {
-            FileName = recoveryKitPath,
-            UseShellExecute = true
-        });
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = recoveryKitPath,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to open recovery kit folder: {ex.Message}", "ERROR");
+            InfoDialog?.Invoke("Could Not Open Recovery Kit",
+                $"Windows refused to open:\n{recoveryKitPath}\n\n{ex.Message}",
+                DialogIcon.Error);
+        }
     }
 
     [RelayCommand]
@@ -1722,10 +1924,21 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        Process.Start(new ProcessStartInfo("notepad.exe", $"\"{verificationScriptPath}\"")
+        try
         {
-            UseShellExecute = true
-        });
+            // notepad ships with every Windows install, but a hardened SKU can have it stripped.
+            Process.Start(new ProcessStartInfo("notepad.exe", $"\"{verificationScriptPath}\"")
+            {
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to open verification script: {ex.Message}", "ERROR");
+            InfoDialog?.Invoke("Could Not Open Verification Script",
+                $"Windows refused to open:\n{verificationScriptPath}\n\n{ex.Message}",
+                DialogIcon.Error);
+        }
     }
 
     [RelayCommand]
@@ -1740,10 +1953,20 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        Process.Start(new ProcessStartInfo("notepad.exe", $"\"{diagnosticsReportPath}\"")
+        try
         {
-            UseShellExecute = true
-        });
+            Process.Start(new ProcessStartInfo("notepad.exe", $"\"{diagnosticsReportPath}\"")
+            {
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to open diagnostics report: {ex.Message}", "ERROR");
+            InfoDialog?.Invoke("Could Not Open Diagnostics Report",
+                $"Windows refused to open:\n{diagnosticsReportPath}\n\n{ex.Message}",
+                DialogIcon.Error);
+        }
     }
 
     [RelayCommand]
@@ -1772,15 +1995,40 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenUpdateUrl()
     {
-        if (!string.IsNullOrEmpty(UpdateUrl))
-            Process.Start(new ProcessStartInfo(UpdateUrl) { UseShellExecute = true });
+        if (string.IsNullOrEmpty(UpdateUrl)) return;
+        OpenUrlInBrowser(UpdateUrl);
     }
 
     [RelayCommand]
-    private void OpenGitHub() => Process.Start(new ProcessStartInfo(AppConfig.GitHubURL) { UseShellExecute = true });
+    private void OpenGitHub() => OpenUrlInBrowser(AppConfig.GitHubURL);
 
     [RelayCommand]
-    private void OpenDocs() => Process.Start(new ProcessStartInfo(AppConfig.DocumentationURL) { UseShellExecute = true });
+    private void OpenDocs() => OpenUrlInBrowser(AppConfig.DocumentationURL);
+
+    private void OpenUrlInBrowser(string url)
+    {
+        // Defense: only allow http(s) URLs. With UseShellExecute=true any "file:" or custom scheme
+        // would be honored by Windows — this keeps the surface to plain web links only.
+        if (string.IsNullOrEmpty(url) ||
+            !(url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+              url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)))
+        {
+            Log($"Refusing to open non-HTTP URL: {url}", "WARNING");
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to open URL: {ex.Message}", "ERROR");
+            InfoDialog?.Invoke("Could Not Open Browser",
+                $"Windows refused to open the URL:\n{url}\n\n{ex.Message}",
+                DialogIcon.Error);
+        }
+    }
 
     public void SyncConfigFromUI()
     {
@@ -1789,32 +2037,57 @@ public partial class MainViewModel : ObservableObject
         Config.AutoSaveLog = AutoSaveLog;
         Config.EnableToasts = EnableToasts;
         Config.WriteEventLog = WriteEventLog;
-        if (int.TryParse(RestartDelayText, out int delay) && delay >= 5 && delay <= 300)
+        // The setter on AppConfig.RestartDelay clamps to 0..3600. We additionally enforce the
+        // UI's documented 5..300s range here so an invalid free-text entry never silently
+        // becomes a 3600-second restart countdown.
+        if (int.TryParse(RestartDelayText, System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out int delay)
+            && delay >= 5 && delay <= 300)
+        {
             Config.RestartDelay = delay;
+        }
+        else
+        {
+            // Reset visible field to the last valid value so the user sees what was kept.
+            RestartDelayText = Config.RestartDelay.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
     }
 
     public void OnClosing()
     {
-        SyncConfigFromUI();
-        ConfigService.Save(Config);
+        try { SyncConfigFromUI(); } catch { }
+        try { ConfigService.Save(Config); } catch { }
 
-        if (Config.AutoSaveLog && _logHistory.Count > 5)
+        if (Config.AutoSaveLog)
         {
-            var path = Path.Combine(Config.WorkingDir, $"NVMe_Patcher_Log_{DateTime.Now:yyyyMMdd_HHmmss}_autosave.txt");
-            try { File.WriteAllLines(path, _logHistory); } catch { }
+            var snapshot = SnapshotLogHistory();
+            if (snapshot.Count > 5)
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(Config.WorkingDir) && !Directory.Exists(Config.WorkingDir))
+                        Directory.CreateDirectory(Config.WorkingDir);
+                    var path = Path.Combine(Config.WorkingDir, $"NVMe_Patcher_Log_{DateTime.Now:yyyyMMdd_HHmmss}_autosave.txt");
+                    File.WriteAllLines(path, snapshot);
+                }
+                catch { }
+            }
         }
 
         try
         {
-            var logFiles = Directory.GetFiles(Config.WorkingDir, "NVMe_Patcher_Log_*.txt")
-                .OrderByDescending(File.GetLastWriteTime).ToArray();
-            foreach (var f in logFiles.Skip(20))
-                try { File.Delete(f); } catch { }
+            if (!string.IsNullOrEmpty(Config.WorkingDir) && Directory.Exists(Config.WorkingDir))
+            {
+                var logFiles = Directory.GetFiles(Config.WorkingDir, "NVMe_Patcher_Log_*.txt")
+                    .OrderByDescending(File.GetLastWriteTime).ToArray();
+                foreach (var f in logFiles.Skip(20))
+                    try { File.Delete(f); } catch { }
+            }
         }
         catch { }
 
-        EventLogService.Write($"{AppConfig.AppName} closed");
-        ToastService.DisposeAll();
+        try { EventLogService.Write($"{AppConfig.AppName} closed"); } catch { }
+        try { ToastService.DisposeAll(); } catch { }
     }
 
     private void SetProgress(int value, string text)
@@ -1824,10 +2097,22 @@ public partial class MainViewModel : ObservableObject
         ProgressVisible = value > 0 && value < 100;
     }
 
+    private const int MaxVisibleLogEntries = 5000;
+
     private void AppendLogEntry(string entry, string message, string level)
     {
         LogEntries.Add(entry);
         LogEntryCount++;
+
+        // Bound the visible buffer so a runaway logging loop cannot blow up the UI thread by
+        // forcing the TextBox to re-render millions of lines. The full audit trail still lives
+        // in _logHistory and gets exported in diagnostics.
+        if (LogEntries.Count > MaxVisibleLogEntries)
+        {
+            int toRemove = LogEntries.Count - MaxVisibleLogEntries;
+            for (int i = 0; i < toRemove; i++)
+                LogEntries.RemoveAt(0);
+        }
 
         switch (level.ToUpperInvariant())
         {

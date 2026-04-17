@@ -23,7 +23,7 @@ public partial class TelemetryView : UserControl
         Reset();
     }
 
-    public int? SetDrives(List<SystemDrive> drives, int? selectedDriveNumber = null)
+    public int? SetDrives(List<SystemDrive>? drives, int? selectedDriveNumber = null)
     {
         _suppressDriveSelectionNotification = true;
         try
@@ -34,7 +34,7 @@ public partial class TelemetryView : UserControl
             int selectedIndex = -1;
             int currentIndex = 0;
 
-            foreach (var drive in drives.Where(d => d.IsNVMe))
+            foreach (var drive in (drives ?? new List<SystemDrive>()).Where(d => d.IsNVMe))
             {
                 DriveSelector.Items.Add(new ComboBoxItem
                 {
@@ -143,8 +143,9 @@ public partial class TelemetryView : UserControl
             : ResolveBrush("TextSecondary", "#FFD9E4F4");
     }
 
-    public void UpdateTempHistory(List<(DateTime Time, int TempC)> data)
+    public void UpdateTempHistory(List<(DateTime Time, int TempC)>? data)
     {
+        data ??= new List<(DateTime, int)>();
         if (data.Count == 0)
         {
             TempChart.Series = [];
@@ -167,8 +168,9 @@ public partial class TelemetryView : UserControl
         };
     }
 
-    public void UpdateWearHistory(List<(DateTime Time, int WearPct)> data)
+    public void UpdateWearHistory(List<(DateTime Time, int WearPct)>? data)
     {
+        data ??= new List<(DateTime, int)>();
         if (data.Count == 0)
         {
             WearChart.Series = [];
@@ -296,12 +298,14 @@ public partial class TelemetryView : UserControl
 
     private Brush ResolveBrush(string resourceKey, string fallbackHex)
     {
-        return TryFindResource(resourceKey) as Brush
-            ?? (Brush)BrushConverter.ConvertFromString(fallbackHex)!;
+        if (TryFindResource(resourceKey) is Brush b) return b;
+        try { return (Brush)BrushConverter.ConvertFromString(fallbackHex)!; }
+        catch { return System.Windows.Media.Brushes.Gray; }
     }
 
-    private static int ExtractNumericValue(string value)
+    private static int ExtractNumericValue(string? value)
     {
+        if (string.IsNullOrEmpty(value)) return 0;
         return int.TryParse(System.Text.RegularExpressions.Regex.Replace(value, @"[^0-9]", ""), out int numericValue)
             ? numericValue
             : 0;

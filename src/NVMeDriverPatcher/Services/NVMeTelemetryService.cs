@@ -18,6 +18,9 @@ public static class NVMeTelemetryService
     /// <returns>A SafeFileHandle to the drive, or null if the drive cannot be opened.</returns>
     public static SafeFileHandle? OpenDriveHandle(int driveNumber)
     {
+        if (driveNumber < 0)
+            return null;
+
         try
         {
             string path = $@"\\.\PhysicalDrive{driveNumber}";
@@ -31,7 +34,12 @@ public static class NVMeTelemetryService
                 IntPtr.Zero);
 
             if (handle.IsInvalid)
+            {
+                // SafeFileHandle on an invalid handle still wraps the INVALID_HANDLE_VALUE
+                // sentinel — we don't want to leak the wrapper to the GC finalizer.
+                handle.Dispose();
                 return null;
+            }
 
             return handle;
         }
@@ -75,7 +83,6 @@ public static class NVMeTelemetryService
                 return null;
 
             // Extract the SMART data from after the descriptor header
-            // The data starts at the offset specified in ProtocolSpecificData
             GCHandle gcHandle = GCHandle.Alloc(outputBuffer, GCHandleType.Pinned);
             try
             {
@@ -85,13 +92,16 @@ public static class NVMeTelemetryService
                 int dataOffset = descriptor.ProtocolSpecificData.ProtocolDataOffset;
                 int dataLength = descriptor.ProtocolSpecificData.ProtocolDataLength;
 
-                if (dataLength < 512)
+                if (dataOffset < 0 || dataLength < 512)
                     return null;
 
-                // Data offset is relative to the start of ProtocolSpecificData within the descriptor
-                // ProtocolSpecificData starts at offset 8 (after Version + Size fields)
-                int absoluteOffset = 8 + dataOffset;
-                if (absoluteOffset + 512 > outputBuffer.Length)
+                // Data offset is relative to the start of ProtocolSpecificData within the descriptor.
+                // Use Marshal.OffsetOf instead of a hard-coded "8" so we stay correct if the layout
+                // ever changes (e.g. struct alignment differences on a future runtime).
+                int protocolSpecificStart = (int)Marshal.OffsetOf<StorageStructs.STORAGE_PROTOCOL_DATA_DESCRIPTOR>(
+                    nameof(StorageStructs.STORAGE_PROTOCOL_DATA_DESCRIPTOR.ProtocolSpecificData));
+                int absoluteOffset = protocolSpecificStart + dataOffset;
+                if (absoluteOffset < 0 || absoluteOffset + 512 > outputBuffer.Length)
                     return null;
 
                 byte[] smartData = new byte[512];
@@ -221,25 +231,37 @@ public static class NVMeTelemetryService
 
     /// <summary>
     /// Reads a 128-bit little-endian unsigned integer from a 16-byte array into a decimal.
-    /// NVMe SMART counters are 128-bit but practical values fit in decimal (96-bit mantissa).
+    /// .NET decimal is a 96-bit mantissa with a 28-29 significant-digit range, which is enough
+    /// for any practical NVMe SMART counter (data units &lt; 10^15, host commands &lt; 10^16).
+    /// Values that genuinely exceed decimal.MaxValue are clamped rather than throwing.
     /// </summary>
     private static decimal Read128BitLE(byte[]? bytes)
     {
         if (bytes is null || bytes.Length < 16)
             return 0m;
 
-        // Build from 4 x 32-bit LE words
-        // decimal can hold up to ~79 digits, more than enough for 128-bit counters
-        decimal result = 0m;
-        decimal multiplier = 1m;
-
-        for (int i = 0; i < 16; i += 4)
+        try
         {
-            uint word = BitConverter.ToUInt32(bytes, i);
-            result += word * multiplier;
-            multiplier *= 4_294_967_296m; // 2^32
+            decimal result = 0m;
+            decimal multiplier = 1m;
+            for (int i = 0; i < 16; i += 4)
+            {
+                uint word = BitConverter.ToUInt32(bytes, i);
+                if (word == 0)
+                {
+                    multiplier *= 4_294_967_296m;
+                    continue;
+                }
+                result += word * multiplier;
+                multiplier *= 4_294_967_296m; // 2^32
+            }
+            return result;
         }
-
-        return result;
+        catch (OverflowException)
+        {
+            // 128-bit value genuinely exceeds decimal.MaxValue (~7.9e28). Surface the cap rather
+            // than letting the parser report a corrupted SMART read.
+            return decimal.MaxValue;
+        }
     }
 }

@@ -107,7 +107,6 @@
                         Style="{StaticResource ActionButton}"
                         AutomationProperties.Name="Acknowledge dialog"
                         IsDefault="True"
-                        IsCancel="True"
                         Visibility="Collapsed"
                         Click="BtnOK_Click"/>
                 </StackPanel>
