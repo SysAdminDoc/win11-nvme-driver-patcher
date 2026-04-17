@@ -9,7 +9,13 @@ public static class ConfigService
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        Converters =
+        {
+            // Persist enums like PatchProfile as "Safe"/"Full" strings — config.json is a file
+            // sysadmins open by hand, and numeric enum values would be opaque.
+            new System.Text.Json.Serialization.JsonStringEnumConverter()
+        }
     };
 
     public static AppConfig Load()
@@ -36,11 +42,22 @@ public static class ConfigService
             config.RestartDelay = saved.RestartDelay;       // setter clamps 0..3600
             config.IncludeServerKey = saved.IncludeServerKey;
             config.SkipWarnings = saved.SkipWarnings;
+            // Unknown or out-of-range enum -> keep the default (Safe). Same defensive
+            // stance we take for RestartDelay via the clamp setter.
+            config.PatchProfile = Enum.IsDefined(typeof(PatchProfile), saved.PatchProfile)
+                ? saved.PatchProfile
+                : PatchProfile.Safe;
+            // Future migrations can branch on ConfigVersion; for now just carry it forward
+            // unless the saved file predates the field (deserializes to 0).
+            config.ConfigVersion = saved.ConfigVersion == 0 ? 2 : saved.ConfigVersion;
             // Drop stale recovery/diagnostics paths whose targets no longer exist —
             // otherwise the workspace shows a "ready" status pointing at missing files.
             config.LastRecoveryKitPath = ExistingDir(saved.LastRecoveryKitPath);
             config.LastDiagnosticsPath = ExistingFile(saved.LastDiagnosticsPath);
             config.LastVerificationScriptPath = ExistingFile(saved.LastVerificationScriptPath);
+            config.PendingVerificationSince = saved.PendingVerificationSince;
+            config.LastVerifiedProfile = saved.LastVerifiedProfile;
+            config.LastVerificationResult = saved.LastVerificationResult;
         }
         catch
         {
@@ -83,9 +100,14 @@ public static class ConfigService
                 config.RestartDelay,
                 config.IncludeServerKey,
                 config.SkipWarnings,
+                config.PatchProfile,
+                config.ConfigVersion,
                 config.LastRecoveryKitPath,
                 config.LastDiagnosticsPath,
                 config.LastVerificationScriptPath,
+                config.PendingVerificationSince,
+                config.LastVerifiedProfile,
+                config.LastVerificationResult,
                 LastRun = DateTime.Now.ToString("o")
             };
             var json = JsonSerializer.Serialize(toSave, JsonOptions);
