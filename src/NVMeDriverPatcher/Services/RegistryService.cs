@@ -10,6 +10,11 @@ public static class RegistryService
         var status = new PatchStatus { Total = AppConfig.TotalComponents };
         int count = 0;
         var keys = new List<string>();
+        bool primarySet = false;
+        bool extendedA = false;   // 1853569164
+        bool extendedB = false;   // 156965516
+        bool safeBootMin = false;
+        bool safeBootNet = false;
 
         try
         {
@@ -28,6 +33,9 @@ public static class RegistryService
                             {
                                 count++;
                                 keys.Add(id);
+                                if (id == AppConfig.PrimaryFeatureID) primarySet = true;
+                                else if (id == "1853569164") extendedA = true;
+                                else if (id == "156965516") extendedB = true;
                             }
                         }
                         catch { /* one bad value shouldn't poison the entire status read */ }
@@ -42,6 +50,7 @@ public static class RegistryService
                 {
                     count++;
                     keys.Add("SafeBootMinimal");
+                    safeBootMin = true;
                 }
             }
 
@@ -52,6 +61,7 @@ public static class RegistryService
                 {
                     count++;
                     keys.Add("SafeBootNetwork");
+                    safeBootNet = true;
                 }
             }
         }
@@ -61,10 +71,28 @@ public static class RegistryService
             // — callers treat zero-applied as "Not Applied" which is the right default.
         }
 
+        // Profile detection — answers "is this a clean Safe install, a clean Full install, or
+        // some in-between state?" independently of what the config thinks was last applied.
+        // Both SafeBoot keys are required for either profile to count as clean.
+        bool cleanSafe = primarySet && !extendedA && !extendedB && safeBootMin && safeBootNet;
+        bool cleanFull = primarySet && extendedA && extendedB && safeBootMin && safeBootNet;
+
+        if (count == 0)
+            status.DetectedProfile = PatchAppliedProfile.None;
+        else if (cleanSafe)
+            status.DetectedProfile = PatchAppliedProfile.Safe;
+        else if (cleanFull)
+            status.DetectedProfile = PatchAppliedProfile.Full;
+        else
+            status.DetectedProfile = PatchAppliedProfile.Mixed;
+
         status.Count = count;
         status.Keys = keys;
-        status.Applied = count == AppConfig.TotalComponents;
-        status.Partial = count > 0 && count < AppConfig.TotalComponents;
+        // "Applied" now means any clean profile. Mixed state is "Partial" regardless of count —
+        // before this fix, a Safe-Mode install (3/5 components) reported as Partial, confusing
+        // users into thinking the tool had failed.
+        status.Applied = cleanSafe || cleanFull;
+        status.Partial = !status.Applied && count > 0;
         return status;
     }
 

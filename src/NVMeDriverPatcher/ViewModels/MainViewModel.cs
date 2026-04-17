@@ -115,6 +115,15 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _enableToasts;
     [ObservableProperty] private bool _writeEventLog;
     [ObservableProperty] private string _restartDelayText = "30";
+    [ObservableProperty] private bool _isSafeModeSelected = true;
+    [ObservableProperty] private bool _isFullModeSelected;
+    [ObservableProperty] private string _patchProfileHelpText =
+        "Safe Mode writes only 735209102 — enough to swap the driver with no reports of BSODs tied to it.";
+
+    // Lit when post-reboot verification detects that the override was blocked. Surfaces a
+    // persistent "Try ViVeTool Fallback" affordance on the Overview card so the user can
+    // revisit the choice without reopening the dialog.
+    [ObservableProperty] private bool _showViVeToolFallbackBadge;
 
     // UI collections
     public ObservableCollection<PreflightCheckVM> LeftChecks { get; } = [];
@@ -135,21 +144,63 @@ public partial class MainViewModel : ObservableObject
     // corrupt the underlying array and crash later reads with IndexOutOfRangeException.
     private readonly object _logHistoryLock = new();
 
+    // Set while the ctor is priming view-bound properties from config, so the change partials
+    // don't immediately save config back out (triggering a pointless write on every startup).
+    private bool _suppressConfigWrites;
+
     public MainViewModel()
     {
         Config = ConfigService.Load();
         VersionText = $"v{AppConfig.AppVersion}";
-        IncludeServerKey = Config.IncludeServerKey;
-        SkipWarnings = Config.SkipWarnings;
-        AutoSaveLog = Config.AutoSaveLog;
-        EnableToasts = Config.EnableToasts;
-        WriteEventLog = Config.WriteEventLog;
-        RestartDelayText = Config.RestartDelay.ToString();
+        _suppressConfigWrites = true;
+        try
+        {
+            IncludeServerKey = Config.IncludeServerKey;
+            SkipWarnings = Config.SkipWarnings;
+            AutoSaveLog = Config.AutoSaveLog;
+            EnableToasts = Config.EnableToasts;
+            WriteEventLog = Config.WriteEventLog;
+            RestartDelayText = Config.RestartDelay.ToString();
+            IsSafeModeSelected = Config.PatchProfile == PatchProfile.Safe;
+            IsFullModeSelected = Config.PatchProfile == PatchProfile.Full;
+        }
+        finally
+        {
+            _suppressConfigWrites = false;
+        }
+        RefreshPatchProfileHelpText();
         UpdateOptionsSummary();
         UpdatePreferenceSummary();
         UpdateOperationalHistory();
         UpdateActivitySummary();
         UpdateWorkspaceBadges();
+    }
+
+    partial void OnIsSafeModeSelectedChanged(bool value)
+    {
+        if (!value) return;
+        IsFullModeSelected = false;
+        Config.PatchProfile = PatchProfile.Safe;
+        if (!_suppressConfigWrites) { try { ConfigService.Save(Config); } catch { } }
+        RefreshPatchProfileHelpText();
+        UpdateOptionsSummary();
+    }
+
+    partial void OnIsFullModeSelectedChanged(bool value)
+    {
+        if (!value) return;
+        IsSafeModeSelected = false;
+        Config.PatchProfile = PatchProfile.Full;
+        if (!_suppressConfigWrites) { try { ConfigService.Save(Config); } catch { } }
+        RefreshPatchProfileHelpText();
+        UpdateOptionsSummary();
+    }
+
+    private void RefreshPatchProfileHelpText()
+    {
+        PatchProfileHelpText = Config.PatchProfile == PatchProfile.Safe
+            ? "Safe Mode writes only 735209102 — enough to swap the driver with no reports of BSODs tied to it. This is what you want on a daily-driver machine."
+            : "Full Mode adds 1853569164 (UxAccOptimization) and 156965516 (Standalone_Future). Higher peak performance on some drives; community BSOD reports cluster on these two flags. Try Safe Mode first — you can always opt in later.";
     }
 
     public void Log(string message, string level = "INFO")
@@ -216,6 +267,63 @@ public partial class MainViewModel : ObservableObject
 
         EventLogService.Initialize(Config.WriteEventLog);
         EventLogService.Write($"{AppConfig.AppName} v{AppConfig.AppVersion} started");
+
+        // Post-reboot verification: evaluate now so the log captures the state at startup,
+        // but defer any dialog until AFTER preflight has rendered. A modal dialog popping up
+        // over a half-rendered UI was jarring AND it blocked the main window from showing
+        // drive data / status cards until the user answered.
+        VerificationReport? pendingVerification = null;
+        try
+        {
+            pendingVerification = PatchVerificationService.Evaluate(Config);
+            switch (pendingVerification.Outcome)
+            {
+                case VerificationOutcome.Confirmed:
+                    Log($"[OK] Post-reboot verification: {pendingVerification.Detail}", "SUCCESS");
+                    ToastService.Show("NVMe Driver Active",
+                        "Native NVMe driver is bound after the reboot.",
+                        ToastType.Success, Config.EnableToasts);
+                    PatchVerificationService.Clear(Config, pendingVerification);
+                    ConfigService.Save(Config);
+                    pendingVerification = null;
+                    break;
+                case VerificationOutcome.OverrideBlocked:
+                    Log("[WARNING] " + pendingVerification.Summary, "WARNING");
+                    Log(pendingVerification.Detail, "WARNING");
+                    EventLogService.Write(pendingVerification.Summary + " — " + pendingVerification.Detail,
+                        System.Diagnostics.EventLogEntryType.Warning, 2101);
+                    ToastService.Show("Patch Inactive",
+                        "Registry keys are set but Windows is still on the legacy driver. See the Activity log.",
+                        ToastType.Warning, Config.EnableToasts);
+                    PatchVerificationService.Clear(Config, pendingVerification);
+                    ShowViVeToolFallbackBadge = true;
+                    ConfigService.Save(Config);
+                    // Dialog itself is deferred — see HandlePendingVerificationDialogAsync below.
+                    break;
+                case VerificationOutcome.Reverted:
+                    Log("Post-reboot verification: previous patch is no longer present.", "INFO");
+                    PatchVerificationService.Clear(Config, pendingVerification);
+                    ConfigService.Save(Config);
+                    pendingVerification = null;
+                    break;
+                case VerificationOutcome.AwaitingRestart:
+                    Log("Patch is applied — restart to complete activation.", "INFO");
+                    pendingVerification = null;
+                    break;
+                case VerificationOutcome.StalePending:
+                    Log("Patch pending-verification flag is older than 30 days; clearing silently.", "DEBUG");
+                    PatchVerificationService.Clear(Config, pendingVerification);
+                    ConfigService.Save(Config);
+                    pendingVerification = null;
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            // Never let verification failures block the rest of preflight.
+            Log($"Post-reboot verification skipped: {ex.Message}", "DEBUG");
+            pendingVerification = null;
+        }
 
         try
         {
@@ -361,6 +469,37 @@ public partial class MainViewModel : ObservableObject
                 });
             }
             catch { }
+        }
+
+        // Dialog AFTER preflight render so the user sees the drive/status cards first rather
+        // than a modal popping up over an empty-looking window. Scheduled via BeginInvoke at
+        // Background priority so rendering has a frame to commit.
+        if (pendingVerification is { Outcome: VerificationOutcome.OverrideBlocked })
+        {
+            try
+            {
+                var vr = pendingVerification;
+                Application.Current?.Dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Background,
+                    new Action(async () =>
+                    {
+                        bool tryFallback = ConfirmDialog?.Invoke(
+                            "Patch Applied But Inactive",
+                            "The registry changes are in place, but Windows is still loading the legacy stornvme.sys driver.\n\n" +
+                            "Microsoft began blocking this override path on recent Insider builds in early 2026. " +
+                            "On those builds the FeatureManagement\\Overrides route is a no-op.\n\n" +
+                            "A community fallback exists: ViVeTool writes to a different feature store using IDs 60786016 and 48433719. " +
+                            "This works on post-block builds at the cost of an extra dependency.\n\n" +
+                            "Would you like this app to download ViVeTool from its official GitHub repository " +
+                            $"({ViVeToolService.ViVeToolProjectUrl}) and apply the fallback now?\n\n" +
+                            "Yes — download + apply ViVeTool fallback (you will need to restart again afterwards).\n" +
+                            "No — leave things as-is. Your registry backup, restore point, and recovery kit are still in place; " +
+                            "you can remove the patch from this app at any time."
+                        ) == true;
+                        if (tryFallback) await ApplyViVeToolFallback();
+                    }));
+            }
+            catch { /* Dispatcher gone during shutdown */ }
         }
     }
 
@@ -1480,37 +1619,110 @@ public partial class MainViewModel : ObservableObject
 
     private string BuildConfirmMessage(string title)
     {
-        var warnings = new List<string>();
+        var blockers = new List<string>();   // [!!] you really should read these before clicking yes
+        var warnings = new List<string>();   // [!]  tradeoffs you accept by continuing
+        var notes = new List<string>();      // [i]  informational — no action needed
 
         if (title == "Apply Patch" && !_preflight!.HasNVMeDrives)
-            warnings.Add("[!] NO NVMe DRIVES DETECTED - This patch only affects NVMe drives using the Windows inbox driver.");
+            warnings.Add("NO NVMe DRIVES FOUND — The patch only benefits NVMe drives using Microsoft's inbox driver. SATA/USB storage is unaffected.");
         if (_preflight!.BitLockerEnabled)
-            warnings.Add("[!] BITLOCKER ACTIVE - Will be automatically suspended for one reboot to prevent recovery key prompt.");
+            notes.Add("BITLOCKER — will be auto-suspended for one reboot so you don't get a recovery-key prompt. It re-enables automatically on second boot.");
         foreach (var sw in _preflight.IncompatibleSoftware.Where(s => s.Severity != "Critical"))
-            warnings.Add($"[i] {sw.Name}: {sw.Message}");
+            notes.Add($"{sw.Name}: {sw.Message}");
         if (_preflight.DriverInfo?.HasThirdParty == true)
-            warnings.Add($"[i] THIRD-PARTY DRIVER: {_preflight.DriverInfo.ThirdPartyName} - May have no effect.");
+            notes.Add($"THIRD-PARTY DRIVER: {_preflight.DriverInfo.ThirdPartyName} is installed. The feature flags may have no effect if this driver owns the controller.");
+
         if (title == "Apply Patch")
         {
+            // Educational opener — set expectations before the list of disclaimers so users
+            // understand WHAT they're turning on, not just what might break.
+            var profileLine = Config.PatchProfile == PatchProfile.Safe
+                ? "Mode: SAFE — writes the single primary feature flag (735209102) that swaps stornvme.sys for nvmedisk.sys. Community BSOD reports correlate with the two extended flags, so this mode leaves them off."
+                : "Mode: FULL — writes all three feature flags (primary + two extended). Higher peak performance on some drives, higher crash risk on others. You can revert at any time.";
+            notes.Insert(0, profileLine);
+
+            // BypassIO / DirectStorage — elevated from an afterthought to a first-class
+            // warning. nvmedisk.sys vetoes BypassIO, which hurts DirectStorage games.
+            if (_preflight.BypassIOStatus?.Supported == true)
+                warnings.Add("DIRECTSTORAGE USERS — Your system drive currently supports BypassIO. The native NVMe driver does NOT, so DirectStorage games (Forspoken, Ratchet & Clank, etc.) will fall back to the slower path after this patch. If you game on this machine, skip the patch or plan to toggle it off for game sessions.");
+            else
+                notes.Add("BypassIO is not currently active on the system drive, so DirectStorage games won't notice the switch.");
+
             var ssdTools = _preflight.IncompatibleSoftware.Where(s => s.Message.Contains("SCSI pass-through")).ToList();
             if (ssdTools.Count > 0)
-                warnings.Add($"[i] SSD TOOLS: {string.Join(", ", ssdTools.Select(s => s.Name))} will not detect drives after patching.");
+                warnings.Add($"SSD VENDOR TOOLS — {string.Join(", ", ssdTools.Select(s => s.Name))} talk to drives through stornvme.sys. After the patch they may stop detecting your drive or fail to update firmware. Run any pending firmware updates BEFORE patching.");
+
             if (_preflight.BuildDetails is { Is24H2OrLater: false })
-                warnings.Add($"[!] OLDER BUILD: {_preflight.BuildDetails.DisplayVersion} - Designed for 24H2+. Results may be unpredictable.");
+                warnings.Add($"OLDER BUILD — {_preflight.BuildDetails.DisplayVersion}. The patch was designed for Windows 11 24H2+. Behavior on earlier builds is not guaranteed.");
+
             if (_preflight.IsLaptop)
-                warnings.Add("[!] LAPTOP DETECTED: Native NVMe breaks APST power management. Expect ~15% battery life reduction.");
-            warnings.Add("[i] GAMING NOTE: Native NVMe does not support BypassIO. DirectStorage games may have higher CPU usage.");
+                warnings.Add("LAPTOP — nvmedisk.sys disables APST (Autonomous Power State Transition). Expect ~15% shorter battery life and higher SSD idle temperatures. Desktops are unaffected.");
+
+            // Microsoft's Feb/Mar 2026 block — let the user know the patch may silently
+            // no-op on the latest Insider builds, and that we'll tell them post-reboot.
+            notes.Add("COMPATIBILITY NOTE — Microsoft began neutering the registry-override path on post-Feb-2026 Insider builds. The patcher will write the keys either way, and on next launch this tool will verify whether Windows actually swapped drivers. If it didn't, you'll get a clear message with no damage done.");
+
+            // Recovery kit freshness. Frame the absence as "we'll make one for you" — not
+            // as a scary warning. Emphasize that rollback is always a click away.
+            var kitPath = ResolveRecoveryKitPath();
+            if (kitPath is null)
+            {
+                notes.Add("RECOVERY KIT — You don't have one yet. We'll generate one automatically right after the patch succeeds; copy it to a USB stick for peace of mind.");
+            }
+            else
+            {
+                try
+                {
+                    var age = DateTime.Now - Directory.GetLastWriteTime(kitPath);
+                    if (age.TotalDays > 30)
+                        notes.Add($"RECOVERY KIT — Your existing kit is {(int)age.TotalDays} days old. A fresh one will be regenerated automatically post-patch.");
+                }
+                catch { }
+            }
+
+            notes.Add("ROLLBACK — This app takes a registry backup, creates a System Restore point, and saves a recovery kit before touching anything. Uninstalling the patch is one click; worst-case recovery is documented in the kit's README.");
         }
 
-        var msg = title == "Apply Patch"
-            ? "Apply the NVMe driver enhancement patch?\n\nThis will modify system registry settings."
-            : "Remove the NVMe driver patch?\n\nThis will revert to default Windows behavior.";
+        string header, body;
+        if (title == "Apply Patch")
+        {
+            header = "Enable Microsoft's native NVMe driver?";
+            body =
+                "This replaces the legacy stornvme.sys driver with the newer nvmedisk.sys driver " +
+                "(the same stack Windows Server 2025 ships by default). Typical gains on modern NVMe drives: " +
+                "~80% higher random-write IOPS and ~45% lower CPU under heavy load. Sequential read throughput " +
+                "is essentially unchanged.\n\n" +
+                "The change takes effect after a restart.";
+        }
+        else
+        {
+            header = "Remove the native NVMe driver?";
+            body =
+                "This restores the legacy stornvme.sys path and clears the registry flags and Safe Boot entries " +
+                "this tool created. Your data is not touched. A restart is required for the change to take effect.";
+        }
 
+        var sb = new System.Text.StringBuilder();
+        sb.Append(header).Append("\n\n").Append(body);
+
+        if (blockers.Count > 0)
+        {
+            sb.Append("\n\n-- CRITICAL --\n");
+            sb.Append(string.Join("\n\n", blockers.Select(s => "[!!] " + s)));
+        }
         if (warnings.Count > 0)
-            msg += "\n\n--- NOTICES ---\n" + string.Join("\n\n", warnings);
+        {
+            sb.Append("\n\n-- TRADEOFFS YOU ACCEPT BY CONTINUING --\n");
+            sb.Append(string.Join("\n\n", warnings.Select(s => "[!] " + s)));
+        }
+        if (notes.Count > 0)
+        {
+            sb.Append("\n\n-- GOOD TO KNOW --\n");
+            sb.Append(string.Join("\n\n", notes.Select(s => "[i] " + s)));
+        }
 
-        msg += "\n\nProceed?";
-        return msg;
+        sb.Append("\n\nProceed?");
+        return sb.ToString();
     }
 
     [RelayCommand]
@@ -1577,6 +1789,10 @@ public partial class MainViewModel : ObservableObject
                         Config.LastRecoveryKitPath = recoveryKitPath;
                 }
                 catch { }
+                // Mark pending — next launch (after reboot) will confirm nvmedisk actually
+                // bound, so we can surface a clear message if Microsoft's block neutered
+                // the override on this build.
+                PatchVerificationService.MarkPending(Config);
                 ConfigService.Save(Config);
                 UpdateOperationalHistory();
 
@@ -1601,7 +1817,24 @@ public partial class MainViewModel : ObservableObject
             }
             else if (result.WasRolledBack)
             {
-                ToastService.Show("NVMe Patch Failed", "Changes rolled back.", ToastType.Warning, Config.EnableToasts);
+                if (result.RollbackFullyReversed)
+                {
+                    ToastService.Show("NVMe Patch Failed", "Changes rolled back cleanly.", ToastType.Warning, Config.EnableToasts);
+                }
+                else
+                {
+                    // Rollback itself failed — some keys remained set. We cannot claim the
+                    // system is in a clean state. Point the user at the safety net instead of
+                    // pretending everything is fine.
+                    ToastService.Show("Rollback Incomplete", "Some writes could not be reversed. See the dialog.", ToastType.Error, Config.EnableToasts);
+                    InfoDialog?.Invoke("Rollback Incomplete",
+                        "The patch failed partway through and the automatic rollback could not reverse every change.\n\n" +
+                        "The system may still have some of the feature flags or Safe Boot entries set. To return to a fully clean state:\n\n" +
+                        $"  1. Double-click the pre-patch registry backup in {Config.WorkingDir} to re-import the previous values, OR\n" +
+                        "  2. Use System Restore to roll back to the checkpoint created before this attempt.\n\n" +
+                        "Your activity log shows which specific keys could not be removed.",
+                        DialogIcon.Error);
+                }
             }
         });
     }
@@ -1738,6 +1971,90 @@ public partial class MainViewModel : ObservableObject
             UpdateOperationalHistory();
             Log($"Diagnostics exported: {path}", "SUCCESS");
             InfoDialog?.Invoke("Export Complete", $"Diagnostics exported to:\n{path}", DialogIcon.Information);
+        }
+    }
+
+    // ViVeTool fallback — downloads ViVeTool from its official GitHub release, caches it in
+    // <workingDir>\tools\, then runs it with the two feature IDs the community adopted after
+    // Microsoft's Feb/Mar 2026 block on the FeatureManagement\Overrides route.
+    // Called both from the post-reboot OverrideBlocked dialog and from a persistent badge so
+    // the user can retry without quitting the app.
+    [RelayCommand]
+    private async Task ApplyViVeToolFallback()
+    {
+        ButtonsEnabled = false;
+        try
+        {
+            Log("========================================");
+            Log("Applying ViVeTool fallback");
+            Log("========================================");
+            var result = await ViVeToolService.ApplyFallbackAsync(Config.WorkingDir, msg => Log(msg));
+            if (!result.Success)
+            {
+                Log($"[ERROR] ViVeTool fallback failed: {result.Message}", "ERROR");
+                InfoDialog?.Invoke("ViVeTool Fallback Failed",
+                    "The fallback could not be applied:\n\n" + result.Message +
+                    "\n\nYour registry backup, restore point, and recovery kit from the original patch are still in place. " +
+                    "You can remove the patch at any time or retry the fallback later (the app will remember the block state until you do).",
+                    DialogIcon.Error);
+                return;
+            }
+
+            Log($"[SUCCESS] ViVeTool fallback applied: {string.Join(", ", result.AppliedIDs)}", "SUCCESS");
+            ShowViVeToolFallbackBadge = false;
+            ToastService.Show("ViVeTool Fallback Applied",
+                "Fallback feature IDs written. Restart to activate the native NVMe driver.",
+                ToastType.Success, Config.EnableToasts);
+            // Reuse the verification pipeline — the fallback is just a different way of
+            // asking Windows to swap the driver, so the same post-reboot check applies.
+            PatchVerificationService.MarkPending(Config);
+            ConfigService.Save(Config);
+
+            var restartMsg =
+                $"ViVeTool wrote feature IDs {string.Join(" and ", result.AppliedIDs)}.\n\n" +
+                "Restart now to let Windows pick up the native NVMe driver?\n\n" +
+                $"(System will restart in {Config.RestartDelay} seconds if you click Yes.)";
+            if (ConfirmDialog?.Invoke("Fallback Applied", restartMsg) == true)
+            {
+                if (!PatchService.InitiateRestart(Config.RestartDelay, m => Log(m, "ERROR")))
+                {
+                    InfoDialog?.Invoke("Restart Could Not Be Scheduled",
+                        "Windows did not accept the restart request. Save your work and restart manually.",
+                        DialogIcon.Warning);
+                }
+            }
+        }
+        finally
+        {
+            ButtonsEnabled = true;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExportSupportBundle()
+    {
+        Log("Generating support bundle (zip)...", "INFO");
+        var path = await DiagnosticsService.ExportBundleAsync(
+            Config.WorkingDir,
+            _preflight,
+            SnapshotLogHistory(),
+            Config.ConfigFile);
+        if (path is not null)
+        {
+            Config.LastDiagnosticsPath = path;
+            ConfigService.Save(Config);
+            UpdateOperationalHistory();
+            Log($"Support bundle exported: {path}", "SUCCESS");
+            InfoDialog?.Invoke("Support Bundle Created",
+                $"A shareable support bundle was saved to:\n{path}\n\nContains: diagnostics report, config, crash logs, recent registry backups, and the SQLite DB.",
+                DialogIcon.Information);
+        }
+        else
+        {
+            Log("Support bundle export failed", "ERROR");
+            InfoDialog?.Invoke("Export Failed",
+                "Could not create support bundle. Check that the working directory is writable.",
+                DialogIcon.Error);
         }
     }
 
