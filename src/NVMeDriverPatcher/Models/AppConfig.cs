@@ -2,6 +2,16 @@ using System.Text.Json.Serialization;
 
 namespace NVMeDriverPatcher.Models;
 
+// Which set of feature flags to write. Safe is the community-recommended default as of
+// 2026 because BSOD reports cluster on the two "extended" flags, while the primary flag
+// alone is sufficient to swap stornvme.sys for nvmedisk.sys.
+// See ROADMAP.md §0.4 and the v4.2.0 CHANGELOG for full context.
+public enum PatchProfile
+{
+    Safe = 0,
+    Full = 1
+}
+
 public class AppConfig
 {
     public const string AppName = "NVMe Driver Patcher";
@@ -33,7 +43,7 @@ public class AppConfig
             if (asmVer is not null) return $"{asmVer.Major}.{asmVer.Minor}.{asmVer.Build}";
         }
         catch { /* fall through to literal */ }
-        return "4.0.0";
+        return "4.3.1";
     }
     public const string RegistryPath = @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
     public const string RegistrySubKey = @"SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
@@ -45,10 +55,29 @@ public class AppConfig
     public const int RecommendedBuild = 26100;
     public const string ServerFeatureID = "1176759950";
 
+    // The lone flag needed to swap stornvme.sys -> nvmedisk.sys on supported builds.
+    // In Safe Mode we write ONLY this (plus SafeBoot) — the two flags below are opt-in.
+    public const string PrimaryFeatureID = "735209102";
+
+    // Extended flags — gated behind Full Mode because community BSOD reports (Jan–Mar 2026
+    // Overclock.net / windowsforum.com threads) correlate crashes with these two.
+    public static IReadOnlyList<string> ExtendedFeatureIDs { get; } = ["1853569164", "156965516"];
+
     // Derived from FeatureIDs.Count so adding/removing a core flag doesn't silently leave
     // TotalComponents out of sync with what PatchService.Install actually writes.
     // (Core feature flags + 2 SafeBoot keys [Minimal, Network])
     public static int TotalComponents => FeatureIDs.Count + 2;
+
+    // The set of feature flags actually written for a given profile, NOT counting SafeBoot
+    // keys (callers add +2 for those). Safe = primary only; Full = primary + extended.
+    public static IReadOnlyList<string> GetFeatureIDsForProfile(PatchProfile profile) =>
+        profile == PatchProfile.Safe
+            ? new[] { PrimaryFeatureID }
+            : FeatureIDs;
+
+    // Component count the installer is aiming for, given profile + optional Server 2025 key.
+    public static int GetTotalComponents(PatchProfile profile, bool includeServerKey) =>
+        GetFeatureIDsForProfile(profile).Count + (includeServerKey ? 1 : 0) + 2;
     public const string EventLogSourceName = "NVMe Driver Patcher";
     public const string GitHubURL = "https://github.com/SysAdminDoc/win11-nvme-driver-patcher";
     public const string DocumentationURL = "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353";
@@ -76,10 +105,21 @@ public class AppConfig
     }
     public bool IncludeServerKey { get; set; }
     public bool SkipWarnings { get; set; }
+    // Default to Safe — primary flag only. Users can opt into Full after reading the tradeoff.
+    public PatchProfile PatchProfile { get; set; } = PatchProfile.Safe;
+    // Schema version for future migrations. Leave loose — unknown values fall back to Safe.
+    public int ConfigVersion { get; set; } = 2;
     public string? LastRun { get; set; }
     public string? LastRecoveryKitPath { get; set; }
     public string? LastDiagnosticsPath { get; set; }
     public string? LastVerificationScriptPath { get; set; }
+
+    // Set on successful patch apply; cleared after a post-reboot verification confirms
+    // nvmedisk.sys actually bound (or flagged the user that the override was blocked).
+    // ISO-8601 UTC timestamp so the next launch can compare vs OS boot time.
+    public string? PendingVerificationSince { get; set; }
+    public string? LastVerifiedProfile { get; set; }
+    public string? LastVerificationResult { get; set; }
 
     [JsonIgnore]
     public string WorkingDir { get; set; } = string.Empty;
