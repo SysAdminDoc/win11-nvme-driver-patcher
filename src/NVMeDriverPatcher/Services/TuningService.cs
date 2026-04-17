@@ -126,6 +126,9 @@ public static class TuningService
             WriteIfSet(TuningProfile.Key_IdlePowerTimeout, profile.IdlePowerTimeout);
             WriteIfSet(TuningProfile.Key_StandbyPowerTimeout, profile.StandbyPowerTimeout);
 
+            // Force the writes to disk so a hard reset between Apply and reboot doesn't lose them.
+            try { key.Flush(); } catch { }
+
             log?.Invoke($"Tuning complete: {applied} applied, {failed} failed");
             EventLogService.Write($"StorNVMe tuning profile '{profile.Name}' applied ({applied} parameters)");
 
@@ -177,7 +180,11 @@ public static class TuningService
 
             key.SetValue(name, value, RegistryValueKind.DWord);
             var verify = key.GetValue(name);
-            return verify is int v && v == value;
+            if (verify is not int v || v != value)
+                return false;
+
+            try { key.Flush(); } catch { }
+            return true;
         }
         catch
         {
@@ -201,6 +208,7 @@ public static class TuningService
                 return true; // Key doesn't exist, parameter is already absent
 
             key.DeleteValue(name, throwOnMissingValue: false);
+            try { key.Flush(); } catch { }
             return true;
         }
         catch
@@ -229,15 +237,38 @@ public static class TuningService
             TuningProfile.Key_StandbyPowerTimeout
         ];
 
-        foreach (string name in allKeys)
+        // Open the parent key once and delete all values, then flush. This is both faster
+        // (one OpenSubKey + Flush instead of six) and removes the per-iteration race window
+        // where a half-deleted set of values is observable.
+        try
         {
-            if (RemoveParameter(name))
-                log?.Invoke($"  [OK] Removed {name}");
-            else
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var key = hklm.OpenSubKey(TuningProfile.RegistrySubKey, writable: true);
+            if (key is null)
             {
-                log?.Invoke($"  [FAIL] Could not remove {name}");
-                allOk = false;
+                log?.Invoke("Reset complete (no overrides were present)");
+                return true;
             }
+
+            foreach (string name in allKeys)
+            {
+                try
+                {
+                    key.DeleteValue(name, throwOnMissingValue: false);
+                    log?.Invoke($"  [OK] Removed {name}");
+                }
+                catch (Exception ex)
+                {
+                    log?.Invoke($"  [FAIL] Could not remove {name}: {ex.Message}");
+                    allOk = false;
+                }
+            }
+            try { key.Flush(); } catch { }
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[ERROR] Reset failed to open parameters key: {ex.Message}");
+            return false;
         }
 
         log?.Invoke(allOk ? "Reset complete" : "Reset completed with errors");

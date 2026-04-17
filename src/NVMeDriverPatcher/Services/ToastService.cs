@@ -7,6 +7,7 @@ public enum ToastType { Info, Success, Warning, Error }
 
 public static class ToastService
 {
+    private const int MaxActiveToasts = 8;
     private static readonly List<System.Windows.Forms.NotifyIcon> ActiveToasts = [];
 
     public static void Show(string title, string message, ToastType type = ToastType.Info, bool enabled = true)
@@ -23,11 +24,24 @@ public static class ToastService
 
         try
         {
+            // Cap the active toast list. Without this, a flood of notifications (e.g. a service
+            // emitting hundreds of warnings during preflight) can keep accumulating tray icons
+            // until the system runs out of HICONs.
+            lock (ActiveToasts)
+            {
+                while (ActiveToasts.Count >= MaxActiveToasts)
+                {
+                    var oldest = ActiveToasts[0];
+                    ActiveToasts.RemoveAt(0);
+                    try { oldest.Visible = false; oldest.Dispose(); } catch { }
+                }
+            }
+
             var icon = new System.Windows.Forms.NotifyIcon
             {
                 Icon = SystemIcons.Information,
-                BalloonTipTitle = title,
-                BalloonTipText = message,
+                BalloonTipTitle = title ?? string.Empty,
+                BalloonTipText = message ?? string.Empty,
                 BalloonTipIcon = type switch
                 {
                     ToastType.Success => System.Windows.Forms.ToolTipIcon.Info,
@@ -44,8 +58,8 @@ public static class ToastService
             timer.Tick += (_, _) =>
             {
                 timer.Stop();
-                icon.Visible = false;
-                icon.Dispose();
+                try { icon.Visible = false; } catch { }
+                try { icon.Dispose(); } catch { }
                 lock (ActiveToasts) { ActiveToasts.Remove(icon); }
             };
             timer.Start();

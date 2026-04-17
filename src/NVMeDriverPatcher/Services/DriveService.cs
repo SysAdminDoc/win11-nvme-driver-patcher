@@ -7,6 +7,37 @@ namespace NVMeDriverPatcher.Services;
 
 public static class DriveService
 {
+    // Each ManagementObject from a ManagementObjectCollection holds an unmanaged COM
+    // pointer that is NOT released by the GC until finalization. We must Dispose
+    // every object we touch — and the collection itself — to avoid a slow native leak
+    // when these calls run on a recurring poll.
+    private static IEnumerable<ManagementObject> Enumerate(ManagementObjectSearcher searcher)
+    {
+        using var collection = searcher.Get();
+        foreach (var obj in collection)
+        {
+            if (obj is ManagementObject mo)
+            {
+                try { yield return mo; }
+                finally { mo.Dispose(); }
+            }
+        }
+    }
+
+    private static int? AsInt(object? value)
+    {
+        if (value is null) return null;
+        try { return Convert.ToInt32(value); }
+        catch { return null; }
+    }
+
+    private static long? AsLong(object? value)
+    {
+        if (value is null) return null;
+        try { return Convert.ToInt64(value); }
+        catch { return null; }
+    }
+
     public static List<SystemDrive> GetSystemDrives()
     {
         var drives = new List<SystemDrive>();
@@ -15,47 +46,68 @@ public static class DriveService
             using var msftSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", "SELECT * FROM MSFT_Disk");
             using var win32Search = new ManagementObjectSearcher("SELECT * FROM Win32_DiskDrive");
 
-            var win32Disks = win32Search.Get().Cast<ManagementObject>().ToList();
-            var msftDisks = msftSearch.Get().Cast<ManagementObject>().ToList();
-
-            foreach (var mDisk in msftDisks)
+            // Snapshot Win32 disks (need to disposable-wrap them too) — keyed by Index for fast lookup.
+            var win32ByIndex = new Dictionary<int, (string Model, string Pnp)>();
+            try
             {
-                int number = Convert.ToInt32(mDisk["Number"]);
-                var wDisk = win32Disks.FirstOrDefault(w => Convert.ToInt32(w["Index"]) == number);
-
-                string friendlyName = wDisk?["Model"]?.ToString() ?? mDisk["FriendlyName"]?.ToString() ?? "Unknown";
-                string pnpId = wDisk?["PNPDeviceID"]?.ToString() ?? "Unknown";
-
-                int busEnum = Convert.ToInt32(mDisk["BusType"]);
-                bool isNVMe = busEnum == 17;
-
-                if (!isNVMe && (pnpId.Contains("NVMe", StringComparison.OrdinalIgnoreCase) ||
-                                friendlyName.Contains("NVMe", StringComparison.OrdinalIgnoreCase)))
-                    isNVMe = true;
-
-                string busLabel = busEnum switch
+                foreach (var wDisk in Enumerate(win32Search))
                 {
-                    17 => "NVMe",
-                    11 => "SATA",
-                    7 => "USB",
-                    8 => "RAID",
-                    _ => isNVMe ? "NVMe" : "Other"
-                };
+                    int? idx = AsInt(wDisk["Index"]);
+                    if (idx is null) continue;
+                    win32ByIndex[idx.Value] = (
+                        wDisk["Model"]?.ToString() ?? "",
+                        wDisk["PNPDeviceID"]?.ToString() ?? "");
+                }
+            }
+            catch { /* Win32 enumeration is supplementary, not fatal */ }
 
-                bool isBoot = mDisk["IsBoot"] is true || mDisk["IsSystem"] is true;
-                long size = Convert.ToInt64(mDisk["Size"]);
-                int sizeGB = (int)Math.Round(size / 1073741824.0);
-
-                drives.Add(new SystemDrive
+            foreach (var mDisk in Enumerate(msftSearch))
+            {
+                // Each drive in its own try so a single bad WMI row never wipes the rest.
+                try
                 {
-                    Number = number,
-                    Name = friendlyName,
-                    Size = $"{sizeGB} GB",
-                    IsNVMe = isNVMe,
-                    BusType = busLabel,
-                    IsBoot = isBoot,
-                    PNPDeviceID = pnpId
-                });
+                    int? numberMaybe = AsInt(mDisk["Number"]);
+                    if (numberMaybe is null) continue;
+                    int number = numberMaybe.Value;
+
+                    win32ByIndex.TryGetValue(number, out var w);
+                    string friendlyName = !string.IsNullOrEmpty(w.Model)
+                        ? w.Model
+                        : mDisk["FriendlyName"]?.ToString() ?? "Unknown";
+                    string pnpId = !string.IsNullOrEmpty(w.Pnp) ? w.Pnp : "Unknown";
+
+                    int busEnum = AsInt(mDisk["BusType"]) ?? 0;
+                    bool isNVMe = busEnum == 17;
+
+                    if (!isNVMe && (pnpId.Contains("NVMe", StringComparison.OrdinalIgnoreCase) ||
+                                    friendlyName.Contains("NVMe", StringComparison.OrdinalIgnoreCase)))
+                        isNVMe = true;
+
+                    string busLabel = busEnum switch
+                    {
+                        17 => "NVMe",
+                        11 => "SATA",
+                        7 => "USB",
+                        8 => "RAID",
+                        _ => isNVMe ? "NVMe" : "Other"
+                    };
+
+                    bool isBoot = mDisk["IsBoot"] is true || mDisk["IsSystem"] is true;
+                    long size = AsLong(mDisk["Size"]) ?? 0;
+                    int sizeGB = (int)Math.Round(size / 1073741824.0);
+
+                    drives.Add(new SystemDrive
+                    {
+                        Number = number,
+                        Name = friendlyName,
+                        Size = sizeGB > 0 ? $"{sizeGB} GB" : "Unknown",
+                        IsNVMe = isNVMe,
+                        BusType = busLabel,
+                        IsBoot = isBoot,
+                        PNPDeviceID = pnpId
+                    });
+                }
+                catch { /* one bad drive shouldn't poison the inventory */ }
             }
 
             drives.Sort((a, b) => a.Number.CompareTo(b.Number));
@@ -70,11 +122,6 @@ public static class DriveService
         try
         {
             using var search = new ManagementObjectSearcher("SELECT * FROM Win32_PnPSignedDriver");
-            var allDrivers = search.Get().Cast<ManagementObject>().ToList();
-
-            var nvmeDrivers = allDrivers.Where(d =>
-                d["DeviceClass"]?.ToString() == "SCSIAdapter" ||
-                (d["DeviceName"]?.ToString()?.Contains("NVMe", StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
 
             var thirdPartyPatterns = new (string Pattern, string Name)[]
             {
@@ -87,31 +134,51 @@ public static class DriveService
                 ("Phison", "Phison NVMe")
             };
 
-            foreach (var driver in nvmeDrivers)
+            // Stream drivers once: capture stornvme + scan for known 3rd-party in the same pass.
+            string inboxVersion = "";
+            using (var collection = search.Get())
             {
-                foreach (var (pattern, name) in thirdPartyPatterns)
+                foreach (var raw in collection)
                 {
-                    var devName = driver["DeviceName"]?.ToString() ?? "";
-                    var manufacturer = driver["Manufacturer"]?.ToString() ?? "";
-                    if (Regex.IsMatch(devName, pattern, RegexOptions.IgnoreCase) ||
-                        Regex.IsMatch(manufacturer, pattern, RegexOptions.IgnoreCase))
+                    if (raw is not ManagementObject driver) continue;
+                    using (driver)
                     {
-                        info.HasThirdParty = true;
-                        info.ThirdPartyName = name;
-                        info.CurrentDriver = $"{devName} v{driver["DriverVersion"]}";
-                        break;
+                        try
+                        {
+                            var infName = driver["InfName"]?.ToString();
+                            var devName = driver["DeviceName"]?.ToString() ?? "";
+                            var deviceClass = driver["DeviceClass"]?.ToString() ?? "";
+                            var manufacturer = driver["Manufacturer"]?.ToString() ?? "";
+                            var driverVersion = driver["DriverVersion"]?.ToString() ?? "";
+
+                            if (infName == "stornvme.inf" && string.IsNullOrEmpty(inboxVersion))
+                                inboxVersion = driverVersion;
+
+                            if (info.HasThirdParty) continue;
+                            bool isNvmeCandidate = deviceClass == "SCSIAdapter"
+                                || devName.Contains("NVMe", StringComparison.OrdinalIgnoreCase);
+                            if (!isNvmeCandidate) continue;
+
+                            foreach (var (pattern, name) in thirdPartyPatterns)
+                            {
+                                if (Regex.IsMatch(devName, pattern, RegexOptions.IgnoreCase) ||
+                                    Regex.IsMatch(manufacturer, pattern, RegexOptions.IgnoreCase))
+                                {
+                                    info.HasThirdParty = true;
+                                    info.ThirdPartyName = name;
+                                    info.CurrentDriver = $"{devName} v{driverVersion}";
+                                    break;
+                                }
+                            }
+                        }
+                        catch { /* Skip malformed driver row */ }
                     }
                 }
-                if (info.HasThirdParty) break;
             }
 
-            var stornvme = allDrivers.FirstOrDefault(d => d["InfName"]?.ToString() == "stornvme.inf");
-            if (stornvme is not null)
-            {
-                info.InboxVersion = stornvme["DriverVersion"]?.ToString() ?? "";
-                if (!info.HasThirdParty)
-                    info.CurrentDriver = $"Windows Inbox (stornvme) v{info.InboxVersion}";
-            }
+            info.InboxVersion = inboxVersion;
+            if (!info.HasThirdParty && !string.IsNullOrEmpty(inboxVersion))
+                info.CurrentDriver = $"Windows Inbox (stornvme) v{inboxVersion}";
 
             // Queue depth
             try
@@ -126,15 +193,15 @@ public static class DriveService
             }
             catch { }
 
-            // Firmware versions via PowerShell (Get-PhysicalDisk requires StorageWMI)
+            // Firmware versions
             try
             {
-                using var physSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", "SELECT * FROM MSFT_PhysicalDisk WHERE BusType=17");
-                foreach (ManagementObject pd in physSearch.Get())
+                using var physSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", "SELECT DeviceId, FirmwareVersion FROM MSFT_PhysicalDisk WHERE BusType=17");
+                foreach (var pd in Enumerate(physSearch))
                 {
                     var fw = pd["FirmwareVersion"]?.ToString();
                     var id = pd["DeviceId"]?.ToString() ?? "";
-                    if (!string.IsNullOrEmpty(fw))
+                    if (!string.IsNullOrEmpty(fw) && !string.IsNullOrEmpty(id))
                         info.FirmwareVersions[id] = fw;
                 }
             }
@@ -142,7 +209,8 @@ public static class DriveService
         }
         catch
         {
-            info.CurrentDriver = "Unable to detect";
+            if (string.IsNullOrEmpty(info.CurrentDriver))
+                info.CurrentDriver = "Unable to detect";
         }
         return info;
     }
@@ -155,9 +223,11 @@ public static class DriveService
             using var search = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
                 "SELECT * FROM MSFT_PhysicalDisk WHERE BusType=17 OR MediaType=4");
 
-            foreach (ManagementObject pd in search.Get())
+            foreach (var pd in Enumerate(search))
             {
                 string diskNum = pd["DeviceId"]?.ToString() ?? "";
+                if (string.IsNullOrEmpty(diskNum)) continue;
+
                 var info = new NVMeHealthInfo
                 {
                     HealthStatus = pd["HealthStatus"]?.ToString() ?? "Unknown",
@@ -168,27 +238,30 @@ public static class DriveService
                 try
                 {
                     var objectId = (pd["ObjectId"]?.ToString() ?? "").Replace("'", "''");
-                    using var relSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
-                        $"ASSOCIATORS OF {{MSFT_PhysicalDisk.ObjectId='{objectId}'}} WHERE AssocClass=MSFT_PhysicalDiskToStorageReliabilityCounter");
-                    foreach (ManagementObject rel in relSearch.Get())
+                    if (objectId.Length > 0)
                     {
-                        var temp = rel["Temperature"];
-                        if (temp is not null) info.Temperature = $"{temp}C";
+                        using var relSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
+                            $"ASSOCIATORS OF {{MSFT_PhysicalDisk.ObjectId='{objectId}'}} WHERE AssocClass=MSFT_PhysicalDiskToStorageReliabilityCounter");
+                        foreach (var rel in Enumerate(relSearch))
+                        {
+                            int? temp = AsInt(rel["Temperature"]);
+                            if (temp is not null) info.Temperature = $"{temp.Value}C";
 
-                        var wear = rel["Wear"];
-                        if (wear is not null) info.Wear = $"{Math.Max(0, 100 - Convert.ToInt32(wear))}%";
+                            int? wear = AsInt(rel["Wear"]);
+                            if (wear is not null) info.Wear = $"{Math.Max(0, 100 - wear.Value)}%";
 
-                        var mediaErr = rel["MediaErrors"];
-                        if (mediaErr is not null) info.MediaErrors = Convert.ToInt32(mediaErr);
+                            int? mediaErr = AsInt(rel["MediaErrors"]);
+                            if (mediaErr is not null) info.MediaErrors = mediaErr.Value;
 
-                        var poh = rel["PowerOnHours"];
-                        if (poh is not null) info.PowerOnHours = $"{poh}h";
+                            long? poh = AsLong(rel["PowerOnHours"]);
+                            if (poh is not null) info.PowerOnHours = $"{poh.Value}h";
 
-                        var readErr = rel["ReadErrorsTotal"];
-                        if (readErr is not null) info.ReadErrors = Convert.ToInt32(readErr);
+                            int? readErr = AsInt(rel["ReadErrorsTotal"]);
+                            if (readErr is not null) info.ReadErrors = readErr.Value;
 
-                        var writeErr = rel["WriteErrorsTotal"];
-                        if (writeErr is not null) info.WriteErrors = Convert.ToInt32(writeErr);
+                            int? writeErr = AsInt(rel["WriteErrorsTotal"]);
+                            if (writeErr is not null) info.WriteErrors = writeErr.Value;
+                        }
                     }
                 }
                 catch { }
@@ -213,8 +286,8 @@ public static class DriveService
         var result = new NativeNVMeStatus();
         try
         {
-            using var driverSearch = new ManagementObjectSearcher("SELECT * FROM Win32_SystemDriver WHERE Name='nvmedisk'");
-            foreach (ManagementObject drv in driverSearch.Get())
+            using var driverSearch = new ManagementObjectSearcher("SELECT Name, State FROM Win32_SystemDriver WHERE Name='nvmedisk'");
+            foreach (var drv in Enumerate(driverSearch))
             {
                 if (drv["State"]?.ToString() == "Running")
                 {
@@ -225,13 +298,19 @@ public static class DriveService
             }
 
             using var pnpSearch = new ManagementObjectSearcher(
-                $"SELECT * FROM Win32_PnPEntity WHERE ClassGuid='{AppConfig.SafeBootGuid}'");
-            var storageDiskDevices = pnpSearch.Get().Cast<ManagementObject>().ToList();
-            if (storageDiskDevices.Count > 0)
+                $"SELECT Name FROM Win32_PnPEntity WHERE ClassGuid='{AppConfig.SafeBootGuid}'");
+            var storageDiskNames = new List<string>();
+            foreach (var dev in Enumerate(pnpSearch))
+            {
+                var name = dev["Name"]?.ToString();
+                if (!string.IsNullOrEmpty(name)) storageDiskNames.Add(name);
+            }
+
+            if (storageDiskNames.Count > 0)
             {
                 result.IsActive = true;
                 result.DeviceCategory = "Storage disks";
-                result.StorageDisks = storageDiskDevices.Select(d => d["Name"]?.ToString() ?? "").ToList();
+                result.StorageDisks = storageDiskNames;
                 if (string.IsNullOrEmpty(result.Details))
                     result.Details = "Drives found under Storage disks category";
             }
@@ -243,8 +322,8 @@ public static class DriveService
             }
 
             using var signedSearch = new ManagementObjectSearcher(
-                "SELECT * FROM Win32_PnPSignedDriver WHERE DeviceName LIKE '%NVMe%' OR InfName='stornvme.inf' OR InfName='nvmedisk.inf'");
-            foreach (ManagementObject drv in signedSearch.Get())
+                "SELECT InfName, DriverVersion FROM Win32_PnPSignedDriver WHERE InfName='stornvme.inf' OR InfName='nvmedisk.inf'");
+            foreach (var drv in Enumerate(signedSearch))
             {
                 if (drv["InfName"]?.ToString() == "nvmedisk.inf")
                 {
@@ -266,7 +345,9 @@ public static class DriveService
         var result = new BypassIOResult();
         try
         {
-            var psi = new ProcessStartInfo("fsutil", $"bypassio state {Environment.GetEnvironmentVariable("SystemDrive")}\\")
+            var systemDrive = Environment.GetEnvironmentVariable("SystemDrive");
+            if (string.IsNullOrEmpty(systemDrive)) systemDrive = "C:";
+            var psi = new ProcessStartInfo("fsutil", $"bypassio state {systemDrive}\\")
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -275,8 +356,15 @@ public static class DriveService
             };
             using var proc = Process.Start(psi);
             if (proc is null) return result;
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(10000);
+            // Read stdout asynchronously while we wait — guards against deadlock if the buffer fills.
+            var outputTask = proc.StandardOutput.ReadToEndAsync();
+            if (!proc.WaitForExit(10000))
+            {
+                try { proc.Kill(true); } catch { }
+                result.RawOutput = "fsutil bypassio query timed out after 10s";
+                return result;
+            }
+            var output = outputTask.GetAwaiter().GetResult();
             result.RawOutput = output.Trim();
 
             if (output.Contains("is currently supported")) result.Supported = true;
@@ -311,13 +399,13 @@ public static class DriveService
         var details = new WindowsBuildDetails();
         try
         {
-            using var search = new ManagementObjectSearcher("SELECT * FROM Win32_OperatingSystem");
-            var os = search.Get().Cast<ManagementObject>().FirstOrDefault();
-            if (os is not null)
+            using var search = new ManagementObjectSearcher("SELECT BuildNumber, Caption FROM Win32_OperatingSystem");
+            foreach (var os in Enumerate(search))
             {
                 int.TryParse(os["BuildNumber"]?.ToString(), out var buildNum);
                 details.BuildNumber = buildNum;
                 details.Caption = os["Caption"]?.ToString() ?? "";
+                break; // single OS row
             }
 
             using var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64);
@@ -341,20 +429,24 @@ public static class DriveService
         var result = new StorageMigrationResult();
         try
         {
-            // Storage Disks class
             using var storageSearch = new ManagementObjectSearcher(
-                "SELECT * FROM Win32_PnPEntity WHERE PNPClass='Storage Disks' AND Status='OK'");
-            foreach (ManagementObject dev in storageSearch.Get())
-                result.Migrated.Add(dev["Name"]?.ToString() ?? "");
+                "SELECT Name FROM Win32_PnPEntity WHERE PNPClass='Storage Disks' AND Status='OK'");
+            foreach (var dev in Enumerate(storageSearch))
+            {
+                var name = dev["Name"]?.ToString();
+                if (!string.IsNullOrEmpty(name)) result.Migrated.Add(name);
+            }
 
-            // Legacy NVMe under Disk drives
             using var legacySearch = new ManagementObjectSearcher(
-                "SELECT * FROM Win32_PnPEntity WHERE PNPClass='DiskDrive' AND Status='OK'");
-            foreach (ManagementObject dev in legacySearch.Get())
+                "SELECT Name, DeviceID FROM Win32_PnPEntity WHERE PNPClass='DiskDrive' AND Status='OK'");
+            foreach (var dev in Enumerate(legacySearch))
             {
                 var instanceId = dev["DeviceID"]?.ToString() ?? "";
                 if (instanceId.Contains("NVMe", StringComparison.OrdinalIgnoreCase))
-                    result.Legacy.Add(dev["Name"]?.ToString() ?? "");
+                {
+                    var name = dev["Name"]?.ToString();
+                    if (!string.IsNullOrEmpty(name)) result.Legacy.Add(name);
+                }
             }
         }
         catch { }
@@ -365,12 +457,13 @@ public static class DriveService
     {
         try
         {
+            var systemDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? "C:";
             using var search = new ManagementObjectSearcher(@"root\cimv2\Security\MicrosoftVolumeEncryption",
-                "SELECT * FROM Win32_EncryptableVolume");
-            foreach (ManagementObject vol in search.Get())
+                "SELECT DriveLetter, ProtectionStatus FROM Win32_EncryptableVolume");
+            foreach (var vol in Enumerate(search))
             {
-                if (vol["DriveLetter"]?.ToString() == Environment.GetEnvironmentVariable("SystemDrive") &&
-                    Convert.ToInt32(vol["ProtectionStatus"]) == 1)
+                if (vol["DriveLetter"]?.ToString() == systemDrive &&
+                    AsInt(vol["ProtectionStatus"]) == 1)
                     return true;
             }
         }
@@ -390,7 +483,15 @@ public static class DriveService
                 if (start is int s && s == 0) return true; // Boot-start driver
             }
 
-            var efiPath = Path.Combine(Environment.GetEnvironmentVariable("SystemDrive") ?? "C:", "EFI", "VeraCrypt");
+            // Path.Combine treats "C:" as a drive-relative spec — must append a separator
+            // or we end up testing "C:EFI\VeraCrypt", which silently never exists.
+            var systemDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? "C:";
+            if (!systemDrive.EndsWith(System.IO.Path.DirectorySeparatorChar) &&
+                !systemDrive.EndsWith(System.IO.Path.AltDirectorySeparatorChar))
+            {
+                systemDrive += System.IO.Path.DirectorySeparatorChar;
+            }
+            var efiPath = Path.Combine(systemDrive, "EFI", "VeraCrypt");
             if (Directory.Exists(efiPath)) return true;
         }
         catch { }
@@ -403,7 +504,7 @@ public static class DriveService
         {
             using var search = new ManagementObjectSearcher("SELECT ChassisTypes FROM Win32_SystemEnclosure");
             int[] laptopTypes = [8, 9, 10, 14, 31, 32];
-            foreach (ManagementObject chassis in search.Get())
+            foreach (var chassis in Enumerate(search))
             {
                 if (chassis["ChassisTypes"] is ushort[] types)
                 {
@@ -414,8 +515,13 @@ public static class DriveService
                 }
             }
 
-            using var battSearch = new ManagementObjectSearcher("SELECT * FROM Win32_Battery");
-            if (battSearch.Get().Count > 0) return true;
+            using var battSearch = new ManagementObjectSearcher("SELECT Name FROM Win32_Battery");
+            using var batteryCollection = battSearch.Get();
+            if (batteryCollection.Count > 0)
+            {
+                foreach (var b in batteryCollection) (b as IDisposable)?.Dispose();
+                return true;
+            }
         }
         catch { }
         return false;
@@ -427,8 +533,12 @@ public static class DriveService
         try
         {
             using var svcSearch = new ManagementObjectSearcher("SELECT Name FROM Win32_Service");
-            var allServices = svcSearch.Get().Cast<ManagementObject>()
-                .Select(s => s["Name"]?.ToString() ?? "").ToList();
+            var allServices = new List<string>();
+            foreach (var s in Enumerate(svcSearch))
+            {
+                var name = s["Name"]?.ToString();
+                if (!string.IsNullOrEmpty(name)) allServices.Add(name);
+            }
 
             if (allServices.Any(s => Regex.IsMatch(s, "acronis|AcronisAgent", RegexOptions.IgnoreCase)))
                 found.Add(new() { Name = "Acronis", Severity = "High", Message = "Backup cannot see drives under Storage disks category" });
@@ -457,7 +567,10 @@ public static class DriveService
             {
                 using var poolSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
                     "SELECT FriendlyName, IsPrimordial FROM MSFT_StoragePool WHERE IsPrimordial=FALSE");
-                if (poolSearch.Get().Count > 0)
+                using var pools = poolSearch.Get();
+                bool any = pools.Count > 0;
+                foreach (var p in pools) (p as IDisposable)?.Dispose();
+                if (any)
                     found.Add(new() { Name = "Storage Spaces", Severity = "High", Message = "Storage pool detected -- arrays may degrade under nvmedisk.sys" });
             }
             catch { }

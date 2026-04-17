@@ -6,8 +6,23 @@ public static class RecoveryKitService
 {
     public static string? Export(string outputDir, Action<string>? log = null)
     {
-        var kitDir = Path.Combine(outputDir, "NVMe_Recovery_Kit");
-        Directory.CreateDirectory(kitDir);
+        if (string.IsNullOrWhiteSpace(outputDir))
+        {
+            log?.Invoke("[ERROR] Recovery kit export needs a destination folder.");
+            return null;
+        }
+
+        string kitDir;
+        try
+        {
+            kitDir = Path.Combine(outputDir, "NVMe_Recovery_Kit");
+            Directory.CreateDirectory(kitDir);
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[ERROR] Could not create recovery kit folder: {ex.Message}");
+            return null;
+        }
 
         // Detect control set number
         string controlSetNum = "001";
@@ -46,7 +61,16 @@ public static class RecoveryKitService
 [-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet{controlSetNum}\Control\SafeBoot\Minimal\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}]
 [-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet{controlSetNum}\Control\SafeBoot\Network\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}]";
 
-        File.WriteAllText(Path.Combine(kitDir, "NVMe_Remove_Patch.reg"), regContent, System.Text.Encoding.Unicode);
+        try
+        {
+            // .reg files require UTF-16 LE WITH BOM. File.WriteAllText with Encoding.Unicode emits the BOM.
+            File.WriteAllText(Path.Combine(kitDir, "NVMe_Remove_Patch.reg"), regContent, System.Text.Encoding.Unicode);
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[ERROR] Could not write NVMe_Remove_Patch.reg: {ex.Message}");
+            return null;
+        }
 
         // .bat file
         var batContent = @"@echo off
@@ -89,7 +113,8 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-for /L %%N in (1,1,3) do (
+rem Sweep ControlSet001..ControlSet009 -- covers boxes where the index has rolled past 003.
+for /L %%N in (1,1,9) do (
     reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides"" /v 735209102 /f 2>nul
     reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides"" /v 1853569164 /f 2>nul
     reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides"" /v 156965516 /f 2>nul
@@ -117,7 +142,15 @@ echo ============================================
 echo.
 pause";
 
-        File.WriteAllText(Path.Combine(kitDir, "Remove_NVMe_Patch.bat"), batContent, System.Text.Encoding.ASCII);
+        try
+        {
+            File.WriteAllText(Path.Combine(kitDir, "Remove_NVMe_Patch.bat"), batContent, System.Text.Encoding.ASCII);
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[ERROR] Could not write Remove_NVMe_Patch.bat: {ex.Message}");
+            return null;
+        }
 
         // README
         var readme = $@"NVMe Driver Patcher - Recovery Kit
@@ -144,7 +177,15 @@ FILES:
 - Remove_NVMe_Patch.bat    - Smart batch script (auto-detects Windows vs WinRE)
 - README.txt               - This file";
 
-        File.WriteAllText(Path.Combine(kitDir, "README.txt"), readme);
+        try
+        {
+            File.WriteAllText(Path.Combine(kitDir, "README.txt"), readme);
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[ERROR] Could not write README.txt: {ex.Message}");
+            // README is informational; don't bail out the whole kit just for this.
+        }
 
         log?.Invoke($"Recovery kit saved to: {kitDir}");
         return kitDir;
@@ -152,6 +193,10 @@ FILES:
 
     public static string? GenerateVerificationScript(string workingDir, bool includeServerKey)
     {
+        if (string.IsNullOrEmpty(workingDir))
+            return null;
+        try { Directory.CreateDirectory(workingDir); } catch { return null; }
+
         var outputPath = Path.Combine(workingDir, "Verify_NVMe_Patch.ps1");
         var serverKeyValue = includeServerKey ? "$true" : "$false";
 
@@ -184,7 +229,9 @@ Write-Host """"; Write-Host ""Press any key...""; $null = $Host.UI.RawUI.ReadKey
 
         try
         {
-            File.WriteAllText(outputPath, script);
+            // Write with UTF-8 BOM so PowerShell 5.1 (powershell.exe) parses any non-ASCII content
+            // correctly without resorting to its legacy ANSI fallback.
+            File.WriteAllText(outputPath, script, new System.Text.UTF8Encoding(true));
             return outputPath;
         }
         catch { return null; }

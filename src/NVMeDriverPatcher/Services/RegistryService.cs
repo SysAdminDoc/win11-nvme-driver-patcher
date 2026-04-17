@@ -11,44 +11,54 @@ public static class RegistryService
         int count = 0;
         var keys = new List<string>();
 
-        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-
-        using var overrides = hklm.OpenSubKey(AppConfig.RegistrySubKey);
-        if (overrides is not null)
+        try
         {
-            foreach (var id in AppConfig.FeatureIDs)
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+
+            using (var overrides = hklm.OpenSubKey(AppConfig.RegistrySubKey))
             {
-                var val = overrides.GetValue(id);
-                if (val is int intVal && intVal == 1)
+                if (overrides is not null)
+                {
+                    foreach (var id in AppConfig.FeatureIDs)
+                    {
+                        try
+                        {
+                            var val = overrides.GetValue(id);
+                            if (val is int intVal && intVal == 1)
+                            {
+                                count++;
+                                keys.Add(id);
+                            }
+                        }
+                        catch { /* one bad value shouldn't poison the entire status read */ }
+                    }
+                }
+            }
+
+            // SafeBoot Minimal
+            using (var safeMin = hklm.OpenSubKey(AppConfig.SafeBootMinimalPath))
+            {
+                if (safeMin is not null && safeMin.GetValue("") as string == AppConfig.SafeBootValue)
                 {
                     count++;
-                    keys.Add(id);
+                    keys.Add("SafeBootMinimal");
+                }
+            }
+
+            // SafeBoot Network
+            using (var safeNet = hklm.OpenSubKey(AppConfig.SafeBootNetworkPath))
+            {
+                if (safeNet is not null && safeNet.GetValue("") as string == AppConfig.SafeBootValue)
+                {
+                    count++;
+                    keys.Add("SafeBootNetwork");
                 }
             }
         }
-
-        // SafeBoot Minimal
-        using var safeMin = hklm.OpenSubKey(AppConfig.SafeBootMinimalPath);
-        if (safeMin is not null)
+        catch
         {
-            var val = safeMin.GetValue("") as string;
-            if (val == AppConfig.SafeBootValue)
-            {
-                count++;
-                keys.Add("SafeBootMinimal");
-            }
-        }
-
-        // SafeBoot Network
-        using var safeNet = hklm.OpenSubKey(AppConfig.SafeBootNetworkPath);
-        if (safeNet is not null)
-        {
-            var val = safeNet.GetValue("") as string;
-            if (val == AppConfig.SafeBootValue)
-            {
-                count++;
-                keys.Add("SafeBootNetwork");
-            }
+            // Registry view denied or hive missing. Return whatever partial state we accumulated
+            // — callers treat zero-applied as "Not Applied" which is the right default.
         }
 
         status.Count = count;
@@ -60,8 +70,18 @@ public static class RegistryService
 
     public static string? ExportRegistryBackup(string workingDir, string description = "NVMe_Backup")
     {
+        if (string.IsNullOrEmpty(workingDir))
+            return null;
+
+        // Sanitize the description so it can't smuggle path separators / invalid filename chars.
+        var safeDesc = string.IsNullOrWhiteSpace(description) ? "NVMe_Backup" : description;
+        foreach (var bad in System.IO.Path.GetInvalidFileNameChars())
+            safeDesc = safeDesc.Replace(bad, '_');
+
+        try { Directory.CreateDirectory(workingDir); } catch { }
+
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        var backupFile = Path.Combine(workingDir, $"{description}_{timestamp}.reg");
+        var backupFile = Path.Combine(workingDir, $"{safeDesc}_{timestamp}.reg");
 
         try
         {
@@ -114,7 +134,17 @@ public static class RegistryService
                 lines.Add("");
             }
 
-            File.WriteAllText(backupFile, string.Join("\r\n", lines), System.Text.Encoding.Unicode);
+            // .reg files must be UTF-16 LE with BOM. Atomic write so a crash doesn't leave
+            // a half-written backup that regedit will silently refuse to import.
+            var tempFile = backupFile + ".tmp";
+            using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var sw = new StreamWriter(fs, System.Text.Encoding.Unicode))
+            {
+                sw.Write(string.Join("\r\n", lines));
+                sw.Flush();
+                fs.Flush(flushToDisk: true);
+            }
+            File.Move(tempFile, backupFile, overwrite: true);
             return backupFile;
         }
         catch
@@ -138,47 +168,48 @@ public static class RegistryService
 
     public static PatchSnapshot GetPatchSnapshot(NativeNVMeStatus? nativeStatus, BypassIOResult? bypassStatus)
     {
+        // ISO 8601 round-trip ("o") preserves the full date and is what DataService.SaveSnapshot
+        // round-trips back to a DateTime. The previous "HH:mm:ss" form lost the date entirely,
+        // so all snapshots saved before midnight ended up with today's date as the prefix.
         var snapshot = new PatchSnapshot
         {
-            Timestamp = DateTime.Now.ToString("HH:mm:ss"),
+            Timestamp = DateTime.Now.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
             Status = GetPatchStatus(),
             DriverActive = nativeStatus?.ActiveDriver ?? "Unknown",
             BypassIO = bypassStatus?.Supported ?? false,
             Components = []
         };
 
-        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-        using var overrides = hklm.OpenSubKey(AppConfig.RegistrySubKey);
-
-        foreach (var id in AppConfig.FeatureIDs)
+        try
         {
-            if (overrides is not null)
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var overrides = hklm.OpenSubKey(AppConfig.RegistrySubKey);
+
+            foreach (var id in AppConfig.FeatureIDs)
             {
-                var val = overrides.GetValue(id);
+                var val = overrides?.GetValue(id);
                 snapshot.Components[id] = val is int intVal && intVal == 1 ? "Set (1)" : "Not Set";
             }
-            else
-            {
-                snapshot.Components[id] = "Not Set";
-            }
-        }
 
-        // Server key
-        if (overrides is not null)
-        {
-            var srvVal = overrides.GetValue(AppConfig.ServerFeatureID);
+            // Server key
+            var srvVal = overrides?.GetValue(AppConfig.ServerFeatureID);
             snapshot.Components[AppConfig.ServerFeatureID] = srvVal is int sv && sv == 1 ? "Set (1)" : "Not Set";
+
+            using var safeMin = hklm.OpenSubKey(AppConfig.SafeBootMinimalPath);
+            snapshot.Components["SafeBootMinimal"] = safeMin is not null ? "Present" : "Absent";
+
+            using var safeNet = hklm.OpenSubKey(AppConfig.SafeBootNetworkPath);
+            snapshot.Components["SafeBootNetwork"] = safeNet is not null ? "Present" : "Absent";
         }
-        else
+        catch
         {
-            snapshot.Components[AppConfig.ServerFeatureID] = "Not Set";
+            // Registry view inaccessible — record placeholders so the diff log doesn't NRE later.
+            foreach (var id in AppConfig.FeatureIDs)
+                snapshot.Components.TryAdd(id, "Unknown");
+            snapshot.Components.TryAdd(AppConfig.ServerFeatureID, "Unknown");
+            snapshot.Components.TryAdd("SafeBootMinimal", "Unknown");
+            snapshot.Components.TryAdd("SafeBootNetwork", "Unknown");
         }
-
-        using var safeMin = hklm.OpenSubKey(AppConfig.SafeBootMinimalPath);
-        snapshot.Components["SafeBootMinimal"] = safeMin is not null ? "Present" : "Absent";
-
-        using var safeNet = hklm.OpenSubKey(AppConfig.SafeBootNetworkPath);
-        snapshot.Components["SafeBootNetwork"] = safeNet is not null ? "Present" : "Absent";
 
         return snapshot;
     }

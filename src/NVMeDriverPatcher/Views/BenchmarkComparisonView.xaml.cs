@@ -14,8 +14,9 @@ public partial class BenchmarkComparisonView : UserControl
         InitializeComponent();
     }
 
-    public void UpdateChart(List<BenchmarkResult> history)
+    public void UpdateChart(List<BenchmarkResult>? history)
     {
+        history ??= new List<BenchmarkResult>();
         if (history.Count == 0)
         {
             RunCountValue.Text = "0";
@@ -107,24 +108,36 @@ public partial class BenchmarkComparisonView : UserControl
         return $"vs previous run: {(pct >= 0 ? "+" : "")}{pct}%";
     }
 
-    private static System.Windows.Media.SolidColorBrush DeltaBrush(double prev, double current)
+    // Cache the converter — re-creating BrushConverter on every delta paint allocates needlessly.
+    private static readonly System.Windows.Media.BrushConverter BrushConv = new();
+    private static readonly System.Windows.Media.SolidColorBrush PositiveBrush = ToBrush("#FF50DD9D");
+    private static readonly System.Windows.Media.SolidColorBrush NegativeBrush = ToBrush("#FFFF8585");
+
+    private static System.Windows.Media.SolidColorBrush ToBrush(string hex)
     {
-        var bc = new System.Windows.Media.BrushConverter();
-        return current >= prev
-            ? (System.Windows.Media.SolidColorBrush)bc.ConvertFromString("#FF50DD9D")!
-            : (System.Windows.Media.SolidColorBrush)bc.ConvertFromString("#FFFF8585")!;
+        try { return (System.Windows.Media.SolidColorBrush)BrushConv.ConvertFromString(hex)!; }
+        catch { return new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Gray); }
     }
 
-    private static string FormatTimestamp(string rawTimestamp)
+    private static System.Windows.Media.SolidColorBrush DeltaBrush(double prev, double current)
     {
-        return DateTime.TryParse(rawTimestamp, out var timestamp)
+        return current >= prev ? PositiveBrush : NegativeBrush;
+    }
+
+    private static string FormatTimestamp(string? rawTimestamp)
+    {
+        return DateTime.TryParse(rawTimestamp,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp)
             ? timestamp.ToString("g")
             : "time unavailable";
     }
 
-    private static string BuildAxisSubLabel(string rawTimestamp, int index)
+    private static string BuildAxisSubLabel(string? rawTimestamp, int index)
     {
-        return DateTime.TryParse(rawTimestamp, out var timestamp)
+        return DateTime.TryParse(rawTimestamp,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp)
             ? timestamp.ToString("MM/dd HH:mm")
             : $"Run {index + 1}";
     }
