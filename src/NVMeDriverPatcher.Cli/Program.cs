@@ -7,29 +7,59 @@ class Program
 {
     static int Main(string[] args)
     {
-        var config = ConfigService.Load();
-        EventLogService.Initialize(config.WriteEventLog);
-
-        if (args.Length == 0)
+        try
         {
-            PrintUsage();
-            return 3;
+            var config = ConfigService.Load();
+            EventLogService.Initialize(config.WriteEventLog);
+
+            if (args is null || args.Length == 0)
+            {
+                PrintUsage();
+                return 3;
+            }
+
+            var command = (args[0] ?? string.Empty).ToLowerInvariant().TrimStart('-', '/');
+            if (command == "help" || command == "?" || command == "h")
+            {
+                PrintUsage();
+                return 0;
+            }
+            if (command == "version" || command == "v")
+            {
+                Console.WriteLine($"NVMe Driver Patcher CLI v{AppConfig.AppVersion}");
+                return 0;
+            }
+
+            bool MatchesAny(string a, params string[] forms) =>
+                forms.Any(f => a.Equals(f, StringComparison.OrdinalIgnoreCase));
+
+            bool force = args.Any(a => a is not null && MatchesAny(a, "--force", "-f"));
+            bool noRestart = args.Any(a => a is not null && MatchesAny(a, "--no-restart"));
+            bool includeServerKeyOverride = args.Any(a => a is not null && MatchesAny(a, "--include-server-key"));
+            bool excludeServerKeyOverride = args.Any(a => a is not null && MatchesAny(a, "--no-server-key"));
+
+            // Allow CLI override of the persisted IncludeServerKey config so automation doesn't
+            // need to first edit config.json. --no-server-key wins if both are passed by mistake.
+            if (includeServerKeyOverride) config.IncludeServerKey = true;
+            if (excludeServerKeyOverride) config.IncludeServerKey = false;
+
+            return command switch
+            {
+                "status" => StatusCommand(),
+                "apply" or "install" => ApplyCommand(config, force, noRestart),
+                "remove" or "uninstall" => RemoveCommand(config, noRestart),
+                "diagnostics" or "export-diagnostics" => DiagnosticsCommand(config),
+                "recovery-kit" or "export-recovery-kit" => RecoveryKitCommand(config),
+                "verify" => VerifyCommand(config),
+                _ => Unknown(command)
+            };
         }
-
-        var command = args[0].ToLowerInvariant().TrimStart('-', '/');
-        bool force = args.Any(a => a.Equals("--force", StringComparison.OrdinalIgnoreCase) || a.Equals("-f", StringComparison.OrdinalIgnoreCase));
-        bool noRestart = args.Any(a => a.Equals("--no-restart", StringComparison.OrdinalIgnoreCase));
-
-        return command switch
+        catch (Exception ex)
         {
-            "status" => StatusCommand(),
-            "apply" or "install" => ApplyCommand(config, force, noRestart),
-            "remove" or "uninstall" => RemoveCommand(config, noRestart),
-            "diagnostics" or "export-diagnostics" => DiagnosticsCommand(config),
-            "recovery-kit" or "export-recovery-kit" => RecoveryKitCommand(config),
-            "verify" => VerifyCommand(config),
-            _ => Unknown(command)
-        };
+            // Surface any unexpected CLI error so scripted callers get a non-zero exit + reason.
+            Console.Error.WriteLine($"Unhandled error: {ex.GetType().Name}: {ex.Message}");
+            return 99;
+        }
     }
 
     static int StatusCommand()
@@ -110,7 +140,7 @@ class Program
             preflight.BypassIOStatus,
             msg => Console.WriteLine(msg));
 
-        if (result.Success && !noRestart)
+        if (result.Success && result.NeedsRestart && !noRestart)
         {
             Console.WriteLine($"Restart required. Run 'shutdown /r /t {config.RestartDelay}' to restart.");
         }
@@ -120,8 +150,12 @@ class Program
 
     static int RemoveCommand(AppConfig config, bool noRestart)
     {
-        var result = PatchService.Uninstall(config, null, null, msg => Console.WriteLine(msg));
-        if (result.Success && !noRestart)
+        // Capture native + bypass status before removal so the snapshot diffs are meaningful
+        // instead of "Unknown -> Unknown".
+        var nativeStatus = DriveService.TestNativeNVMeActive();
+        var bypassStatus = DriveService.GetBypassIOStatus();
+        var result = PatchService.Uninstall(config, nativeStatus, bypassStatus, msg => Console.WriteLine(msg));
+        if (result.Success && result.NeedsRestart && !noRestart)
             Console.WriteLine("Restart required to complete removal.");
         return result.Success ? 0 : 1;
     }
@@ -178,9 +212,19 @@ class Program
         Console.WriteLine("  diagnostics         Export system diagnostics report");
         Console.WriteLine("  recovery-kit        Generate WinRE recovery kit");
         Console.WriteLine("  verify              Generate post-reboot verification script");
+        Console.WriteLine("  version             Print the CLI version");
         Console.WriteLine();
         Console.WriteLine("Options:");
-        Console.WriteLine("  --force, -f         Skip safety checks");
-        Console.WriteLine("  --no-restart        Don't prompt for restart");
+        Console.WriteLine("  --force, -f                Skip safety checks");
+        Console.WriteLine("  --no-restart               Don't prompt for restart");
+        Console.WriteLine("  --include-server-key       Force the optional Server 2025 key on for this run");
+        Console.WriteLine("  --no-server-key            Force the optional Server 2025 key off for this run");
+        Console.WriteLine();
+        Console.WriteLine("Exit codes:");
+        Console.WriteLine("  0  success / patch applied (status)");
+        Console.WriteLine("  1  failure / patch not applied (status)");
+        Console.WriteLine("  2  partial state / no NVMe drives");
+        Console.WriteLine("  3  unknown command or no args");
+        Console.WriteLine("  99 unhandled error");
     }
 }

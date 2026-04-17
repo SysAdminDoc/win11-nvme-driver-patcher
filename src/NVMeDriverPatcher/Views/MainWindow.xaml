@@ -1183,6 +1183,8 @@
                                             Grid.Row="1"
                                             Margin="0,18,0,0"
                                             Style="{StaticResource WorkspaceTabControl}"
+                                            KeyboardNavigation.TabNavigation="Cycle"
+                                            AutomationProperties.Name="Workspace tabs"
                                             SelectionChanged="WorkspaceTabs_SelectionChanged">
                                     <TabItem Style="{StaticResource WorkspaceTabItem}">
                                         <TabItem.Header>

@@ -14,12 +14,16 @@ public class AppDbContext : DbContext
             Models.AppConfig.GetWorkingDir(),
             "nvmepatcher.db");
 
+        // Cache=Private is the safe default for a single-process WPF app. Shared cache + WAL
+        // can produce surprising lock-conflict behaviour with EF Core's per-query connections.
+        // DefaultTimeout bumped to 10s so a transient lock during telemetry pruning doesn't
+        // bubble up as an exception during Save.
         var connStr = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
         {
             DataSource = dbPath,
             Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadWriteCreate,
-            Cache = Microsoft.Data.Sqlite.SqliteCacheMode.Shared,
-            DefaultTimeout = 5
+            Cache = Microsoft.Data.Sqlite.SqliteCacheMode.Private,
+            DefaultTimeout = 10
         }.ToString();
 
         optionsBuilder.UseSqlite(connStr);
@@ -48,6 +52,10 @@ public class AppDbContext : DbContext
     {
         using var db = new AppDbContext();
         db.Database.EnsureCreated();
-        db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+        // WAL improves concurrency between read pollers and writes; busy_timeout backs the
+        // SQLite engine's own retry loop in case a brief writer blocks a reader.
+        try { db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;"); } catch { }
+        try { db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=5000;"); } catch { }
+        try { db.Database.ExecuteSqlRaw("PRAGMA synchronous=NORMAL;"); } catch { }
     }
 }

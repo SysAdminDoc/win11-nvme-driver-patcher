@@ -17,6 +17,8 @@ public partial class MainWindow : Window
     private int _telemetryWorkspaceRefreshId;
     private int _telemetryDataRefreshId;
 
+    private bool _initialized;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -41,11 +43,17 @@ public partial class MainWindow : Window
         if (Width > workArea.Width) Width = workArea.Width - 20;
 
         ContentRendered += OnContentRendered;
-        Closing += (_, _) => _vm.OnClosing();
+        Closing += MainWindow_Closing;
     }
 
     private async void OnContentRendered(object? sender, EventArgs e)
     {
+        // ContentRendered can fire more than once across the lifetime of a Window (any time the
+        // content tree is rebuilt). Guard against running the entire preflight multiple times.
+        if (_initialized) return;
+        _initialized = true;
+        ContentRendered -= OnContentRendered;
+
         try
         {
             await _vm.RunPreflightAsync();
@@ -56,6 +64,14 @@ public partial class MainWindow : Window
         {
             System.Diagnostics.Debug.WriteLine($"[OnContentRendered] {ex}");
         }
+    }
+
+    private void MainWindow_Closing(object? sender, CancelEventArgs e)
+    {
+        try { _vm.OnClosing(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[OnClosing] {ex}"); }
+        try { _vm.PropertyChanged -= ViewModel_PropertyChanged; } catch { }
+        try { TelemetryPanelControl.DriveSelected -= TelemetryPanel_DriveSelected; } catch { }
+        try { TuningPanelControl.LogMessage -= TuningPanel_LogMessage; } catch { }
     }
 
     private bool ShowConfirmDialog(string title, string message)
@@ -70,8 +86,15 @@ public partial class MainWindow : Window
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.LeftButton == MouseButtonState.Pressed)
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        try
+        {
+            // DragMove throws InvalidOperationException if called when the window is in a state
+            // that doesn't allow dragging (e.g. while WPF is mid-resize). Swallow that — the
+            // user just gets no drag, not a crash dialog.
             DragMove();
+        }
+        catch (InvalidOperationException) { }
     }
 
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
@@ -140,11 +163,20 @@ public partial class MainWindow : Window
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainViewModel.BenchLabelText) or nameof(MainViewModel.StatusText))
+        // BenchLabelText and StatusText fire often during preflight; only refresh the
+        // benchmark chart panel when it's the visible tab. Saves the file read + chart relayout.
+        if ((e.PropertyName == nameof(MainViewModel.BenchLabelText) ||
+             e.PropertyName == nameof(MainViewModel.StatusText)) &&
+            WorkspaceTabs.SelectedIndex == 1)
+        {
             RefreshBenchmarkWorkspace();
+        }
 
-        if (e.PropertyName == nameof(MainViewModel.DriveInventorySummaryText))
+        if (e.PropertyName == nameof(MainViewModel.DriveInventorySummaryText) &&
+            WorkspaceTabs.SelectedIndex == 2)
+        {
             _ = RefreshTelemetryWorkspaceAsync();
+        }
     }
 
     private void ExecuteRecommendedAction(string? actionId)
@@ -281,17 +313,26 @@ public partial class MainWindow : Window
         TelemetryPanelControl.SetTelemetryStatus(
             $"Polling Disk {driveNumber} for a fresh health snapshot and trend history.");
 
-        var cachedHealthTask = Task.Run(DriveService.GetNVMeHealthData);
-        var liveDataTask = NVMeTelemetryService.PollAsync(driveNumber);
-        await Task.WhenAll(cachedHealthTask, liveDataTask);
+        var cachedHealthTask = Task.Run(() =>
+        {
+            try { return DriveService.GetNVMeHealthData(); }
+            catch { return new Dictionary<string, NVMeHealthInfo>(); }
+        });
+        var liveDataTask = Task.Run(async () =>
+        {
+            try { return await NVMeTelemetryService.PollAsync(driveNumber); }
+            catch { return null; }
+        });
+
+        // Use individual awaits so a faulted task in one stream doesn't surface as an
+        // AggregateException via WhenAll; either side failing is non-fatal here.
+        var cachedHealth = await cachedHealthTask;
+        var liveData = await liveDataTask;
 
         if (requestId != _telemetryDataRefreshId)
             return;
 
-        var cachedHealth = cachedHealthTask.Result;
         cachedHealth.TryGetValue(driveNumber.ToString(), out NVMeHealthInfo? fallbackHealth);
-
-        NVMeHealthData? liveData = liveDataTask.Result;
         NVMeHealthInfo? currentHealth = liveData is not null
             ? CreateHealthInfo(liveData)
             : fallbackHealth;

@@ -37,15 +37,20 @@ public static class DiagnosticsService
 
         try
         {
-            using var search = new ManagementObjectSearcher("SELECT * FROM Win32_OperatingSystem");
-            var os = search.Get().Cast<ManagementObject>().FirstOrDefault();
-            if (os is not null)
+            using var search = new ManagementObjectSearcher("SELECT Caption, BuildNumber, Version, InstallDate, LastBootUpTime FROM Win32_OperatingSystem");
+            using var collection = search.Get();
+            foreach (var raw in collection)
             {
-                sb.AppendLine($"OS Caption: {os["Caption"]}");
-                sb.AppendLine($"OS Build: {os["BuildNumber"]}");
-                sb.AppendLine($"OS Version: {os["Version"]}");
-                sb.AppendLine($"Install Date: {os["InstallDate"]}");
-                sb.AppendLine($"Last Boot: {os["LastBootUpTime"]}");
+                if (raw is not ManagementObject os) continue;
+                using (os)
+                {
+                    sb.AppendLine($"OS Caption: {os["Caption"]}");
+                    sb.AppendLine($"OS Build: {os["BuildNumber"]}");
+                    sb.AppendLine($"OS Version: {os["Version"]}");
+                    sb.AppendLine($"Install Date: {os["InstallDate"]}");
+                    sb.AppendLine($"Last Boot: {os["LastBootUpTime"]}");
+                }
+                break;
             }
         }
         catch { sb.AppendLine("Unable to retrieve OS information"); }
@@ -53,13 +58,22 @@ public static class DiagnosticsService
         sb.AppendLine().AppendLine("HARDWARE").AppendLine("--------");
         try
         {
-            using var search = new ManagementObjectSearcher("SELECT * FROM Win32_ComputerSystem");
-            var cs = search.Get().Cast<ManagementObject>().FirstOrDefault();
-            if (cs is not null)
+            using var search = new ManagementObjectSearcher("SELECT Manufacturer, Model, TotalPhysicalMemory FROM Win32_ComputerSystem");
+            using var collection = search.Get();
+            foreach (var raw in collection)
             {
-                sb.AppendLine($"Manufacturer: {cs["Manufacturer"]}");
-                sb.AppendLine($"Model: {cs["Model"]}");
-                sb.AppendLine($"Total RAM: {Math.Round(Convert.ToInt64(cs["TotalPhysicalMemory"]) / 1073741824.0, 2)} GB");
+                if (raw is not ManagementObject cs) continue;
+                using (cs)
+                {
+                    sb.AppendLine($"Manufacturer: {cs["Manufacturer"]}");
+                    sb.AppendLine($"Model: {cs["Model"]}");
+                    long? memBytes = null;
+                    try { memBytes = Convert.ToInt64(cs["TotalPhysicalMemory"] ?? 0); } catch { }
+                    sb.AppendLine(memBytes is { } mb && mb > 0
+                        ? $"Total RAM: {Math.Round(mb / 1073741824.0, 2)} GB"
+                        : "Total RAM: Unknown");
+                }
+                break;
             }
         }
         catch { sb.AppendLine("Unable to retrieve hardware information"); }
@@ -169,13 +183,28 @@ public static class DiagnosticsService
         else sb.AppendLine("  No benchmark history");
 
         sb.AppendLine().AppendLine("ACTIVITY LOG").AppendLine("------------");
-        sb.AppendLine(string.Join("\n", logHistory));
+        // The rest of the report uses StringBuilder.AppendLine which emits Environment.NewLine
+        // (CRLF on Windows). Match that so the file opens cleanly in Notepad / older editors
+        // instead of showing single-line wrap-around for the whole activity section.
+        sb.AppendLine(string.Join(Environment.NewLine, logHistory ?? new List<string>()));
         sb.AppendLine().AppendLine("================================================================================");
         sb.AppendLine("End of Diagnostics Report");
 
         try
         {
-            File.WriteAllText(outputPath, sb.ToString());
+            // Atomic write so a power loss in the middle of an export never leaves a half-written report.
+            var dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+            var tempPath = outputPath + ".tmp";
+            using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var sw = new StreamWriter(fs, new System.Text.UTF8Encoding(false)))
+            {
+                sw.Write(sb.ToString());
+                sw.Flush();
+                fs.Flush(flushToDisk: true);
+            }
+            File.Move(tempPath, outputPath, overwrite: true);
             return outputPath;
         }
         catch { return null; }
