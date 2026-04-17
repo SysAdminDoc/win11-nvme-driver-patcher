@@ -44,13 +44,20 @@ public static class HotSwapService
     /// <param name="log">Optional logging callback for status updates.</param>
     /// <returns>A result indicating success or failure with details.</returns>
     // HIGH RISK: This operation can cause data loss. Only call after explicit user confirmation.
-    public static async Task<HotSwapResult> SwapAsync(SystemDrive drive, Action<string>? log = null)
+    public static async Task<HotSwapResult> SwapAsync(SystemDrive? drive, Action<string>? log = null)
     {
         var result = new HotSwapResult();
 
         // ================================================================
         // Step 1: Safety verification
         // ================================================================
+        if (drive is null)
+        {
+            result.ErrorMessage = "BLOCKED: No drive specified for hot-swap.";
+            log?.Invoke($"[ERROR] {result.ErrorMessage}");
+            return result;
+        }
+
         if (!CanHotSwap(drive))
         {
             result.ErrorMessage = drive.IsBoot
@@ -246,22 +253,38 @@ public static class HotSwapService
     private static List<string> GetVolumesForDrive(int driveNumber)
     {
         var volumes = new List<string>();
+        if (driveNumber < 0)
+            return volumes;
+
         try
         {
             using var partSearch = new ManagementObjectSearcher(
                 $"ASSOCIATORS OF {{Win32_DiskDrive.DeviceID='\\\\\\\\.\\\\PHYSICALDRIVE{driveNumber}'}} WHERE AssocClass=Win32_DiskDriveToDiskPartition");
 
-            foreach (ManagementObject partition in partSearch.Get())
+            using var partitions = partSearch.Get();
+            foreach (var rawPart in partitions)
             {
-                string partId = partition["DeviceID"]?.ToString() ?? "";
-                using var logicalSearch = new ManagementObjectSearcher(
-                    $"ASSOCIATORS OF {{Win32_DiskPartition.DeviceID='{partId}'}} WHERE AssocClass=Win32_LogicalDiskToPartition");
-
-                foreach (ManagementObject logical in logicalSearch.Get())
+                if (rawPart is not ManagementObject partition) continue;
+                using (partition)
                 {
-                    string? letter = logical["DeviceID"]?.ToString();
-                    if (!string.IsNullOrEmpty(letter))
-                        volumes.Add(letter);
+                    string partId = partition["DeviceID"]?.ToString() ?? "";
+                    if (string.IsNullOrEmpty(partId)) continue;
+
+                    string escaped = EscapeWmiSingleQuotes(partId);
+                    using var logicalSearch = new ManagementObjectSearcher(
+                        $"ASSOCIATORS OF {{Win32_DiskPartition.DeviceID='{escaped}'}} WHERE AssocClass=Win32_LogicalDiskToPartition");
+
+                    using var logicalCollection = logicalSearch.Get();
+                    foreach (var rawLogical in logicalCollection)
+                    {
+                        if (rawLogical is not ManagementObject logical) continue;
+                        using (logical)
+                        {
+                            string? letter = logical["DeviceID"]?.ToString();
+                            if (!string.IsNullOrEmpty(letter))
+                                volumes.Add(letter);
+                        }
+                    }
                 }
             }
         }
@@ -272,15 +295,30 @@ public static class HotSwapService
         return volumes;
     }
 
+    private static string EscapeWmiSingleQuotes(string value)
+    {
+        // WMI WQL uses single-quote string literals; escape both backslashes and quotes.
+        // Backslashes in WQL must be doubled because they are escape characters.
+        return value
+            .Replace("\\", "\\\\")
+            .Replace("'", "\\'");
+    }
+
     /// <summary>
     /// Dismounts a volume by its drive letter using mountvol.
     /// </summary>
     private static bool DismountVolume(string driveLetter)
     {
+        if (string.IsNullOrWhiteSpace(driveLetter))
+            return false;
+        // Defensive: only allow simple drive letters like "C:" — never let arbitrary text be
+        // appended to a process command line.
+        if (driveLetter.Length < 2 || driveLetter[1] != ':' || !char.IsLetter(driveLetter[0]))
+            return false;
+
         try
         {
-            // Use mountvol to dismount
-            var psi = new ProcessStartInfo("mountvol", $"{driveLetter}\\ /P")
+            var psi = new ProcessStartInfo("mountvol", $"{driveLetter[0]}:\\ /P")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -289,8 +327,18 @@ public static class HotSwapService
             };
 
             using var proc = Process.Start(psi);
-            proc?.WaitForExit(5000);
-            return proc?.ExitCode == 0;
+            if (proc is null) return false;
+            // Drain stdout/stderr to avoid pipe-buffer deadlocks on slow machines.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            if (!proc.WaitForExit(5000))
+            {
+                try { proc.Kill(true); } catch { }
+                return false;
+            }
+            try { stdoutTask.GetAwaiter().GetResult(); } catch { }
+            try { stderrTask.GetAwaiter().GetResult(); } catch { }
+            return proc.ExitCode == 0;
         }
         catch
         {
@@ -303,13 +351,17 @@ public static class HotSwapService
     /// </summary>
     private static bool IsDrivePresent(int driveNumber)
     {
+        if (driveNumber < 0) return false;
         try
         {
             using var search = new ManagementObjectSearcher(
                 @"root\Microsoft\Windows\Storage",
                 $"SELECT Number FROM MSFT_Disk WHERE Number={driveNumber}");
 
-            return search.Get().Count > 0;
+            using var collection = search.Get();
+            int count = collection.Count;
+            foreach (var obj in collection) (obj as IDisposable)?.Dispose();
+            return count > 0;
         }
         catch
         {
@@ -322,22 +374,35 @@ public static class HotSwapService
     /// </summary>
     private static string? GetParentDeviceId(string pnpDeviceId)
     {
+        if (string.IsNullOrEmpty(pnpDeviceId)) return null;
         try
         {
+            string escaped = EscapeWmiSingleQuotes(pnpDeviceId);
+
             // PNP device IDs for NVMe disks are typically under their controller
-            // e.g., SCSI\DISK&VEN_NVME&PROD_... -> parent is the NVMe controller
+            // e.g., SCSI\DISK&VEN_NVME&PROD_... -> parent is the NVMe controller.
             using var search = new ManagementObjectSearcher(
-                $"SELECT * FROM Win32_PnPEntity WHERE DeviceID='{pnpDeviceId.Replace("\\", "\\\\")}'");
+                $"SELECT DeviceID FROM Win32_PnPEntity WHERE DeviceID='{escaped}'");
 
-            foreach (ManagementObject dev in search.Get())
+            using var devices = search.Get();
+            foreach (var rawDev in devices)
             {
-                // Get parent via ASSOCIATORS
-                using var parentSearch = new ManagementObjectSearcher(
-                    $"ASSOCIATORS OF {{Win32_PnPEntity.DeviceID='{pnpDeviceId.Replace("\\", "\\\\")}'}} WHERE AssocClass=CIM_BusController");
-
-                foreach (ManagementObject parent in parentSearch.Get())
+                if (rawDev is not ManagementObject dev) continue;
+                using (dev)
                 {
-                    return parent["DeviceID"]?.ToString();
+                    using var parentSearch = new ManagementObjectSearcher(
+                        $"ASSOCIATORS OF {{Win32_PnPEntity.DeviceID='{escaped}'}} WHERE AssocClass=CIM_BusController");
+
+                    using var parents = parentSearch.Get();
+                    foreach (var rawParent in parents)
+                    {
+                        if (rawParent is not ManagementObject parent) continue;
+                        using (parent)
+                        {
+                            var id = parent["DeviceID"]?.ToString();
+                            if (!string.IsNullOrEmpty(id)) return id;
+                        }
+                    }
                 }
             }
         }

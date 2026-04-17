@@ -5,7 +5,36 @@ namespace NVMeDriverPatcher.Models;
 public class AppConfig
 {
     public const string AppName = "NVMe Driver Patcher";
-    public const string AppVersion = "4.0.0";
+
+    // Derived from the executing assembly's InformationalVersion / AssemblyVersion so a tagged
+    // release build (which sets these via dotnet publish -p:Version=...) reports the right
+    // version everywhere — instead of having a hard-coded literal here drift out of sync with
+    // the csproj. Falls back to the literal if the lookup ever fails.
+    public static string AppVersion { get; } = ResolveAssemblyVersion();
+
+    private static string ResolveAssemblyVersion()
+    {
+        try
+        {
+            var asm = typeof(AppConfig).Assembly;
+            var infoAttr = asm
+                .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+                .FirstOrDefault();
+            var v = infoAttr?.InformationalVersion;
+            if (!string.IsNullOrEmpty(v))
+            {
+                // InformationalVersion may include a "+commitsha" suffix — trim it.
+                int plus = v.IndexOf('+');
+                if (plus > 0) v = v.Substring(0, plus);
+                return v;
+            }
+            var asmVer = asm.GetName().Version;
+            if (asmVer is not null) return $"{asmVer.Major}.{asmVer.Minor}.{asmVer.Build}";
+        }
+        catch { /* fall through to literal */ }
+        return "4.0.0";
+    }
     public const string RegistryPath = @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
     public const string RegistrySubKey = @"SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
     public const string SafeBootMinimalPath = @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}";
@@ -14,8 +43,12 @@ public class AppConfig
     public const string SafeBootValue = "Storage Disks";
     public const int MinWinBuild = 22000;
     public const int RecommendedBuild = 26100;
-    public const int TotalComponents = 5;
     public const string ServerFeatureID = "1176759950";
+
+    // Derived from FeatureIDs.Count so adding/removing a core flag doesn't silently leave
+    // TotalComponents out of sync with what PatchService.Install actually writes.
+    // (Core feature flags + 2 SafeBoot keys [Minimal, Network])
+    public static int TotalComponents => FeatureIDs.Count + 2;
     public const string EventLogSourceName = "NVMe Driver Patcher";
     public const string GitHubURL = "https://github.com/SysAdminDoc/win11-nvme-driver-patcher";
     public const string DocumentationURL = "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353";
@@ -56,17 +89,31 @@ public class AppConfig
 
     public static string GetWorkingDir()
     {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var dir = Path.Combine(localAppData, "NVMePatcher");
-        if (!Directory.Exists(dir))
+        // Try in order: LocalAppData (preferred), TEMP fallback, current directory last-resort.
+        // Each step is independently try-wrapped so a denied LocalAppData (rare, hardened SKUs)
+        // still gets us a usable working folder instead of NRE'ing the rest of the app.
+        try
         {
-            try { Directory.CreateDirectory(dir); }
-            catch
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrEmpty(localAppData))
             {
-                dir = Path.Combine(Path.GetTempPath(), "NVMePatcher_Backups");
+                var dir = Path.Combine(localAppData, "NVMePatcher");
+                if (Directory.Exists(dir)) return dir;
                 Directory.CreateDirectory(dir);
+                return dir;
             }
         }
-        return dir;
+        catch { /* fall through */ }
+
+        try
+        {
+            var temp = Path.Combine(Path.GetTempPath(), "NVMePatcher_Backups");
+            if (!Directory.Exists(temp)) Directory.CreateDirectory(temp);
+            return temp;
+        }
+        catch { /* fall through */ }
+
+        // Absolute last resort — current directory. Always exists.
+        return Environment.CurrentDirectory;
     }
 }

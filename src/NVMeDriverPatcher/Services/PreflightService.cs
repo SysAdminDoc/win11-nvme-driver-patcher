@@ -32,8 +32,12 @@ public static class PreflightService
         var result = new PreflightResult();
         var checks = new Dictionary<string, PreflightCheck>();
 
-        // Admin is guaranteed by manifest
-        checks["AdminPrivileges"] = new(CheckStatus.Pass, "Administrator", true);
+        // Admin should already be enforced by the assembly manifest, but verify at runtime
+        // anyway so a side-loaded launch (e.g. weird shell that strips elevation) still fails
+        // loudly instead of silently doing nothing when registry writes are denied.
+        checks["AdminPrivileges"] = IsRunningAsAdmin()
+            ? new(CheckStatus.Pass, "Administrator", true)
+            : new(CheckStatus.Fail, "Administrator privileges required", true);
 
         // 1. Windows Version
         log?.Invoke("  [1/11] Checking Windows version...");
@@ -218,19 +222,43 @@ public static class PreflightService
 
         log?.Invoke("  [11/11] Admin privileges verified");
 
-        // Health and migration data
+        // Health and migration data — only meaningful when there are NVMe drives present.
         try { result.CachedHealth = DriveService.GetNVMeHealthData() ?? []; } catch { }
         try { result.CachedMigration = DriveService.GetStorageDiskMigration(); } catch { }
 
-        // Update check
-        try { result.UpdateAvailable = UpdateService.Check(); } catch { }
+        // Update check — fire-and-forget on its own thread so a slow / unreachable GitHub API
+        // never holds the preflight UI hostage. The caller can re-render whenever this finishes.
+        try
+        {
+            // We still wait briefly so the first preflight render usually has the badge,
+            // but we cap the cost at 3s instead of the previous synchronous 5s.
+            var t = System.Threading.Tasks.Task.Run(UpdateService.Check);
+            if (t.Wait(TimeSpan.FromSeconds(3)))
+                result.UpdateAvailable = t.Result;
+        }
+        catch { }
 
         result.Checks = checks;
         return result;
     }
 
-    public static bool AllCriticalPassed(Dictionary<string, PreflightCheck> checks)
+    public static bool AllCriticalPassed(Dictionary<string, PreflightCheck>? checks)
     {
+        if (checks is null) return false;
         return checks.Values.All(c => !c.Critical || c.Status != CheckStatus.Fail);
+    }
+
+    private static bool IsRunningAsAdmin()
+    {
+        try
+        {
+            using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            var principal = new System.Security.Principal.WindowsPrincipal(identity);
+            return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

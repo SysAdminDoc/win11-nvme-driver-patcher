@@ -300,8 +300,9 @@ public partial class TuningPanel : UserControl
 
     private Brush ResolveBrush(string resourceKey, string fallbackHex)
     {
-        return TryFindResource(resourceKey) as Brush
-            ?? (Brush)BrushConverter.ConvertFromString(fallbackHex)!;
+        if (TryFindResource(resourceKey) is Brush b) return b;
+        try { return (Brush)BrushConverter.ConvertFromString(fallbackHex)!; }
+        catch { return System.Windows.Media.Brushes.Gray; }
     }
 
     private bool AreControlsReady()
