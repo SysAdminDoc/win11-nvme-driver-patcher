@@ -134,6 +134,14 @@ public partial class MainViewModel : ObservableObject
     // revisit the choice without reopening the dialog.
     [ObservableProperty] private bool _showViVeToolFallbackBadge;
 
+    // Set while a benchmark is running, used by the XAML Cancel button to show/hide and
+    // to gate CancelBenchmarkCommand. Mirrors _benchmarkInFlight but as a bindable property.
+    [ObservableProperty] private bool _benchmarkRunning;
+
+    // Source used to cancel the active benchmark run. Non-null only while a benchmark is
+    // in flight; disposed and nulled out in the finally block of RunBenchmark.
+    private System.Threading.CancellationTokenSource? _benchmarkCts;
+
     // UI collections
     public ObservableCollection<PreflightCheckVM> LeftChecks { get; } = [];
     public ObservableCollection<PreflightCheckVM> RightChecks { get; } = [];
@@ -1987,17 +1995,21 @@ public partial class MainViewModel : ObservableObject
             Log("A benchmark is already running.", "WARNING");
             return;
         }
+        ButtonsEnabled = false;
+        _benchmarkCts = new System.Threading.CancellationTokenSource();
+        BenchmarkRunning = true;
         try
         {
             var status = RegistryService.GetPatchStatus();
             string label = status.Applied ? "Post-Patch" : "Pre-Patch";
             Log($"Starting storage benchmark ({label})...");
-            Log("This will take approximately 60 seconds. Do not use disk-heavy apps.", "WARNING");
+            Log("This will take approximately 60 seconds. Do not use disk-heavy apps. Click Cancel to stop early.", "WARNING");
 
             var result = await BenchmarkService.RunBenchmarkAsync(
                 Config.WorkingDir, label,
                 msg => Log(msg),
-                (val, text) => Application.Current?.Dispatcher.BeginInvoke(() => SetProgress(val, text)));
+                (val, text) => Application.Current?.Dispatcher.BeginInvoke(() => SetProgress(val, text)),
+                _benchmarkCts.Token);
 
             if (result is not null)
             {
@@ -2032,7 +2044,34 @@ public partial class MainViewModel : ObservableObject
         {
             // Guarantee the UI is usable again even if BenchmarkService throws.
             ButtonsEnabled = true;
+            BenchmarkRunning = false;
+            try { _benchmarkCts?.Dispose(); } catch { }
+            _benchmarkCts = null;
             ReleaseInFlight(ref _benchmarkInFlight);
+        }
+    }
+
+    /// <summary>Cancels the currently-running benchmark. Safe to call when no benchmark is
+    /// running — no-ops if the CTS has already been cleared. Wired to a Cancel button that
+    /// the XAML shows only while <see cref="BenchmarkRunning"/> is true.</summary>
+    [RelayCommand]
+    private void CancelBenchmark()
+    {
+        var cts = _benchmarkCts;
+        if (cts is null)
+        {
+            Log("No benchmark is running.", "DEBUG");
+            return;
+        }
+        try
+        {
+            Log("Canceling benchmark...", "WARNING");
+            cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // CTS was disposed between our null-check and Cancel() — the benchmark already
+            // finished on its own. Nothing to do.
         }
     }
 
@@ -2212,12 +2251,18 @@ public partial class MainViewModel : ObservableObject
     // invocation is in flight. `ButtonsEnabled = false` guards the UI but it's set AFTER the
     // async method starts, so a rapid double-click before the property binding re-renders
     // could race two invocations. Interlocked.CompareExchange closes that window.
-    private int _refreshInFlight;
-    private int _applyInFlight;
-    private int _removeInFlight;
-    private int _benchmarkInFlight;
-    private int _backupInFlight;
-    private int _fallbackInFlight;
+    //
+    // Kept STATIC so a future second MainViewModel instance (hypothetical multi-window
+    // support) can't concurrently run the same registry-mutating command. App.xaml.cs
+    // already enforces single-instance via mutex so the process boundary is covered;
+    // these guards close the in-process boundary. The process dying clears static state
+    // on next launch, so there's no stuck-guard recovery concern.
+    private static int _refreshInFlight;
+    private static int _applyInFlight;
+    private static int _removeInFlight;
+    private static int _benchmarkInFlight;
+    private static int _backupInFlight;
+    private static int _fallbackInFlight;
 
     /// <summary>Acquires a re-entrancy slot using an atomic 0→1 transition. Returns true if
     /// the caller owns the slot (and MUST release it via <see cref="ReleaseInFlight"/> in a
