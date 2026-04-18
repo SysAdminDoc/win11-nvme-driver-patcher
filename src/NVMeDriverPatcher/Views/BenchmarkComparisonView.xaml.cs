@@ -22,10 +22,12 @@ public partial class BenchmarkComparisonView : UserControl
             RunCountValue.Text = "0";
             BenchmarkContextText.Text = "No benchmark runs recorded yet.";
             BenchmarkSummaryText.Text = "Capture a baseline before you change drivers, then run the benchmark again afterward to validate the outcome on this exact machine.";
+            TrendHintText.Text = "The chart becomes useful once at least one run is captured and far more trustworthy once a second run confirms direction.";
             ReadIopsValue.Text = "-";
             WriteIopsValue.Text = "-";
             ReadDelta.Text = "";
             WriteDelta.Text = "";
+            ApplyBenchmarkState("Waiting", NeutralBrush, NeutralBgBrush, NeutralBorderBrush);
             BenchChart.Series = [];
             return;
         }
@@ -44,14 +46,18 @@ public partial class BenchmarkComparisonView : UserControl
             WriteDelta.Text = FormatDelta(prev.Write.IOPS, latest.Write.IOPS);
             WriteDelta.Foreground = DeltaBrush(prev.Write.IOPS, latest.Write.IOPS);
             BenchmarkSummaryText.Text = $"Comparing {latest.Label} against the previous run shows whether the most recent change helped sustained 4K random performance or simply shifted the tradeoff.";
+            TrendHintText.Text = "Use the chart to confirm whether the latest change moved both read and write performance in the direction you expected, not just one headline metric.";
+            ApplyBenchmarkState("Comparison Ready", PositiveBrush, SuccessBgBrush, SuccessBorderBrush);
         }
         else
         {
             ReadDelta.Text = "Baseline captured";
-            ReadDelta.Foreground = DeltaBrush(1, 1);
+            ReadDelta.Foreground = NeutralBrush;
             WriteDelta.Text = "Run another benchmark after a driver change to compare.";
-            WriteDelta.Foreground = DeltaBrush(1, 1);
+            WriteDelta.Foreground = NeutralBrush;
             BenchmarkSummaryText.Text = "This first run is your baseline. Capture another run after applying or removing the patch so the comparison view can show direction, not just raw numbers.";
+            TrendHintText.Text = "The chart currently reflects one baseline run. Add a post-change run to reveal direction instead of a single point in time.";
+            ApplyBenchmarkState("Baseline Only", AccentBrush, AccentBgBrush, AccentBrush);
         }
 
         var labels = history.Select((h, index) => $"{h.Label}\n{BuildAxisSubLabel(h.Timestamp, index)}").ToArray();
@@ -101,6 +107,20 @@ public partial class BenchmarkComparisonView : UserControl
         };
     }
 
+    private void ApplyBenchmarkState(
+        string label,
+        System.Windows.Media.SolidColorBrush foreground,
+        System.Windows.Media.SolidColorBrush background,
+        System.Windows.Media.SolidColorBrush border)
+    {
+        BenchmarkStateText.Text = label;
+        BenchmarkStateText.Foreground = foreground;
+        BenchmarkStateBadge.Background = background;
+        BenchmarkStateBadge.BorderBrush = border;
+        InterpretationCard.Background = background;
+        InterpretationCard.BorderBrush = border;
+    }
+
     private static string FormatDelta(double prev, double current)
     {
         if (prev <= 0) return "";
@@ -112,6 +132,13 @@ public partial class BenchmarkComparisonView : UserControl
     private static readonly System.Windows.Media.BrushConverter BrushConv = new();
     private static readonly System.Windows.Media.SolidColorBrush PositiveBrush = ToBrush("#FF50DD9D");
     private static readonly System.Windows.Media.SolidColorBrush NegativeBrush = ToBrush("#FFFF8585");
+    private static readonly System.Windows.Media.SolidColorBrush NeutralBrush = ToBrush("#FF8393AD");
+    private static readonly System.Windows.Media.SolidColorBrush AccentBrush = ToBrush("#FF69AEFF");
+    private static readonly System.Windows.Media.SolidColorBrush AccentBgBrush = ToBrush("#FF102845");
+    private static readonly System.Windows.Media.SolidColorBrush SuccessBgBrush = ToBrush("#FF13392C");
+    private static readonly System.Windows.Media.SolidColorBrush SuccessBorderBrush = ToBrush("#FF50DD9D");
+    private static readonly System.Windows.Media.SolidColorBrush NeutralBgBrush = ToBrush("#FF131C29");
+    private static readonly System.Windows.Media.SolidColorBrush NeutralBorderBrush = ToBrush("#FF344B69");
 
     private static System.Windows.Media.SolidColorBrush ToBrush(string hex)
     {

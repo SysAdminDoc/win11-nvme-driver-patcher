@@ -248,7 +248,7 @@ public static class PreflightService
         return checks.Values.All(c => !c.Critical || c.Status != CheckStatus.Fail);
     }
 
-    private static bool IsRunningAsAdmin()
+    public static bool IsRunningAsAdmin()
     {
         try
         {
