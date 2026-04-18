@@ -638,14 +638,20 @@ public static class PatchService
         delaySeconds = Math.Clamp(delaySeconds, 0, 3600);
         try
         {
-            var psi = new ProcessStartInfo("shutdown.exe",
-                $"/r /t {delaySeconds} /c \"NVMe Driver Patch - Restarting in {delaySeconds} seconds. Save your work!\"")
+            // Pass args via ArgumentList so each argument is individually escaped —
+            // defense-in-depth even though delaySeconds is already clamped.
+            var psi = new ProcessStartInfo("shutdown.exe")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            psi.ArgumentList.Add("/r");
+            psi.ArgumentList.Add("/t");
+            psi.ArgumentList.Add(delaySeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            psi.ArgumentList.Add("/c");
+            psi.ArgumentList.Add($"NVMe Driver Patch - Restarting in {delaySeconds} seconds. Save your work!");
             using var proc = Process.Start(psi);
             if (proc is null)
             {
