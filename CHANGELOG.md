@@ -2,6 +2,17 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [v4.3.3] - 2026-04-17
+
+### Fixed — reliability
+
+- **`HotSwapService.RemountVolumes` retries `mountvol` up to 3 times** with a 1-second
+  backoff between attempts. On slow NVMe controllers the first remount can race the
+  storage stack's post-re-enumerate volume-GUID publication and fail with
+  "volume not found" even though the device is visibly back. The retry window is also
+  auto-mount-aware: if Windows auto-mount lands between retries we detect it and skip
+  the redundant call instead of logging a spurious failure.
+
 ## [v4.3.2] - 2026-04-17
 
 Follow-up hardening pass on the two items deferred from v4.3.1.
