@@ -2,6 +2,29 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [v4.3.6] - 2026-04-17
+
+### Fixed — correctness
+
+- **`EventLogService.Write` no longer splits a UTF-16 surrogate pair at the truncation
+  boundary.** The prior implementation's `Substring(0, 30000)` could leave a lone high
+  surrogate at the end when the 30000th character landed mid-pair, producing an
+  invalid UTF-16 sequence that the Windows Event Log API may reject or mangle. Emoji
+  and CJK extension-plane characters in a logged message now truncate cleanly. Pulled
+  the truncation into a new `internal` helper (`TruncatePreservingSurrogates`) so the
+  behavior is directly unit-testable.
+
+### Tests
+
+- **`PatchVerificationServiceTests` expanded** from one case to eight: covers
+  `None` path (no pending flag), whitespace-only timestamp, invalid timestamp
+  (StalePending with "invalid" message), over-30-days-old timestamp (StalePending
+  with "too old" message), within-window timestamp, Local→UTC kind coercion,
+  `MarkPending` ISO-8601 round-trip, `Clear` state recording.
+- **`EventLogServiceTests` new**: six cases covering the surrogate-pair fix
+  (unchanged-when-short, unchanged-when-equal, BMP-only split, lone-high-surrogate
+  trim, pair-after-cutoff preservation, empty/null input).
+
 ## [v4.3.5] - 2026-04-17
 
 Polish pass. Small quality fixes across several services and view code-behinds.
