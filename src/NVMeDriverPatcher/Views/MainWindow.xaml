@@ -505,6 +505,15 @@
                                                       AutomationProperties.Name="Run benchmark"
                                                       IsEnabled="{Binding ButtonsEnabled}"
                                                       Command="{Binding RunBenchmarkCommand}"/>
+                                              <Button Content="Cancel Benchmark"
+                                                      MinWidth="168"
+                                                      MaxWidth="220"
+                                                      Margin="0,0,12,12"
+                                                      Style="{StaticResource SecondaryButton}"
+                                                      ToolTip="Stop the current DiskSpd run. Partial data is discarded."
+                                                      AutomationProperties.Name="Cancel running benchmark"
+                                                      Visibility="{Binding BenchmarkRunning, Converter={StaticResource BoolVis}}"
+                                                      Command="{Binding CancelBenchmarkCommand}"/>
                                               <Button Content="Export Diagnostics"
                                                       MinWidth="168"
                                                       MaxWidth="220"
