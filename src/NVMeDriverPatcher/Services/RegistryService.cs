@@ -71,29 +71,56 @@ public static class RegistryService
             // — callers treat zero-applied as "Not Applied" which is the right default.
         }
 
-        // Profile detection — answers "is this a clean Safe install, a clean Full install, or
-        // some in-between state?" independently of what the config thinks was last applied.
-        // Both SafeBoot keys are required for either profile to count as clean.
+        // Profile detection + Applied/Partial derivation is pushed into a pure helper so it
+        // can be exhaustively unit-tested without touching the live registry.
+        var classification = ClassifyPatchState(primarySet, extendedA, extendedB, safeBootMin, safeBootNet, count);
+        status.DetectedProfile = classification.Profile;
+        status.Count = count;
+        status.Keys = keys;
+        status.Applied = classification.Applied;
+        status.Partial = classification.Partial;
+        return status;
+    }
+
+    /// <summary>
+    /// Pure helper exposing the profile classification and Applied/Partial state derived from
+    /// the raw "is this key set?" booleans. Extracted from <see cref="GetPatchStatus"/> so the
+    /// logic (which users rely on for "is my patch correctly applied?") can be exhaustively
+    /// tested without invoking the live registry.
+    /// <para/>
+    /// Rules:
+    /// <list type="bullet">
+    /// <item><c>count == 0</c> → <c>None</c>, not applied, not partial.</item>
+    /// <item>Primary + both SafeBoot keys present, no extended flags → clean <c>Safe</c> install.</item>
+    /// <item>Primary + both extended + both SafeBoot → clean <c>Full</c> install.</item>
+    /// <item>Anything else with at least one key set → <c>Mixed</c> + Partial.</item>
+    /// </list>
+    /// Applied is true for either clean profile; Partial is the leftover "something is set
+    /// but it's not a clean install" bucket.
+    /// </summary>
+    internal readonly record struct PatchClassification(PatchAppliedProfile Profile, bool Applied, bool Partial);
+
+    internal static PatchClassification ClassifyPatchState(
+        bool primarySet,
+        bool extendedA,
+        bool extendedB,
+        bool safeBootMin,
+        bool safeBootNet,
+        int count)
+    {
+        if (count <= 0)
+            return new PatchClassification(PatchAppliedProfile.None, Applied: false, Partial: false);
+
+        // Both SafeBoot keys are required for either profile to count as clean; either one
+        // missing demotes the install to Mixed even if the feature flags look right.
         bool cleanSafe = primarySet && !extendedA && !extendedB && safeBootMin && safeBootNet;
         bool cleanFull = primarySet && extendedA && extendedB && safeBootMin && safeBootNet;
 
-        if (count == 0)
-            status.DetectedProfile = PatchAppliedProfile.None;
-        else if (cleanSafe)
-            status.DetectedProfile = PatchAppliedProfile.Safe;
-        else if (cleanFull)
-            status.DetectedProfile = PatchAppliedProfile.Full;
-        else
-            status.DetectedProfile = PatchAppliedProfile.Mixed;
-
-        status.Count = count;
-        status.Keys = keys;
-        // "Applied" now means any clean profile. Mixed state is "Partial" regardless of count —
-        // before this fix, a Safe-Mode install (3/5 components) reported as Partial, confusing
-        // users into thinking the tool had failed.
-        status.Applied = cleanSafe || cleanFull;
-        status.Partial = !status.Applied && count > 0;
-        return status;
+        if (cleanSafe)
+            return new PatchClassification(PatchAppliedProfile.Safe, Applied: true, Partial: false);
+        if (cleanFull)
+            return new PatchClassification(PatchAppliedProfile.Full, Applied: true, Partial: false);
+        return new PatchClassification(PatchAppliedProfile.Mixed, Applied: false, Partial: true);
     }
 
     public static string? ExportRegistryBackup(string workingDir, string description = "NVMe_Backup")
