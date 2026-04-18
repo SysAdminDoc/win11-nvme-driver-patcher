@@ -2,6 +2,29 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [v4.3.7] - 2026-04-17
+
+### Refactored
+
+- **Profile-classification logic extracted from `RegistryService.GetPatchStatus`
+  into a pure `ClassifyPatchState` helper.** The v4.3.1 fix for "Safe Mode reports
+  as PARTIAL" is now exercised by direct unit tests against the helper's inputs
+  (5 booleans + a count) rather than only via the registry-reading call path.
+  `GetPatchStatus` retains the same public shape; the pure helper is `internal`
+  so it stays opaque to external callers.
+
+### Tests
+
+- **`RegistryServiceClassifyTests` new, 11 cases + a 9-row theory**: empty state
+  returns None; clean Safe (primary + both SafeBoot) reports Applied; clean Full
+  (all three flags + both SafeBoot) reports Applied; missing-one-SafeBoot demotes
+  a Safe install to Mixed; missing-one-extended demotes a Full install to Mixed;
+  no-primary-but-extended reports Mixed; only-SafeBoot-entries reports Mixed;
+  zero count overrides all booleans; negative count treated as empty; plus an
+  `[InlineData]` theory covering the combinations the individual tests don't
+  spell out row-by-row. The historical "Safe install shown as PARTIAL" regression
+  is now pinned by the `CleanSafeInstall_ClassifiesAsSafeApplied` case.
+
 ## [v4.3.6] - 2026-04-17
 
 ### Fixed — correctness
