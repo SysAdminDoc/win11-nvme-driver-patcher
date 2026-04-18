@@ -52,7 +52,14 @@ class Program
             // need to first edit config.json. --no-server-key wins if both are passed by mistake.
             if (includeServerKeyOverride) config.IncludeServerKey = true;
             if (excludeServerKeyOverride) config.IncludeServerKey = false;
-            // Mode override — Safe wins on conflict because it's the strictly-smaller key set.
+
+            // Reject conflicting mode flags instead of silently picking one — automation callers
+            // deserve a clear error so the intended profile is written to the audit trail.
+            if (safeMode && fullMode)
+            {
+                Console.Error.WriteLine("Error: --safe and --full cannot be combined. Pick one.");
+                return 3;
+            }
             if (safeMode) config.PatchProfile = PatchProfile.Safe;
             else if (fullMode) config.PatchProfile = PatchProfile.Full;
 

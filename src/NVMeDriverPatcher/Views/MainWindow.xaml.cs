@@ -49,11 +49,13 @@ public partial class MainWindow : Window
         Closing += MainWindow_Closing;
         StateChanged += MainWindow_StateChanged;
         SizeChanged += MainWindow_SizeChanged;
-        Loaded += (_, _) =>
-        {
-            UpdateWindowPresentation();
-            UpdateAdaptiveLayout();
-        };
+        Loaded += MainWindow_Loaded;
+    }
+
+    private void MainWindow_Loaded(object? sender, RoutedEventArgs e)
+    {
+        UpdateWindowPresentation();
+        UpdateAdaptiveLayout();
     }
 
     private async void OnContentRendered(object? sender, EventArgs e)
@@ -82,6 +84,9 @@ public partial class MainWindow : Window
         try { _vm.PropertyChanged -= ViewModel_PropertyChanged; } catch { }
         try { TelemetryPanelControl.DriveSelected -= TelemetryPanel_DriveSelected; } catch { }
         try { TuningPanelControl.LogMessage -= TuningPanel_LogMessage; } catch { }
+        try { Loaded -= MainWindow_Loaded; } catch { }
+        try { StateChanged -= MainWindow_StateChanged; } catch { }
+        try { SizeChanged -= MainWindow_SizeChanged; } catch { }
     }
 
     private bool ShowConfirmDialog(string title, string message)

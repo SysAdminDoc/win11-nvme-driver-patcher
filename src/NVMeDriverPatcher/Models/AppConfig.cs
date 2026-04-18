@@ -43,7 +43,7 @@ public class AppConfig
             if (asmVer is not null) return $"{asmVer.Major}.{asmVer.Minor}.{asmVer.Build}";
         }
         catch { /* fall through to literal */ }
-        return "4.3.4";
+        return "4.3.5";
     }
     public const string RegistryPath = @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
     public const string RegistrySubKey = @"SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
@@ -127,11 +127,18 @@ public class AppConfig
     [JsonIgnore]
     public string ConfigFile { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Records which fallback path was used so startup can log a warning when running
+    /// from something other than LocalAppData. Null when LocalAppData succeeded normally.
+    /// </summary>
+    public static string? WorkingDirFallbackReason { get; private set; }
+
     public static string GetWorkingDir()
     {
         // Try in order: LocalAppData (preferred), TEMP fallback, current directory last-resort.
         // Each step is independently try-wrapped so a denied LocalAppData (rare, hardened SKUs)
         // still gets us a usable working folder instead of NRE'ing the rest of the app.
+        string? localAppDataError = null;
         try
         {
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -142,18 +149,27 @@ public class AppConfig
                 Directory.CreateDirectory(dir);
                 return dir;
             }
+            localAppDataError = "LocalAppData path was empty";
         }
-        catch { /* fall through */ }
+        catch (Exception ex)
+        {
+            localAppDataError = $"LocalAppData unavailable: {ex.GetType().Name}";
+        }
 
         try
         {
             var temp = Path.Combine(Path.GetTempPath(), "NVMePatcher_Backups");
             if (!Directory.Exists(temp)) Directory.CreateDirectory(temp);
+            WorkingDirFallbackReason = $"Using TEMP fallback ({localAppDataError ?? "unknown reason"})";
             return temp;
         }
-        catch { /* fall through */ }
-
-        // Absolute last resort — current directory. Always exists.
-        return Environment.CurrentDirectory;
+        catch (Exception ex)
+        {
+            // Absolute last resort — current directory. Always exists. This is the most
+            // concerning fallback because launching from a privileged directory (e.g.
+            // C:\Windows\System32) would land DB/backups there too.
+            WorkingDirFallbackReason = $"Using CurrentDirectory last-resort fallback: {Environment.CurrentDirectory} (TEMP failed: {ex.GetType().Name}; {localAppDataError ?? "unknown"})";
+            return Environment.CurrentDirectory;
+        }
     }
 }
