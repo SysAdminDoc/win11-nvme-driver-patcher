@@ -42,12 +42,27 @@ public static class EventLogService
 
         // Guard the OS limit. Truncate-with-marker is more useful than throwing & swallowing.
         if (message.Length > MaxMessageLength)
-            message = message.Substring(0, MaxMessageLength) + "... [truncated]";
+            message = TruncatePreservingSurrogates(message, MaxMessageLength) + "... [truncated]";
 
         try
         {
             EventLog.WriteEntry(AppConfig.EventLogSourceName, message, entryType, eventId);
         }
         catch { /* Event log write best-effort */ }
+    }
+
+    // A raw Substring(0, N) can slice a UTF-16 surrogate pair in half — if index N-1 is a
+    // high surrogate and index N would have been the low surrogate, the result is an
+    // invalid UTF-16 code unit sequence that Event Log may reject or mangle. This helper
+    // drops the stray high surrogate so the truncated string remains well-formed even
+    // when the underlying message contains emoji, CJK extension-plane characters, or
+    // other supplementary-plane codepoints. Internal so EventLogServiceTests can exercise
+    // it directly without pulling in the actual Windows Event Log.
+    internal static string TruncatePreservingSurrogates(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxLength) return value;
+        int cutoff = maxLength;
+        if (char.IsHighSurrogate(value[cutoff - 1])) cutoff--;
+        return value.Substring(0, cutoff);
     }
 }
