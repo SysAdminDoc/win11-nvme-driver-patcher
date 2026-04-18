@@ -89,13 +89,61 @@ public partial class TelemetryView : UserControl
     public void SetTelemetryStatus(string message, string tone = "muted")
     {
         TelemetryStatusText.Text = message;
-        TelemetryStatusText.Foreground = tone switch
+
+        string foregroundKey;
+        string foregroundFallback;
+        string backgroundKey;
+        string backgroundFallback;
+        string borderKey;
+        string borderFallback;
+
+        switch (tone)
         {
-            "success" => ResolveBrush("Green", "#FF50DD9D"),
-            "warning" => ResolveBrush("Yellow", "#FFFFC86C"),
-            "danger" => ResolveBrush("Red", "#FFFF8585"),
-            _ => ResolveBrush("TextDim", "#FF8393AD")
-        };
+            case "success":
+                foregroundKey = "Green";
+                foregroundFallback = "#FF50DD9D";
+                backgroundKey = "GreenBg";
+                backgroundFallback = "#FF13392C";
+                borderKey = "Green";
+                borderFallback = "#FF50DD9D";
+                break;
+            case "warning":
+                foregroundKey = "Yellow";
+                foregroundFallback = "#FFFFC86C";
+                backgroundKey = "YellowBg";
+                backgroundFallback = "#FF3A2A11";
+                borderKey = "Yellow";
+                borderFallback = "#FFFFC86C";
+                break;
+            case "danger":
+                foregroundKey = "Red";
+                foregroundFallback = "#FFFF8585";
+                backgroundKey = "RedBg";
+                backgroundFallback = "#FF3A1A1D";
+                borderKey = "Red";
+                borderFallback = "#FFFF8585";
+                break;
+            case "info":
+                foregroundKey = "Accent";
+                foregroundFallback = "#FF69AEFF";
+                backgroundKey = "AccentBg";
+                backgroundFallback = "#FF102845";
+                borderKey = "Accent";
+                borderFallback = "#FF69AEFF";
+                break;
+            default:
+                foregroundKey = "TextDim";
+                foregroundFallback = "#FF8393AD";
+                backgroundKey = "SurfaceInset";
+                backgroundFallback = "#FF09111B";
+                borderKey = "Border";
+                borderFallback = "#FF213146";
+                break;
+        }
+
+        TelemetryStatusText.Foreground = ResolveBrush(foregroundKey, foregroundFallback);
+        TelemetryStatusCard.Background = ResolveBrush(backgroundKey, backgroundFallback);
+        TelemetryStatusCard.BorderBrush = ResolveBrush(borderKey, borderFallback);
     }
 
     public void UpdateCurrentHealth(NVMeHealthInfo? health)
