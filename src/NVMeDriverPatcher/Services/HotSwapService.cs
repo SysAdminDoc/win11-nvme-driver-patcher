@@ -381,11 +381,15 @@ public static class HotSwapService
 
     /// <summary>
     /// Reattaches each captured volume to its original drive letter. Skips volumes whose
-    /// letter already came back via auto-mount. Returns the split list of restored vs
-    /// failed letters so the caller can surface any that need manual intervention.
+    /// letter already came back via auto-mount. Retries each remount up to 3 times with
+    /// a 1-second delay between attempts — `mountvol` can race the storage stack on slow
+    /// controllers and fail the first try with "volume not found" even though the device
+    /// is visibly back. Returns the split list of restored vs failed letters so the caller
+    /// can surface any that need manual intervention.
     /// </summary>
     private static RemountSummary RemountVolumes(List<MountedVolume> volumes, Action<string>? log)
     {
+        const int maxAttempts = 3;
         var summary = new RemountSummary();
         if (volumes is null || volumes.Count == 0) return summary;
 
@@ -401,15 +405,39 @@ public static class HotSwapService
                 continue;
             }
 
-            if (Mount(vol.Letter, vol.VolumeGuidPath, log))
+            bool restored = false;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                log?.Invoke($"  [OK] Reattached {vol.Letter}");
-                summary.Restored.Add(vol.Letter);
+                // Give the storage stack a moment between retries. Common failure signature
+                // on slow controllers: first mountvol sees no volume GUID yet, second sees it.
+                if (attempt > 1)
+                {
+                    Thread.Sleep(1000);
+                    // Auto-mount sometimes lands between retries — re-check so we don't shout
+                    // over a letter Windows already restored for us.
+                    if (IsLetterBoundToVolume(vol.Letter, vol.VolumeGuidPath))
+                    {
+                        log?.Invoke($"  [OK] {vol.Letter} was restored by auto-mount (attempt {attempt})");
+                        restored = true;
+                        break;
+                    }
+                }
+
+                if (Mount(vol.Letter, vol.VolumeGuidPath, log))
+                {
+                    log?.Invoke(attempt == 1
+                        ? $"  [OK] Reattached {vol.Letter}"
+                        : $"  [OK] Reattached {vol.Letter} (attempt {attempt}/{maxAttempts})");
+                    restored = true;
+                    break;
+                }
+
+                if (attempt < maxAttempts)
+                    log?.Invoke($"  [RETRY] {vol.Letter} reattach attempt {attempt}/{maxAttempts} failed; retrying...");
             }
-            else
-            {
-                summary.Failed.Add(vol.Letter);
-            }
+
+            if (restored) summary.Restored.Add(vol.Letter);
+            else summary.Failed.Add(vol.Letter);
         }
         return summary;
     }
