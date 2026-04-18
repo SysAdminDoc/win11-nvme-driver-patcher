@@ -74,17 +74,23 @@ public static class HotSwapService
 
         return await Task.Run(() =>
         {
+            // Captured BEFORE dismount so we can restore letters deterministically after the
+            // device returns. `mountvol X: /P` removes the mount point; Windows auto-mount
+            // MAY restore the letter but it's not guaranteed — especially on systems where
+            // the NoAutoMount policy is set (common on servers). Re-attaching by the volume's
+            // GUID is the only robust path back.
+            List<MountedVolume> volumesCaptured = [];
             try
             {
                 // ================================================================
                 // Step 2: Get volume mount points for this physical drive
                 // ================================================================
                 log?.Invoke("Step 1/4: Identifying mounted volumes...");
-                var volumes = GetVolumesForDrive(drive.Number);
+                volumesCaptured = GetVolumesForDrive(drive.Number);
 
-                if (volumes.Count > 0)
+                if (volumesCaptured.Count > 0)
                 {
-                    log?.Invoke($"  Found {volumes.Count} volume(s): {string.Join(", ", volumes)}");
+                    log?.Invoke($"  Found {volumesCaptured.Count} volume(s): {string.Join(", ", volumesCaptured.Select(v => v.Letter))}");
                 }
                 else
                 {
@@ -94,22 +100,25 @@ public static class HotSwapService
                 // ================================================================
                 // Step 3: Dismount volumes
                 // ================================================================
-                if (volumes.Count > 0)
+                if (volumesCaptured.Count > 0)
                 {
                     log?.Invoke("Step 2/4: Dismounting volumes...");
                     bool allDismounted = true;
-                    foreach (string vol in volumes)
+                    foreach (var vol in volumesCaptured)
                     {
-                        if (DismountVolume(vol))
-                            log?.Invoke($"  [OK] Dismounted {vol}");
+                        if (DismountVolume(vol.Letter))
+                            log?.Invoke($"  [OK] Dismounted {vol.Letter}");
                         else
                         {
-                            log?.Invoke($"  [FAIL] Could not dismount {vol} - open handles present");
+                            log?.Invoke($"  [FAIL] Could not dismount {vol.Letter} - open handles present");
                             allDismounted = false;
                         }
                     }
                     if (!allDismounted)
                     {
+                        // Best-effort restore of any volumes we already dismounted so the user
+                        // isn't left in a worse state than they started.
+                        RemountVolumes(volumesCaptured, log);
                         result.ErrorMessage = "ABORTED: One or more volumes could not be dismounted. Close all files on this drive and retry.";
                         log?.Invoke($"[ERROR] {result.ErrorMessage}");
                         return result;
@@ -190,9 +199,28 @@ public static class HotSwapService
                 {
                     result.Success = true;
                     result.DeviceReturned = true;
+
+                    // Explicitly reattach any letters we dismounted. Rely on the captured
+                    // (letter, volume GUID) pairing rather than trusting auto-mount, which
+                    // can be disabled system-wide (SAN hosts, servers, hardened workstations).
+                    if (volumesCaptured.Count > 0)
+                    {
+                        // Partitions don't always materialize on the moment CM_Reenumerate_DevNode
+                        // returns — give the storage stack a brief window to rediscover them.
+                        // Without this delay, mountvol can race and fail with "volume not found".
+                        Thread.Sleep(1500);
+                        var remount = RemountVolumes(volumesCaptured, log);
+                        result.FailedRemountLetters = remount.Failed;
+                        if (remount.Failed.Count > 0)
+                        {
+                            log?.Invoke("[WARNING] Some volumes could not be reattached automatically:");
+                            foreach (var letter in remount.Failed)
+                                log?.Invoke($"  - {letter} (use Disk Management -> Online to restore manually)");
+                        }
+                    }
+
                     log?.Invoke("========================================");
                     log?.Invoke("[SUCCESS] Hot-swap complete. Drive is back online with updated driver stack.");
-                    log?.Invoke("[INFO] Volumes will auto-remount. Verify drive access before resuming work.");
                     EventLogService.Write($"NVMe hot-swap completed for Drive {drive.Number} ({drive.Name})");
                 }
                 else
@@ -247,12 +275,29 @@ public static class HotSwapService
     }
 
     /// <summary>
-    /// Gets the volume drive letters mounted from a specific physical drive number.
-    /// Uses WMI to map PhysicalDrive -> Partitions -> LogicalDisks.
+    /// Record of a single mounted volume captured before dismount. The drive letter is what
+    /// the user sees; the volume GUID path (e.g. <c>\\?\Volume{GUID}\</c>) is what survives
+    /// re-enumeration and is the stable key we hand to <c>mountvol</c> when restoring the
+    /// letter afterwards.
     /// </summary>
-    private static List<string> GetVolumesForDrive(int driveNumber)
+    private sealed record MountedVolume(string Letter, string VolumeGuidPath);
+
+    /// <summary>Pairs the successful and failed re-attach results so the caller can
+    /// surface unrecoverable volumes to the user without inferring them from counts.</summary>
+    public sealed class RemountSummary
     {
-        var volumes = new List<string>();
+        public List<string> Restored { get; } = [];
+        public List<string> Failed { get; } = [];
+    }
+
+    /// <summary>
+    /// Enumerates each partitioned volume on the given physical drive and captures both the
+    /// drive letter and the volume GUID path. The GUID path is stable across re-enumeration
+    /// and is what we use to reattach the letter after the hot-swap.
+    /// </summary>
+    private static List<MountedVolume> GetVolumesForDrive(int driveNumber)
+    {
+        var volumes = new List<MountedVolume>();
         if (driveNumber < 0)
             return volumes;
 
@@ -281,8 +326,13 @@ public static class HotSwapService
                         using (logical)
                         {
                             string? letter = logical["DeviceID"]?.ToString();
-                            if (!string.IsNullOrEmpty(letter))
-                                volumes.Add(letter);
+                            if (string.IsNullOrEmpty(letter)) continue;
+
+                            var guidPath = TryResolveVolumeGuid(letter);
+                            // Only record the volume if we could resolve its GUID — otherwise
+                            // we have no reliable way to reattach it after re-enumeration.
+                            if (!string.IsNullOrEmpty(guidPath))
+                                volumes.Add(new MountedVolume(letter, guidPath));
                         }
                     }
                 }
@@ -290,9 +340,170 @@ public static class HotSwapService
         }
         catch
         {
-            // Best effort
+            // Best effort — enumeration failures surface as "no volumes found" and the caller
+            // reports "raw/unpartitioned drive", which is still safe.
         }
         return volumes;
+    }
+
+    /// <summary>
+    /// Resolves a drive letter (e.g. <c>"D:"</c>) to its volume GUID path
+    /// (e.g. <c>\\?\Volume{GUID}\</c>) via <c>Win32_Volume</c>. Returns null if the volume
+    /// isn't resolvable — in which case we refuse to track it (see <see cref="GetVolumesForDrive"/>).
+    /// </summary>
+    private static string? TryResolveVolumeGuid(string driveLetter)
+    {
+        if (string.IsNullOrWhiteSpace(driveLetter) || driveLetter.Length < 2 || driveLetter[1] != ':')
+            return null;
+        try
+        {
+            // Win32_Volume reports DriveLetter as "D:" (no trailing slash), so we match that form.
+            var escaped = EscapeWmiSingleQuotes(driveLetter);
+            using var search = new ManagementObjectSearcher(
+                $"SELECT DeviceID FROM Win32_Volume WHERE DriveLetter='{escaped}'");
+            using var results = search.Get();
+            foreach (var raw in results)
+            {
+                if (raw is not ManagementObject vol) continue;
+                using (vol)
+                {
+                    var deviceId = vol["DeviceID"]?.ToString();
+                    if (!string.IsNullOrEmpty(deviceId)) return deviceId;
+                }
+            }
+        }
+        catch
+        {
+            // WMI can fail transiently; the caller treats a null as "no stable reattach key".
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Reattaches each captured volume to its original drive letter. Skips volumes whose
+    /// letter already came back via auto-mount. Returns the split list of restored vs
+    /// failed letters so the caller can surface any that need manual intervention.
+    /// </summary>
+    private static RemountSummary RemountVolumes(List<MountedVolume> volumes, Action<string>? log)
+    {
+        var summary = new RemountSummary();
+        if (volumes is null || volumes.Count == 0) return summary;
+
+        log?.Invoke("Reattaching drive letters...");
+        foreach (var vol in volumes)
+        {
+            // If Windows auto-mount already restored the original letter to the original
+            // volume we don't need to touch it — calling mountvol again would error out.
+            if (IsLetterBoundToVolume(vol.Letter, vol.VolumeGuidPath))
+            {
+                log?.Invoke($"  [OK] {vol.Letter} was restored by auto-mount");
+                summary.Restored.Add(vol.Letter);
+                continue;
+            }
+
+            if (Mount(vol.Letter, vol.VolumeGuidPath, log))
+            {
+                log?.Invoke($"  [OK] Reattached {vol.Letter}");
+                summary.Restored.Add(vol.Letter);
+            }
+            else
+            {
+                summary.Failed.Add(vol.Letter);
+            }
+        }
+        return summary;
+    }
+
+    /// <summary>
+    /// Returns true when the given drive letter is currently bound to the given volume GUID.
+    /// Used to avoid a redundant remount when Windows auto-mount beat us to it.
+    /// </summary>
+    private static bool IsLetterBoundToVolume(string driveLetter, string volumeGuidPath)
+    {
+        if (string.IsNullOrEmpty(driveLetter) || string.IsNullOrEmpty(volumeGuidPath)) return false;
+        try
+        {
+            var escaped = EscapeWmiSingleQuotes(driveLetter);
+            using var search = new ManagementObjectSearcher(
+                $"SELECT DeviceID FROM Win32_Volume WHERE DriveLetter='{escaped}'");
+            using var results = search.Get();
+            foreach (var raw in results)
+            {
+                if (raw is not ManagementObject vol) continue;
+                using (vol)
+                {
+                    var deviceId = vol["DeviceID"]?.ToString();
+                    if (!string.IsNullOrEmpty(deviceId) &&
+                        string.Equals(deviceId, volumeGuidPath, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    /// <summary>
+    /// Assigns a drive letter to a volume via <c>mountvol &lt;letter&gt;: &lt;VolumeGuidPath&gt;</c>.
+    /// Returns true on success. Failures are logged and the caller adds the letter to the
+    /// unrecoverable list so the user can see it.
+    /// </summary>
+    private static bool Mount(string driveLetter, string volumeGuidPath, Action<string>? log)
+    {
+        if (string.IsNullOrWhiteSpace(driveLetter) ||
+            driveLetter.Length < 2 || driveLetter[1] != ':' ||
+            !char.IsLetter(driveLetter[0]))
+            return false;
+        // Volume GUID paths have a very specific shape; refuse anything that doesn't look
+        // like one so a corrupted input can't smuggle arbitrary arguments into mountvol.
+        if (string.IsNullOrEmpty(volumeGuidPath) ||
+            !volumeGuidPath.StartsWith(@"\\?\Volume{", StringComparison.OrdinalIgnoreCase) ||
+            !volumeGuidPath.EndsWith("}\\", StringComparison.Ordinal))
+            return false;
+
+        try
+        {
+            var psi = new ProcessStartInfo("mountvol")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            // ArgumentList escapes per-token so neither the letter nor the GUID path can
+            // collide with cmd.exe-style quoting.
+            psi.ArgumentList.Add($"{driveLetter[0]}:");
+            psi.ArgumentList.Add(volumeGuidPath);
+
+            using var proc = Process.Start(psi);
+            if (proc is null)
+            {
+                log?.Invoke($"  [FAIL] Could not start mountvol for {driveLetter}");
+                return false;
+            }
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            if (!proc.WaitForExit(5000))
+            {
+                try { proc.Kill(true); } catch { }
+                log?.Invoke($"  [FAIL] mountvol timed out reattaching {driveLetter}");
+                return false;
+            }
+            var stderr = string.Empty;
+            try { stdoutTask.GetAwaiter().GetResult(); } catch { }
+            try { stderr = (stderrTask.GetAwaiter().GetResult() ?? string.Empty).Trim(); } catch { }
+            if (proc.ExitCode != 0)
+            {
+                log?.Invoke($"  [FAIL] mountvol {driveLetter} -> {volumeGuidPath}: exit {proc.ExitCode}{(string.IsNullOrEmpty(stderr) ? "" : $" — {stderr}")}");
+                return false;
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"  [FAIL] mountvol exception for {driveLetter}: {ex.Message}");
+            return false;
+        }
     }
 
     private static string EscapeWmiSingleQuotes(string value)
@@ -430,4 +641,9 @@ public class HotSwapResult
 
     /// <summary>Error message if the operation failed.</summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>Drive letters that were dismounted but could not be restored automatically.
+    /// Empty on clean success. Non-empty means the user must open Disk Management to
+    /// bring those volumes back online manually.</summary>
+    public List<string> FailedRemountLetters { get; set; } = [];
 }
