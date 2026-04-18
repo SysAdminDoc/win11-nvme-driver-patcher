@@ -2,6 +2,40 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [v4.3.4] - 2026-04-17
+
+Closes the three follow-up items listed in the v4.3.3 summary.
+
+### Fixed — safety
+
+- **HotSwap detects BitLocker-protected volumes before dismount.** Queries
+  `Win32_EncryptableVolume` for each captured volume; any protected volume is logged with
+  a clear "will require BitLocker unlock after the hot-swap" warning and surfaced on
+  `HotSwapResult.BitLockerLockedLetters`. BitLocker is detected-and-informed, not blocked —
+  the user gets the information up front instead of discovering the drive is locked after
+  the swap completes. Missing BitLocker WMI namespace (older SKUs) is treated as
+  "no risk detected" so it doesn't break the swap on systems without the feature.
+
+### Fixed — concurrency
+
+- **Re-entrancy guards are now `private static`.** The Interlocked counters guarded the
+  six long-running commands per-`MainViewModel` instance; moving them to `static` covers
+  a hypothetical future multi-window scenario where two VMs could concurrently run the
+  same registry-mutating command. The single-instance mutex in `App.xaml.cs` already
+  handles process-level concurrency; these guards handle in-process concurrency.
+
+### Added — UX
+
+- **Cancel Benchmark button.** Long-awaited UX affordance for a 60+ second operation.
+  `BenchmarkService.RunBenchmarkAsync` now takes a `CancellationToken`. MainViewModel
+  creates a `CancellationTokenSource` when `RunBenchmark` starts, exposes a
+  `CancelBenchmarkCommand` bound to a Cancel button that's visible only while a run is
+  active (`BenchmarkRunning` observable property), and disposes the CTS in the finally
+  block. `RunDiskSpd` links the external token with its internal 120-second timeout via
+  `CreateLinkedTokenSource` and preserves the semantics: a user-cancel throws
+  `OperationCanceledException`, while a 120-second timeout still throws
+  `InvalidOperationException`. Canceled benchmarks log `[CANCELED]` instead of `[ERROR]`.
+
 ## [v4.3.3] - 2026-04-17
 
 ### Fixed — reliability

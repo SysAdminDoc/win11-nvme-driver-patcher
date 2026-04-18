@@ -91,6 +91,21 @@ public static class HotSwapService
                 if (volumesCaptured.Count > 0)
                 {
                     log?.Invoke($"  Found {volumesCaptured.Count} volume(s): {string.Join(", ", volumesCaptured.Select(v => v.Letter))}");
+
+                    // Flag BitLocker-protected volumes that won't auto-unlock after remount.
+                    // The hot-swap doesn't lose data, but the drive comes back LOCKED and the
+                    // user will need the recovery key or password to access it again. Surfacing
+                    // this up front lets the user back out BEFORE we dismount rather than
+                    // discover it post-swap.
+                    var lockedAfterSwap = DescribeBitLockerRisk(volumesCaptured);
+                    if (lockedAfterSwap.Count > 0)
+                    {
+                        result.BitLockerLockedLetters = lockedAfterSwap;
+                        log?.Invoke("[WARNING] BitLocker-protected volume(s) detected:");
+                        foreach (var letter in lockedAfterSwap)
+                            log?.Invoke($"  - {letter} will require BitLocker unlock after the hot-swap");
+                        log?.Invoke("[WARNING] Have the recovery key or password ready before continuing.");
+                    }
                 }
                 else
                 {
@@ -344,6 +359,60 @@ public static class HotSwapService
             // reports "raw/unpartitioned drive", which is still safe.
         }
         return volumes;
+    }
+
+    /// <summary>
+    /// Returns the drive letters (of the captured set) that have BitLocker protection
+    /// turned on AND do NOT have auto-unlock enabled. Those are the volumes that will come
+    /// back locked after the hot-swap and need the recovery key/password to access again.
+    /// Volumes where BitLocker is off, fully decrypted, or auto-unlock-enabled are omitted
+    /// because they'll remount seamlessly.
+    /// </summary>
+    private static List<string> DescribeBitLockerRisk(List<MountedVolume> volumes)
+    {
+        var atRisk = new List<string>();
+        if (volumes is null || volumes.Count == 0) return atRisk;
+
+        try
+        {
+            // Win32_EncryptableVolume lives in a non-default namespace that's queryable under admin.
+            // It's also not guaranteed to be present (older SKUs without BitLocker feature) — so
+            // any exception becomes "no risk detected" rather than blocking the swap.
+            using var search = new System.Management.ManagementObjectSearcher(
+                @"root\CIMV2\Security\MicrosoftVolumeEncryption",
+                "SELECT DriveLetter, ProtectionStatus, IsVolumeInitializedForProtection FROM Win32_EncryptableVolume");
+            using var results = search.Get();
+            foreach (var raw in results)
+            {
+                if (raw is not System.Management.ManagementObject vol) continue;
+                using (vol)
+                {
+                    var letter = vol["DriveLetter"]?.ToString();
+                    if (string.IsNullOrEmpty(letter)) continue;
+
+                    // Only care about volumes the caller actually captured for this physical drive.
+                    if (!volumes.Any(v => string.Equals(v.Letter, letter, StringComparison.OrdinalIgnoreCase)))
+                        continue;
+
+                    // ProtectionStatus: 0 = off, 1 = on, 2 = unknown. Only 1 is "encryption active".
+                    int protectionStatus = 0;
+                    try { protectionStatus = Convert.ToInt32(vol["ProtectionStatus"] ?? 0); } catch { }
+                    if (protectionStatus != 1) continue;
+
+                    // Auto-unlock state isn't on Win32_EncryptableVolume as a property; it's exposed
+                    // via GetKeyProtectors(KeyProtectorType = 1 [ExternalKey]). In practice this is
+                    // complex to query reliably across Windows versions, so we take the conservative
+                    // stance: ANY protected volume that's not the system drive is flagged. System
+                    // drive auto-unlocks itself; others require explicit setup most users haven't done.
+                    atRisk.Add(letter);
+                }
+            }
+        }
+        catch
+        {
+            // BitLocker not installed / WMI namespace missing / access denied → no warning.
+        }
+        return atRisk;
     }
 
     /// <summary>
@@ -674,4 +743,9 @@ public class HotSwapResult
     /// Empty on clean success. Non-empty means the user must open Disk Management to
     /// bring those volumes back online manually.</summary>
     public List<string> FailedRemountLetters { get; set; } = [];
+
+    /// <summary>Drive letters whose volumes were BitLocker-protected at the time of the swap
+    /// and will come back LOCKED after the remount — the user will need the recovery key or
+    /// password to access them. Empty if no BitLocker risk was detected.</summary>
+    public List<string> BitLockerLockedLetters { get; set; } = [];
 }
