@@ -2,6 +2,38 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [v4.3.2] - 2026-04-17
+
+Follow-up hardening pass on the two items deferred from v4.3.1.
+
+### Fixed — data safety
+
+- **`HotSwapService` now explicitly re-attaches drive letters after dismount.**
+  `mountvol /P` removes the mount point and only Windows auto-mount would otherwise bring
+  it back. On systems where auto-mount is disabled (servers, SAN hosts, hardened
+  workstations) the dismounted volumes stayed offline until the user opened Disk Management.
+  We now capture each volume's `(letter, \\?\Volume{GUID}\ path)` before dismount and
+  call `mountvol <letter>: <guid>` after the device returns, skipping any letter
+  Windows auto-mount already restored. Unrecoverable letters surface on
+  `HotSwapResult.FailedRemountLetters` and are logged with a pointer to Disk Management.
+  Volume GUIDs are pulled via `Win32_Volume.DeviceID`; volumes that can't be resolved to
+  a stable GUID are refused at capture time so we never dismount something we can't
+  deterministically restore. `mountvol` is now invoked via `ProcessStartInfo.ArgumentList`
+  with a strict `\\?\Volume{…}\` shape check on the GUID path.
+
+### Fixed — concurrency
+
+- **Re-entrancy guards on every long-running command** (`ApplyPatch`, `RemovePatch`,
+  `RunBenchmark`, `RunBackup`, `ApplyViVeToolFallback`). `ButtonsEnabled = false` was the
+  only prior guard, but it's set AFTER the async method starts — a rapid double-click
+  before the binding re-rendered could race two concurrent invocations of the same
+  command. Each command now wraps its body in an `Interlocked.CompareExchange`-based
+  `TryAcquireInFlight` / `ReleaseInFlight` pair (same pattern `Refresh` has used since
+  the first audit pass). The existing `Refresh` guard was refactored onto the new helpers
+  for consistency.
+- `RunBackup` now re-enables `ButtonsEnabled` in a `finally`, so a mid-operation exception
+  can't leave the UI locked.
+
 ## [v4.3.1] - 2026-04-17
 
 Deep hardening pass. No new features — existing behavior made substantially more robust.
