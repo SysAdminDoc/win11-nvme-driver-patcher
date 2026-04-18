@@ -14,14 +14,50 @@ public class UpdateInfo
 
 public static class UpdateService
 {
+    private static readonly object CacheLock = new();
+    private static UpdateInfo? _cachedResult;
+    private static DateTime _lastCheckUtc;
+    private static bool _hasCachedCheck;
+    private static bool _lastCheckFaulted;
+    private static readonly TimeSpan SuccessCacheLifetime = TimeSpan.FromHours(6);
+    private static readonly TimeSpan FailureCacheLifetime = TimeSpan.FromMinutes(15);
+
     public static UpdateInfo? Check()
     {
         try
         {
-            // Run on thread pool to avoid deadlock when called from UI synchronization context
-            return Task.Run(CheckAsync).GetAwaiter().GetResult();
+            lock (CacheLock)
+            {
+                var age = DateTime.UtcNow - _lastCheckUtc;
+                var cacheLifetime = _lastCheckFaulted ? FailureCacheLifetime : SuccessCacheLifetime;
+                if (_hasCachedCheck && _lastCheckUtc != default && age >= TimeSpan.Zero && age < cacheLifetime)
+                    return _cachedResult;
+            }
+
+            // CheckAsync uses ConfigureAwait(false), so a synchronous wait here won't deadlock the UI thread.
+            var result = CheckAsync().GetAwaiter().GetResult();
+
+            lock (CacheLock)
+            {
+                _cachedResult = result;
+                _lastCheckUtc = DateTime.UtcNow;
+                _hasCachedCheck = true;
+                _lastCheckFaulted = false;
+            }
+
+            return result;
         }
-        catch { return null; }
+        catch
+        {
+            lock (CacheLock)
+            {
+                _cachedResult = null;
+                _lastCheckUtc = DateTime.UtcNow;
+                _hasCachedCheck = true;
+                _lastCheckFaulted = true;
+            }
+            return null;
+        }
     }
 
     private static async Task<UpdateInfo?> CheckAsync()
@@ -40,12 +76,8 @@ public static class UpdateService
         var tagName = tagProp.GetString()?.TrimStart('v', 'V').Trim() ?? "";
         if (string.IsNullOrEmpty(tagName)) return null;
 
-        // Some upstream tags include pre-release labels (e.g. "4.1.0-rc1"); strip those so
-        // Version.TryParse doesn't reject otherwise-valid newer releases.
-        int dashIdx = tagName.IndexOf('-');
-        var versionPart = dashIdx > 0 ? tagName[..dashIdx] : tagName;
-        if (!Version.TryParse(versionPart, out var latest)) return null;
-        if (!Version.TryParse(AppConfig.AppVersion, out var current)) return null;
+        if (!TryParseComparableVersion(tagName, out var latest)) return null;
+        if (!TryParseComparableVersion(AppConfig.AppVersion, out var current)) return null;
         if (latest <= current) return null;
 
         // Skip drafts and pre-releases by default — users who opt into pre-releases can use the
@@ -55,10 +87,53 @@ public static class UpdateService
         if (root.TryGetProperty("prerelease", out var preProp) && preProp.ValueKind == JsonValueKind.True)
             return null;
 
-        var htmlUrl = root.TryGetProperty("html_url", out var urlProp) ? urlProp.GetString() ?? "" : "";
+        var htmlUrl = root.TryGetProperty("html_url", out var urlProp)
+            ? SanitizeReleaseUrl(urlProp.GetString())
+            : "";
+        if (string.IsNullOrEmpty(htmlUrl))
+            htmlUrl = AppConfig.GitHubURL;
         var body = root.TryGetProperty("body", out var bodyProp) ? bodyProp.GetString() ?? "" : "";
         if (body.Length > 200) body = body[..200] + "...";
 
         return new UpdateInfo { Version = tagName, URL = htmlUrl, Notes = body };
+    }
+
+    internal static bool TryParseComparableVersion(string? rawVersion, out Version version)
+    {
+        version = new Version();
+        var normalized = NormalizeVersionString(rawVersion);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+
+        if (!Version.TryParse(normalized, out var parsed) || parsed is null)
+            return false;
+
+        version = parsed;
+        return true;
+    }
+
+    internal static string NormalizeVersionString(string? rawVersion)
+    {
+        if (string.IsNullOrWhiteSpace(rawVersion))
+            return string.Empty;
+
+        var normalized = rawVersion.Trim().TrimStart('v', 'V');
+        int suffixStart = normalized.IndexOfAny(['-', '+']);
+        if (suffixStart > 0)
+            normalized = normalized[..suffixStart];
+        return normalized.Trim();
+    }
+
+    internal static string SanitizeReleaseUrl(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return string.Empty;
+
+        if (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
+            return string.Empty;
+
+        return uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
+            ? uri.ToString()
+            : string.Empty;
     }
 }
