@@ -43,7 +43,7 @@ public class AppConfig
             if (asmVer is not null) return $"{asmVer.Major}.{asmVer.Minor}.{asmVer.Build}";
         }
         catch { /* fall through to literal */ }
-        return "4.3.2";
+        return "4.3.3";
     }
     public const string RegistryPath = @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
     public const string RegistrySubKey = @"SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
