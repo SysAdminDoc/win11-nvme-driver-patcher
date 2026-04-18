@@ -1751,33 +1751,43 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task ApplyPatch()
     {
-        if (_preflight is null)
+        if (!TryAcquireInFlight(ref _applyInFlight))
         {
-            // Should never happen because the button is disabled until preflight finishes,
-            // but if it does we'd rather refuse than dereference null and crash.
-            Log("Preflight not yet complete. Waiting before apply.", "WARNING");
+            // A prior Apply is still running. The UI button is normally disabled, but this
+            // guards against a rapid double-click landing before the binding updates.
+            Log("Apply Patch is already running — waiting for the current run to finish.", "WARNING");
             return;
         }
 
-        if (_preflight.VeraCryptDetected)
+        try
         {
-            Log("[ERROR] BLOCKED: VeraCrypt system encryption detected", "ERROR");
-            InfoDialog?.Invoke("VeraCrypt Incompatibility",
-                "CANNOT APPLY PATCH\n\nVeraCrypt system encryption detected. Enabling the native NVMe driver (nvmedisk.sys) breaks VeraCrypt boot entirely.\n\nThis block cannot be overridden.",
-                DialogIcon.Error);
-            return;
-        }
+            if (_preflight is null)
+            {
+                // Should never happen because the button is disabled until preflight finishes,
+                // but if it does we'd rather refuse than dereference null and crash.
+                Log("Preflight not yet complete. Waiting before apply.", "WARNING");
+                return;
+            }
 
-        SyncConfigFromUI();
+            if (_preflight.VeraCryptDetected)
+            {
+                Log("[ERROR] BLOCKED: VeraCrypt system encryption detected", "ERROR");
+                InfoDialog?.Invoke("VeraCrypt Incompatibility",
+                    "CANNOT APPLY PATCH\n\nVeraCrypt system encryption detected. Enabling the native NVMe driver (nvmedisk.sys) breaks VeraCrypt boot entirely.\n\nThis block cannot be overridden.",
+                    DialogIcon.Error);
+                return;
+            }
 
-        if (!Config.SkipWarnings)
-        {
-            var msg = BuildConfirmMessage("Apply Patch");
-            if (ConfirmDialog?.Invoke("Apply Patch", msg) != true) return;
-        }
+            SyncConfigFromUI();
 
-        ButtonsEnabled = false;
-        ApplyEnabled = false;
+            if (!Config.SkipWarnings)
+            {
+                var msg = BuildConfirmMessage("Apply Patch");
+                if (ConfirmDialog?.Invoke("Apply Patch", msg) != true) return;
+            }
+
+            ButtonsEnabled = false;
+            ApplyEnabled = false;
 
         var result = await Task.Run(() => PatchService.Install(
             Config,
@@ -1860,12 +1870,24 @@ public partial class MainViewModel : ObservableObject
                 }
             }
         });
+        }
+        finally
+        {
+            ReleaseInFlight(ref _applyInFlight);
+        }
     }
 
     [RelayCommand]
     private async Task RemovePatch()
     {
-        SyncConfigFromUI();
+        if (!TryAcquireInFlight(ref _removeInFlight))
+        {
+            Log("Remove Patch is already running — waiting for the current run to finish.", "WARNING");
+            return;
+        }
+        try
+        {
+            SyncConfigFromUI();
 
         if (!Config.SkipWarnings)
         {
@@ -1912,75 +1934,106 @@ public partial class MainViewModel : ObservableObject
                 }
             }
         });
+        }
+        finally
+        {
+            ReleaseInFlight(ref _removeInFlight);
+        }
     }
 
     [RelayCommand]
     private async Task RunBackup()
     {
-        ButtonsEnabled = false;
-        Log("Creating system backup...");
-        var backupFile = await Task.Run(() => RegistryService.ExportRegistryBackup(Config.WorkingDir, "Manual_Backup"));
-        if (backupFile is not null)
+        if (!TryAcquireInFlight(ref _backupInFlight))
         {
-            Log($"Registry backup saved: {backupFile}", "SUCCESS");
-            try
-            {
-                var nativeStatus = _preflight?.NativeNVMeStatus ?? DriveService.TestNativeNVMeActive();
-                var bypassStatus = _preflight?.BypassIOStatus ?? DriveService.GetBypassIOStatus();
-                var snapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
-                DataService.SaveSnapshot(snapshot, "Manual registry backup", isPrePatch: !snapshot.Status.Applied);
-            }
-            catch { }
-            UpdateOperationalHistory();
+            Log("Backup is already running.", "WARNING");
+            return;
         }
-        else
-            Log("Failed to create backup", "ERROR");
-        ButtonsEnabled = true;
+        try
+        {
+            ButtonsEnabled = false;
+            Log("Creating system backup...");
+            var backupFile = await Task.Run(() => RegistryService.ExportRegistryBackup(Config.WorkingDir, "Manual_Backup"));
+            if (backupFile is not null)
+            {
+                Log($"Registry backup saved: {backupFile}", "SUCCESS");
+                try
+                {
+                    var nativeStatus = _preflight?.NativeNVMeStatus ?? DriveService.TestNativeNVMeActive();
+                    var bypassStatus = _preflight?.BypassIOStatus ?? DriveService.GetBypassIOStatus();
+                    var snapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
+                    DataService.SaveSnapshot(snapshot, "Manual registry backup", isPrePatch: !snapshot.Status.Applied);
+                }
+                catch { }
+                UpdateOperationalHistory();
+            }
+            else
+                Log("Failed to create backup", "ERROR");
+        }
+        finally
+        {
+            // Re-enable buttons on every exit path so a backup-service crash can't leave the
+            // UI locked. Previous code missed this finally; the full-audit flagged it as LOW.
+            ButtonsEnabled = true;
+            ReleaseInFlight(ref _backupInFlight);
+        }
     }
 
     [RelayCommand]
     private async Task RunBenchmark()
     {
-        ButtonsEnabled = false;
-        var status = RegistryService.GetPatchStatus();
-        string label = status.Applied ? "Post-Patch" : "Pre-Patch";
-        Log($"Starting storage benchmark ({label})...");
-        Log("This will take approximately 60 seconds. Do not use disk-heavy apps.", "WARNING");
-
-        var result = await BenchmarkService.RunBenchmarkAsync(
-            Config.WorkingDir, label,
-            msg => Log(msg),
-            (val, text) => Application.Current?.Dispatcher.BeginInvoke(() => SetProgress(val, text)));
-
-        if (result is not null)
+        if (!TryAcquireInFlight(ref _benchmarkInFlight))
         {
-            BenchmarkService.SaveResults(Config.WorkingDir, result);
-            Log("");
-            Log("============ BENCHMARK RESULTS ============");
-            Log($"  {label} @ {DateTime.Now:HH:mm:ss}");
-            Log($"  4K Random Read:  {result.Read.IOPS} IOPS  |  {result.Read.ThroughputMBs} MB/s  |  {result.Read.AvgLatencyMs} ms avg", "SUCCESS");
-            Log($"  4K Random Write: {result.Write.IOPS} IOPS  |  {result.Write.ThroughputMBs} MB/s  |  {result.Write.AvgLatencyMs} ms avg", "SUCCESS");
-
-            // Compare with previous
-            var history = BenchmarkService.GetHistory(Config.WorkingDir);
-            var prev = history.Where(h => h.Label != label).LastOrDefault();
-            if (prev?.Read.IOPS > 0)
-            {
-                var readDelta = prev.Read.IOPS > 0 ? Math.Round((result.Read.IOPS - prev.Read.IOPS) / prev.Read.IOPS * 100, 1) : 0;
-                var writeDelta = prev.Write.IOPS > 0 ? Math.Round((result.Write.IOPS - prev.Write.IOPS) / prev.Write.IOPS * 100, 1) : 0;
-                Log("");
-                Log($"  --- vs. Previous ({prev.Label}) ---");
-                Log($"  Read IOPS:  {prev.Read.IOPS} --> {result.Read.IOPS} ({(readDelta >= 0 ? "+" : "")}{readDelta}%)", readDelta >= 0 ? "SUCCESS" : "WARNING");
-                Log($"  Write IOPS: {prev.Write.IOPS} --> {result.Write.IOPS} ({(writeDelta >= 0 ? "+" : "")}{writeDelta}%)", writeDelta >= 0 ? "SUCCESS" : "WARNING");
-            }
-            Log("===========================================");
-
-            BenchLabelText = $"Last bench: {result.Read.IOPS} IOPS read / {result.Write.IOPS} IOPS write ({label})";
-            BenchLabelVisible = true;
-            UpdateOverviewSummary();
-            UpdateOperationalHistory();
+            Log("A benchmark is already running.", "WARNING");
+            return;
         }
-        ButtonsEnabled = true;
+        try
+        {
+            var status = RegistryService.GetPatchStatus();
+            string label = status.Applied ? "Post-Patch" : "Pre-Patch";
+            Log($"Starting storage benchmark ({label})...");
+            Log("This will take approximately 60 seconds. Do not use disk-heavy apps.", "WARNING");
+
+            var result = await BenchmarkService.RunBenchmarkAsync(
+                Config.WorkingDir, label,
+                msg => Log(msg),
+                (val, text) => Application.Current?.Dispatcher.BeginInvoke(() => SetProgress(val, text)));
+
+            if (result is not null)
+            {
+                BenchmarkService.SaveResults(Config.WorkingDir, result);
+                Log("");
+                Log("============ BENCHMARK RESULTS ============");
+                Log($"  {label} @ {DateTime.Now:HH:mm:ss}");
+                Log($"  4K Random Read:  {result.Read.IOPS} IOPS  |  {result.Read.ThroughputMBs} MB/s  |  {result.Read.AvgLatencyMs} ms avg", "SUCCESS");
+                Log($"  4K Random Write: {result.Write.IOPS} IOPS  |  {result.Write.ThroughputMBs} MB/s  |  {result.Write.AvgLatencyMs} ms avg", "SUCCESS");
+
+                // Compare with previous
+                var history = BenchmarkService.GetHistory(Config.WorkingDir);
+                var prev = history.Where(h => h.Label != label).LastOrDefault();
+                if (prev?.Read.IOPS > 0)
+                {
+                    var readDelta = prev.Read.IOPS > 0 ? Math.Round((result.Read.IOPS - prev.Read.IOPS) / prev.Read.IOPS * 100, 1) : 0;
+                    var writeDelta = prev.Write.IOPS > 0 ? Math.Round((result.Write.IOPS - prev.Write.IOPS) / prev.Write.IOPS * 100, 1) : 0;
+                    Log("");
+                    Log($"  --- vs. Previous ({prev.Label}) ---");
+                    Log($"  Read IOPS:  {prev.Read.IOPS} --> {result.Read.IOPS} ({(readDelta >= 0 ? "+" : "")}{readDelta}%)", readDelta >= 0 ? "SUCCESS" : "WARNING");
+                    Log($"  Write IOPS: {prev.Write.IOPS} --> {result.Write.IOPS} ({(writeDelta >= 0 ? "+" : "")}{writeDelta}%)", writeDelta >= 0 ? "SUCCESS" : "WARNING");
+                }
+                Log("===========================================");
+
+                BenchLabelText = $"Last bench: {result.Read.IOPS} IOPS read / {result.Write.IOPS} IOPS write ({label})";
+                BenchLabelVisible = true;
+                UpdateOverviewSummary();
+                UpdateOperationalHistory();
+            }
+        }
+        finally
+        {
+            // Guarantee the UI is usable again even if BenchmarkService throws.
+            ButtonsEnabled = true;
+            ReleaseInFlight(ref _benchmarkInFlight);
+        }
     }
 
     [RelayCommand]
@@ -2005,6 +2058,11 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task ApplyViVeToolFallback()
     {
+        if (!TryAcquireInFlight(ref _fallbackInFlight))
+        {
+            Log("ViVeTool fallback is already running.", "WARNING");
+            return;
+        }
         ButtonsEnabled = false;
         try
         {
@@ -2050,6 +2108,7 @@ public partial class MainViewModel : ObservableObject
         finally
         {
             ButtonsEnabled = true;
+            ReleaseInFlight(ref _fallbackInFlight);
         }
     }
 
@@ -2149,7 +2208,25 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private int _refreshInFlight; // 0 = idle, 1 = a refresh is in flight
+    // Re-entrancy guards for long-running commands. Each is 0 when idle, 1 while a single
+    // invocation is in flight. `ButtonsEnabled = false` guards the UI but it's set AFTER the
+    // async method starts, so a rapid double-click before the property binding re-renders
+    // could race two invocations. Interlocked.CompareExchange closes that window.
+    private int _refreshInFlight;
+    private int _applyInFlight;
+    private int _removeInFlight;
+    private int _benchmarkInFlight;
+    private int _backupInFlight;
+    private int _fallbackInFlight;
+
+    /// <summary>Acquires a re-entrancy slot using an atomic 0→1 transition. Returns true if
+    /// the caller owns the slot (and MUST release it via <see cref="ReleaseInFlight"/> in a
+    /// finally block); false if another invocation is already running.</summary>
+    private static bool TryAcquireInFlight(ref int slot) =>
+        System.Threading.Interlocked.CompareExchange(ref slot, 1, 0) == 0;
+
+    private static void ReleaseInFlight(ref int slot) =>
+        System.Threading.Interlocked.Exchange(ref slot, 0);
 
     [RelayCommand]
     private async Task Refresh()
@@ -2157,7 +2234,7 @@ public partial class MainViewModel : ObservableObject
         // Block re-entrant Refresh: clicking the button repeatedly was kicking off concurrent
         // PreflightService.RunAllAsync executions that fought over the WMI queries and the
         // _preflight field. Only one refresh runs at a time.
-        if (System.Threading.Interlocked.CompareExchange(ref _refreshInFlight, 1, 0) != 0)
+        if (!TryAcquireInFlight(ref _refreshInFlight))
         {
             Log("Refresh already in progress.", "WARNING");
             return;
@@ -2170,7 +2247,7 @@ public partial class MainViewModel : ObservableObject
         }
         finally
         {
-            System.Threading.Interlocked.Exchange(ref _refreshInFlight, 0);
+            ReleaseInFlight(ref _refreshInFlight);
         }
     }
 
