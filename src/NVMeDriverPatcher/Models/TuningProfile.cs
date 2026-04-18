@@ -81,6 +81,9 @@ public class TuningProfile
 
     // ========================================================================
     // Built-in Presets
+    //
+    // NOTE: These are shared singletons used for read-only comparisons in the UI.
+    // Do NOT mutate their properties; clone first if you need to customize.
     // ========================================================================
 
     /// <summary>

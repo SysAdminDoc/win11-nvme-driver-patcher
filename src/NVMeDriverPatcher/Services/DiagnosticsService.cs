@@ -190,9 +190,16 @@ public static class DiagnosticsService
         try
         {
             var text = File.ReadAllText(reportPath);
-            text = Regex.Replace(text, @"^Computer Name:\s*.*$", "Computer Name: [redacted]", RegexOptions.Multiline);
-            text = Regex.Replace(text, @"^User:\s*.*$", "User: [redacted]", RegexOptions.Multiline);
+            // Regex timeout caps backtracking in case a pathological diagnostic line
+            // (e.g. an embedded stack trace without newlines) slips in.
+            var timeout = TimeSpan.FromSeconds(2);
+            text = Regex.Replace(text, @"^Computer Name:\s*.*$", "Computer Name: [redacted]", RegexOptions.Multiline, timeout);
+            text = Regex.Replace(text, @"^User:\s*.*$", "User: [redacted]", RegexOptions.Multiline, timeout);
             return text;
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return null;
         }
         catch
         {
