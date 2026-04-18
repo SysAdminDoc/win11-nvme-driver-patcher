@@ -157,8 +157,11 @@ public static class BenchmarkService
         string workingDir,
         string label,
         Action<string>? log = null,
-        Action<int, string>? progress = null)
+        Action<int, string>? progress = null,
+        CancellationToken cancellationToken = default)
     {
+        // Bail BEFORE downloading DiskSpd if the user has already hit Cancel.
+        cancellationToken.ThrowIfCancellationRequested();
         var exe = await InstallDiskSpdAsync(workingDir, log);
         if (exe is null) return null;
 
@@ -215,19 +218,26 @@ public static class BenchmarkService
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             log?.Invoke("Running 4K random read benchmark (30s)...");
             progress?.Invoke(20, "Benchmarking reads...");
-            var readOutput = await RunDiskSpd(exe, $"-c128M -d30 -w0 -t4 -o16 -b4K -r -Sh -L \"{testFile}\"");
+            var readOutput = await RunDiskSpd(exe, $"-c128M -d30 -w0 -t4 -o16 -b4K -r -Sh -L \"{testFile}\"", cancellationToken);
             result.Read = ParseDiskSpdOutput(readOutput);
             if (!HasAnyMetrics(result.Read))
                 throw new InvalidOperationException("DiskSpd read benchmark completed, but no parseable metrics were returned.");
 
+            cancellationToken.ThrowIfCancellationRequested();
             log?.Invoke("Running 4K random write benchmark (30s)...");
             progress?.Invoke(60, "Benchmarking writes...");
-            var writeOutput = await RunDiskSpd(exe, $"-c128M -d30 -w100 -t4 -o16 -b4K -r -Sh -L \"{testFile}\"");
+            var writeOutput = await RunDiskSpd(exe, $"-c128M -d30 -w100 -t4 -o16 -b4K -r -Sh -L \"{testFile}\"", cancellationToken);
             result.Write = ParseDiskSpdOutput(writeOutput);
             if (!HasAnyMetrics(result.Write))
                 throw new InvalidOperationException("DiskSpd write benchmark completed, but no parseable metrics were returned.");
+        }
+        catch (OperationCanceledException)
+        {
+            log?.Invoke("[CANCELED] Benchmark canceled by user");
+            result = null;
         }
         catch (Exception ex)
         {
@@ -249,7 +259,7 @@ public static class BenchmarkService
         return result;
     }
 
-    private static async Task<string> RunDiskSpd(string exePath, string args)
+    private static async Task<string> RunDiskSpd(string exePath, string args, CancellationToken cancellationToken = default)
     {
         var psi = new ProcessStartInfo(exePath, args)
         {
@@ -267,14 +277,21 @@ public static class BenchmarkService
         var errorTask = proc.StandardError.ReadToEndAsync();
         // Generous per-run ceiling: DiskSpd normally finishes in ~30s, but give it extra headroom
         // for heavily loaded or throttled systems before we treat the process as wedged.
-        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(120));
+        // Linked with the external cancellation token so a user-triggered Cancel kills the
+        // process cleanly. When the caller's token fires, CancellationRequested propagates
+        // through the linked source and WaitForExitAsync throws OperationCanceledException.
+        using var timeoutCts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(120));
+        using var linkedCts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
         try
         {
-            await proc.WaitForExitAsync(cts.Token);
+            await proc.WaitForExitAsync(linkedCts.Token);
         }
         catch (OperationCanceledException)
         {
             try { proc.Kill(true); } catch { }
+            // Let the caller distinguish user-cancel from timeout so the UI message is accurate.
+            if (cancellationToken.IsCancellationRequested)
+                throw new OperationCanceledException(cancellationToken);
             throw new InvalidOperationException("DiskSpd timed out after 120 seconds.");
         }
 
