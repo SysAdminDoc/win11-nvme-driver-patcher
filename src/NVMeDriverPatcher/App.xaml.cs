@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using NVMeDriverPatcher.Views;
 
 namespace NVMeDriverPatcher;
 
@@ -22,13 +23,41 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += AppDomain_UnhandledException;
         TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
 
-        _mutex = new Mutex(true, @"Global\NVMeDriverPatcher_SingleInstance", out bool createdNew);
-        _ownsMutex = createdNew;
+        bool createdNew = true;
+        try
+        {
+            _mutex = new Mutex(true, @"Global\NVMeDriverPatcher_SingleInstance", out createdNew);
+            _ownsMutex = createdNew;
+        }
+        catch (Exception ex)
+        {
+            WriteCrashEntry("StartupMutexGlobal", ex);
+            try
+            {
+                _mutex = new Mutex(true, @"Local\NVMeDriverPatcher_SingleInstance", out createdNew);
+                _ownsMutex = createdNew;
+            }
+            catch (Exception localEx)
+            {
+                // If both mutex scopes fail on a hardened system, keep the app usable instead
+                // of crashing on launch. We lose single-instance protection for that run only.
+                WriteCrashEntry("StartupMutexLocal", localEx);
+                _mutex = null;
+                _ownsMutex = false;
+                createdNew = true;
+            }
+        }
 
         if (!createdNew)
         {
-            MessageBox.Show("NVMe Driver Patcher is already running.", "Already Running",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            if (!TryShowThemedMessage(
+                    "Already Open",
+                    "NVMe Driver Patcher is already open.\n\nReturn to the existing window instead of launching a second elevated session.",
+                    DialogIcon.Information))
+            {
+                MessageBox.Show("NVMe Driver Patcher is already running.", "Already Running",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
             Shutdown();
             return;
         }
@@ -40,6 +69,7 @@ public partial class App : Application
             // who keep the app installed for years. Both calls are best-effort.
             try { Services.DataService.PruneTelemetry(TimeSpan.FromDays(90)); } catch { }
             try { Services.DataService.PruneSnapshots(500); } catch { }
+            try { Services.DataService.PruneBenchmarks(500); } catch { }
         }
         catch { /* Best-effort local data store */ }
 
@@ -62,10 +92,16 @@ public partial class App : Application
     private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         WriteCrashEntry("Dispatcher", e.Exception);
-        MessageBox.Show(
-            $"An unexpected error occurred and has been logged.\n\n{e.Exception.Message}",
-            "NVMe Driver Patcher - Error",
-            MessageBoxButton.OK, MessageBoxImage.Error);
+        if (!TryShowThemedMessage(
+                "Unexpected Error",
+                $"Something interrupted NVMe Driver Patcher unexpectedly. The details were written to the local crash log.\n\n{e.Exception.Message}",
+                DialogIcon.Error))
+        {
+            MessageBox.Show(
+                $"An unexpected error occurred and has been logged.\n\n{e.Exception.Message}",
+                "NVMe Driver Patcher - Error",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
         e.Handled = true;
     }
 
@@ -113,5 +149,18 @@ public partial class App : Application
             File.AppendAllText(logPath, entry);
         }
         catch { /* last-resort: can't write crash log */ }
+    }
+
+    private static bool TryShowThemedMessage(string title, string message, DialogIcon icon)
+    {
+        try
+        {
+            ThemedDialog.Show(message, title, DialogButtons.OK, icon);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

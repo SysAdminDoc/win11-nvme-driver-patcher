@@ -12,12 +12,15 @@ namespace NVMeDriverPatcher.Views;
 
 public partial class MainWindow : Window
 {
+    private const double CompactLayoutThreshold = 1380;
+
     private readonly MainViewModel _vm;
     private int? _selectedTelemetryDriveNumber;
     private int _telemetryWorkspaceRefreshId;
     private int _telemetryDataRefreshId;
 
     private bool _initialized;
+    private bool _compactLayoutApplied;
 
     public MainWindow()
     {
@@ -44,6 +47,13 @@ public partial class MainWindow : Window
 
         ContentRendered += OnContentRendered;
         Closing += MainWindow_Closing;
+        StateChanged += MainWindow_StateChanged;
+        SizeChanged += MainWindow_SizeChanged;
+        Loaded += (_, _) =>
+        {
+            UpdateWindowPresentation();
+            UpdateAdaptiveLayout();
+        };
     }
 
     private async void OnContentRendered(object? sender, EventArgs e)
@@ -87,6 +97,15 @@ public partial class MainWindow : Window
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed) return;
+        if (FindAncestor<System.Windows.Controls.Primitives.ButtonBase>(e.OriginalSource as DependencyObject) is not null)
+            return;
+
+        if (e.ClickCount == 2)
+        {
+            ToggleMaximizeRestore();
+            return;
+        }
+
         try
         {
             // DragMove throws InvalidOperationException if called when the window is in a state
@@ -98,8 +117,153 @@ public partial class MainWindow : Window
     }
 
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void MaximizeRestore_Click(object sender, RoutedEventArgs e) => ToggleMaximizeRestore();
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
+    private void MainWindow_StateChanged(object? sender, EventArgs e)
+    {
+        UpdateWindowPresentation();
+        UpdateAdaptiveLayout();
+    }
+
+    private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateAdaptiveLayout();
+    }
+
+    private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.F5)
+        {
+            if (_vm.ButtonsEnabled && _vm.RefreshCommand.CanExecute(null))
+                _vm.RefreshCommand.Execute(null);
+
+            e.Handled = true;
+            return;
+        }
+
+        if ((Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control)
+            return;
+
+        int? tabIndex = e.Key switch
+        {
+            Key.D1 or Key.NumPad1 => 0,
+            Key.D2 or Key.NumPad2 => 1,
+            Key.D3 or Key.NumPad3 => 2,
+            Key.D4 or Key.NumPad4 => 3,
+            Key.D5 or Key.NumPad5 => 4,
+            _ => null
+        };
+
+        if (tabIndex is int index)
+        {
+            SelectWorkspaceTab(index);
+            e.Handled = true;
+        }
+    }
+
+    private void ToggleMaximizeRestore()
+    {
+        if (ResizeMode == ResizeMode.NoResize)
+            return;
+
+        WindowState = WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
+    }
+
+    private void UpdateWindowPresentation()
+    {
+        bool maximized = WindowState == WindowState.Maximized;
+
+        RootFrame.Margin = maximized ? new Thickness(10) : new Thickness(20);
+        ShellBorder.CornerRadius = maximized ? new CornerRadius(20) : new CornerRadius(28);
+        ShellAccentBar.CornerRadius = maximized ? new CornerRadius(20, 20, 0, 0) : new CornerRadius(28, 28, 0, 0);
+        ShellBorder.Effect = maximized
+            ? null
+            : TryFindResource("WindowShadow") as System.Windows.Media.Effects.Effect;
+
+        MaximizeRestoreButton.Content = maximized ? "❐" : "□";
+        MaximizeRestoreButton.ToolTip = maximized ? "Restore down" : "Maximize";
+        System.Windows.Automation.AutomationProperties.SetName(
+            MaximizeRestoreButton,
+            maximized ? "Restore window" : "Maximize window");
+    }
+
+    private void UpdateAdaptiveLayout()
+    {
+        bool compact = ActualWidth < CompactLayoutThreshold;
+        _compactLayoutApplied = compact;
+
+        TitleBarRegion.Padding = compact
+            ? new Thickness(24, 20, 24, 0)
+            : new Thickness(32, 24, 32, 0);
+        OverviewSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(20);
+        MainContentSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(20);
+        MainContentSplitter.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        MainContentSecondaryRow.Height = compact
+            ? new GridLength(1, GridUnitType.Star)
+            : GridLength.Auto;
+
+        ControlsCard.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
+        WorkspaceSurface.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
+        FooterActionsPanel.Margin = compact ? new Thickness(0, 12, 0, 0) : new Thickness(0);
+        SettingsSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(16);
+        AuditAlertsCard.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
+
+        if (compact)
+        {
+            Grid.SetRow(ReadinessCard, 0);
+            Grid.SetColumn(ReadinessCard, 0);
+            Grid.SetColumnSpan(ReadinessCard, 3);
+
+            Grid.SetRow(ControlsCard, 1);
+            Grid.SetColumn(ControlsCard, 0);
+            Grid.SetColumnSpan(ControlsCard, 3);
+
+            Grid.SetRow(OverviewScrollViewer, 0);
+            Grid.SetColumn(OverviewScrollViewer, 0);
+            Grid.SetColumnSpan(OverviewScrollViewer, 3);
+
+            Grid.SetRow(WorkspaceSurface, 1);
+            Grid.SetColumn(WorkspaceSurface, 0);
+            Grid.SetColumnSpan(WorkspaceSurface, 3);
+
+            Grid.SetRow(PatchDefaultsCard, 0);
+            Grid.SetColumn(PatchDefaultsCard, 0);
+            Grid.SetColumnSpan(PatchDefaultsCard, 3);
+
+            Grid.SetRow(AuditAlertsCard, 1);
+            Grid.SetColumn(AuditAlertsCard, 0);
+            Grid.SetColumnSpan(AuditAlertsCard, 3);
+        }
+        else
+        {
+            Grid.SetRow(ReadinessCard, 0);
+            Grid.SetColumn(ReadinessCard, 0);
+            Grid.SetColumnSpan(ReadinessCard, 1);
+
+            Grid.SetRow(ControlsCard, 0);
+            Grid.SetColumn(ControlsCard, 2);
+            Grid.SetColumnSpan(ControlsCard, 1);
+
+            Grid.SetRow(OverviewScrollViewer, 0);
+            Grid.SetColumn(OverviewScrollViewer, 0);
+            Grid.SetColumnSpan(OverviewScrollViewer, 1);
+
+            Grid.SetRow(WorkspaceSurface, 0);
+            Grid.SetColumn(WorkspaceSurface, 2);
+            Grid.SetColumnSpan(WorkspaceSurface, 1);
+
+            Grid.SetRow(PatchDefaultsCard, 0);
+            Grid.SetColumn(PatchDefaultsCard, 0);
+            Grid.SetColumnSpan(PatchDefaultsCard, 1);
+
+            Grid.SetRow(AuditAlertsCard, 0);
+            Grid.SetColumn(AuditAlertsCard, 2);
+            Grid.SetColumnSpan(AuditAlertsCard, 1);
+        }
+    }
 
     private void GitHub_Click(object sender, RoutedEventArgs e) => _vm.OpenGitHubCommand.Execute(null);
     private void Docs_Click(object sender, RoutedEventArgs e) => _vm.OpenDocsCommand.Execute(null);
@@ -478,5 +642,19 @@ public partial class MainWindow : Window
                 : "INFO";
 
         _vm.Log(message, level);
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? current)
+        where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T match)
+                return match;
+
+            current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
     }
 }

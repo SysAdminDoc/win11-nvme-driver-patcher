@@ -39,7 +39,13 @@ public static class ToastService
 
             var icon = new System.Windows.Forms.NotifyIcon
             {
-                Icon = SystemIcons.Information,
+                Icon = type switch
+                {
+                    ToastType.Success => SystemIcons.Information,
+                    ToastType.Warning => SystemIcons.Warning,
+                    ToastType.Error => SystemIcons.Error,
+                    _ => SystemIcons.Information
+                },
                 BalloonTipTitle = title ?? string.Empty,
                 BalloonTipText = message ?? string.Empty,
                 BalloonTipIcon = type switch

@@ -12,45 +12,129 @@ namespace NVMeDriverPatcher.Services;
 
 public static class BenchmarkService
 {
+    private static readonly string[] AllowedAssetHosts =
+    [
+        "github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com"
+    ];
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true
     };
 
+    private const string DiskSpdArchiveUrl = "https://github.com/microsoft/diskspd/releases/latest/download/DiskSpd.ZIP";
+    private const long MinArchiveBytes = 32 * 1024;
+    private const long MaxArchiveBytes = 64 * 1024 * 1024;
+    private const long MinExeBytes = 32 * 1024;
+    private static readonly SemaphoreSlim _installLock = new(1, 1);
+
     public static async Task<string?> InstallDiskSpdAsync(string workingDir, Action<string>? log = null)
     {
-        if (string.IsNullOrEmpty(workingDir))
+        if (string.IsNullOrWhiteSpace(workingDir))
             return null;
 
+        if (!await _installLock.WaitAsync(TimeSpan.FromMinutes(2)).ConfigureAwait(false))
+        {
+            log?.Invoke("[ERROR] Another DiskSpd install is already in progress. Try again in a moment.");
+            return null;
+        }
+
+        try
+        {
+            return await InstallDiskSpdInnerAsync(workingDir, log).ConfigureAwait(false);
+        }
+        finally
+        {
+            _installLock.Release();
+        }
+    }
+
+    private static async Task<string?> InstallDiskSpdInnerAsync(string workingDir, Action<string>? log)
+    {
         var diskSpdDir = Path.Combine(workingDir, "DiskSpd");
         var diskSpdExe = Path.Combine(diskSpdDir, "diskspd.exe");
-        if (File.Exists(diskSpdExe)) return diskSpdExe;
+        if (IsInstalled(diskSpdExe)) return diskSpdExe;
 
+        var tempZip = Path.Combine(diskSpdDir, $"DiskSpd-{Guid.NewGuid():N}.zip");
+        var stagingDir = Path.Combine(diskSpdDir, $"staging-{Guid.NewGuid():N}");
         log?.Invoke("Downloading Microsoft DiskSpd benchmark tool...");
         try
         {
             Directory.CreateDirectory(diskSpdDir);
-            var zipUrl = "https://github.com/microsoft/diskspd/releases/latest/download/DiskSpd.ZIP";
-            var zipPath = Path.Combine(diskSpdDir, "DiskSpd.zip");
 
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
             client.DefaultRequestHeaders.UserAgent.ParseAdd($"NVMeDriverPatcher/{Models.AppConfig.AppVersion}");
-            var bytes = await client.GetByteArrayAsync(zipUrl);
-            await File.WriteAllBytesAsync(zipPath, bytes);
+            using (var response = await client.GetAsync(DiskSpdArchiveUrl, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
+            {
+                response.EnsureSuccessStatusCode();
 
-            ZipFile.ExtractToDirectory(zipPath, diskSpdDir, overwriteFiles: true);
-            try { File.Delete(zipPath); } catch { }
+                var finalUri = response.RequestMessage?.RequestUri;
+                if (finalUri is null ||
+                    finalUri.Scheme != Uri.UriSchemeHttps ||
+                    !AllowedAssetHosts.Any(h => finalUri.Host.Equals(h, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw new InvalidOperationException($"Refusing to download DiskSpd from untrusted host '{finalUri?.Host ?? "unknown"}'.");
+                }
+
+                var reportedSize = response.Content.Headers.ContentLength;
+                if (reportedSize is { } expectedSize &&
+                    (expectedSize < MinArchiveBytes || expectedSize > MaxArchiveBytes))
+                {
+                    throw new InvalidOperationException(
+                        $"DiskSpd archive size {expectedSize} bytes is outside the expected range ({MinArchiveBytes}..{MaxArchiveBytes}).");
+                }
+
+                await using var fs = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None);
+                await response.Content.CopyToAsync(fs).ConfigureAwait(false);
+            }
+
+            var actualSize = new FileInfo(tempZip).Length;
+            if (actualSize < MinArchiveBytes || actualSize > MaxArchiveBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Downloaded DiskSpd archive size {actualSize} bytes is outside the expected range ({MinArchiveBytes}..{MaxArchiveBytes}).");
+            }
+
+            Directory.CreateDirectory(stagingDir);
+            var stagingPrefix = Path.GetFullPath(stagingDir);
+            if (!stagingPrefix.EndsWith(Path.DirectorySeparatorChar))
+                stagingPrefix += Path.DirectorySeparatorChar;
+
+            using (var archive = ZipFile.OpenRead(tempZip))
+            {
+                foreach (var entry in archive.Entries)
+                {
+                    if (string.IsNullOrEmpty(entry.Name)) continue;
+
+                    var targetPath = Path.GetFullPath(Path.Combine(stagingDir, entry.FullName));
+                    if (!targetPath.StartsWith(stagingPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        log?.Invoke($"[WARNING] Skipping suspicious DiskSpd archive entry: {entry.FullName}");
+                        continue;
+                    }
+
+                    var targetDir = Path.GetDirectoryName(targetPath);
+                    if (!string.IsNullOrEmpty(targetDir))
+                        Directory.CreateDirectory(targetDir);
+                    entry.ExtractToFile(targetPath, overwrite: true);
+                }
+            }
 
             // Prefer amd64 (we're a 64-bit process), but fall back to anything we can find.
-            var allExes = Directory.GetFiles(diskSpdDir, "diskspd.exe", SearchOption.AllDirectories);
+            var allExes = Directory.GetFiles(stagingDir, "diskspd.exe", SearchOption.AllDirectories);
             var found = allExes.FirstOrDefault(f => f.Contains("amd64", StringComparison.OrdinalIgnoreCase))
                 ?? allExes.FirstOrDefault();
 
             if (found is not null)
             {
-                if (!string.Equals(found, diskSpdExe, StringComparison.OrdinalIgnoreCase))
-                    File.Copy(found, diskSpdExe, overwrite: true);
+                var stagedExe = new FileInfo(found);
+                if (stagedExe.Length < MinExeBytes)
+                    throw new InvalidOperationException("DiskSpd executable looks incomplete after extraction.");
+
+                File.Copy(found, diskSpdExe, overwrite: true);
                 log?.Invoke("DiskSpd downloaded successfully");
                 return diskSpdExe;
             }
@@ -60,6 +144,11 @@ public static class BenchmarkService
         catch (Exception ex)
         {
             log?.Invoke($"[ERROR] Failed to download DiskSpd: {ex.Message}");
+        }
+        finally
+        {
+            try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+            try { if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, recursive: true); } catch { }
         }
         return null;
     }
@@ -77,23 +166,12 @@ public static class BenchmarkService
         string benchDir = workingDir;
         try
         {
-            var nvmeDiskIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            using (var diskSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
-                "SELECT DeviceId FROM MSFT_PhysicalDisk WHERE BusType=17"))
-            using (var diskCollection = diskSearch.Get())
-            {
-                foreach (var raw in diskCollection)
-                {
-                    if (raw is not ManagementObject d) continue;
-                    using (d)
-                    {
-                        var id = d["DeviceId"]?.ToString();
-                        if (!string.IsNullOrEmpty(id)) nvmeDiskIds.Add(id);
-                    }
-                }
-            }
+            var nvmeDiskNumbers = DriveService.GetSystemDrives()
+                .Where(d => d.IsNVMe)
+                .Select(d => d.Number)
+                .ToHashSet();
 
-            if (nvmeDiskIds.Count > 0)
+            if (nvmeDiskNumbers.Count > 0)
             {
                 using var partSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
                     "SELECT DiskNumber, DriveLetter FROM MSFT_Partition WHERE DriveLetter!=0");
@@ -103,8 +181,11 @@ public static class BenchmarkService
                     if (raw is not ManagementObject part) continue;
                     using (part)
                     {
-                        var diskNum = part["DiskNumber"]?.ToString();
-                        if (string.IsNullOrEmpty(diskNum) || !nvmeDiskIds.Contains(diskNum)) continue;
+                        if (!int.TryParse(part["DiskNumber"]?.ToString(), out var diskNumber) ||
+                            !nvmeDiskNumbers.Contains(diskNumber))
+                        {
+                            continue;
+                        }
 
                         var letter = part["DriveLetter"];
                         if (letter is char ch && char.IsLetter(ch))
@@ -115,7 +196,7 @@ public static class BenchmarkService
                             {
                                 Directory.CreateDirectory(nvmeTempDir);
                                 benchDir = nvmeTempDir;
-                                log?.Invoke($"Benchmarking NVMe drive: {nvmeRoot} (Disk {diskNum})");
+                                log?.Invoke($"Benchmarking NVMe drive: {nvmeRoot} (Disk {diskNumber})");
                             }
                             catch (Exception dirEx)
                             {
@@ -130,7 +211,7 @@ public static class BenchmarkService
         catch { }
 
         var testFile = Path.Combine(benchDir, "diskspd_test.dat");
-        var result = new BenchmarkResult { Label = label, Timestamp = DateTime.Now.ToString("o") };
+        BenchmarkResult? result = new() { Label = label, Timestamp = DateTime.Now.ToString("o") };
 
         try
         {
@@ -138,15 +219,20 @@ public static class BenchmarkService
             progress?.Invoke(20, "Benchmarking reads...");
             var readOutput = await RunDiskSpd(exe, $"-c128M -d30 -w0 -t4 -o16 -b4K -r -Sh -L \"{testFile}\"");
             result.Read = ParseDiskSpdOutput(readOutput);
+            if (!HasAnyMetrics(result.Read))
+                throw new InvalidOperationException("DiskSpd read benchmark completed, but no parseable metrics were returned.");
 
             log?.Invoke("Running 4K random write benchmark (30s)...");
             progress?.Invoke(60, "Benchmarking writes...");
             var writeOutput = await RunDiskSpd(exe, $"-c128M -d30 -w100 -t4 -o16 -b4K -r -Sh -L \"{testFile}\"");
             result.Write = ParseDiskSpdOutput(writeOutput);
+            if (!HasAnyMetrics(result.Write))
+                throw new InvalidOperationException("DiskSpd write benchmark completed, but no parseable metrics were returned.");
         }
         catch (Exception ex)
         {
             log?.Invoke($"[ERROR] Benchmark error: {ex.Message}");
+            result = null;
         }
         finally
         {
@@ -179,7 +265,8 @@ public static class BenchmarkService
         // buffer while we're only reading stdout.
         var outputTask = proc.StandardOutput.ReadToEndAsync();
         var errorTask = proc.StandardError.ReadToEndAsync();
-        // 90s ceiling: 30s read + overhead + 30s write + overhead. If diskspd hangs, kill it.
+        // Generous per-run ceiling: DiskSpd normally finishes in ~30s, but give it extra headroom
+        // for heavily loaded or throttled systems before we treat the process as wedged.
         using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(120));
         try
         {
@@ -190,7 +277,21 @@ public static class BenchmarkService
             try { proc.Kill(true); } catch { }
             throw new InvalidOperationException("DiskSpd timed out after 120 seconds.");
         }
-        return await outputTask;
+
+        var output = await outputTask.ConfigureAwait(false);
+        var error = await errorTask.ConfigureAwait(false);
+        if (proc.ExitCode != 0)
+        {
+            var details = FirstNonEmpty(error, output, "DiskSpd exited without any diagnostic output.");
+            throw new InvalidOperationException($"DiskSpd exited with code {proc.ExitCode}: {details}");
+        }
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            var details = FirstNonEmpty(error, "DiskSpd produced no output.");
+            throw new InvalidOperationException(details);
+        }
+
+        return output;
     }
 
     public static BenchmarkMetrics ParseDiskSpdOutput(string rawOutput)
@@ -206,19 +307,17 @@ public static class BenchmarkService
                 if (parts.Length < 4) continue;
 
                 var culture = CultureInfo.InvariantCulture;
-                var throughputStr = Regex.Replace(parts[2], @"[^\d.,]", "").Replace(',', '.');
-                var iopsStr = Regex.Replace(parts[3], @"[^\d.,]", "").Replace(',', '.');
+                TryPopulateMetrics(metrics, parts, culture, 2, 3, 4);
 
-                if (double.TryParse(throughputStr, NumberStyles.Float, culture, out var throughput))
-                    metrics.ThroughputMBs = Math.Round(throughput, 2);
-                if (double.TryParse(iopsStr, NumberStyles.Float, culture, out var iops))
-                    metrics.IOPS = Math.Round(iops, 0);
-
-                if (parts.Length >= 5)
+                // DiskSpd table layouts can shift by one column depending on the report flavor.
+                // If the primary shape produced nonsense (e.g. 0 throughput with non-zero IOPS),
+                // retry one column to the right before giving up and surfacing an empty result.
+                if ((metrics.ThroughputMBs <= 0 || metrics.IOPS <= 0) && parts.Length >= 6)
                 {
-                    var latStr = Regex.Replace(parts[4], @"[^\d.,]", "").Replace(',', '.');
-                    if (double.TryParse(latStr, NumberStyles.Float, culture, out var lat))
-                        metrics.AvgLatencyMs = Math.Round(lat, 3);
+                    var shifted = new BenchmarkMetrics();
+                    TryPopulateMetrics(shifted, parts, culture, 3, 4, 5);
+                    if (shifted.ThroughputMBs > 0 && shifted.IOPS > 0)
+                        metrics = shifted;
                 }
                 break;
             }
@@ -286,5 +385,57 @@ public static class BenchmarkService
             return parsed?.Where(r => r is not null).ToList() ?? [];
         }
         catch { return []; }
+    }
+
+    private static bool IsInstalled(string exePath)
+    {
+        try
+        {
+            if (!File.Exists(exePath)) return false;
+            return new FileInfo(exePath).Length >= MinExeBytes;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool HasAnyMetrics(BenchmarkMetrics metrics) =>
+        metrics.IOPS > 0 || metrics.ThroughputMBs > 0 || metrics.AvgLatencyMs > 0;
+
+    private static string FirstNonEmpty(params string[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value.Trim();
+        }
+
+        return string.Empty;
+    }
+
+    private static void TryPopulateMetrics(
+        BenchmarkMetrics metrics,
+        string[] parts,
+        CultureInfo culture,
+        int throughputIndex,
+        int iopsIndex,
+        int latencyIndex)
+    {
+        if (TryParseNumericPart(parts, throughputIndex, culture, out var throughput))
+            metrics.ThroughputMBs = Math.Round(throughput, 2);
+        if (TryParseNumericPart(parts, iopsIndex, culture, out var iops))
+            metrics.IOPS = Math.Round(iops, 0);
+        if (TryParseNumericPart(parts, latencyIndex, culture, out var latency))
+            metrics.AvgLatencyMs = Math.Round(latency, 3);
+    }
+
+    private static bool TryParseNumericPart(string[] parts, int index, CultureInfo culture, out double value)
+    {
+        value = 0;
+        if (index < 0 || index >= parts.Length) return false;
+
+        var numeric = Regex.Replace(parts[index], @"[^\d.,]", "").Replace(',', '.');
+        return double.TryParse(numeric, NumberStyles.Float, culture, out value);
     }
 }
