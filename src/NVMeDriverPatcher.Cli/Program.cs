@@ -9,9 +9,6 @@ class Program
     {
         try
         {
-            var config = ConfigService.Load();
-            EventLogService.Initialize(config.WriteEventLog);
-
             if (args is null || args.Length == 0)
             {
                 PrintUsage();
@@ -29,6 +26,17 @@ class Program
                 Console.WriteLine($"NVMe Driver Patcher CLI v{AppConfig.AppVersion}");
                 return 0;
             }
+            if (!IsKnownOperationalCommand(command))
+                return Unknown(command);
+            if (!PreflightService.IsRunningAsAdmin())
+            {
+                Console.Error.WriteLine("Administrator privileges are required for NVMe Driver Patcher CLI operations.");
+                Console.Error.WriteLine("Run an elevated terminal, or launch the published EXE directly so Windows can honor its elevation manifest.");
+                return 5;
+            }
+
+            var config = ConfigService.Load();
+            EventLogService.Initialize(config.WriteEventLog);
 
             bool MatchesAny(string a, params string[] forms) =>
                 forms.Any(f => a.Equals(f, StringComparison.OrdinalIgnoreCase));
@@ -68,6 +76,19 @@ class Program
             return 99;
         }
     }
+
+    static bool IsKnownOperationalCommand(string command) => command switch
+    {
+        "status" => true,
+        "apply" or "install" => true,
+        "remove" or "uninstall" => true,
+        "diagnostics" or "export-diagnostics" => true,
+        "bundle" or "export-bundle" or "support-bundle" => true,
+        "fallback" or "vivetool-fallback" or "apply-fallback" => true,
+        "recovery-kit" or "export-recovery-kit" => true,
+        "verify" => true,
+        _ => false
+    };
 
     static int StatusCommand()
     {
@@ -286,6 +307,7 @@ class Program
         Console.WriteLine("  1  failure / patch not applied (status)");
         Console.WriteLine("  2  partial state / no NVMe drives");
         Console.WriteLine("  3  unknown command or no args");
+        Console.WriteLine("  5  Administrator privileges required");
         Console.WriteLine("  99 unhandled error");
     }
 }

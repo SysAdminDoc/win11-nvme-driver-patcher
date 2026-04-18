@@ -10,11 +10,12 @@ public static class EventLogService
     private const int MaxMessageLength = 30000;
 
     private static volatile bool _enabled = true;
+    private static volatile bool _sourceRegistrationAttempted;
 
     public static void Initialize(bool enabled)
     {
         _enabled = enabled;
-        if (!_enabled) return;
+        if (!_enabled || _sourceRegistrationAttempted) return;
 
         try
         {
@@ -27,6 +28,10 @@ public static class EventLogService
         catch
         {
             // Best-effort — Write() is also wrapped in try/catch.
+        }
+        finally
+        {
+            _sourceRegistrationAttempted = true;
         }
     }
 

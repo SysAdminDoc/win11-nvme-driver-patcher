@@ -123,6 +123,7 @@ public partial class ThemedDialog : Window
     private void BtnOK_Click(object sender, RoutedEventArgs e) { Result = "OK"; Close(); }
     private void BtnYes_Click(object sender, RoutedEventArgs e) { Result = "Yes"; Close(); }
     private void BtnNo_Click(object sender, RoutedEventArgs e) { Result = "No"; Close(); }
+    private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {

@@ -31,6 +31,9 @@ public static class PatchService
         Action<int, string>? progress = null)
     {
         var result = new PatchOperationResult();
+        string workingDir = string.IsNullOrWhiteSpace(config.WorkingDir)
+            ? AppConfig.GetWorkingDir()
+            : config.WorkingDir;
         result.BeforeSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
         try { DataService.SaveSnapshot(result.BeforeSnapshot, "Before patch install", isPrePatch: true); } catch { }
 
@@ -72,8 +75,8 @@ public static class PatchService
 
         // Profile-driven key set. Safe = primary flag only (community-recommended default —
         // the extended flags are correlated with BSOD reports). Full = all three.
-        var profile = config?.PatchProfile ?? PatchProfile.Safe;
-        bool includeServer = config?.IncludeServerKey == true;
+        var profile = config.PatchProfile;
+        bool includeServer = config.IncludeServerKey;
         var featureIDsToApply = new List<string>(AppConfig.GetFeatureIDsForProfile(profile));
         int effectiveTotal = AppConfig.GetTotalComponents(profile, includeServer);
         log?.Invoke($"Mode: {profile.ToString().ToUpperInvariant()} ({(profile == PatchProfile.Safe ? "primary flag only" : "primary + extended flags")})");
@@ -101,7 +104,7 @@ public static class PatchService
             // Step 1: Backup
             log?.Invoke("Step 1/3: Creating system backup...");
             progress?.Invoke(10, "Creating registry backup...");
-            RegistryService.ExportRegistryBackup(config.WorkingDir, "Pre_Patch");
+            RegistryService.ExportRegistryBackup(workingDir, "Pre_Patch");
             progress?.Invoke(30, "Creating restore point...");
             CreateRestorePoint("Pre-NVMe-Driver-Patch", log);
 
@@ -359,6 +362,9 @@ public static class PatchService
         Action<int, string>? progress = null)
     {
         var result = new PatchOperationResult();
+        string workingDir = string.IsNullOrWhiteSpace(config.WorkingDir)
+            ? AppConfig.GetWorkingDir()
+            : config.WorkingDir;
         result.BeforeSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
         try { DataService.SaveSnapshot(result.BeforeSnapshot, "Before patch removal", isPrePatch: true); } catch { }
 
@@ -368,7 +374,7 @@ public static class PatchService
         EventLogService.Write("NVMe Driver Patch removal started");
 
         progress?.Invoke(10, "Creating backup...");
-        RegistryService.ExportRegistryBackup(config.WorkingDir, "Pre_Removal");
+        RegistryService.ExportRegistryBackup(workingDir, "Pre_Removal");
         int removedCount = 0;
 
         try

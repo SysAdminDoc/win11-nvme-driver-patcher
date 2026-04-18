@@ -1,12 +1,20 @@
 using System.IO.Compression;
 using System.Management;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
 
 public static class DiagnosticsService
 {
+    private static readonly JsonSerializerOptions BundleJsonOptions = new()
+    {
+        WriteIndented = true
+    };
+
     public static async Task<string?> ExportAsync(
         string workingDir,
         PreflightResult? preflight,
@@ -53,7 +61,14 @@ public static class DiagnosticsService
             {
                 // Primary diagnostics report.
                 if (report is not null && File.Exists(report))
-                    zip.CreateEntryFromFile(report, "diagnostics.txt", CompressionLevel.Optimal);
+                {
+                    var sanitizedReport = TryCreateShareableDiagnosticsText(report);
+                    if (!string.IsNullOrWhiteSpace(sanitizedReport))
+                        AddTextEntry(zip, "diagnostics.txt", sanitizedReport);
+                    else
+                        AddTextEntry(zip, "diagnostics-omitted.txt",
+                            "The diagnostics report was generated, but it could not be sanitized safely for inclusion in a shareable bundle.");
+                }
 
                 // Application config (sanitize first — strip anything that looks path-y from the
                 // user's home so the bundle stays shareable).
@@ -61,10 +76,12 @@ public static class DiagnosticsService
                 {
                     try
                     {
-                        var cfgEntry = zip.CreateEntry("config.json", CompressionLevel.Optimal);
-                        using var es = cfgEntry.Open();
-                        using var fs = new FileStream(configPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                        fs.CopyTo(es);
+                        var sanitizedConfig = TryCreateShareableConfigText(configPath);
+                        if (!string.IsNullOrWhiteSpace(sanitizedConfig))
+                            AddTextEntry(zip, "config.json", sanitizedConfig);
+                        else
+                            AddTextEntry(zip, "config-omitted.txt",
+                                "config.json was present but could not be parsed safely for inclusion in a shareable bundle.");
                     }
                     catch { }
                 }
@@ -79,7 +96,7 @@ public static class DiagnosticsService
                     {
                         var p = Path.Combine(crashDir, name);
                         if (File.Exists(p))
-                            zip.CreateEntryFromFile(p, $"crash/{name}", CompressionLevel.Optimal);
+                            AddSharedFileEntry(zip, p, $"crash/{name}");
                     }
                 }
                 catch { }
@@ -92,22 +109,29 @@ public static class DiagnosticsService
                         .OrderByDescending(fi => fi.LastWriteTimeUtc)
                         .Take(5);
                     foreach (var fi in regBackups)
-                        zip.CreateEntryFromFile(fi.FullName, $"registry/{fi.Name}", CompressionLevel.Optimal);
+                        AddSharedFileEntry(zip, fi.FullName, $"registry/{fi.Name}");
                 }
                 catch { }
 
-                // Copy the SQLite DB via a read-only FileStream with FileShare.ReadWrite so we
-                // don't collide with any open EF Core connection.
+                // Copy the SQLite DB and any live WAL sidecars via read-only FileStreams with
+                // FileShare.ReadWrite so we don't collide with open EF Core connections.
                 try
                 {
-                    var dbPath = Path.Combine(workingDir, "nvmepatcher.db");
-                    if (File.Exists(dbPath))
+                    foreach (var name in new[] { "nvmepatcher.db", "nvmepatcher.db-wal", "nvmepatcher.db-shm" })
                     {
-                        var entry = zip.CreateEntry("data/nvmepatcher.db", CompressionLevel.Optimal);
-                        using var es = entry.Open();
-                        using var fs = new FileStream(dbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                        fs.CopyTo(es);
+                        var sourcePath = Path.Combine(workingDir, name);
+                        if (File.Exists(sourcePath))
+                            AddSharedFileEntry(zip, sourcePath, $"data/{name}");
                     }
+                }
+                catch { }
+
+                // Benchmark history JSON is useful to support even when the DB is unavailable.
+                try
+                {
+                    var benchmarkHistoryPath = Path.Combine(workingDir, "benchmark_results.json");
+                    if (File.Exists(benchmarkHistoryPath))
+                        AddSharedFileEntry(zip, benchmarkHistoryPath, "data/benchmark_results.json");
                 }
                 catch { }
 
@@ -116,19 +140,18 @@ public static class DiagnosticsService
                 manifest.AppendLine("NVMe Driver Patcher Support Bundle");
                 manifest.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss zzz}");
                 manifest.AppendLine($"Version: {AppConfig.AppVersion}");
-                manifest.AppendLine($"Machine: {Environment.MachineName}");
-                manifest.AppendLine($"User: {Environment.UserName}");
+                manifest.AppendLine("Machine: [redacted]");
+                manifest.AppendLine("User: [redacted]");
                 manifest.AppendLine($"OS: {Environment.OSVersion.VersionString}");
                 manifest.AppendLine();
                 manifest.AppendLine("Contents:");
-                manifest.AppendLine("  diagnostics.txt   Full system + patch report");
-                manifest.AppendLine("  config.json       App configuration (if present)");
+                manifest.AppendLine("  diagnostics.txt   Shareable system + patch report");
+                manifest.AppendLine("  config.json       App configuration with local paths redacted");
                 manifest.AppendLine("  crash/*           Crash logs (if present)");
                 manifest.AppendLine("  registry/*.reg    Up to 5 most-recent registry backups");
-                manifest.AppendLine("  data/*.db         SQLite DB (benchmarks/snapshots/telemetry)");
-                var manifestEntry = zip.CreateEntry("MANIFEST.txt", CompressionLevel.Optimal);
-                using var mw = new StreamWriter(manifestEntry.Open(), new UTF8Encoding(false));
-                mw.Write(manifest.ToString());
+                manifest.AppendLine("  data/*.db*        SQLite DB plus WAL sidecars (if present)");
+                manifest.AppendLine("  data/benchmark_results.json  Benchmark history cache (if present)");
+                AddTextEntry(zip, "MANIFEST.txt", manifest.ToString());
             }
 
             // Atomic promote — bundle never appears half-written.
@@ -144,6 +167,36 @@ public static class DiagnosticsService
         finally
         {
             try { if (File.Exists(reportPath)) File.Delete(reportPath); } catch { }
+        }
+    }
+
+    internal static string? TryCreateShareableConfigText(string configPath)
+    {
+        try
+        {
+            var root = JsonNode.Parse(File.ReadAllText(configPath));
+            if (root is not JsonObject obj) return null;
+            RedactPathLikeProperties(obj);
+            return obj.ToJsonString(BundleJsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static string? TryCreateShareableDiagnosticsText(string reportPath)
+    {
+        try
+        {
+            var text = File.ReadAllText(reportPath);
+            text = Regex.Replace(text, @"^Computer Name:\s*.*$", "Computer Name: [redacted]", RegexOptions.Multiline);
+            text = Regex.Replace(text, @"^User:\s*.*$", "User: [redacted]", RegexOptions.Multiline);
+            return text;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -341,5 +394,78 @@ public static class DiagnosticsService
             return outputPath;
         }
         catch { return null; }
+    }
+
+    private static void RedactPathLikeProperties(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject obj:
+                foreach (var entry in obj.ToList())
+                {
+                    if (entry.Value is JsonValue value &&
+                        value.TryGetValue<string>(out var textValue) &&
+                        ShouldRedactPathLikeProperty(entry.Key, textValue))
+                    {
+                        obj[entry.Key] = RedactPathValue(textValue);
+                        continue;
+                    }
+
+                    RedactPathLikeProperties(entry.Value);
+                }
+                break;
+
+            case JsonArray array:
+                foreach (var item in array)
+                    RedactPathLikeProperties(item);
+                break;
+        }
+    }
+
+    private static bool ShouldRedactPathLikeProperty(string propertyName, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !LooksLikePath(value))
+            return false;
+
+        return propertyName.EndsWith("Path", StringComparison.OrdinalIgnoreCase)
+            || propertyName.EndsWith("Dir", StringComparison.OrdinalIgnoreCase)
+            || propertyName.EndsWith("Directory", StringComparison.OrdinalIgnoreCase)
+            || propertyName.EndsWith("Folder", StringComparison.OrdinalIgnoreCase)
+            || propertyName.EndsWith("File", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksLikePath(string value) =>
+        Path.IsPathRooted(value)
+        || value.Contains(Path.DirectorySeparatorChar)
+        || value.Contains(Path.AltDirectorySeparatorChar);
+
+    private static string RedactPathValue(string value)
+    {
+        var trimmed = value.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return "[redacted path]";
+
+        var leaf = Path.GetFileName(trimmed);
+        if (!string.IsNullOrWhiteSpace(leaf))
+            return leaf;
+
+        var parent = Path.GetDirectoryName(trimmed);
+        var parentLeaf = string.IsNullOrWhiteSpace(parent) ? string.Empty : Path.GetFileName(parent);
+        return string.IsNullOrWhiteSpace(parentLeaf) ? "[redacted path]" : parentLeaf;
+    }
+
+    private static void AddSharedFileEntry(ZipArchive zip, string sourcePath, string entryName)
+    {
+        var entry = zip.CreateEntry(entryName, CompressionLevel.Optimal);
+        using var es = entry.Open();
+        using var fs = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        fs.CopyTo(es);
+    }
+
+    private static void AddTextEntry(ZipArchive zip, string entryName, string content)
+    {
+        var entry = zip.CreateEntry(entryName, CompressionLevel.Optimal);
+        using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false));
+        writer.Write(content);
     }
 }
