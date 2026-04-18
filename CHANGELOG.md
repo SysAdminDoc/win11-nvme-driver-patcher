@@ -2,6 +2,45 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [v4.3.5] - 2026-04-17
+
+Polish pass. Small quality fixes across several services and view code-behinds.
+
+### Fixed — safety & defense-in-depth
+
+- **`PatchService.InitiateRestart` now passes arguments via `ProcessStartInfo.ArgumentList`**
+  instead of the concatenated-string form. `delaySeconds` is already clamped so there's no
+  real injection surface, but the explicit-per-arg form is the pattern the rest of the
+  codebase converged on in v4.3.1.
+- **CLI rejects conflicting `--safe` / `--full` flags** with exit 3 and a clear error,
+  instead of silently picking Safe via `if/else if`. Automation callers deserve an
+  explicit audit-trail failure when the intended profile is ambiguous.
+- **`BenchmarkService.InstallDiskSpdAsync` takes a `CancellationToken`**, propagated into
+  `SemaphoreSlim.WaitAsync`, `HttpClient.GetAsync`, and `HttpContent.CopyToAsync`. A user
+  who hits Cancel during the DiskSpd download now aborts cleanly instead of having to
+  wait out the full transfer.
+
+### Fixed — concurrency & correctness
+
+- **`BenchmarkComparisonView`, `TelemetryView`, and `TuningPanel` replaced shared
+  `BrushConverter` usage** with pre-frozen `SolidColorBrush` singletons (constant palette)
+  or a locked cache of parsed hex brushes (dynamic fallback). `BrushConverter` is not
+  thread-safe; converting the same hex string on every delta paint was also wasteful.
+  Fixes the thread-safety concern raised in the earlier audit pass.
+- **`MainWindow` hoists the `Loaded` handler into a named method and unsubscribes it**
+  (alongside `StateChanged` and `SizeChanged`) on close, closing a small delegate-leak
+  pattern where event handlers retained references to the window after it was closed.
+
+### Fixed — UX polish
+
+- **`TuningProfile.Balanced` / `Performance` / `PowerSave` carry an explicit "do not
+  mutate" comment**. These are shared singletons used for read-only UI comparison;
+  future contributors should clone before customizing.
+- **`AppConfig.GetWorkingDir` now records a `WorkingDirFallbackReason`** when the primary
+  LocalAppData path is unavailable and we fall back to TEMP / CWD. Lets startup surface a
+  warning on unusual SKUs instead of silently hiding the fact that config is living in a
+  temp folder.
+
 ## [v4.3.4] - 2026-04-17
 
 Closes the three follow-up items listed in the v4.3.3 summary.

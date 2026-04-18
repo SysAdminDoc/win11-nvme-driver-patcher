@@ -31,12 +31,18 @@ public static class BenchmarkService
     private const long MinExeBytes = 32 * 1024;
     private static readonly SemaphoreSlim _installLock = new(1, 1);
 
-    public static async Task<string?> InstallDiskSpdAsync(string workingDir, Action<string>? log = null)
+    public static async Task<string?> InstallDiskSpdAsync(
+        string workingDir,
+        Action<string>? log = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(workingDir))
             return null;
 
-        if (!await _installLock.WaitAsync(TimeSpan.FromMinutes(2)).ConfigureAwait(false))
+        // Respect the token even before we queue on the install lock — a user who clicked
+        // Cancel before the semaphore came free shouldn't have to wait out an unrelated
+        // concurrent download.
+        if (!await _installLock.WaitAsync(TimeSpan.FromMinutes(2), cancellationToken).ConfigureAwait(false))
         {
             log?.Invoke("[ERROR] Another DiskSpd install is already in progress. Try again in a moment.");
             return null;
@@ -44,7 +50,7 @@ public static class BenchmarkService
 
         try
         {
-            return await InstallDiskSpdInnerAsync(workingDir, log).ConfigureAwait(false);
+            return await InstallDiskSpdInnerAsync(workingDir, log, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -52,7 +58,10 @@ public static class BenchmarkService
         }
     }
 
-    private static async Task<string?> InstallDiskSpdInnerAsync(string workingDir, Action<string>? log)
+    private static async Task<string?> InstallDiskSpdInnerAsync(
+        string workingDir,
+        Action<string>? log,
+        CancellationToken cancellationToken)
     {
         var diskSpdDir = Path.Combine(workingDir, "DiskSpd");
         var diskSpdExe = Path.Combine(diskSpdDir, "diskspd.exe");
@@ -63,11 +72,12 @@ public static class BenchmarkService
         log?.Invoke("Downloading Microsoft DiskSpd benchmark tool...");
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             Directory.CreateDirectory(diskSpdDir);
 
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
             client.DefaultRequestHeaders.UserAgent.ParseAdd($"NVMeDriverPatcher/{Models.AppConfig.AppVersion}");
-            using (var response = await client.GetAsync(DiskSpdArchiveUrl, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
+            using (var response = await client.GetAsync(DiskSpdArchiveUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
             {
                 response.EnsureSuccessStatusCode();
 
@@ -88,7 +98,7 @@ public static class BenchmarkService
                 }
 
                 await using var fs = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None);
-                await response.Content.CopyToAsync(fs).ConfigureAwait(false);
+                await response.Content.CopyToAsync(fs, cancellationToken).ConfigureAwait(false);
             }
 
             var actualSize = new FileInfo(tempZip).Length;
@@ -162,7 +172,7 @@ public static class BenchmarkService
     {
         // Bail BEFORE downloading DiskSpd if the user has already hit Cancel.
         cancellationToken.ThrowIfCancellationRequested();
-        var exe = await InstallDiskSpdAsync(workingDir, log);
+        var exe = await InstallDiskSpdAsync(workingDir, log, cancellationToken);
         if (exe is null) return null;
 
         // Find a partition on an NVMe drive to benchmark

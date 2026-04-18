@@ -128,22 +128,23 @@ public partial class BenchmarkComparisonView : UserControl
         return $"vs previous run: {(pct >= 0 ? "+" : "")}{pct}%";
     }
 
-    // Cache the converter — re-creating BrushConverter on every delta paint allocates needlessly.
-    private static readonly System.Windows.Media.BrushConverter BrushConv = new();
-    private static readonly System.Windows.Media.SolidColorBrush PositiveBrush = ToBrush("#FF50DD9D");
-    private static readonly System.Windows.Media.SolidColorBrush NegativeBrush = ToBrush("#FFFF8585");
-    private static readonly System.Windows.Media.SolidColorBrush NeutralBrush = ToBrush("#FF8393AD");
-    private static readonly System.Windows.Media.SolidColorBrush AccentBrush = ToBrush("#FF69AEFF");
-    private static readonly System.Windows.Media.SolidColorBrush AccentBgBrush = ToBrush("#FF102845");
-    private static readonly System.Windows.Media.SolidColorBrush SuccessBgBrush = ToBrush("#FF13392C");
-    private static readonly System.Windows.Media.SolidColorBrush SuccessBorderBrush = ToBrush("#FF50DD9D");
-    private static readonly System.Windows.Media.SolidColorBrush NeutralBgBrush = ToBrush("#FF131C29");
-    private static readonly System.Windows.Media.SolidColorBrush NeutralBorderBrush = ToBrush("#FF344B69");
+    // Frozen brushes: safe to share across threads, bypass BrushConverter (not thread-safe),
+    // and let WPF skip change-tracking overhead.
+    private static readonly System.Windows.Media.SolidColorBrush PositiveBrush = ToBrush(0xFF, 0x50, 0xDD, 0x9D);
+    private static readonly System.Windows.Media.SolidColorBrush NegativeBrush = ToBrush(0xFF, 0xFF, 0x85, 0x85);
+    private static readonly System.Windows.Media.SolidColorBrush NeutralBrush = ToBrush(0xFF, 0x83, 0x93, 0xAD);
+    private static readonly System.Windows.Media.SolidColorBrush AccentBrush = ToBrush(0xFF, 0x69, 0xAE, 0xFF);
+    private static readonly System.Windows.Media.SolidColorBrush AccentBgBrush = ToBrush(0xFF, 0x10, 0x28, 0x45);
+    private static readonly System.Windows.Media.SolidColorBrush SuccessBgBrush = ToBrush(0xFF, 0x13, 0x39, 0x2C);
+    private static readonly System.Windows.Media.SolidColorBrush SuccessBorderBrush = ToBrush(0xFF, 0x50, 0xDD, 0x9D);
+    private static readonly System.Windows.Media.SolidColorBrush NeutralBgBrush = ToBrush(0xFF, 0x13, 0x1C, 0x29);
+    private static readonly System.Windows.Media.SolidColorBrush NeutralBorderBrush = ToBrush(0xFF, 0x34, 0x4B, 0x69);
 
-    private static System.Windows.Media.SolidColorBrush ToBrush(string hex)
+    private static System.Windows.Media.SolidColorBrush ToBrush(byte a, byte r, byte g, byte b)
     {
-        try { return (System.Windows.Media.SolidColorBrush)BrushConv.ConvertFromString(hex)!; }
-        catch { return new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Gray); }
+        var brush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(a, r, g, b));
+        brush.Freeze();
+        return brush;
     }
 
     private static System.Windows.Media.SolidColorBrush DeltaBrush(double prev, double current)

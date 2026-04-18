@@ -73,6 +73,15 @@ public partial class App : Application
         }
         catch { /* Best-effort local data store */ }
 
+        // If GetWorkingDir() had to fall back off LocalAppData, stamp a crash-log entry so
+        // we have a breadcrumb if the app is writing to an unexpected directory.
+        var fallbackReason = Models.AppConfig.WorkingDirFallbackReason;
+        if (!string.IsNullOrEmpty(fallbackReason))
+        {
+            WriteCrashEntry("WorkingDirFallback",
+                new InvalidOperationException(fallbackReason));
+        }
+
         base.OnStartup(e);
     }
 
