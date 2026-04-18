@@ -13,10 +13,14 @@ public static class RecoveryKitService
         }
 
         string kitDir;
+        string stagingDir;
         try
         {
             kitDir = Path.Combine(outputDir, "NVMe_Recovery_Kit");
-            Directory.CreateDirectory(kitDir);
+            stagingDir = Path.Combine(outputDir, $"NVMe_Recovery_Kit.{Guid.NewGuid():N}.tmp");
+            if (Directory.Exists(stagingDir))
+                Directory.Delete(stagingDir, recursive: true);
+            Directory.CreateDirectory(stagingDir);
         }
         catch (Exception ex)
         {
@@ -64,7 +68,7 @@ public static class RecoveryKitService
         try
         {
             // .reg files require UTF-16 LE WITH BOM. File.WriteAllText with Encoding.Unicode emits the BOM.
-            File.WriteAllText(Path.Combine(kitDir, "NVMe_Remove_Patch.reg"), regContent, System.Text.Encoding.Unicode);
+            WriteAllTextAtomic(Path.Combine(stagingDir, "NVMe_Remove_Patch.reg"), regContent, System.Text.Encoding.Unicode);
         }
         catch (Exception ex)
         {
@@ -144,7 +148,7 @@ pause";
 
         try
         {
-            File.WriteAllText(Path.Combine(kitDir, "Remove_NVMe_Patch.bat"), batContent, System.Text.Encoding.ASCII);
+            WriteAllTextAtomic(Path.Combine(stagingDir, "Remove_NVMe_Patch.bat"), batContent, System.Text.Encoding.ASCII);
         }
         catch (Exception ex)
         {
@@ -179,12 +183,50 @@ FILES:
 
         try
         {
-            File.WriteAllText(Path.Combine(kitDir, "README.txt"), readme);
+            WriteAllTextAtomic(Path.Combine(stagingDir, "README.txt"), readme, new System.Text.UTF8Encoding(false));
         }
         catch (Exception ex)
         {
             log?.Invoke($"[ERROR] Could not write README.txt: {ex.Message}");
             // README is informational; don't bail out the whole kit just for this.
+        }
+
+        string? previousKitBackupDir = null;
+        try
+        {
+            if (Directory.Exists(kitDir))
+            {
+                previousKitBackupDir = Path.Combine(outputDir, $"NVMe_Recovery_Kit.{Guid.NewGuid():N}.bak");
+                Directory.Move(kitDir, previousKitBackupDir);
+            }
+
+            Directory.Move(stagingDir, kitDir);
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[ERROR] Could not finalize recovery kit folder: {ex.Message}");
+            try { if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, recursive: true); } catch { }
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(previousKitBackupDir) &&
+                    Directory.Exists(previousKitBackupDir) &&
+                    !Directory.Exists(kitDir))
+                {
+                    Directory.Move(previousKitBackupDir, kitDir);
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(previousKitBackupDir) && Directory.Exists(previousKitBackupDir))
+                Directory.Delete(previousKitBackupDir, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[WARNING] New recovery kit is ready, but the previous backup copy could not be cleaned up: {ex.Message}");
         }
 
         log?.Invoke($"Recovery kit saved to: {kitDir}");
@@ -231,9 +273,28 @@ Write-Host """"; Write-Host ""Press any key...""; $null = $Host.UI.RawUI.ReadKey
         {
             // Write with UTF-8 BOM so PowerShell 5.1 (powershell.exe) parses any non-ASCII content
             // correctly without resorting to its legacy ANSI fallback.
-            File.WriteAllText(outputPath, script, new System.Text.UTF8Encoding(true));
+            WriteAllTextAtomic(outputPath, script, new System.Text.UTF8Encoding(true));
             return outputPath;
         }
         catch { return null; }
+    }
+
+    private static void WriteAllTextAtomic(string path, string content, System.Text.Encoding encoding)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        var tempPath = path + ".tmp";
+        try
+        {
+            File.WriteAllText(tempPath, content, encoding);
+            File.Move(tempPath, path, overwrite: true);
+        }
+        catch
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            throw;
+        }
     }
 }

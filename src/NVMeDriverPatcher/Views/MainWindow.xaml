@@ -10,24 +10,27 @@
         AllowsTransparency="True"
         Background="#00000000"
         WindowStartupLocation="CenterScreen"
-        MinHeight="820"
-        MinWidth="1240">
+        MinHeight="780"
+        MinWidth="1080"
+        PreviewKeyDown="Window_PreviewKeyDown">
 
-    <Grid Margin="20">
-        <Border Background="{StaticResource WindowCanvasBrush}"
+    <Grid x:Name="RootFrame" Margin="16">
+        <Border x:Name="ShellBorder"
+                Background="{StaticResource WindowCanvasBrush}"
                 BorderBrush="{StaticResource Border}"
                 BorderThickness="1"
-                CornerRadius="28"
+                CornerRadius="18"
                 ClipToBounds="False">
             <Border.Effect>
                 <StaticResource ResourceKey="WindowShadow"/>
             </Border.Effect>
 
             <Grid ClipToBounds="True">
-                <Border Height="4"
+                <Border x:Name="ShellAccentBar"
+                        Height="1"
                         VerticalAlignment="Top"
                         Background="{StaticResource AccentLineBrush}"
-                        CornerRadius="28,28,0,0"
+                        CornerRadius="18,18,0,0"
                         Panel.ZIndex="2"/>
 
                 <Grid>
@@ -38,8 +41,9 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <Border Grid.Row="0"
-                            Padding="32,24,32,0"
+                    <Border x:Name="TitleBarRegion"
+                            Grid.Row="0"
+                            Padding="24,18,24,0"
                             Background="Transparent"
                             MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                         <Grid>
@@ -49,16 +53,16 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Orientation="Horizontal">
-                                <Border Width="54"
-                                        Height="54"
-                                        Margin="0,0,20,0"
-                                        Background="{StaticResource AccentBg}"
-                                        BorderBrush="{StaticResource BorderLight}"
+                                <Border Width="40"
+                                        Height="40"
+                                        Margin="0,0,14,0"
+                                        Background="{StaticResource SurfaceInset}"
+                                        BorderBrush="{StaticResource Border}"
                                         BorderThickness="1"
-                                        CornerRadius="18">
+                                        CornerRadius="12">
                                     <Grid>
                                         <TextBlock Text="NVMe"
-                                                   FontSize="13"
+                                                   FontSize="11"
                                                    FontWeight="Bold"
                                                    Foreground="{StaticResource Accent}"
                                                    HorizontalAlignment="Center"
@@ -68,13 +72,13 @@
 
                                 <StackPanel>
                                     <TextBlock Text="NVMe Driver Patcher"
-                                               FontSize="30"
+                                               FontSize="24"
                                                FontWeight="SemiBold"
                                                Foreground="{StaticResource TextPrimary}"/>
-                                    <TextBlock Text="Controlled activation, diagnostics, and rollback support for Windows 11 native NVMe."
-                                               FontSize="14"
+                                    <TextBlock Text="Enable, verify, and roll back the Windows 11 native NVMe driver."
+                                               FontSize="12.5"
                                                Foreground="{StaticResource TextMuted}"
-                                               Margin="0,4,0,0"/>
+                                               Margin="0,2,0,0"/>
                                 </StackPanel>
                             </StackPanel>
 
@@ -92,21 +96,27 @@
                                 </Button>
 
                                 <Border Margin="0,0,14,0"
-                                        Padding="12,7"
-                                        Background="{StaticResource BgMedium}"
+                                        Padding="10,6"
+                                        Background="{StaticResource SurfaceInset}"
                                         BorderBrush="{StaticResource Border}"
                                         BorderThickness="1"
-                                        CornerRadius="12">
+                                        CornerRadius="10">
                                     <TextBlock Text="{Binding VersionText}"
                                                FontSize="11"
                                                FontWeight="SemiBold"
-                                               Foreground="{StaticResource Accent}"/>
+                                               Foreground="{StaticResource TextMuted}"/>
                                 </Border>
 
                                 <Button Content="&#x2013;"
                                         Style="{StaticResource WindowChromeButton}"
                                         AutomationProperties.Name="Minimize window"
                                         Click="Minimize_Click"/>
+                                <Button x:Name="MaximizeRestoreButton"
+                                        Content="&#x25A1;"
+                                        Margin="6,0,0,0"
+                                        Style="{StaticResource WindowChromeButton}"
+                                        AutomationProperties.Name="Maximize window"
+                                        Click="MaximizeRestore_Click"/>
                                 <Button Content="&#x2715;"
                                         Margin="6,0,0,0"
                                         Style="{StaticResource CloseWindowChromeButton}"
@@ -116,16 +126,21 @@
                         </Grid>
                     </Border>
 
-                    <Grid Grid.Row="1" Margin="32,24,32,0">
+                    <Grid x:Name="OverviewGrid" Grid.Row="1" Margin="24,18,24,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="1.15*"/>
-                            <ColumnDefinition Width="20"/>
+                            <ColumnDefinition x:Name="OverviewSpacerColumn" Width="20"/>
                             <ColumnDefinition Width="0.85*"/>
                         </Grid.ColumnDefinitions>
 
-                        <Border Grid.Column="0"
-                                Style="{StaticResource SurfaceCard}"
-                                Background="{StaticResource HeroSurfaceBrush}">
+                        <Border x:Name="ReadinessCard"
+                                Grid.Row="0"
+                                Grid.Column="0"
+                                Style="{StaticResource SurfaceCard}">
                               <Grid>
                                   <Grid.RowDefinitions>
                                       <RowDefinition Height="Auto"/>
@@ -136,14 +151,14 @@
                                   </Grid.RowDefinitions>
 
                                 <StackPanel>
-                                    <TextBlock Text="Patch Readiness" Style="{StaticResource SectionEyebrow}"/>
+                                    <TextBlock Text="Readiness" Style="{StaticResource SectionEyebrow}"/>
                                     <TextBlock Text="{Binding StatusText}"
-                                               Margin="0,10,0,0"
-                                               FontSize="32"
+                                               Margin="0,8,0,0"
+                                               FontSize="28"
                                                FontWeight="SemiBold"
                                                Foreground="{Binding StatusColor, Converter={StaticResource StrToBrush}}"/>
                                     <TextBlock Text="{Binding StatusSummaryText}"
-                                               Margin="0,10,0,0"
+                                               Margin="0,8,0,0"
                                                Style="{StaticResource BodyCopy}"/>
 
                                     <Border Margin="0,14,0,0"
@@ -181,43 +196,64 @@
                                     </Border>
                                 </StackPanel>
 
-                                <WrapPanel Grid.Row="2" Margin="0,24,0,0">
-                                    <Border Style="{StaticResource MetricCard}" Width="180" Margin="0,0,12,12">
-                                        <StackPanel>
-                                            <TextBlock Text="Build" Style="{StaticResource SectionEyebrow}"/>
-                                            <TextBlock Text="{Binding BuildSummaryText}"
-                                                       Margin="0,8,0,0"
-                                                       Foreground="{StaticResource TextPrimary}"
-                                                       FontSize="14"
-                                                       FontWeight="SemiBold"
-                                                       TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                    </Border>
+                                <Border Grid.Row="2"
+                                        Margin="0,20,0,0"
+                                        Style="{StaticResource InsetCard}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
-                                    <Border Style="{StaticResource MetricCard}" Width="180" Margin="0,0,12,12">
-                                        <StackPanel>
-                                            <TextBlock Text="Drive Inventory" Style="{StaticResource SectionEyebrow}"/>
-                                            <TextBlock Text="{Binding DriveInventorySummaryText}"
-                                                       Margin="0,8,0,0"
-                                                       Foreground="{StaticResource TextPrimary}"
-                                                       FontSize="14"
-                                                       FontWeight="SemiBold"
-                                                       TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                    </Border>
+                                        <TextBlock Text="Build"
+                                                   Style="{StaticResource SectionEyebrow}"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding BuildSummaryText}"
+                                                   Foreground="{StaticResource TextPrimary}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap"/>
 
-                                    <Border Style="{StaticResource MetricCard}" Width="180" Margin="0,0,12,12">
-                                        <StackPanel>
-                                            <TextBlock Text="Risk Summary" Style="{StaticResource SectionEyebrow}"/>
-                                            <TextBlock Text="{Binding RiskSummaryText}"
-                                                       Margin="0,8,0,0"
-                                                       Foreground="{StaticResource TextPrimary}"
-                                                       FontSize="14"
-                                                       FontWeight="SemiBold"
-                                                       TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                    </Border>
-                                </WrapPanel>
+                                        <Border Grid.Row="1"
+                                                Grid.ColumnSpan="2"
+                                                Margin="0,12"
+                                                Height="1"
+                                                Background="{StaticResource Border}"/>
+                                        <TextBlock Grid.Row="1"
+                                                   Text="Drives"
+                                                   Style="{StaticResource SectionEyebrow}"/>
+                                        <TextBlock Grid.Row="1"
+                                                   Grid.Column="1"
+                                                   Text="{Binding DriveInventorySummaryText}"
+                                                   Foreground="{StaticResource TextPrimary}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap"/>
+
+                                        <Border Grid.Row="2"
+                                                Grid.ColumnSpan="2"
+                                                Margin="0,-1,0,12"
+                                                Height="1"
+                                                Background="{StaticResource Border}"/>
+                                        <TextBlock Grid.Row="2"
+                                                   Text="Risk"
+                                                   Margin="0,12,0,0"
+                                                   Style="{StaticResource SectionEyebrow}"/>
+                                        <TextBlock Grid.Row="2"
+                                                   Grid.Column="1"
+                                                   Margin="0,12,0,0"
+                                                   Text="{Binding RiskSummaryText}"
+                                                   Foreground="{StaticResource TextPrimary}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap"/>
+                                    </Grid>
+                                </Border>
 
                                 <Border Grid.Row="3"
                                         Margin="0,12,0,0"
@@ -259,7 +295,10 @@
                             </Grid>
                         </Border>
 
-                        <Border Grid.Column="2" Style="{StaticResource SurfaceCard}">
+                        <Border x:Name="ControlsCard"
+                                Grid.Row="0"
+                                Grid.Column="2"
+                                Style="{StaticResource SurfaceCard}">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -272,8 +311,8 @@
                                 </Grid.RowDefinitions>
 
                                 <StackPanel>
-                                    <TextBlock Text="Change Controls" Style="{StaticResource SectionEyebrow}"/>
-                                    <TextBlock Text="Apply, validate, and recover without jumping across the app."
+                                    <TextBlock Text="Actions" Style="{StaticResource SectionEyebrow}"/>
+                                    <TextBlock Text="Apply the change, confirm the result, or recover cleanly."
                                                 Margin="0,8,0,0"
                                                 Style="{StaticResource BodyCopy}"/>
                                 </StackPanel>
@@ -281,32 +320,12 @@
                                 <Border Grid.Row="1"
                                         Margin="0,18,0,0"
                                         Style="{StaticResource InsetCard}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <Border Width="34"
-                                                Height="34"
-                                                Background="{Binding NextStepColor, Converter={StaticResource StrToBrush}}"
-                                                CornerRadius="17"
-                                                VerticalAlignment="Top"
-                                                Opacity="0.16"/>
-
-                                        <Ellipse Width="10"
-                                                 Height="10"
-                                                 Margin="12,12,0,0"
-                                                 HorizontalAlignment="Left"
-                                                 VerticalAlignment="Top"
-                                                 Fill="{Binding NextStepColor, Converter={StaticResource StrToBrush}}"/>
-
-                                        <StackPanel Grid.Column="1" Margin="16,0,0,0">
-                                            <TextBlock Text="Recommended Next Step" Style="{StaticResource SectionEyebrow}"/>
+                                    <StackPanel>
+                                            <TextBlock Text="Next step" Style="{StaticResource SectionEyebrow}"/>
                                             <TextBlock Text="{Binding NextStepTitle}"
                                                        Margin="0,8,0,0"
                                                        Foreground="{Binding NextStepColor, Converter={StaticResource StrToBrush}}"
-                                                       FontSize="18"
+                                                       FontSize="16"
                                                        FontWeight="SemiBold"
                                                        TextWrapping="Wrap"/>
                                             <TextBlock Text="{Binding NextStepDescription}"
@@ -317,7 +336,7 @@
                                                 <Button Content="{Binding NextStepPrimaryActionText}"
                                                         Margin="0,0,10,10"
                                                         Padding="14,8"
-                                                        Style="{StaticResource SecondaryButton}"
+                                                        Style="{StaticResource ActionButton}"
                                                         AutomationProperties.Name="Recommended primary action"
                                                         Visibility="{Binding HasNextStepPrimaryAction, Converter={StaticResource BoolVis}}"
                                                         IsEnabled="{Binding NextStepPrimaryActionEnabled}"
@@ -325,232 +344,104 @@
                                                 <Button Content="{Binding NextStepSecondaryActionText}"
                                                         Margin="0,0,0,10"
                                                         Padding="14,8"
-                                                        Style="{StaticResource OutlinedActionButton}"
+                                                        Style="{StaticResource SecondaryButton}"
                                                         AutomationProperties.Name="Recommended secondary action"
                                                         Visibility="{Binding HasNextStepSecondaryAction, Converter={StaticResource BoolVis}}"
                                                         IsEnabled="{Binding NextStepSecondaryActionEnabled}"
                                                         Click="RecommendedSecondaryAction_Click"/>
                                             </WrapPanel>
-
-                                            <WrapPanel Margin="0,6,0,0">
-                                                <Border Margin="0,0,8,8"
-                                                        Padding="10,5"
-                                                        CornerRadius="999">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{StaticResource BgMedium}"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding HasBackupFiles}" Value="True">
-                                                                    <Setter Property="Background" Value="{StaticResource GreenBg}"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <TextBlock Text="Backup Ready"
-                                                               FontSize="11"
-                                                               FontWeight="SemiBold">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding HasBackupFiles}" Value="True">
-                                                                        <Setter Property="Foreground" Value="{StaticResource Green}"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </Border>
-
-                                                <Border Margin="0,0,8,8"
-                                                        Padding="10,5"
-                                                        CornerRadius="999">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{StaticResource BgMedium}"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding HasBenchmarkHistory}" Value="True">
-                                                                    <Setter Property="Background" Value="{StaticResource AccentBg}"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <TextBlock Text="Baseline Logged"
-                                                               FontSize="11"
-                                                               FontWeight="SemiBold">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding HasBenchmarkHistory}" Value="True">
-                                                                        <Setter Property="Foreground" Value="{StaticResource Accent}"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </Border>
-
-                                                <Border Margin="0,0,8,8"
-                                                        Padding="10,5"
-                                                        CornerRadius="999">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{StaticResource BgMedium}"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding HasRecoveryKit}" Value="True">
-                                                                    <Setter Property="Background" Value="{StaticResource YellowBg}"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <TextBlock Text="Recovery Kit"
-                                                               FontSize="11"
-                                                               FontWeight="SemiBold">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding HasRecoveryKit}" Value="True">
-                                                                        <Setter Property="Foreground" Value="{StaticResource Yellow}"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </Border>
-
-                                                <Border Margin="0,0,0,8"
-                                                        Padding="10,5"
-                                                        CornerRadius="999">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{StaticResource BgMedium}"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding HasDiagnosticsReport}" Value="True">
-                                                                    <Setter Property="Background" Value="{StaticResource AccentBg}"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <TextBlock Text="Diagnostics"
-                                                               FontSize="11"
-                                                               FontWeight="SemiBold">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding HasDiagnosticsReport}" Value="True">
-                                                                        <Setter Property="Foreground" Value="{StaticResource Accent}"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </Border>
-                                            </WrapPanel>
-                                        </StackPanel>
-                                    </Grid>
+                                            <TextBlock Text="Preparation details stay available below when you need backups, benchmarks, recovery files, or diagnostics."
+                                                       Margin="0,2,0,0"
+                                                       Foreground="{StaticResource TextDim}"
+                                                       FontSize="11.5"
+                                                       TextWrapping="Wrap"/>
+                                    </StackPanel>
                                 </Border>
 
                                 <Border Grid.Row="2"
                                         Margin="0,18,0,0"
                                         Style="{StaticResource InsetCard}">
                                     <StackPanel>
-                                        <TextBlock Text="Planned Machine Impact" Style="{StaticResource SectionEyebrow}"/>
+                                        <TextBlock Text="What changes" Style="{StaticResource SectionEyebrow}"/>
                                         <TextBlock Text="{Binding ChangePlanSummaryText}"
                                                    Margin="0,8,0,0"
                                                    Style="{StaticResource BodyCopy}"/>
-
-                                        <Border Margin="0,14,0,0"
-                                                Padding="14,12"
-                                                Background="{StaticResource BgMedium}"
-                                                BorderBrush="{StaticResource Border}"
-                                                BorderThickness="1"
-                                                CornerRadius="12">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding HasChangePlanSteps}" Value="False">
-                                                            <Setter Property="Visibility" Value="Visible"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                            <TextBlock Text="Waiting for the readiness scan to finish before building a machine-specific plan."
-                                                       Foreground="{StaticResource TextSecondary}"
-                                                       FontSize="12"
-                                                       TextWrapping="Wrap"/>
-                                        </Border>
-
-                                        <ItemsControl ItemsSource="{Binding ChangePlanSteps}" Margin="0,14,0,0">
-                                            <ItemsControl.Style>
-                                                <Style TargetType="ItemsControl">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding HasChangePlanSteps}" Value="False">
+                                        <Expander Margin="0,14,0,0"
+                                                  IsExpanded="False"
+                                                  Style="{StaticResource DarkExpander}">
+                                            <Expander.Header>
+                                                <TextBlock Text="Change details"
+                                                           FontWeight="SemiBold"/>
+                                            </Expander.Header>
+                                            <StackPanel>
+                                                <Border Padding="12,10"
+                                                        Background="{StaticResource BgMedium}"
+                                                        BorderBrush="{StaticResource Border}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="10">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
                                                             <Setter Property="Visibility" Value="Collapsed"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </ItemsControl.Style>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Border Margin="0,0,0,10"
-                                                            Padding="14,12"
-                                                            Background="{StaticResource BgMedium}"
-                                                            BorderBrush="{StaticResource Border}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="12">
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                                <ColumnDefinition Width="*"/>
-                                                            </Grid.ColumnDefinitions>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasChangePlanSteps}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <TextBlock Text="Waiting for the readiness scan to finish before building a machine-specific plan."
+                                                               Foreground="{StaticResource TextSecondary}"
+                                                               FontSize="12"
+                                                               TextWrapping="Wrap"/>
+                                                </Border>
 
-                                                            <Border Width="28"
-                                                                    Height="28"
-                                                                    Background="{Binding ToneColor, Converter={StaticResource StrToBrush}}"
-                                                                    CornerRadius="14"
-                                                                    Opacity="0.16"
-                                                                    VerticalAlignment="Top"/>
-                                                            <Ellipse Width="8"
-                                                                     Height="8"
-                                                                     Margin="10,10,0,0"
-                                                                     HorizontalAlignment="Left"
-                                                                     VerticalAlignment="Top"
-                                                                     Fill="{Binding ToneColor, Converter={StaticResource StrToBrush}}"/>
-
-                                                            <StackPanel Grid.Column="1" Margin="14,0,0,0">
-                                                                <TextBlock Text="{Binding Title}"
-                                                                           Foreground="{Binding ToneColor, Converter={StaticResource StrToBrush}}"
-                                                                           FontSize="13"
-                                                                           FontWeight="SemiBold"
-                                                                           TextWrapping="Wrap"/>
-                                                                <TextBlock Text="{Binding Detail}"
-                                                                           Margin="0,8,0,0"
-                                                                           Foreground="{StaticResource TextSecondary}"
-                                                                           FontSize="12"
-                                                                           TextWrapping="Wrap"/>
-                                                            </StackPanel>
-                                                        </Grid>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
+                                                <ItemsControl ItemsSource="{Binding ChangePlanSteps}" Margin="0,10,0,0">
+                                                    <ItemsControl.Style>
+                                                        <Style TargetType="ItemsControl">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasChangePlanSteps}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </ItemsControl.Style>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Margin="0,0,0,10"
+                                                                    Padding="12,10"
+                                                                    Background="{StaticResource BgMedium}"
+                                                                    BorderBrush="{StaticResource Border}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="10">
+                                                                <StackPanel>
+                                                                    <TextBlock Text="{Binding Title}"
+                                                                               Foreground="{Binding ToneColor, Converter={StaticResource StrToBrush}}"
+                                                                               FontSize="12.5"
+                                                                               FontWeight="SemiBold"
+                                                                               TextWrapping="Wrap"/>
+                                                                    <TextBlock Text="{Binding Detail}"
+                                                                               Margin="0,6,0,0"
+                                                                               Foreground="{StaticResource TextSecondary}"
+                                                                               FontSize="12"
+                                                                               TextWrapping="Wrap"/>
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Expander>
                                     </StackPanel>
                                 </Border>
 
-                                <Grid Grid.Row="3" Margin="0,22,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition/>
-                                        <ColumnDefinition Width="12"/>
-                                        <ColumnDefinition/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <Button Grid.Column="0"
-                                            Content="{Binding ApplyButtonText}"
+                                <WrapPanel Grid.Row="3"
+                                           Margin="0,22,0,0"
+                                           ItemHeight="48">
+                                    <Button Content="{Binding ApplyButtonText}"
+                                            MinWidth="220"
+                                            MaxWidth="320"
+                                            Margin="0,0,12,12"
                                             Background="{StaticResource GreenBg}"
                                             BorderBrush="{StaticResource Green}"
                                             Foreground="{StaticResource TextPrimary}"
@@ -560,14 +451,16 @@
                                             ToolTip="{Binding ApplyButtonTooltipText}"
                                             Command="{Binding ApplyPatchCommand}"/>
 
-                                    <Button Grid.Column="2"
-                                            Content="Remove Patch"
+                                    <Button Content="Remove Patch"
+                                            MinWidth="220"
+                                            MaxWidth="320"
+                                            Margin="0,0,0,12"
                                             Style="{StaticResource OutlinedActionButton}"
                                             AutomationProperties.Name="Remove patch"
                                             IsEnabled="{Binding RemoveEnabled}"
                                             ToolTip="{Binding RemoveButtonTooltipText}"
                                             Command="{Binding RemovePatchCommand}"/>
-                                </Grid>
+                                </WrapPanel>
 
                                   <Border Grid.Row="4"
                                           Margin="0,16,0,0"
@@ -583,109 +476,147 @@
                                                  TextWrapping="Wrap"/>
                                   </Border>
 
-                                  <UniformGrid Grid.Row="5"
-                                               Columns="2"
-                                               Margin="0,18,0,0">
-                                    <Button Content="Create Backup"
-                                            Margin="0,0,10,10"
-                                            Style="{StaticResource SecondaryButton}"
-                                            AutomationProperties.Name="Create backup"
-                                            IsEnabled="{Binding ButtonsEnabled}"
-                                            Command="{Binding RunBackupCommand}"/>
-                                    <Button Content="Run Benchmark"
-                                            Margin="0,0,0,10"
-                                            Style="{StaticResource SecondaryButton}"
-                                            AutomationProperties.Name="Run benchmark"
-                                            IsEnabled="{Binding ButtonsEnabled}"
-                                            Command="{Binding RunBenchmarkCommand}"/>
-                                    <Button Content="Export Diagnostics"
-                                            Margin="0,0,10,0"
-                                            Style="{StaticResource SecondaryButton}"
-                                            AutomationProperties.Name="Export diagnostics"
-                                            IsEnabled="{Binding ButtonsEnabled}"
-                                            Command="{Binding ExportDiagnosticsCommand}"/>
-                                    <Button Content="Create Recovery Kit"
-                                            Style="{StaticResource SecondaryButton}"
-                                              AutomationProperties.Name="Create recovery kit"
-                                              IsEnabled="{Binding ButtonsEnabled}"
-                                              Command="{Binding ExportRecoveryKitCommand}"/>
-                                  </UniformGrid>
+                                  <Border Grid.Row="5"
+                                          Margin="0,18,0,0"
+                                          Style="{StaticResource InsetCard}">
+                                      <StackPanel>
+                                          <TextBlock Text="Prepare" Style="{StaticResource SectionEyebrow}"/>
+                                          <TextBlock Text="Create the backups and evidence you want before touching the live driver path."
+                                                     Margin="0,8,0,0"
+                                                     Style="{StaticResource BodyCopy}"/>
+
+                                          <WrapPanel Margin="0,16,0,0"
+                                                     ItemHeight="40">
+                                              <Button Content="Create Backup"
+                                                      MinWidth="168"
+                                                      MaxWidth="220"
+                                                      Margin="0,0,12,12"
+                                                      Style="{StaticResource SecondaryButton}"
+                                                      ToolTip="Export a manual registry backup so the current state can be restored quickly if needed."
+                                                      AutomationProperties.Name="Create backup"
+                                                      IsEnabled="{Binding ButtonsEnabled}"
+                                                      Command="{Binding RunBackupCommand}"/>
+                                              <Button Content="Run Benchmark"
+                                                      MinWidth="168"
+                                                      MaxWidth="220"
+                                                      Margin="0,0,12,12"
+                                                      Style="{StaticResource SecondaryButton}"
+                                                      ToolTip="Capture a machine-specific performance run for before-and-after comparison."
+                                                      AutomationProperties.Name="Run benchmark"
+                                                      IsEnabled="{Binding ButtonsEnabled}"
+                                                      Command="{Binding RunBenchmarkCommand}"/>
+                                              <Button Content="Export Diagnostics"
+                                                      MinWidth="168"
+                                                      MaxWidth="220"
+                                                      Margin="0,0,12,12"
+                                                      Style="{StaticResource SecondaryButton}"
+                                                      ToolTip="Save a support-ready snapshot with readiness, health, and recent activity details."
+                                                      AutomationProperties.Name="Export diagnostics"
+                                                      IsEnabled="{Binding ButtonsEnabled}"
+                                                      Command="{Binding ExportDiagnosticsCommand}"/>
+                                              <Button Content="Create Recovery Kit"
+                                                      MinWidth="168"
+                                                      MaxWidth="220"
+                                                      Margin="0,0,0,12"
+                                                      Style="{StaticResource SecondaryButton}"
+                                                      ToolTip="Generate offline rollback files for Windows and WinRE before a risky restart or handoff."
+                                                      AutomationProperties.Name="Create recovery kit"
+                                                      IsEnabled="{Binding ButtonsEnabled}"
+                                                      Command="{Binding ExportRecoveryKitCommand}"/>
+                                          </WrapPanel>
+                                      </StackPanel>
+                                  </Border>
 
                                   <Border Grid.Row="6"
                                           Margin="0,18,0,0"
                                           Style="{StaticResource InsetCard}">
                                       <StackPanel>
-                                          <TextBlock Text="Operational History" Style="{StaticResource SectionEyebrow}"/>
-                                          <TextBlock Text="Backups, snapshots, and benchmarks stay local so you can confirm what changed and when."
+                                          <TextBlock Text="Recent local data" Style="{StaticResource SectionEyebrow}"/>
+                                          <TextBlock Text="Local backups, snapshots, and benchmarks stay close so you can see what changed and when."
                                                      Margin="0,8,0,0"
                                                      Style="{StaticResource BodyCopy}"/>
-
-                                          <Border Margin="0,14,0,0"
-                                                  Padding="12,10"
-                                                  Background="{StaticResource BgMedium}"
-                                                  BorderBrush="{StaticResource Border}"
-                                                  BorderThickness="1"
-                                                  CornerRadius="12">
+                                          <Expander Margin="0,14,0,0"
+                                                    IsExpanded="False"
+                                                    Style="{StaticResource DarkExpander}">
+                                              <Expander.Header>
+                                                  <TextBlock Text="History details"
+                                                             FontWeight="SemiBold"/>
+                                              </Expander.Header>
                                               <StackPanel>
-                                                  <TextBlock Text="Registry Backups" Style="{StaticResource SectionEyebrow}"/>
-                                                  <TextBlock Text="{Binding BackupHistoryText}"
-                                                             Margin="0,6,0,0"
-                                                             Foreground="{StaticResource TextSecondary}"
-                                                             FontSize="12"
-                                                             TextWrapping="Wrap"/>
-                                              </StackPanel>
-                                          </Border>
+                                                  <Border Padding="12,10"
+                                                          Background="{StaticResource BgMedium}"
+                                                          BorderBrush="{StaticResource Border}"
+                                                          BorderThickness="1"
+                                                          CornerRadius="10">
+                                                      <StackPanel>
+                                                          <TextBlock Text="Registry Backups" Style="{StaticResource SectionEyebrow}"/>
+                                                          <TextBlock Text="{Binding BackupHistoryText}"
+                                                                     Margin="0,6,0,0"
+                                                                     Foreground="{StaticResource TextSecondary}"
+                                                                     FontSize="12"
+                                                                     TextWrapping="Wrap"/>
+                                                      </StackPanel>
+                                                  </Border>
 
-                                          <Border Margin="0,10,0,0"
-                                                  Padding="12,10"
-                                                  Background="{StaticResource BgMedium}"
-                                                  BorderBrush="{StaticResource Border}"
-                                                  BorderThickness="1"
-                                                  CornerRadius="12">
-                                              <StackPanel>
-                                                  <TextBlock Text="Change Snapshots" Style="{StaticResource SectionEyebrow}"/>
-                                                  <TextBlock Text="{Binding SnapshotHistoryText}"
-                                                             Margin="0,6,0,0"
-                                                             Foreground="{StaticResource TextSecondary}"
-                                                             FontSize="12"
-                                                             TextWrapping="Wrap"/>
-                                              </StackPanel>
-                                          </Border>
+                                                  <Border Margin="0,10,0,0"
+                                                          Padding="12,10"
+                                                          Background="{StaticResource BgMedium}"
+                                                          BorderBrush="{StaticResource Border}"
+                                                          BorderThickness="1"
+                                                          CornerRadius="10">
+                                                      <StackPanel>
+                                                          <TextBlock Text="Change Snapshots" Style="{StaticResource SectionEyebrow}"/>
+                                                          <TextBlock Text="{Binding SnapshotHistoryText}"
+                                                                     Margin="0,6,0,0"
+                                                                     Foreground="{StaticResource TextSecondary}"
+                                                                     FontSize="12"
+                                                                     TextWrapping="Wrap"/>
+                                                      </StackPanel>
+                                                  </Border>
 
-                                          <Border Margin="0,10,0,0"
-                                                  Padding="12,10"
-                                                  Background="{StaticResource BgMedium}"
-                                                  BorderBrush="{StaticResource Border}"
-                                                  BorderThickness="1"
-                                                  CornerRadius="12">
-                                              <StackPanel>
-                                                  <TextBlock Text="Benchmark Runs" Style="{StaticResource SectionEyebrow}"/>
-                                                  <TextBlock Text="{Binding BenchmarkHistoryText}"
-                                                             Margin="0,6,0,0"
-                                                             Foreground="{StaticResource TextSecondary}"
-                                                             FontSize="12"
-                                                             TextWrapping="Wrap"/>
+                                                  <Border Margin="0,10,0,0"
+                                                          Padding="12,10"
+                                                          Background="{StaticResource BgMedium}"
+                                                          BorderBrush="{StaticResource Border}"
+                                                          BorderThickness="1"
+                                                          CornerRadius="10">
+                                                      <StackPanel>
+                                                          <TextBlock Text="Benchmark Runs" Style="{StaticResource SectionEyebrow}"/>
+                                                          <TextBlock Text="{Binding BenchmarkHistoryText}"
+                                                                     Margin="0,6,0,0"
+                                                                     Foreground="{StaticResource TextSecondary}"
+                                                                     FontSize="12"
+                                                                     TextWrapping="Wrap"/>
+                                                      </StackPanel>
+                                                  </Border>
                                               </StackPanel>
-                                          </Border>
+                                          </Expander>
                                       </StackPanel>
                                   </Border>
                               </Grid>
                           </Border>
                     </Grid>
 
-                    <Grid Grid.Row="2" Margin="32,22,32,0">
+                    <Grid x:Name="MainContentGrid" Grid.Row="2" Margin="32,22,32,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition x:Name="MainContentPrimaryRow" Height="*"/>
+                            <RowDefinition x:Name="MainContentSecondaryRow" Height="Auto"/>
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="1.02*"/>
-                            <ColumnDefinition Width="20"/>
+                            <ColumnDefinition x:Name="MainContentSpacerColumn" Width="20"/>
                             <ColumnDefinition Width="0.98*"/>
                         </Grid.ColumnDefinitions>
 
-                        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                        <ScrollViewer x:Name="OverviewScrollViewer"
+                                      Grid.Row="0"
+                                      Grid.Column="0"
+                                      VerticalScrollBarVisibility="Auto">
                             <StackPanel>
                                 <Border Style="{StaticResource SurfaceCard}" Margin="0,0,0,16">
                                     <StackPanel>
                                         <TextBlock Text="Readiness Checklist" Style="{StaticResource SectionEyebrow}"/>
-                                        <TextBlock Text="Every prerequisite is grouped here before driver changes unlock."
+                                        <TextBlock Text="Review the blockers before changing the driver."
                                                    Margin="0,8,0,0"
                                                    Style="{StaticResource BodyCopy}"/>
 
@@ -772,7 +703,7 @@
 
                                         <Border Margin="0,18,0,0"
                                                 Padding="16,14"
-                                                Background="{StaticResource GreenBg}"
+                                                Background="{StaticResource SurfaceInset}"
                                                 BorderBrush="{StaticResource Border}"
                                                 BorderThickness="1"
                                                 CornerRadius="14">
@@ -787,11 +718,11 @@
                                                 </Style>
                                             </Border.Style>
                                             <StackPanel>
-                                                <TextBlock Text="No extra compatibility caveats"
-                                                           Foreground="{StaticResource Green}"
-                                                           FontSize="16"
+                                                <TextBlock Text="No extra compatibility notes"
+                                                           Foreground="{StaticResource TextPrimary}"
+                                                           FontSize="14"
                                                            FontWeight="SemiBold"/>
-                                                <TextBlock Text="The scan did not surface any special vendor or platform notes beyond the standard readiness checks."
+                                                <TextBlock Text="The latest scan did not surface any vendor or platform notes beyond the standard readiness checks."
                                                            Margin="0,8,0,0"
                                                            Foreground="{StaticResource TextSecondary}"
                                                            FontSize="12"
@@ -858,14 +789,18 @@
                                 </Border>
 
                                 <Border Style="{StaticResource SurfaceCard}" Margin="0,0,0,16">
-                                    <Grid>
+                                    <Grid x:Name="SettingsColumnsGrid">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition/>
-                                            <ColumnDefinition Width="16"/>
+                                            <ColumnDefinition x:Name="SettingsSpacerColumn" Width="16"/>
                                             <ColumnDefinition/>
                                         </Grid.ColumnDefinitions>
 
-                                        <Border Grid.Column="0" Style="{StaticResource InsetCard}">
+                                        <Border x:Name="PatchDefaultsCard" Grid.Row="0" Grid.Column="0" Style="{StaticResource InsetCard}">
                                             <StackPanel>
                                                 <TextBlock Text="Patch Defaults" Style="{StaticResource SectionEyebrow}"/>
                                                 <TextBlock Text="{Binding OptionsSummaryText}"
@@ -902,11 +837,11 @@
 
                                                 <Border Margin="0,14,0,0"
                                                         Padding="14,12"
-                                                        Background="{StaticResource AccentBg}"
-                                                        BorderBrush="{StaticResource BorderLight}"
+                                                        Background="{StaticResource SurfaceInset}"
+                                                        BorderBrush="{StaticResource Border}"
                                                         BorderThickness="1"
                                                         CornerRadius="12">
-                                                    <TextBlock Text="Safe Mode is the community-recommended default for 2026. The Server 2025 key is optional and mostly relevant on server SKUs — leave it off unless you know you need it."
+                                                    <TextBlock Text="Safe Mode is still the safest default for most systems. Add the Server 2025 key only when you need the broader compatibility path."
                                                                Foreground="{StaticResource TextSecondary}"
                                                                FontSize="12"
                                                                TextWrapping="Wrap"/>
@@ -926,7 +861,7 @@
                                             </StackPanel>
                                         </Border>
 
-                                        <Border Grid.Column="2" Style="{StaticResource InsetCard}">
+                                        <Border x:Name="AuditAlertsCard" Grid.Row="0" Grid.Column="2" Style="{StaticResource InsetCard}">
                                             <StackPanel>
                                                 <TextBlock Text="Audit &amp; Alerts" Style="{StaticResource SectionEyebrow}"/>
                                                 <TextBlock Text="{Binding PreferenceSummaryText}"
@@ -943,7 +878,9 @@
                                                           Style="{StaticResource DarkCheckBox}"
                                                           IsChecked="{Binding WriteEventLog}"/>
 
-                                                <StackPanel Orientation="Horizontal" Margin="0,14,0,0" VerticalAlignment="Center">
+                                                <WrapPanel x:Name="RestartDelayPanel"
+                                                           Margin="0,14,0,0"
+                                                           VerticalAlignment="Center">
                                                     <TextBlock Text="Restart delay"
                                                                VerticalAlignment="Center"
                                                                Foreground="{StaticResource TextSecondary}"
@@ -951,23 +888,32 @@
                                                     <TextBox Width="72"
                                                              Margin="12,0,10,0"
                                                              Style="{StaticResource DarkTextBox}"
+                                                             AutomationProperties.Name="Restart delay in seconds"
+                                                             ToolTip="Use a value between 5 and 300 seconds for post-patch restart countdowns."
                                                              Text="{Binding RestartDelayText, UpdateSourceTrigger=LostFocus}"
                                                              VerticalContentAlignment="Center"/>
                                                     <TextBlock Text="seconds"
                                                                VerticalAlignment="Center"
                                                                Foreground="{StaticResource TextDim}"/>
-                                                </StackPanel>
+                                                </WrapPanel>
 
-                                                <Button Content="Open Data Folder"
-                                                        Margin="0,14,0,0"
-                                                        HorizontalAlignment="Left"
-                                                        Style="{StaticResource SecondaryButton}"
-                                                        Command="{Binding OpenDataFolderCommand}"/>
-                                                <Button Content="Use Recommended Setup"
-                                                        Margin="0,10,0,0"
-                                                        HorizontalAlignment="Left"
-                                                        Style="{StaticResource SecondaryButton}"
-                                                        Command="{Binding UseRecommendedSetupCommand}"/>
+                                                <WrapPanel x:Name="PreferenceActionsPanel"
+                                                           Margin="0,14,0,0">
+                                                    <Button Content="Open Data"
+                                                            Margin="0,0,10,10"
+                                                            HorizontalAlignment="Left"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            AutomationProperties.Name="Open data folder"
+                                                            ToolTip="Open the working folder that stores logs, exports, backups, and diagnostics."
+                                                            Command="{Binding OpenDataFolderCommand}"/>
+                                                    <Button Content="Restore Defaults"
+                                                            Margin="0,0,0,10"
+                                                            HorizontalAlignment="Left"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            AutomationProperties.Name="Restore recommended defaults"
+                                                            ToolTip="Restore the app's recommended safety-first settings."
+                                                            Command="{Binding UseRecommendedSetupCommand}"/>
+                                                </WrapPanel>
                                             </StackPanel>
                                         </Border>
                                     </Grid>
@@ -975,7 +921,7 @@
 
                                 <Border Style="{StaticResource SurfaceCard}" Margin="0,0,0,16">
                                     <StackPanel>
-                                        <TextBlock Text="Detected Storage" Style="{StaticResource SectionEyebrow}"/>
+                                        <TextBlock Text="Storage" Style="{StaticResource SectionEyebrow}"/>
                                         <TextBlock Text="{Binding DriveInventorySummaryText}"
                                                    Margin="0,8,0,0"
                                                    Style="{StaticResource BodyCopy}"/>
@@ -983,7 +929,7 @@
                                         <TextBlock Margin="0,18,0,0"
                                                    FontSize="12"
                                                    Foreground="{StaticResource TextDim}"
-                                                   Text="No drive data was returned by the latest scan. Refresh the checks or confirm the app still has administrator access.">
+                                                   Text="No drive data came back from the latest scan. Refresh readiness or confirm the app still has administrator access.">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
                                                     <Setter Property="Visibility" Value="Visible"/>
@@ -996,223 +942,242 @@
                                             </TextBlock.Style>
                                         </TextBlock>
 
-                                        <ItemsControl ItemsSource="{Binding Drives}" Margin="0,18,0,0">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Border Margin="0,0,0,10"
-                                                            Padding="16,14"
-                                                            Background="{StaticResource BgMedium}"
-                                                            BorderBrush="{StaticResource Border}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="14">
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="*"/>
-                                                                <ColumnDefinition Width="18"/>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                            </Grid.ColumnDefinitions>
+                                        <Expander Margin="0,16,0,0"
+                                                  IsExpanded="False">
+                                            <Expander.Style>
+                                                <Style TargetType="Expander" BasedOn="{StaticResource DarkExpander}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasDriveData}" Value="False">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Expander.Style>
+                                            <Expander.Header>
+                                                <TextBlock Text="Drive details"
+                                                           FontWeight="SemiBold"/>
+                                            </Expander.Header>
+                                            <ItemsControl ItemsSource="{Binding Drives}" Margin="0,8,0,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Margin="0,0,0,10"
+                                                                Padding="14,12"
+                                                                Background="{StaticResource BgMedium}"
+                                                                BorderBrush="{StaticResource Border}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="12">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="18"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
 
-                                                            <StackPanel>
-                                                                <StackPanel Orientation="Horizontal">
-                                                                    <Ellipse Width="10"
-                                                                             Height="10"
-                                                                             Margin="0,0,10,0"
-                                                                             VerticalAlignment="Center"
-                                                                             Fill="{Binding DotColor, Converter={StaticResource StrToBrush}}"/>
-                                                                    <TextBlock Text="{Binding Name}"
-                                                                               Foreground="{StaticResource TextPrimary}"
-                                                                               FontSize="13"
-                                                                               FontWeight="SemiBold"
-                                                                               TextTrimming="CharacterEllipsis"/>
+                                                                <StackPanel>
+                                                                    <StackPanel Orientation="Horizontal">
+                                                                        <Ellipse Width="10"
+                                                                                 Height="10"
+                                                                                 Margin="0,0,10,0"
+                                                                                 VerticalAlignment="Center"
+                                                                                 Fill="{Binding DotColor, Converter={StaticResource StrToBrush}}"/>
+                                                                        <TextBlock Text="{Binding Name}"
+                                                                                   Foreground="{StaticResource TextPrimary}"
+                                                                                   FontSize="13"
+                                                                                   FontWeight="SemiBold"
+                                                                                   TextTrimming="CharacterEllipsis"/>
+                                                                    </StackPanel>
+                                                                    <TextBlock Text="{Binding Size}"
+                                                                               Margin="20,6,0,0"
+                                                                               Foreground="{StaticResource TextDim}"
+                                                                               FontSize="12"/>
+                                                                    <WrapPanel Margin="20,8,0,0">
+                                                                        <TextBlock Text="{Binding Temperature, StringFormat=Temp {0}}"
+                                                                                   Margin="0,0,12,6"
+                                                                                   Foreground="{Binding TempColor, Converter={StaticResource StrToBrush}}"
+                                                                                   FontSize="11.5"
+                                                                                   Visibility="{Binding ShowTemp, Converter={StaticResource BoolVis}}"/>
+                                                                        <TextBlock Text="{Binding Wear, StringFormat=Health {0}}"
+                                                                                   Margin="0,0,12,6"
+                                                                                   Foreground="{Binding WearColor, Converter={StaticResource StrToBrush}}"
+                                                                                   FontSize="11.5"
+                                                                                   ToolTip="{Binding SmartTooltip}"
+                                                                                   Visibility="{Binding ShowWear, Converter={StaticResource BoolVis}}"/>
+                                                                        <TextBlock Text="{Binding Firmware, StringFormat=FW {0}}"
+                                                                                   Margin="0,0,0,6"
+                                                                                   Foreground="{StaticResource TextMuted}"
+                                                                                   FontSize="11.5"
+                                                                                   Visibility="{Binding ShowFirmware, Converter={StaticResource BoolVis}}"/>
+                                                                    </WrapPanel>
                                                                 </StackPanel>
-                                                                <TextBlock Text="{Binding Size}"
-                                                                           Margin="20,6,0,0"
-                                                                           Foreground="{StaticResource TextDim}"
-                                                                           FontSize="12"/>
-                                                            </StackPanel>
 
-                                                            <WrapPanel Grid.Column="2"
-                                                                       HorizontalAlignment="Right"
-                                                                       VerticalAlignment="Center"
-                                                                       ItemHeight="28">
-                                                                <Border Margin="0,0,6,6"
-                                                                        Padding="10,5"
-                                                                        Background="{Binding BusPillBg, Converter={StaticResource StrToBrush}}"
-                                                                        CornerRadius="999">
-                                                                    <TextBlock Text="{Binding BusType}"
-                                                                               Foreground="{Binding BusPillFg, Converter={StaticResource StrToBrush}}"
-                                                                               FontSize="11"
-                                                                               FontWeight="SemiBold"/>
-                                                                </Border>
+                                                                <WrapPanel Grid.Column="2"
+                                                                           HorizontalAlignment="Right"
+                                                                           VerticalAlignment="Top"
+                                                                           ItemHeight="28">
+                                                                    <Border Margin="0,0,6,6"
+                                                                            Padding="8,4"
+                                                                            Background="{Binding BusPillBg, Converter={StaticResource StrToBrush}}"
+                                                                            CornerRadius="999">
+                                                                        <TextBlock Text="{Binding BusType}"
+                                                                                   Foreground="{Binding BusPillFg, Converter={StaticResource StrToBrush}}"
+                                                                                   FontSize="10.5"
+                                                                                   FontWeight="SemiBold"/>
+                                                                    </Border>
 
-                                                                <Border Margin="0,0,6,6"
-                                                                        Padding="10,5"
-                                                                        Background="{StaticResource YellowBg}"
-                                                                        CornerRadius="999"
-                                                                        Visibility="{Binding IsBoot, Converter={StaticResource BoolVis}}">
-                                                                    <TextBlock Text="Boot"
-                                                                               Foreground="{StaticResource Yellow}"
-                                                                               FontSize="11"
-                                                                               FontWeight="SemiBold"/>
-                                                                </Border>
+                                                                    <Border Margin="0,0,6,6"
+                                                                            Padding="8,4"
+                                                                            Background="{StaticResource YellowBg}"
+                                                                            CornerRadius="999"
+                                                                            Visibility="{Binding IsBoot, Converter={StaticResource BoolVis}}">
+                                                                        <TextBlock Text="Boot"
+                                                                                   Foreground="{StaticResource Yellow}"
+                                                                                   FontSize="10.5"
+                                                                                   FontWeight="SemiBold"/>
+                                                                    </Border>
 
-                                                                <Border Margin="0,0,6,6"
-                                                                        Padding="10,5"
-                                                                        Background="{Binding DriverBadgeBg, Converter={StaticResource StrToBrush}}"
-                                                                        CornerRadius="999"
-                                                                        Visibility="{Binding ShowDriverBadge, Converter={StaticResource BoolVis}}">
-                                                                    <TextBlock Text="{Binding DriverBadgeText}"
-                                                                               Foreground="{Binding DriverBadgeFg, Converter={StaticResource StrToBrush}}"
-                                                                               FontSize="11"
-                                                                               FontWeight="SemiBold"/>
-                                                                </Border>
-
-                                                                <Border Margin="0,0,6,6"
-                                                                        Padding="10,5"
-                                                                        Background="{StaticResource SurfaceInset}"
-                                                                        CornerRadius="999"
-                                                                        ToolTip="Drive temperature"
-                                                                        Visibility="{Binding ShowTemp, Converter={StaticResource BoolVis}}">
-                                                                    <TextBlock Text="{Binding Temperature}"
-                                                                               Foreground="{Binding TempColor, Converter={StaticResource StrToBrush}}"
-                                                                               FontSize="11"
-                                                                               FontWeight="SemiBold"/>
-                                                                </Border>
-
-                                                                <Border Margin="0,0,6,6"
-                                                                        Padding="10,5"
-                                                                        Background="{StaticResource SurfaceInset}"
-                                                                        CornerRadius="999"
-                                                                        ToolTip="{Binding SmartTooltip}"
-                                                                        Visibility="{Binding ShowWear, Converter={StaticResource BoolVis}}">
-                                                                    <TextBlock Text="{Binding Wear}"
-                                                                               Foreground="{Binding WearColor, Converter={StaticResource StrToBrush}}"
-                                                                               FontSize="11"
-                                                                               FontWeight="SemiBold"/>
-                                                                </Border>
-
-                                                                <Border Margin="0,0,0,6"
-                                                                        Padding="10,5"
-                                                                        Background="{StaticResource SurfaceInset}"
-                                                                        CornerRadius="999"
-                                                                        ToolTip="Firmware version"
-                                                                        Visibility="{Binding ShowFirmware, Converter={StaticResource BoolVis}}">
-                                                                    <TextBlock Text="{Binding Firmware}"
-                                                                               Foreground="{StaticResource TextMuted}"
-                                                                               FontSize="11"/>
-                                                                </Border>
-                                                            </WrapPanel>
-                                                        </Grid>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
+                                                                    <Border Margin="0,0,0,6"
+                                                                            Padding="8,4"
+                                                                            Background="{Binding DriverBadgeBg, Converter={StaticResource StrToBrush}}"
+                                                                            CornerRadius="999"
+                                                                            Visibility="{Binding ShowDriverBadge, Converter={StaticResource BoolVis}}">
+                                                                        <TextBlock Text="{Binding DriverBadgeText}"
+                                                                                   Foreground="{Binding DriverBadgeFg, Converter={StaticResource StrToBrush}}"
+                                                                                   FontSize="10.5"
+                                                                                   FontWeight="SemiBold"/>
+                                                                    </Border>
+                                                                </WrapPanel>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Expander>
                                     </StackPanel>
                                 </Border>
 
                                 <Border Style="{StaticResource SurfaceCard}">
-                                    <Grid>
+                                    <StackPanel>
+                                        <TextBlock Text="Technical details" Style="{StaticResource SectionEyebrow}"/>
+                                        <TextBlock Text="Expand the exact keys only when you want to inspect the change set behind the patch."
+                                                   Margin="0,8,0,0"
+                                                   Style="{StaticResource BodyCopy}"/>
+
+                                        <Grid Margin="0,16,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition/>
                                             <ColumnDefinition Width="16"/>
                                             <ColumnDefinition/>
                                         </Grid.ColumnDefinitions>
 
-                                        <StackPanel Grid.Column="0">
-                                            <TextBlock Text="Registry Change Set" Style="{StaticResource SectionEyebrow}"/>
-                                            <TextBlock Text="Feature flags that enable the native path and its supporting optimizations."
-                                                       Margin="0,8,0,0"
-                                                       Style="{StaticResource BodyCopy}"/>
+                                            <Expander Grid.Column="0"
+                                                      IsExpanded="False"
+                                                      Style="{StaticResource DarkExpander}">
+                                                <Expander.Header>
+                                                    <TextBlock Text="Patch keys"
+                                                               FontWeight="SemiBold"/>
+                                                </Expander.Header>
+                                                <StackPanel>
+                                                    <TextBlock Text="Feature flags that enable the native path and its related optimizations."
+                                                               Style="{StaticResource BodyCopy}"/>
+                                                    <ItemsControl ItemsSource="{Binding RegistryFlags}" Margin="0,12,0,0">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Margin="0,0,0,10"
+                                                                        Padding="14,12"
+                                                                        Background="{StaticResource BgMedium}"
+                                                                        BorderBrush="{StaticResource Border}"
+                                                                        BorderThickness="1"
+                                                                        CornerRadius="12">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                            <ColumnDefinition Width="120"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                        </Grid.ColumnDefinitions>
 
-                                            <ItemsControl ItemsSource="{Binding RegistryFlags}" Margin="0,18,0,0">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Border Margin="0,0,0,10"
-                                                                Padding="14,12"
-                                                                Background="{StaticResource BgMedium}"
-                                                                BorderBrush="{StaticResource Border}"
-                                                                BorderThickness="1"
-                                                                CornerRadius="12">
-                                                            <Grid>
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="Auto"/>
-                                                                    <ColumnDefinition Width="120"/>
-                                                                    <ColumnDefinition Width="*"/>
-                                                                </Grid.ColumnDefinitions>
+                                                                        <Ellipse Width="9"
+                                                                                 Height="9"
+                                                                                 Margin="0,0,10,0"
+                                                                                 VerticalAlignment="Center"
+                                                                                 Fill="{Binding DotColor, Converter={StaticResource StrToBrush}}"/>
+                                                                        <TextBlock Grid.Column="1"
+                                                                                   Text="{Binding Id}"
+                                                                                   Foreground="{StaticResource TextPrimary}"
+                                                                                   FontFamily="Cascadia Code,Consolas"
+                                                                                   FontSize="11"
+                                                                                   FontWeight="SemiBold"/>
+                                                                        <TextBlock Grid.Column="2"
+                                                                                   Text="{Binding Name}"
+                                                                                   Foreground="{StaticResource TextMuted}"
+                                                                                   FontSize="12"
+                                                                                   TextWrapping="Wrap"/>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Expander>
 
-                                                                <Ellipse Width="9"
-                                                                         Height="9"
-                                                                         Margin="0,0,10,0"
-                                                                         VerticalAlignment="Center"
-                                                                         Fill="{Binding DotColor, Converter={StaticResource StrToBrush}}"/>
-                                                                <TextBlock Grid.Column="1"
-                                                                           Text="{Binding Id}"
-                                                                           Foreground="{StaticResource TextPrimary}"
-                                                                           FontFamily="Cascadia Code,Consolas"
-                                                                           FontSize="11"
-                                                                           FontWeight="SemiBold"/>
-                                                                <TextBlock Grid.Column="2"
-                                                                           Text="{Binding Name}"
-                                                                           Foreground="{StaticResource TextMuted}"
-                                                                           FontSize="12"
-                                                                           TextWrapping="Wrap"/>
-                                                            </Grid>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </StackPanel>
+                                            <Expander Grid.Column="2"
+                                                      IsExpanded="False"
+                                                      Style="{StaticResource DarkExpander}">
+                                                <Expander.Header>
+                                                    <TextBlock Text="Recovery keys"
+                                                               FontWeight="SemiBold"/>
+                                                </Expander.Header>
+                                                <StackPanel>
+                                                    <TextBlock Text="Safe Mode safeguards that keep offline rollback usable if you need it."
+                                                               Style="{StaticResource BodyCopy}"/>
+                                                    <ItemsControl ItemsSource="{Binding SafeBootFlags}" Margin="0,12,0,0">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Margin="0,0,0,10"
+                                                                        Padding="14,12"
+                                                                        Background="{StaticResource BgMedium}"
+                                                                        BorderBrush="{StaticResource Border}"
+                                                                        BorderThickness="1"
+                                                                        CornerRadius="12">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                            <ColumnDefinition Width="120"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                        </Grid.ColumnDefinitions>
 
-                                        <StackPanel Grid.Column="2">
-                                            <TextBlock Text="Recovery Safeguards" Style="{StaticResource SectionEyebrow}"/>
-                                            <TextBlock Text="Critical recovery keys that keep Safe Mode usable if you need to roll back offline."
-                                                       Margin="0,8,0,0"
-                                                       Style="{StaticResource BodyCopy}"/>
-
-                                            <ItemsControl ItemsSource="{Binding SafeBootFlags}" Margin="0,18,0,0">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Border Margin="0,0,0,10"
-                                                                Padding="14,12"
-                                                                Background="{StaticResource BgMedium}"
-                                                                BorderBrush="{StaticResource Border}"
-                                                                BorderThickness="1"
-                                                                CornerRadius="12">
-                                                            <Grid>
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="Auto"/>
-                                                                    <ColumnDefinition Width="120"/>
-                                                                    <ColumnDefinition Width="*"/>
-                                                                </Grid.ColumnDefinitions>
-
-                                                                <Ellipse Width="9"
-                                                                         Height="9"
-                                                                         Margin="0,0,10,0"
-                                                                         VerticalAlignment="Center"
-                                                                         Fill="{Binding DotColor, Converter={StaticResource StrToBrush}}"/>
-                                                                <TextBlock Grid.Column="1"
-                                                                           Text="{Binding Id}"
-                                                                           Foreground="{StaticResource TextPrimary}"
-                                                                           FontFamily="Cascadia Code,Consolas"
-                                                                           FontSize="11"
-                                                                           FontWeight="SemiBold"/>
-                                                                <TextBlock Grid.Column="2"
-                                                                           Text="{Binding Name}"
-                                                                           Foreground="{StaticResource TextMuted}"
-                                                                           FontSize="12"
-                                                                           TextWrapping="Wrap"/>
-                                                            </Grid>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </StackPanel>
-                                    </Grid>
+                                                                        <Ellipse Width="9"
+                                                                                 Height="9"
+                                                                                 Margin="0,0,10,0"
+                                                                                 VerticalAlignment="Center"
+                                                                                 Fill="{Binding DotColor, Converter={StaticResource StrToBrush}}"/>
+                                                                        <TextBlock Grid.Column="1"
+                                                                                   Text="{Binding Id}"
+                                                                                   Foreground="{StaticResource TextPrimary}"
+                                                                                   FontFamily="Cascadia Code,Consolas"
+                                                                                   FontSize="11"
+                                                                                   FontWeight="SemiBold"/>
+                                                                        <TextBlock Grid.Column="2"
+                                                                                   Text="{Binding Name}"
+                                                                                   Foreground="{StaticResource TextMuted}"
+                                                                                   FontSize="12"
+                                                                                   TextWrapping="Wrap"/>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Expander>
+                                        </Grid>
+                                    </StackPanel>
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>
 
-                        <GridSplitter Grid.Column="1"
+                        <GridSplitter x:Name="MainContentSplitter"
+                                      Grid.Row="0"
+                                      Grid.Column="1"
                                       Width="6"
                                       HorizontalAlignment="Center"
                                       VerticalAlignment="Stretch"
@@ -1220,7 +1185,10 @@
                                       Cursor="SizeWE"
                                       ShowsPreview="True"/>
 
-                        <Border Grid.Column="2" Style="{StaticResource SurfaceCard}">
+                        <Border x:Name="WorkspaceSurface"
+                                Grid.Row="0"
+                                Grid.Column="2"
+                                Style="{StaticResource SurfaceCard}">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -1228,8 +1196,8 @@
                                 </Grid.RowDefinitions>
 
                                 <StackPanel>
-                                    <TextBlock Text="Validation Workspace" Style="{StaticResource SectionEyebrow}"/>
-                                    <TextBlock Text="Use activity for traceability, benchmarks for before-and-after validation, telemetry for health trends, recovery for rollback confidence, and tuning only when you need deeper control."
+                                    <TextBlock Text="Validation" Style="{StaticResource SectionEyebrow}"/>
+                                    <TextBlock Text="Activity shows what happened. Benchmarks and telemetry help validate the result. Recovery keeps rollback nearby."
                                                Margin="0,8,0,0"
                                                Style="{StaticResource BodyCopy}"/>
                                 </StackPanel>
@@ -1241,23 +1209,7 @@
                                             KeyboardNavigation.TabNavigation="Cycle"
                                             AutomationProperties.Name="Workspace tabs"
                                             SelectionChanged="WorkspaceTabs_SelectionChanged">
-                                    <TabItem Style="{StaticResource WorkspaceTabItem}">
-                                        <TabItem.Header>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="Activity" VerticalAlignment="Center"/>
-                                                <Border Margin="8,0,0,0"
-                                                        Padding="8,3"
-                                                        Background="{StaticResource BgMedium}"
-                                                        BorderBrush="{Binding ActivityTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="999">
-                                                    <TextBlock Text="{Binding ActivityTabBadgeText}"
-                                                               Foreground="{Binding ActivityTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                               FontSize="10.5"
-                                                               FontWeight="SemiBold"/>
-                                                </Border>
-                                            </StackPanel>
-                                        </TabItem.Header>
+                                    <TabItem Style="{StaticResource WorkspaceTabItem}" Header="Activity">
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
@@ -1273,7 +1225,7 @@
                                                 </Grid.ColumnDefinitions>
 
                                                 <StackPanel>
-                                                    <TextBlock Text="Live activity keeps every step auditable, from preflight checks through restart prompts."
+                                                    <TextBlock Text="Review the local audit trail for checks, changes, and restart prompts."
                                                                Style="{StaticResource BodyCopy}"/>
                                                     <TextBlock Text="{Binding LogRetentionText}"
                                                                Margin="0,8,0,0"
@@ -1300,18 +1252,8 @@
                                                 </StackPanel>
                                             </Grid>
 
-                                            <Grid Grid.Row="1" Margin="0,18,0,0">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="120"/>
-                                                    <ColumnDefinition Width="12"/>
-                                                    <ColumnDefinition Width="120"/>
-                                                    <ColumnDefinition Width="12"/>
-                                                    <ColumnDefinition Width="120"/>
-                                                    <ColumnDefinition Width="12"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <Border Grid.Column="0" Style="{StaticResource InsetCard}">
+                                            <WrapPanel Grid.Row="1" Margin="0,18,0,0">
+                                                <Border Width="120" Margin="0,0,12,12" Style="{StaticResource InsetCard}">
                                                     <StackPanel>
                                                         <TextBlock Text="Entries" Style="{StaticResource SectionEyebrow}"/>
                                                         <TextBlock Text="{Binding LogEntryCount}"
@@ -1322,7 +1264,7 @@
                                                     </StackPanel>
                                                 </Border>
 
-                                                <Border Grid.Column="2" Style="{StaticResource InsetCard}">
+                                                <Border Width="120" Margin="0,0,12,12" Style="{StaticResource InsetCard}">
                                                     <StackPanel>
                                                         <TextBlock Text="Warnings" Style="{StaticResource SectionEyebrow}"/>
                                                         <TextBlock Text="{Binding LogWarningCount}"
@@ -1333,7 +1275,7 @@
                                                     </StackPanel>
                                                 </Border>
 
-                                                <Border Grid.Column="4" Style="{StaticResource InsetCard}">
+                                                <Border Width="120" Margin="0,0,12,12" Style="{StaticResource InsetCard}">
                                                     <StackPanel>
                                                         <TextBlock Text="Errors" Style="{StaticResource SectionEyebrow}"/>
                                                         <TextBlock Text="{Binding LogErrorCount}"
@@ -1344,7 +1286,7 @@
                                                     </StackPanel>
                                                 </Border>
 
-                                                <Border Grid.Column="6" Style="{StaticResource InsetCard}">
+                                                <Border MinWidth="260" MaxWidth="420" Margin="0,0,0,12" Style="{StaticResource InsetCard}">
                                                     <StackPanel>
                                                         <TextBlock Text="Audit Snapshot" Style="{StaticResource SectionEyebrow}"/>
                                                         <TextBlock Text="{Binding ActivitySummaryText}"
@@ -1362,7 +1304,7 @@
                                                                    MaxHeight="34"/>
                                                     </StackPanel>
                                                 </Border>
-                                            </Grid>
+                                            </WrapPanel>
 
                                             <Border Grid.Row="2"
                                                     Margin="0,18,0,0"
@@ -1396,11 +1338,9 @@
                                                         </TextBox>
                                                     </ScrollViewer>
 
-                                                    <Border Background="#5509090B"
-                                                            CornerRadius="14"
-                                                            IsHitTestVisible="False">
+                                                    <Border IsHitTestVisible="False">
                                                         <Border.Style>
-                                                            <Style TargetType="Border">
+                                                            <Style TargetType="Border" BasedOn="{StaticResource EmptyStateCard}">
                                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding LogEntryCount}" Value="0">
@@ -1410,16 +1350,25 @@
                                                             </Style>
                                                         </Border.Style>
                                                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                            <TextBlock Text="No activity captured yet"
-                                                                       Foreground="{StaticResource TextPrimary}"
-                                                                       FontSize="22"
-                                                                       FontWeight="SemiBold"
-                                                                       HorizontalAlignment="Center"/>
+                                                            <Border Width="48"
+                                                                    Height="48"
+                                                                    Background="{StaticResource AccentBg}"
+                                                                    BorderBrush="{StaticResource BorderLight}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="24">
+                                                                <TextBlock Text="i"
+                                                                           Foreground="{StaticResource Accent}"
+                                                                           FontSize="20"
+                                                                           FontWeight="SemiBold"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"/>
+                                                            </Border>
+                                                            <TextBlock Margin="0,16,0,0"
+                                                                       Text="No activity captured yet"
+                                                                       Style="{StaticResource EmptyStateTitle}"/>
                                                             <TextBlock Text="Run checks or actions and this workspace will keep a local, exportable audit trail of what happened."
                                                                        Margin="0,10,0,0"
-                                                                       Style="{StaticResource BodyCopy}"
-                                                                       TextAlignment="Center"
-                                                                       MaxWidth="380"/>
+                                                                       Style="{StaticResource EmptyStateBody}"/>
                                                         </StackPanel>
                                                     </Border>
                                                 </Grid>
@@ -1440,23 +1389,7 @@
                                         </Grid>
                                     </TabItem>
 
-                                    <TabItem Style="{StaticResource WorkspaceTabItem}">
-                                        <TabItem.Header>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="Benchmarks" VerticalAlignment="Center"/>
-                                                <Border Margin="8,0,0,0"
-                                                        Padding="8,3"
-                                                        Background="{StaticResource BgMedium}"
-                                                        BorderBrush="{Binding BenchmarkTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="999">
-                                                    <TextBlock Text="{Binding BenchmarkTabBadgeText}"
-                                                               Foreground="{Binding BenchmarkTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                               FontSize="10.5"
-                                                               FontWeight="SemiBold"/>
-                                                </Border>
-                                            </StackPanel>
-                                        </TabItem.Header>
+                                    <TabItem Style="{StaticResource WorkspaceTabItem}" Header="Benchmark">
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
@@ -1464,25 +1397,34 @@
                                             </Grid.RowDefinitions>
 
                                             <Border Style="{StaticResource InsetCard}">
-                                                <TextBlock Text="Use a before/after benchmark pass to validate whether the native stack helped this exact machine, not just the headline numbers."
+                                                <TextBlock Text="Validate the patch with a before-and-after run from this machine."
                                                            Style="{StaticResource BodyCopy}"/>
                                             </Border>
 
                                             <Border x:Name="BenchmarkEmptyState"
                                                     Grid.Row="1"
                                                     Margin="0,16,0,0"
-                                                    Style="{StaticResource InsetCard}">
+                                                    Style="{StaticResource EmptyStateCard}">
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <TextBlock Text="No benchmark history yet"
-                                                               Foreground="{StaticResource TextPrimary}"
-                                                               FontSize="22"
-                                                               FontWeight="SemiBold"
-                                                               HorizontalAlignment="Center"/>
+                                                    <Border Width="48"
+                                                            Height="48"
+                                                            Background="{StaticResource AccentBg}"
+                                                            BorderBrush="{StaticResource BorderLight}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="24">
+                                                        <TextBlock Text="B"
+                                                                   Foreground="{StaticResource Accent}"
+                                                                   FontSize="20"
+                                                                   FontWeight="SemiBold"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <TextBlock Margin="0,16,0,0"
+                                                               Text="No benchmark history yet"
+                                                               Style="{StaticResource EmptyStateTitle}"/>
                                                     <TextBlock Text="Run a benchmark before or after applying the patch to build a machine-specific comparison."
                                                                Margin="0,10,0,0"
-                                                               Style="{StaticResource BodyCopy}"
-                                                               TextAlignment="Center"
-                                                               MaxWidth="360"/>
+                                                               Style="{StaticResource EmptyStateBody}"/>
                                                     <Button Content="Run Benchmark"
                                                             Margin="0,18,0,0"
                                                             HorizontalAlignment="Center"
@@ -1501,23 +1443,7 @@
                                         </Grid>
                                     </TabItem>
 
-                                    <TabItem Style="{StaticResource WorkspaceTabItem}">
-                                        <TabItem.Header>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="Telemetry" VerticalAlignment="Center"/>
-                                                <Border Margin="8,0,0,0"
-                                                        Padding="8,3"
-                                                        Background="{StaticResource BgMedium}"
-                                                        BorderBrush="{Binding TelemetryTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="999">
-                                                    <TextBlock Text="{Binding TelemetryTabBadgeText}"
-                                                               Foreground="{Binding TelemetryTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                               FontSize="10.5"
-                                                               FontWeight="SemiBold"/>
-                                                </Border>
-                                            </StackPanel>
-                                        </TabItem.Header>
+                                    <TabItem Style="{StaticResource WorkspaceTabItem}" Header="Telemetry">
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
@@ -1525,47 +1451,53 @@
                                             </Grid.RowDefinitions>
 
                                             <Border Style="{StaticResource InsetCard}">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-
-                                                    <StackPanel>
-                                                        <TextBlock Text="Drive telemetry pairs live SMART polling with a rolling seven-day history so you can spot thermal drift or endurance changes with context."
+                                                <WrapPanel>
+                                                    <StackPanel MaxWidth="460"
+                                                                Margin="0,0,18,12">
+                                                        <TextBlock Text="Capture a fresh SMART snapshot and compare it against recent local history."
                                                                    Style="{StaticResource BodyCopy}"/>
                                                     </StackPanel>
 
-                                                    <Button Grid.Column="1"
-                                                            Margin="18,0,0,0"
+                                                    <Button Margin="0,0,0,12"
                                                             VerticalAlignment="Center"
                                                             Content="Capture Snapshot"
                                                             Style="{StaticResource SecondaryButton}"
                                                             AutomationProperties.Name="Capture telemetry snapshot"
+                                                            ToolTip="Poll the currently selected NVMe drive again and refresh the local telemetry view."
                                                             Click="RefreshTelemetry_Click"/>
-                                                </Grid>
+                                                </WrapPanel>
                                             </Border>
 
                                             <Border x:Name="TelemetryEmptyState"
                                                     Grid.Row="1"
                                                     Margin="0,16,0,0"
-                                                    Style="{StaticResource InsetCard}">
+                                                    Style="{StaticResource EmptyStateCard}">
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <TextBlock Text="No NVMe telemetry source available"
-                                                               Foreground="{StaticResource TextPrimary}"
-                                                               FontSize="22"
-                                                               FontWeight="SemiBold"
-                                                               HorizontalAlignment="Center"/>
+                                                    <Border Width="48"
+                                                            Height="48"
+                                                            Background="{StaticResource AccentBg}"
+                                                            BorderBrush="{StaticResource BorderLight}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="24">
+                                                        <TextBlock Text="T"
+                                                                   Foreground="{StaticResource Accent}"
+                                                                   FontSize="20"
+                                                                   FontWeight="SemiBold"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <TextBlock Margin="0,16,0,0"
+                                                               Text="No NVMe telemetry source available"
+                                                               Style="{StaticResource EmptyStateTitle}"/>
                                                     <TextBlock Text="This workspace activates when the current scan finds at least one NVMe drive that Windows can surface for health checks."
                                                                Margin="0,10,0,0"
-                                                               Style="{StaticResource BodyCopy}"
-                                                               TextAlignment="Center"
-                                                               MaxWidth="420"/>
-                                                    <Button Content="Refresh Checks"
+                                                               Style="{StaticResource EmptyStateBody}"/>
+                                                    <Button Content="Refresh Readiness"
                                                             Margin="0,18,0,0"
                                                             HorizontalAlignment="Center"
                                                             Style="{StaticResource SecondaryButton}"
                                                             AutomationProperties.Name="Refresh readiness checks"
+                                                            ToolTip="Run readiness checks again and rescan hardware inventory (F5)."
                                                             Command="{Binding RefreshCommand}"/>
                                                 </StackPanel>
                                             </Border>
@@ -1579,23 +1511,7 @@
                                         </Grid>
                                     </TabItem>
 
-                                    <TabItem Style="{StaticResource WorkspaceTabItem}">
-                                        <TabItem.Header>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="Recovery" VerticalAlignment="Center"/>
-                                                <Border Margin="8,0,0,0"
-                                                        Padding="8,3"
-                                                        Background="{StaticResource BgMedium}"
-                                                        BorderBrush="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="999">
-                                                    <TextBlock Text="{Binding RecoveryTabBadgeText}"
-                                                               Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                               FontSize="10.5"
-                                                               FontWeight="SemiBold"/>
-                                                </Border>
-                                            </StackPanel>
-                                        </TabItem.Header>
+                                    <TabItem Style="{StaticResource WorkspaceTabItem}" Header="Recovery">
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
@@ -1605,14 +1521,10 @@
                                             </Grid.RowDefinitions>
 
                                             <Border Style="{StaticResource InsetCard}">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-
-                                                    <StackPanel>
-                                                        <TextBlock Text="Recovery artifacts keep rollback, validation, and support handoffs calm when something changes after the patch."
+                                                <WrapPanel>
+                                                    <StackPanel MaxWidth="430"
+                                                                Margin="0,0,18,12">
+                                                        <TextBlock Text="Keep rollback files and support exports close before you restart or hand off the machine."
                                                                    Style="{StaticResource BodyCopy}"/>
                                                         <TextBlock Text="{Binding RecoveryWorkspaceSummaryText}"
                                                                    Margin="0,10,0,0"
@@ -1622,27 +1534,25 @@
                                                                    TextWrapping="Wrap"/>
                                                     </StackPanel>
 
-                                                    <StackPanel Grid.Column="1"
-                                                                Margin="18,0,0,0"
-                                                                Orientation="Horizontal"
-                                                                VerticalAlignment="Center">
+                                                    <WrapPanel VerticalAlignment="Center">
                                                         <Button Content="Refresh Assets"
-                                                                Margin="0,0,10,0"
+                                                                Margin="0,0,10,10"
                                                                 Style="{StaticResource SecondaryButton}"
                                                                 AutomationProperties.Name="Refresh recovery assets"
+                                                                ToolTip="Rescan the working folder for recovery kits, verification scripts, and diagnostics."
                                                                 Command="{Binding RefreshRecoveryAssetsCommand}"/>
                                                         <Button Content="Open Data Folder"
+                                                                Margin="0,0,0,10"
                                                                 Style="{StaticResource SecondaryButton}"
                                                                 AutomationProperties.Name="Open data folder"
+                                                                ToolTip="Open the working folder that stores recovery exports and diagnostics."
                                                                 Command="{Binding OpenDataFolderCommand}"/>
-                                                    </StackPanel>
-                                                </Grid>
+                                                    </WrapPanel>
+                                                </WrapPanel>
                                             </Border>
 
-                                            <UniformGrid Grid.Row="1"
-                                                         Columns="3"
-                                                         Margin="0,16,0,0">
-                                                <Border Style="{StaticResource InsetCard}" Margin="0,0,12,0">
+                                            <WrapPanel Grid.Row="1" Margin="0,16,0,0">
+                                                <Border MinWidth="220" MaxWidth="260" Margin="0,0,12,12" Style="{StaticResource InsetCard}">
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="Auto"/>
@@ -1677,7 +1587,7 @@
                                                     </Grid>
                                                 </Border>
 
-                                                <Border Style="{StaticResource InsetCard}" Margin="0,0,12,0">
+                                                <Border MinWidth="220" MaxWidth="260" Margin="0,0,12,12" Style="{StaticResource InsetCard}">
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="Auto"/>
@@ -1712,7 +1622,7 @@
                                                     </Grid>
                                                 </Border>
 
-                                                <Border Style="{StaticResource InsetCard}">
+                                                <Border MinWidth="220" MaxWidth="260" Margin="0,0,0,12" Style="{StaticResource InsetCard}">
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="Auto"/>
@@ -1746,7 +1656,7 @@
                                                         </StackPanel>
                                                     </Grid>
                                                 </Border>
-                                            </UniformGrid>
+                                            </WrapPanel>
 
                                             <Grid Grid.Row="2" Margin="0,16,0,0">
                                                 <Grid.RowDefinitions>
@@ -1756,121 +1666,211 @@
                                                 </Grid.RowDefinitions>
 
                                                 <Border Style="{StaticResource InsetCard}" Margin="0,0,0,14">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*"/>
-                                                            <ColumnDefinition Width="Auto"/>
-                                                        </Grid.ColumnDefinitions>
+                                                    <StackPanel>
+                                                        <WrapPanel>
+                                                            <StackPanel MaxWidth="500"
+                                                                        Margin="0,0,18,10">
+                                                                <TextBlock Text="Recovery Kit" Style="{StaticResource SectionEyebrow}"/>
+                                                                <TextBlock Text="Offline rollback files for Windows and WinRE."
+                                                                           Margin="0,8,0,0"
+                                                                           Style="{StaticResource BodyCopy}"/>
+                                                            </StackPanel>
 
-                                                        <StackPanel>
-                                                            <TextBlock Text="Recovery Kit" Style="{StaticResource SectionEyebrow}"/>
-                                                            <TextBlock Text="Offline rollback files for Windows and WinRE."
-                                                                       Margin="0,8,0,0"
-                                                                       Style="{StaticResource BodyCopy}"/>
-                                                            <TextBlock Text="{Binding RecoveryKitStatusText}"
-                                                                       Margin="0,12,0,0"
-                                                                       Foreground="{StaticResource TextSecondary}"
-                                                                       FontSize="12"
-                                                                       TextWrapping="Wrap"/>
-                                                        </StackPanel>
+                                                            <Border Margin="0,0,0,10">
+                                                                <Border.Style>
+                                                                    <Style TargetType="Border" BasedOn="{StaticResource StatusChipBorder}">
+                                                                        <Setter Property="Background" Value="{StaticResource YellowBg}"/>
+                                                                        <Setter Property="BorderBrush" Value="{StaticResource Yellow}"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding HasRecoveryKit}" Value="True">
+                                                                                <Setter Property="Background" Value="{StaticResource GreenBg}"/>
+                                                                                <Setter Property="BorderBrush" Value="{StaticResource Green}"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Border.Style>
+                                                                <TextBlock>
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource StatusChipText}">
+                                                                            <Setter Property="Text" Value="Missing"/>
+                                                                            <Setter Property="Foreground" Value="{StaticResource Yellow}"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding HasRecoveryKit}" Value="True">
+                                                                                    <Setter Property="Text" Value="Ready"/>
+                                                                                    <Setter Property="Foreground" Value="{StaticResource Green}"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                            </Border>
+                                                        </WrapPanel>
 
-                                                        <StackPanel Grid.Column="1"
-                                                                    Margin="18,0,0,0"
-                                                                    VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding RecoveryKitStatusText}"
+                                                                   Margin="0,2,0,0"
+                                                                   Foreground="{StaticResource TextSecondary}"
+                                                                   FontSize="12"
+                                                                   TextWrapping="Wrap"/>
+
+                                                        <WrapPanel Margin="0,16,0,0"
+                                                                   ItemHeight="40">
                                                             <Button Content="Open Kit Folder"
+                                                                    Margin="0,0,10,10"
                                                                     Style="{StaticResource SecondaryButton}"
+                                                                    ToolTip="Open the most recent recovery kit folder. Available after a kit has been generated or detected."
                                                                     AutomationProperties.Name="Open recovery kit folder"
                                                                     IsEnabled="{Binding HasRecoveryKit}"
                                                                     Command="{Binding OpenLatestRecoveryKitCommand}"/>
                                                             <Button Content="Create Fresh Copy"
-                                                                    Margin="0,10,0,0"
+                                                                    Margin="0,0,0,10"
                                                                     Style="{StaticResource SecondaryButton}"
+                                                                    ToolTip="Export a fresh recovery kit so rollback stays available even if this install becomes unbootable."
                                                                     AutomationProperties.Name="Create recovery kit copy"
                                                                     IsEnabled="{Binding ButtonsEnabled}"
                                                                     Command="{Binding ExportRecoveryKitCommand}"/>
-                                                        </StackPanel>
-                                                    </Grid>
+                                                        </WrapPanel>
+                                                    </StackPanel>
                                                 </Border>
 
                                                 <Border Grid.Row="1" Style="{StaticResource InsetCard}" Margin="0,0,0,14">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*"/>
-                                                            <ColumnDefinition Width="Auto"/>
-                                                        </Grid.ColumnDefinitions>
+                                                    <StackPanel>
+                                                        <WrapPanel>
+                                                            <StackPanel MaxWidth="500"
+                                                                        Margin="0,0,18,10">
+                                                                <TextBlock Text="Verification Script" Style="{StaticResource SectionEyebrow}"/>
+                                                                <TextBlock Text="Readable post-reboot confirmation for the patch and Safe Mode protections."
+                                                                           Margin="0,8,0,0"
+                                                                           Style="{StaticResource BodyCopy}"/>
+                                                            </StackPanel>
 
-                                                        <StackPanel>
-                                                            <TextBlock Text="Verification Script" Style="{StaticResource SectionEyebrow}"/>
-                                                            <TextBlock Text="Readable post-reboot confirmation for the patch and Safe Mode protections."
-                                                                       Margin="0,8,0,0"
-                                                                       Style="{StaticResource BodyCopy}"/>
-                                                            <TextBlock Text="{Binding VerificationScriptStatusText}"
-                                                                       Margin="0,12,0,0"
-                                                                       Foreground="{StaticResource TextSecondary}"
-                                                                       FontSize="12"
-                                                                       TextWrapping="Wrap"/>
-                                                        </StackPanel>
+                                                            <Border Margin="0,0,0,10">
+                                                                <Border.Style>
+                                                                    <Style TargetType="Border" BasedOn="{StaticResource StatusChipBorder}">
+                                                                        <Setter Property="Background" Value="{StaticResource YellowBg}"/>
+                                                                        <Setter Property="BorderBrush" Value="{StaticResource Yellow}"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding HasVerificationScript}" Value="True">
+                                                                                <Setter Property="Background" Value="{StaticResource GreenBg}"/>
+                                                                                <Setter Property="BorderBrush" Value="{StaticResource Green}"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Border.Style>
+                                                                <TextBlock>
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource StatusChipText}">
+                                                                            <Setter Property="Text" Value="Missing"/>
+                                                                            <Setter Property="Foreground" Value="{StaticResource Yellow}"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding HasVerificationScript}" Value="True">
+                                                                                    <Setter Property="Text" Value="Ready"/>
+                                                                                    <Setter Property="Foreground" Value="{StaticResource Green}"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                            </Border>
+                                                        </WrapPanel>
 
-                                                        <StackPanel Grid.Column="1"
-                                                                    Margin="18,0,0,0"
-                                                                    VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding VerificationScriptStatusText}"
+                                                                   Margin="0,2,0,0"
+                                                                   Foreground="{StaticResource TextSecondary}"
+                                                                   FontSize="12"
+                                                                   TextWrapping="Wrap"/>
+
+                                                        <WrapPanel Margin="0,16,0,0"
+                                                                   ItemHeight="40">
                                                             <Button Content="Review Script"
+                                                                    Margin="0,0,10,10"
                                                                     Style="{StaticResource SecondaryButton}"
+                                                                    ToolTip="Open the latest verification script. Available after a script has been generated or detected."
                                                                     AutomationProperties.Name="Review verification script"
                                                                     IsEnabled="{Binding HasVerificationScript}"
                                                                     Command="{Binding OpenVerificationScriptCommand}"/>
                                                             <Button Content="Generate Script"
-                                                                    Margin="0,10,0,0"
+                                                                    Margin="0,0,0,10"
                                                                     Style="{StaticResource SecondaryButton}"
+                                                                    ToolTip="Create a post-reboot PowerShell checklist for the patch and Safe Mode keys."
                                                                     AutomationProperties.Name="Generate verification script"
                                                                     IsEnabled="{Binding ButtonsEnabled}"
                                                                     Command="{Binding GenerateVerificationScriptCommand}"/>
-                                                        </StackPanel>
-                                                    </Grid>
+                                                        </WrapPanel>
+                                                    </StackPanel>
                                                 </Border>
 
                                                 <Border Grid.Row="2" Style="{StaticResource InsetCard}">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*"/>
-                                                            <ColumnDefinition Width="Auto"/>
-                                                        </Grid.ColumnDefinitions>
+                                                    <StackPanel>
+                                                        <WrapPanel>
+                                                            <StackPanel MaxWidth="500"
+                                                                        Margin="0,0,18,10">
+                                                                <TextBlock Text="Diagnostics Report" Style="{StaticResource SectionEyebrow}"/>
+                                                                <TextBlock Text="Support-ready system context, health data, and change history in one local report."
+                                                                           Margin="0,8,0,0"
+                                                                           Style="{StaticResource BodyCopy}"/>
+                                                            </StackPanel>
 
-                                                        <StackPanel>
-                                                            <TextBlock Text="Diagnostics Report" Style="{StaticResource SectionEyebrow}"/>
-                                                            <TextBlock Text="Support-ready system context, health data, and change history in one local report."
-                                                                       Margin="0,8,0,0"
-                                                                       Style="{StaticResource BodyCopy}"/>
-                                                            <TextBlock Text="{Binding DiagnosticsReportStatusText}"
-                                                                       Margin="0,12,0,0"
-                                                                       Foreground="{StaticResource TextSecondary}"
-                                                                       FontSize="12"
-                                                                       TextWrapping="Wrap"/>
-                                                        </StackPanel>
+                                                            <Border Margin="0,0,0,10">
+                                                                <Border.Style>
+                                                                    <Style TargetType="Border" BasedOn="{StaticResource StatusChipBorder}">
+                                                                        <Setter Property="Background" Value="{StaticResource YellowBg}"/>
+                                                                        <Setter Property="BorderBrush" Value="{StaticResource Yellow}"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding HasDiagnosticsReport}" Value="True">
+                                                                                <Setter Property="Background" Value="{StaticResource GreenBg}"/>
+                                                                                <Setter Property="BorderBrush" Value="{StaticResource Green}"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Border.Style>
+                                                                <TextBlock>
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource StatusChipText}">
+                                                                            <Setter Property="Text" Value="Missing"/>
+                                                                            <Setter Property="Foreground" Value="{StaticResource Yellow}"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding HasDiagnosticsReport}" Value="True">
+                                                                                    <Setter Property="Text" Value="Ready"/>
+                                                                                    <Setter Property="Foreground" Value="{StaticResource Green}"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                            </Border>
+                                                        </WrapPanel>
 
-                                                        <StackPanel Grid.Column="1"
-                                                                    Margin="18,0,0,0"
-                                                                    VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding DiagnosticsReportStatusText}"
+                                                                   Margin="0,2,0,0"
+                                                                   Foreground="{StaticResource TextSecondary}"
+                                                                   FontSize="12"
+                                                                   TextWrapping="Wrap"/>
+
+                                                        <WrapPanel Margin="0,16,0,0"
+                                                                   ItemHeight="40">
                                                             <Button Content="Review Report"
+                                                                    Margin="0,0,10,10"
                                                                     Style="{StaticResource SecondaryButton}"
+                                                                    ToolTip="Open the latest diagnostics report. Available after a report has been generated or detected."
                                                                     AutomationProperties.Name="Review diagnostics report"
                                                                     IsEnabled="{Binding HasDiagnosticsReport}"
                                                                     Command="{Binding OpenLatestDiagnosticsReportCommand}"/>
                                                             <Button Content="Export Report"
-                                                                    Margin="0,10,0,0"
+                                                                    Margin="0,0,10,10"
                                                                     Style="{StaticResource SecondaryButton}"
+                                                                    ToolTip="Export a fresh diagnostics report with health data, configuration, and recent activity."
                                                                     AutomationProperties.Name="Export diagnostics report"
                                                                     IsEnabled="{Binding ButtonsEnabled}"
                                                                     Command="{Binding ExportDiagnosticsCommand}"/>
                                                             <Button Content="Support Bundle (ZIP)"
-                                                                    Margin="0,10,0,0"
+                                                                    Margin="0,0,0,10"
                                                                     Style="{StaticResource SecondaryButton}"
-                                                                    ToolTip="Bundle the diagnostics report, config, crash logs, recent registry backups, and SQLite database into a single shareable zip."
+                                                                    ToolTip="Bundle the diagnostics report, config, crash logs, recent registry backups, and SQLite database into a single shareable ZIP."
                                                                     AutomationProperties.Name="Export support bundle zip"
                                                                     IsEnabled="{Binding ButtonsEnabled}"
                                                                     Command="{Binding ExportSupportBundleCommand}"/>
-                                                        </StackPanel>
-                                                    </Grid>
+                                                        </WrapPanel>
+                                                    </StackPanel>
                                                 </Border>
                                             </Grid>
 
@@ -1881,31 +1881,22 @@
                                                     BorderBrush="{StaticResource Border}"
                                                     BorderThickness="1"
                                                     CornerRadius="12">
-                                                <TextBlock Text="For the safest rollback path, keep the recovery kit somewhere outside this machine before you restart or leave the system unattended."
-                                                           Foreground="{StaticResource Yellow}"
-                                                           FontSize="12"
-                                                           TextWrapping="Wrap"/>
+                                                <StackPanel>
+                                                    <TextBlock Text="Keep One Copy Off-Device"
+                                                               Foreground="{StaticResource Yellow}"
+                                                               FontSize="11.5"
+                                                               FontWeight="SemiBold"/>
+                                                    <TextBlock Text="For the safest rollback path, keep the recovery kit somewhere outside this machine before you restart or leave the system unattended."
+                                                               Margin="0,6,0,0"
+                                                               Foreground="{StaticResource TextSecondary}"
+                                                               FontSize="12"
+                                                               TextWrapping="Wrap"/>
+                                                </StackPanel>
                                             </Border>
                                         </Grid>
                                     </TabItem>
 
-                                    <TabItem Style="{StaticResource WorkspaceTabItem}">
-                                        <TabItem.Header>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="Tuning" VerticalAlignment="Center"/>
-                                                <Border Margin="8,0,0,0"
-                                                        Padding="8,3"
-                                                        Background="{StaticResource BgMedium}"
-                                                        BorderBrush="{StaticResource Border}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="999">
-                                                    <TextBlock Text="Advanced"
-                                                               Foreground="{StaticResource TextDim}"
-                                                               FontSize="10.5"
-                                                               FontWeight="SemiBold"/>
-                                                </Border>
-                                            </StackPanel>
-                                        </TabItem.Header>
+                                    <TabItem Style="{StaticResource WorkspaceTabItem}" Header="Tuning">
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
@@ -1913,7 +1904,7 @@
                                             </Grid.RowDefinitions>
 
                                             <Border Style="{StaticResource InsetCard}">
-                                                <TextBlock Text="Advanced StorNVMe registry tuning is intentionally separated from the patch workflow. Use it only when you want to shape queue depth and power behavior beyond the default experience."
+                                                <TextBlock Text="Advanced StorNVMe tuning sits outside the default patch path. Use it only when you need deeper control."
                                                            Style="{StaticResource BodyCopy}"/>
                                             </Border>
 
@@ -1932,27 +1923,30 @@
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Foreground="{StaticResource TextDim}"
                                            FontSize="11"
-                                           Text="Careful driver changes work best when you verify, back up, apply, reboot, and confirm in that order."/>
-                                <StackPanel Orientation="Horizontal"
-                                            Margin="0,8,0,0"
-                                            Visibility="{Binding ProgressVisible, Converter={StaticResource BoolVis}}">
+                                           Text="Verify, back up, apply, reboot, confirm."/>
+                                <WrapPanel Margin="0,8,0,0"
+                                           Visibility="{Binding ProgressVisible, Converter={StaticResource BoolVis}}">
                                     <TextBlock Text="{Binding ProgressText}"
+                                               Margin="0,0,12,8"
                                                Foreground="{StaticResource TextSecondary}"
                                                FontSize="11"
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis"
-                                               Width="420"/>
+                                               MaxWidth="420"/>
                                     <ProgressBar Width="180"
                                                  Height="6"
-                                                 Margin="12,0,0,0"
+                                                 Margin="0,4,0,8"
                                                  VerticalAlignment="Center"
                                                  Value="{Binding ProgressValue}"
                                                  Foreground="{StaticResource Accent}"
                                                  Template="{StaticResource RoundProgress}"/>
-                                </StackPanel>
+                                </WrapPanel>
                             </StackPanel>
 
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <WrapPanel x:Name="FooterActionsPanel"
+                                       Orientation="Horizontal"
+                                       HorizontalAlignment="Right"
+                                       ItemHeight="40">
                                 <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextDim}">
                                     <Hyperlink Foreground="{StaticResource TextMuted}" TextDecorations="None" Click="GitHub_Click">GitHub</Hyperlink>
                                 </TextBlock>
@@ -1965,13 +1959,14 @@
                                         Style="{StaticResource SecondaryButton}"
                                         AutomationProperties.Name="Open data folder"
                                         Command="{Binding OpenDataFolderCommand}"/>
-                                <Button Content="Refresh Checks"
+                                <Button Content="Refresh Readiness"
                                         Margin="10,0,0,0"
                                         Style="{StaticResource SecondaryButton}"
                                         AutomationProperties.Name="Refresh readiness checks"
+                                        ToolTip="Run readiness checks again and rescan hardware inventory (F5)."
                                         Command="{Binding RefreshCommand}"
                                         IsEnabled="{Binding ButtonsEnabled}"/>
-                            </StackPanel>
+                            </WrapPanel>
                         </Grid>
                     </Border>
                 </Grid>
@@ -1980,7 +1975,8 @@
                         Background="#AA09090B"
                         Visibility="{Binding IsLoading, Converter={StaticResource BoolVis}}">
                     <Grid>
-                        <Border Width="520"
+                        <Border MaxWidth="560"
+                                Margin="24"
                                 Padding="28,26"
                                 Background="{StaticResource BgDark}"
                                 BorderBrush="{StaticResource BorderLight}"
@@ -1993,11 +1989,11 @@
                             </Border.Effect>
 
                             <StackPanel>
-                                <TextBlock Text="Refreshing system readiness"
+                                <TextBlock Text="Refreshing readiness"
                                            Foreground="{StaticResource TextPrimary}"
                                            FontSize="26"
                                            FontWeight="SemiBold"/>
-                                <TextBlock Text="Checking the current Windows build, active storage path, NVMe inventory, and rollback safety before any driver action is exposed."
+                                <TextBlock Text="Checking the current Windows build, storage path, NVMe inventory, and rollback safety before driver actions unlock."
                                            Margin="0,12,0,0"
                                            Style="{StaticResource BodyCopy}"/>
 
@@ -2006,8 +2002,8 @@
                                              Foreground="{StaticResource Accent}"
                                              Template="{StaticResource RoundProgressIndeterminate}"/>
 
-                                <UniformGrid Columns="3" Margin="0,22,0,0">
-                                    <Border Margin="0,0,10,0" Style="{StaticResource InsetCard}">
+                                <WrapPanel Margin="0,22,0,0">
+                                    <Border Width="150" Margin="0,0,12,12" Style="{StaticResource InsetCard}">
                                         <StackPanel>
                                             <TextBlock Text="Build &amp; Driver" Style="{StaticResource SectionEyebrow}"/>
                                             <TextBlock Text="Verifying Windows compatibility and the active NVMe stack."
@@ -2015,7 +2011,7 @@
                                                        Style="{StaticResource BodyCopy}"/>
                                         </StackPanel>
                                     </Border>
-                                    <Border Margin="0,0,10,0" Style="{StaticResource InsetCard}">
+                                    <Border Width="150" Margin="0,0,12,12" Style="{StaticResource InsetCard}">
                                         <StackPanel>
                                             <TextBlock Text="Drive Inventory" Style="{StaticResource SectionEyebrow}"/>
                                             <TextBlock Text="Enumerating local disks, NVMe health signals, and migration status."
@@ -2023,7 +2019,7 @@
                                                        Style="{StaticResource BodyCopy}"/>
                                         </StackPanel>
                                     </Border>
-                                    <Border Style="{StaticResource InsetCard}">
+                                    <Border Width="150" Style="{StaticResource InsetCard}">
                                         <StackPanel>
                                             <TextBlock Text="Rollback Safety" Style="{StaticResource SectionEyebrow}"/>
                                             <TextBlock Text="Reviewing recovery prerequisites, warnings, and compatibility blockers."
@@ -2031,7 +2027,7 @@
                                                        Style="{StaticResource BodyCopy}"/>
                                         </StackPanel>
                                     </Border>
-                                </UniformGrid>
+                                </WrapPanel>
 
                                 <TextBlock Text="The first pass can take a few seconds while Windows storage and WMI data settle."
                                            Margin="0,18,0,0"

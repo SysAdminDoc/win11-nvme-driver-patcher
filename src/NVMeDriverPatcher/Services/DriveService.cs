@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Management;
 using System.Text.RegularExpressions;
 using NVMeDriverPatcher.Models;
@@ -193,16 +194,18 @@ public static class DriveService
             }
             catch { }
 
-            // Firmware versions
+            // Firmware versions keyed by OS disk number so the UI can match them reliably.
             try
             {
-                using var physSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", "SELECT DeviceId, FirmwareVersion FROM MSFT_PhysicalDisk WHERE BusType=17");
-                foreach (var pd in Enumerate(physSearch))
+                using var diskSearch = new ManagementObjectSearcher(
+                    @"root\Microsoft\Windows\Storage",
+                    "SELECT Number, FirmwareVersion FROM MSFT_Disk WHERE BusType=17");
+                foreach (var disk in Enumerate(diskSearch))
                 {
-                    var fw = pd["FirmwareVersion"]?.ToString();
-                    var id = pd["DeviceId"]?.ToString() ?? "";
-                    if (!string.IsNullOrEmpty(fw) && !string.IsNullOrEmpty(id))
-                        info.FirmwareVersions[id] = fw;
+                    var diskNumber = AsInt(disk["Number"]);
+                    var fw = disk["FirmwareVersion"]?.ToString();
+                    if (diskNumber is not null && !string.IsNullOrWhiteSpace(fw))
+                        info.FirmwareVersions[diskNumber.Value.ToString(CultureInfo.InvariantCulture)] = fw;
                 }
             }
             catch { }
@@ -220,28 +223,30 @@ public static class DriveService
         var health = new Dictionary<string, NVMeHealthInfo>();
         try
         {
-            using var search = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
-                "SELECT * FROM MSFT_PhysicalDisk WHERE BusType=17 OR MediaType=4");
+            using var search = new ManagementObjectSearcher(
+                @"root\Microsoft\Windows\Storage",
+                "SELECT Number, ObjectId, HealthStatus, OperationalStatus FROM MSFT_Disk WHERE BusType=17");
 
-            foreach (var pd in Enumerate(search))
+            foreach (var disk in Enumerate(search))
             {
-                string diskNum = pd["DeviceId"]?.ToString() ?? "";
-                if (string.IsNullOrEmpty(diskNum)) continue;
+                int? diskNumber = AsInt(disk["Number"]);
+                if (diskNumber is null) continue;
 
+                var diskKey = diskNumber.Value.ToString(CultureInfo.InvariantCulture);
                 var info = new NVMeHealthInfo
                 {
-                    HealthStatus = pd["HealthStatus"]?.ToString() ?? "Unknown",
-                    OperationalStatus = pd["OperationalStatus"]?.ToString() ?? "Unknown"
+                    HealthStatus = DescribeHealthStatus(disk["HealthStatus"]),
+                    OperationalStatus = DescribeOperationalStatus(disk["OperationalStatus"])
                 };
 
-                // StorageReliabilityCounter via CIM
                 try
                 {
-                    var objectId = (pd["ObjectId"]?.ToString() ?? "").Replace("'", "''");
+                    var objectId = EscapeWqlLiteral(disk["ObjectId"]?.ToString());
                     if (objectId.Length > 0)
                     {
-                        using var relSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
-                            $"ASSOCIATORS OF {{MSFT_PhysicalDisk.ObjectId='{objectId}'}} WHERE AssocClass=MSFT_PhysicalDiskToStorageReliabilityCounter");
+                        using var relSearch = new ManagementObjectSearcher(
+                            @"root\Microsoft\Windows\Storage",
+                            $"ASSOCIATORS OF {{MSFT_Disk.ObjectId='{objectId}'}} WHERE AssocClass=MSFT_DiskToStorageReliabilityCounter");
                         foreach (var rel in Enumerate(relSearch))
                         {
                             int? temp = AsInt(rel["Temperature"]);
@@ -261,12 +266,16 @@ public static class DriveService
 
                             int? writeErr = AsInt(rel["WriteErrorsTotal"]);
                             if (writeErr is not null) info.WriteErrors = writeErr.Value;
+
+                            break;
                         }
                     }
                 }
                 catch { }
 
                 var tips = new List<string> { $"Health: {info.HealthStatus}" };
+                if (!string.IsNullOrWhiteSpace(info.OperationalStatus) && info.OperationalStatus != "Unknown")
+                    tips.Add($"Status: {info.OperationalStatus}");
                 if (info.Temperature != "N/A") tips.Add($"Temp: {info.Temperature}");
                 if (info.Wear != "N/A") tips.Add($"Life remaining: {info.Wear}");
                 if (info.PowerOnHours != "N/A") tips.Add($"Power-on: {info.PowerOnHours}");
@@ -274,7 +283,7 @@ public static class DriveService
                 if (info.ReadErrors > 0) tips.Add($"Read errors: {info.ReadErrors}");
                 info.SmartTooltip = string.Join(" | ", tips);
 
-                health[diskNum] = info;
+                health[diskKey] = info;
             }
         }
         catch { }
@@ -345,9 +354,8 @@ public static class DriveService
         var result = new BypassIOResult();
         try
         {
-            var systemDrive = Environment.GetEnvironmentVariable("SystemDrive");
-            if (string.IsNullOrEmpty(systemDrive)) systemDrive = "C:";
-            var psi = new ProcessStartInfo("fsutil", $"bypassio state {systemDrive}\\")
+            var systemDrive = NormalizeDriveRoot(Environment.GetEnvironmentVariable("SystemDrive")) ?? "C:\\";
+            var psi = new ProcessStartInfo("fsutil", $"bypassio state {systemDrive}")
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -356,8 +364,9 @@ public static class DriveService
             };
             using var proc = Process.Start(psi);
             if (proc is null) return result;
-            // Read stdout asynchronously while we wait — guards against deadlock if the buffer fills.
+            // Read both pipes asynchronously so stderr can't block process exit on failure.
             var outputTask = proc.StandardOutput.ReadToEndAsync();
+            var errorTask = proc.StandardError.ReadToEndAsync();
             if (!proc.WaitForExit(10000))
             {
                 try { proc.Kill(true); } catch { }
@@ -365,7 +374,16 @@ public static class DriveService
                 return result;
             }
             var output = outputTask.GetAwaiter().GetResult();
-            result.RawOutput = output.Trim();
+            var error = errorTask.GetAwaiter().GetResult();
+            result.RawOutput = string.IsNullOrWhiteSpace(error)
+                ? output.Trim()
+                : $"{output}{Environment.NewLine}{error}".Trim();
+
+            if (proc.ExitCode != 0 && string.IsNullOrWhiteSpace(result.RawOutput))
+            {
+                result.RawOutput = $"fsutil bypassio exited with code {proc.ExitCode}";
+                return result;
+            }
 
             if (output.Contains("is currently supported")) result.Supported = true;
             else if (output.Contains("is not currently supported")) result.Supported = false;
@@ -392,6 +410,92 @@ public static class DriveService
             result.RawOutput = $"Unable to check BypassIO: {ex.Message}";
         }
         return result;
+    }
+
+    private static string? NormalizeDriveRoot(string? drive)
+    {
+        if (string.IsNullOrWhiteSpace(drive))
+            return null;
+
+        drive = drive.Trim();
+        if (drive.Length >= 2 && char.IsLetter(drive[0]) && drive[1] == ':')
+            return $"{char.ToUpperInvariant(drive[0])}:\\";
+
+        return null;
+    }
+
+    private static string EscapeWqlLiteral(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("'", "''");
+
+    internal static string DescribeHealthStatus(object? value)
+    {
+        return AsInt(value) switch
+        {
+            0 => "Healthy",
+            1 => "Warning",
+            2 => "Unhealthy",
+            5 => "Unknown",
+            null => "Unknown",
+            var code => $"Code {code}"
+        };
+    }
+
+    internal static string DescribeOperationalStatus(object? value)
+    {
+        var codes = ExtractStatusCodes(value);
+        if (codes.Count == 0)
+            return "Unknown";
+
+        var labels = codes
+            .Select(code => code switch
+            {
+                0 => "Unknown",
+                1 => "Other",
+                2 => "OK",
+                3 => "Degraded",
+                4 => "Stressed",
+                5 => "Predictive Failure",
+                6 => "Error",
+                7 => "Non-Recoverable Error",
+                8 => "Starting",
+                9 => "Stopping",
+                10 => "Stopped",
+                11 => "In Service",
+                12 => "No Contact",
+                13 => "Lost Communication",
+                14 => "Aborted",
+                15 => "Dormant",
+                16 => "Supporting Entity In Error",
+                17 => "Completed",
+                18 => "Power Mode",
+                19 => "Relocating",
+                0xD000 => "Read-only",
+                0xD001 => "Incomplete",
+                _ => $"Code {code}"
+            })
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return string.Join(", ", labels);
+    }
+
+    private static List<int> ExtractStatusCodes(object? value)
+    {
+        if (value is null)
+            return [];
+
+        if (value is Array array)
+        {
+            return array
+                .Cast<object?>()
+                .Select(AsInt)
+                .Where(code => code is not null)
+                .Select(code => code!.Value)
+                .ToList();
+        }
+
+        var single = AsInt(value);
+        return single is null ? [] : [single.Value];
     }
 
     public static WindowsBuildDetails GetWindowsBuildDetails()

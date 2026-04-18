@@ -13,6 +13,15 @@ namespace NVMeDriverPatcher.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
+    private const string NoActivityYetText = "No activity in this session yet.";
+    private const string RemoveUnavailableText = "Remove stays unavailable until a patch or partial patch is present.";
+    private const string NoBackupHistoryText = "No registry backups are saved in the working folder yet.";
+    private const string NoSnapshotHistoryText = "No change snapshots saved yet.";
+    private const string NoBenchmarkHistoryText = "No benchmark runs saved yet.";
+    private const string NoRecoveryKitText = "No recovery kit is ready yet. Generate one before a risky reboot or remote handoff.";
+    private const string NoVerificationScriptText = "No verification script is ready yet. Generate one so post-reboot checks stay predictable.";
+    private const string NoDiagnosticsReportText = "No diagnostics report is saved yet. Export one when you need a support-ready snapshot.";
+
     public AppConfig Config { get; }
 
     // Dialog delegates (set by MainWindow.xaml.cs)
@@ -45,7 +54,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _logErrorCount;
     [ObservableProperty] private string _activitySummaryText = "Activity entries will appear here as checks and actions run.";
     [ObservableProperty] private string _logRetentionText = "Session logs stay local. Auto-save and Event Log settings shape how much audit trail is retained.";
-    [ObservableProperty] private string _latestActivityText = "No activity recorded yet.";
+    [ObservableProperty] private string _latestActivityText = NoActivityYetText;
     [ObservableProperty] private string _activityTabBadgeText = "Idle";
     [ObservableProperty] private string _activityTabBadgeColor = "#FF71717a";
     [ObservableProperty] private string _benchmarkTabBadgeText = "New";
@@ -69,7 +78,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _actionReadinessText = "Readiness checks will explain when apply or remove becomes available.";
     [ObservableProperty] private string _actionReadinessColor = "#FFA1B0C8";
     [ObservableProperty] private string _applyButtonTooltipText = "Readiness checks are still running.";
-    [ObservableProperty] private string _removeButtonTooltipText = "Nothing is staged to remove yet.";
+    [ObservableProperty] private string _removeButtonTooltipText = RemoveUnavailableText;
     [ObservableProperty] private string _nextStepTitle = "Running readiness checks";
     [ObservableProperty] private string _nextStepDescription = "Driver changes stay locked until Windows build support, drive visibility, and rollback safety are confirmed.";
     [ObservableProperty] private string _nextStepColor = "#FF60a5fa";
@@ -81,13 +90,13 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _nextStepSecondaryActionText = "";
     [ObservableProperty] private string _nextStepSecondaryActionId = "";
     [ObservableProperty] private bool _nextStepSecondaryActionEnabled;
-    [ObservableProperty] private string _backupHistoryText = "No registry backups saved in the working folder yet.";
-    [ObservableProperty] private string _snapshotHistoryText = "No change snapshots recorded yet.";
-    [ObservableProperty] private string _benchmarkHistoryText = "No benchmark history recorded yet.";
-    [ObservableProperty] private string _recoveryKitStatusText = "No local recovery kit has been prepared yet.";
-    [ObservableProperty] private string _verificationScriptStatusText = "No verification script is available yet.";
-    [ObservableProperty] private string _diagnosticsReportStatusText = "No diagnostics report has been exported yet.";
-    [ObservableProperty] private string _recoveryWorkspaceSummaryText = "Generate rollback and verification assets so the system can be reversed or confirmed without guesswork.";
+    [ObservableProperty] private string _backupHistoryText = NoBackupHistoryText;
+    [ObservableProperty] private string _snapshotHistoryText = NoSnapshotHistoryText;
+    [ObservableProperty] private string _benchmarkHistoryText = NoBenchmarkHistoryText;
+    [ObservableProperty] private string _recoveryKitStatusText = NoRecoveryKitText;
+    [ObservableProperty] private string _verificationScriptStatusText = NoVerificationScriptText;
+    [ObservableProperty] private string _diagnosticsReportStatusText = NoDiagnosticsReportText;
+    [ObservableProperty] private string _recoveryWorkspaceSummaryText = "Generate rollback, verification, and diagnostics assets so the system can be reversed or confirmed without guesswork.";
     [ObservableProperty] private bool _hasRecoveryKit;
     [ObservableProperty] private bool _hasVerificationScript;
     [ObservableProperty] private bool _hasDiagnosticsReport;
@@ -143,6 +152,7 @@ public partial class MainViewModel : ObservableObject
     // (PatchService.Install runs in Task.Run). Without this, concurrent Add() calls can
     // corrupt the underlying array and crash later reads with IndexOutOfRangeException.
     private readonly object _logHistoryLock = new();
+    private bool _hasLoggedSessionStart;
 
     // Set while the ctor is priming view-bound properties from config, so the change partials
     // don't immediately save config back out (triggering a pointless write on every startup).
@@ -243,7 +253,7 @@ public partial class MainViewModel : ObservableObject
         LogSuccessCount = 0;
         LogWarningCount = 0;
         LogErrorCount = 0;
-        LatestActivityText = "Log cleared. New activity will appear here.";
+        LatestActivityText = "Session activity cleared. New events will appear here.";
         UpdateActivitySummary();
         OnPropertyChanged(nameof(LogText));
     }
@@ -260,13 +270,20 @@ public partial class MainViewModel : ObservableObject
         ResetOverviewState();
         IsLoading = true;
         ButtonsEnabled = false;
-        Log($"{AppConfig.AppName} v{AppConfig.AppVersion} started");
-        Log($"Working directory: {Config.WorkingDir}");
-        Log("----------------------------------------");
-        Log("Running pre-flight checks...");
-
         EventLogService.Initialize(Config.WriteEventLog);
-        EventLogService.Write($"{AppConfig.AppName} v{AppConfig.AppVersion} started");
+        if (!_hasLoggedSessionStart)
+        {
+            Log($"{AppConfig.AppName} v{AppConfig.AppVersion} started");
+            Log($"Working directory: {Config.WorkingDir}");
+            Log("----------------------------------------");
+            EventLogService.Write($"{AppConfig.AppName} v{AppConfig.AppVersion} started");
+            _hasLoggedSessionStart = true;
+        }
+        else
+        {
+            Log("----------------------------------------");
+        }
+        Log("Running pre-flight checks...");
 
         // Post-reboot verification: evaluate now so the log captures the state at startup,
         // but defer any dialog until AFTER preflight has rendered. A modal dialog popping up
@@ -311,7 +328,7 @@ public partial class MainViewModel : ObservableObject
                     pendingVerification = null;
                     break;
                 case VerificationOutcome.StalePending:
-                    Log("Patch pending-verification flag is older than 30 days; clearing silently.", "DEBUG");
+                    Log($"Patch verification state is being cleared: {pendingVerification.Detail}", "DEBUG");
                     PatchVerificationService.Clear(Config, pendingVerification);
                     ConfigService.Save(Config);
                     pendingVerification = null;
@@ -747,7 +764,7 @@ public partial class MainViewModel : ObservableObject
         ActionReadinessText = "Readiness checks will explain when apply or remove becomes available.";
         ActionReadinessColor = "#FFA1B0C8";
         ApplyButtonTooltipText = "Readiness checks are still running.";
-        RemoveButtonTooltipText = "Nothing is staged to remove yet.";
+        RemoveButtonTooltipText = RemoveUnavailableText;
         UpdateWorkspaceBadges();
     }
 
@@ -844,7 +861,7 @@ public partial class MainViewModel : ObservableObject
 
                 if (backupFiles.Count == 0)
                 {
-                    BackupHistoryText = "No registry backups saved in the working folder yet.";
+                    BackupHistoryText = NoBackupHistoryText;
                 }
                 else
                 {
@@ -869,7 +886,7 @@ public partial class MainViewModel : ObservableObject
             var snapshots = DataService.GetSnapshots();
             if (snapshots.Count == 0)
             {
-                SnapshotHistoryText = "No change snapshots recorded yet.";
+                SnapshotHistoryText = NoSnapshotHistoryText;
             }
             else
             {
@@ -889,7 +906,7 @@ public partial class MainViewModel : ObservableObject
             {
                 HasBenchmarkHistory = false;
                 BenchmarkRunCount = 0;
-                BenchmarkHistoryText = "No benchmark history recorded yet.";
+                BenchmarkHistoryText = NoBenchmarkHistoryText;
             }
             else
             {
@@ -913,7 +930,7 @@ public partial class MainViewModel : ObservableObject
 
             if (!HasRecoveryKit)
             {
-                RecoveryKitStatusText = "No local recovery kit has been prepared yet.";
+                RecoveryKitStatusText = NoRecoveryKitText;
             }
             else
             {
@@ -941,7 +958,7 @@ public partial class MainViewModel : ObservableObject
 
             if (!HasVerificationScript)
             {
-                VerificationScriptStatusText = "No verification script is available yet.";
+                VerificationScriptStatusText = NoVerificationScriptText;
             }
             else
             {
@@ -962,7 +979,7 @@ public partial class MainViewModel : ObservableObject
 
             if (!HasDiagnosticsReport)
             {
-                DiagnosticsReportStatusText = "No diagnostics report has been exported yet.";
+                DiagnosticsReportStatusText = NoDiagnosticsReportText;
             }
             else
             {
@@ -999,6 +1016,9 @@ public partial class MainViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(Config.LastRecoveryKitPath) && Directory.Exists(Config.LastRecoveryKitPath))
             return Config.LastRecoveryKitPath;
 
+        if (string.IsNullOrWhiteSpace(Config.WorkingDir))
+            return null;
+
         var localKitPath = Path.Combine(Config.WorkingDir, "NVMe_Recovery_Kit");
         return Directory.Exists(localKitPath) ? localKitPath : null;
     }
@@ -1007,6 +1027,9 @@ public partial class MainViewModel : ObservableObject
     {
         if (!string.IsNullOrWhiteSpace(Config.LastVerificationScriptPath) && File.Exists(Config.LastVerificationScriptPath))
             return Config.LastVerificationScriptPath;
+
+        if (string.IsNullOrWhiteSpace(Config.WorkingDir))
+            return null;
 
         var localScriptPath = Path.Combine(Config.WorkingDir, "Verify_NVMe_Patch.ps1");
         return File.Exists(localScriptPath) ? localScriptPath : null;
@@ -1167,7 +1190,7 @@ public partial class MainViewModel : ObservableObject
             ActionReadinessText = "Readiness checks will explain when apply or remove becomes available.";
             ActionReadinessColor = "#FFA1B0C8";
             ApplyButtonTooltipText = "Readiness checks are still running.";
-            RemoveButtonTooltipText = "Nothing is staged to remove yet.";
+            RemoveButtonTooltipText = RemoveUnavailableText;
             return;
         }
 
@@ -1182,7 +1205,7 @@ public partial class MainViewModel : ObservableObject
             ApplyButtonTooltipText = ActionReadinessText;
             RemoveButtonTooltipText = status.Applied || status.Partial
                 ? "Remove can still revert the staged or partial registry state."
-                : "Nothing is staged to remove yet.";
+                : RemoveUnavailableText;
             return;
         }
 
@@ -1191,7 +1214,7 @@ public partial class MainViewModel : ObservableObject
             ActionReadinessText = "Native NVMe is already active. Apply is optional here and mainly helps stage the registry keys, Safe Mode protections, and recovery material for consistency.";
             ActionReadinessColor = "#FF22C55E";
             ApplyButtonTooltipText = $"Apply will stage {plannedComponentCount} patch components plus recovery helpers, even though the native driver path is already live.";
-            RemoveButtonTooltipText = "Nothing is staged to remove yet.";
+            RemoveButtonTooltipText = RemoveUnavailableText;
             return;
         }
 
@@ -1218,14 +1241,14 @@ public partial class MainViewModel : ObservableObject
             ActionReadinessText = "Apply is available, but this machine still has advisory notes. Review Compatibility Highlights and the machine impact plan before you commit.";
             ActionReadinessColor = "#FFF59E0B";
             ApplyButtonTooltipText = $"Apply will stage {plannedComponentCount} patch components, Safe Mode protections, and local recovery material once you accept the advisory tradeoffs.";
-            RemoveButtonTooltipText = "Nothing is staged to remove yet.";
+            RemoveButtonTooltipText = RemoveUnavailableText;
             return;
         }
 
         ActionReadinessText = $"Apply is ready. It will stage {plannedComponentCount} patch components, add Safe Mode protections, save snapshots, and require a reboot before the live driver path changes.";
         ActionReadinessColor = "#FF22C55E";
         ApplyButtonTooltipText = ActionReadinessText;
-        RemoveButtonTooltipText = "Nothing is staged to remove yet.";
+        RemoveButtonTooltipText = RemoveUnavailableText;
     }
 
     private string BuildBlockingActionSummary()
@@ -1459,11 +1482,11 @@ public partial class MainViewModel : ObservableObject
     private void UpdateOptionsSummary()
     {
         var serverKeyText = IncludeServerKey
-            ? "Server 2025 compatibility key enabled for fuller scheduler activation."
-            : "Server 2025 compatibility key is still off, even though it is usually the recommended patch stance.";
+            ? "Server 2025 compatibility key is enabled for the broader compatibility path."
+            : "Server 2025 compatibility key is off. Leave it that way unless this machine needs the broader compatibility path.";
         var warningsText = SkipWarnings
             ? "Expert warning confirmations are reduced."
-            : "Confirmation warnings stay on for safer review.";
+            : "Confirmation warnings stay on for a safer review pass.";
 
         OptionsSummaryText = $"{serverKeyText} {warningsText}";
     }
@@ -1472,7 +1495,7 @@ public partial class MainViewModel : ObservableObject
     {
         string restartSummary = int.TryParse(RestartDelayText, out int delay) && delay >= 5 && delay <= 300
             ? $"Restart countdown is set to {delay} seconds."
-            : "Restart countdown needs a number between 5 and 300 seconds.";
+            : "Restart countdown needs a value between 5 and 300 seconds.";
 
         string toastSummary = EnableToasts
             ? "Toast notifications are enabled."

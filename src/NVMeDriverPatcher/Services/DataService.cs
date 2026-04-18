@@ -236,18 +236,45 @@ public static class DataService
         try
         {
             using var db = new AppDbContext();
-            // Find the timestamp threshold below which everything is excess.
-            var threshold = db.Snapshots
+            // Delete by primary key so identical timestamps don't over-delete the boundary row.
+            var idsToDelete = db.Snapshots
                 .OrderByDescending(s => s.Timestamp)
+                .ThenByDescending(s => s.Id)
                 .Skip(keepNewest)
-                .Select(s => (DateTime?)s.Timestamp)
-                .FirstOrDefault();
-            if (threshold is null) return 0;
-            return db.Snapshots.Where(s => s.Timestamp <= threshold).ExecuteDelete();
+                .Select(s => s.Id)
+                .ToList();
+            if (idsToDelete.Count == 0) return 0;
+            return db.Snapshots.Where(s => idsToDelete.Contains(s.Id)).ExecuteDelete();
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[DataService] PruneSnapshots failed: {ex.Message}");
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Removes benchmark rows beyond a generous retention cap. The JSON history file already
+    /// keeps only the newest ten results, and the UI only renders a small recent slice.
+    /// </summary>
+    public static int PruneBenchmarks(int keepNewest = 500)
+    {
+        if (keepNewest < 50) keepNewest = 50;
+        try
+        {
+            using var db = new AppDbContext();
+            var idsToDelete = db.Benchmarks
+                .OrderByDescending(b => b.Timestamp)
+                .ThenByDescending(b => b.Id)
+                .Skip(keepNewest)
+                .Select(b => b.Id)
+                .ToList();
+            if (idsToDelete.Count == 0) return 0;
+            return db.Benchmarks.Where(b => idsToDelete.Contains(b.Id)).ExecuteDelete();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DataService] PruneBenchmarks failed: {ex.Message}");
             return 0;
         }
     }

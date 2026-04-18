@@ -67,7 +67,9 @@ public static class PatchVerificationService
                 out var appliedAtRaw))
         {
             // Corrupt timestamp — treat as stale and clear.
-            report.Outcome = VerificationOutcome.None;
+            report.Outcome = VerificationOutcome.StalePending;
+            report.Summary = "Patch verification timestamp was invalid";
+            report.Detail = "The saved pending-verification timestamp could not be parsed. Clearing it so startup verification can recover cleanly.";
             return report;
         }
         // Force UTC so downstream comparisons don't silently mix zones if a future code
