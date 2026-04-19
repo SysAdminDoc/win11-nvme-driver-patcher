@@ -49,7 +49,7 @@ public sealed class DiagnosticsServiceTests : IDisposable
     }
 
     [Fact]
-    public void TryCreateShareableDiagnosticsText_RedactsComputerAndUserLines()
+    public void TryCreateShareableDiagnosticsText_RedactsIdentityAndHardwareIdentifierLines()
     {
         var reportPath = Path.Combine(_tempRoot, "diagnostics.txt");
         File.WriteAllText(reportPath, """
@@ -57,6 +57,9 @@ public sealed class DiagnosticsServiceTests : IDisposable
             Computer Name: DESKTOP-ALICE
             User: alice
             OS: Windows 11 Pro
+            STORAGE DRIVES
+            Disk 1: Test NVMe (1 TB) [NVMe]
+              PNP ID: SCSI\DISK&VEN_NVME&PROD_TEST\SERIAL-123456
             """);
 
         var sanitized = DiagnosticsService.TryCreateShareableDiagnosticsText(reportPath);
@@ -64,9 +67,28 @@ public sealed class DiagnosticsServiceTests : IDisposable
         Assert.NotNull(sanitized);
         Assert.Contains("Computer Name: [redacted]", sanitized, StringComparison.Ordinal);
         Assert.Contains("User: [redacted]", sanitized, StringComparison.Ordinal);
+        Assert.Contains("  PNP ID: [redacted]", sanitized, StringComparison.Ordinal);
         Assert.Contains("OS: Windows 11 Pro", sanitized, StringComparison.Ordinal);
         Assert.DoesNotContain("DESKTOP-ALICE", sanitized, StringComparison.Ordinal);
         Assert.DoesNotContain("User: alice", sanitized, StringComparison.Ordinal);
+        Assert.DoesNotContain("SERIAL-123456", sanitized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryCreateShareableLogText_RedactsUserProfilePaths()
+    {
+        var logPath = Path.Combine(_tempRoot, "crash.log");
+        File.WriteAllText(logPath, """
+            [2026-04-19T10:00:00Z] [Dispatcher] IOException: denied
+               at NVMeDriverPatcher.Services.ConfigService.Load()
+               path: C:\Users\alice\AppData\Local\NVMePatcher\config.json
+            """);
+
+        var sanitized = DiagnosticsService.TryCreateShareableLogText(logPath);
+
+        Assert.NotNull(sanitized);
+        Assert.Contains(@"C:\Users\[redacted]\AppData\Local\NVMePatcher\config.json", sanitized, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\alice\", sanitized, StringComparison.OrdinalIgnoreCase);
     }
 
     public void Dispose()

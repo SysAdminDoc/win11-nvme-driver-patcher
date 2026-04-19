@@ -28,7 +28,7 @@ public class StatusToColorConverter : IValueConverter
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => throw new NotImplementedException();
+        => System.Windows.Data.Binding.DoNothing;
 }
 
 public class BoolToVisibilityConverter : IValueConverter
@@ -37,7 +37,7 @@ public class BoolToVisibilityConverter : IValueConverter
         => value is true ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => throw new NotImplementedException();
+        => System.Windows.Data.Binding.DoNothing;
 }
 
 public class SettingsToggleConverter : IValueConverter
@@ -46,7 +46,7 @@ public class SettingsToggleConverter : IValueConverter
         => value is true ? "- Settings" : "+ Settings";
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => throw new NotImplementedException();
+        => System.Windows.Data.Binding.DoNothing;
 }
 
 public class StringToColorConverter : IValueConverter
@@ -62,7 +62,7 @@ public class StringToColorConverter : IValueConverter
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => throw new NotImplementedException();
+        => System.Windows.Data.Binding.DoNothing;
 }
 
 public class StringToBrushConverter : IValueConverter
@@ -80,5 +80,5 @@ public class StringToBrushConverter : IValueConverter
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => throw new NotImplementedException();
+        => System.Windows.Data.Binding.DoNothing;
 }

@@ -45,9 +45,10 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Restore
-        run: |
-          dotnet restore src/NVMeDriverPatcher/NVMeDriverPatcher.csproj
-          dotnet restore src/NVMeDriverPatcher.Cli/NVMeDriverPatcher.Cli.csproj
+        run: dotnet restore NVMeDriverPatcher.sln
+
+      - name: Test
+        run: dotnet test NVMeDriverPatcher.sln -c Release --no-restore --verbosity normal
 
       - name: Build GUI (self-contained single file)
         run: dotnet publish src/NVMeDriverPatcher -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:Version=${{ steps.tag.outputs.version }} -p:AssemblyVersion=${{ steps.tag.outputs.version }}.0 -p:FileVersion=${{ steps.tag.outputs.version }}.0 -o publish/gui

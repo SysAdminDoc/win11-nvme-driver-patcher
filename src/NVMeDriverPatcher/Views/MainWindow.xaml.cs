@@ -91,7 +91,7 @@ public partial class MainWindow : Window
 
     private bool ShowConfirmDialog(string title, string message)
     {
-        return ThemedDialog.Show(message, title, DialogButtons.YesNo, DialogIcon.Question, this) == "Yes";
+        return ThemedDialog.Show(message, title, DialogButtons.YesNo, ResolveConfirmationIcon(title), this) == "Yes";
     }
 
     private void ShowInfoDialog(string title, string message, DialogIcon icon)
@@ -181,9 +181,9 @@ public partial class MainWindow : Window
     {
         bool maximized = WindowState == WindowState.Maximized;
 
-        RootFrame.Margin = maximized ? new Thickness(10) : new Thickness(20);
-        ShellBorder.CornerRadius = maximized ? new CornerRadius(20) : new CornerRadius(28);
-        ShellAccentBar.CornerRadius = maximized ? new CornerRadius(20, 20, 0, 0) : new CornerRadius(28, 28, 0, 0);
+        RootFrame.Margin = maximized ? new Thickness(0) : new Thickness(16);
+        ShellBorder.CornerRadius = maximized ? new CornerRadius(0) : new CornerRadius(14);
+        ShellAccentBar.CornerRadius = maximized ? new CornerRadius(0) : new CornerRadius(14, 14, 0, 0);
         ShellBorder.Effect = maximized
             ? null
             : TryFindResource("WindowShadow") as System.Windows.Media.Effects.Effect;
@@ -291,6 +291,18 @@ public partial class MainWindow : Window
 
     private void ClearLog_Click(object sender, RoutedEventArgs e)
     {
+        if (_vm.LogEntryCount > 0)
+        {
+            bool confirmed = ThemedDialog.Show(
+                $"This clears {FormatCount(_vm.LogEntryCount, "visible activity entry")} from the current session.\n\nExport the log first if you need a saved audit trail.",
+                "Clear Activity Log",
+                DialogButtons.YesNo,
+                DialogIcon.Warning,
+                this) == "Yes";
+            if (!confirmed)
+                return;
+        }
+
         _vm.ClearLog();
     }
 
@@ -448,29 +460,46 @@ public partial class MainWindow : Window
     private async Task RefreshTelemetryWorkspaceAsync()
     {
         int refreshId = Interlocked.Increment(ref _telemetryWorkspaceRefreshId);
-        var nvmeDrives = (await Task.Run(DriveService.GetSystemDrives))
-            .Where(d => d.IsNVMe)
-            .ToList();
-
-        if (refreshId != _telemetryWorkspaceRefreshId)
-            return;
-
-        bool hasNvmeDrives = nvmeDrives.Count > 0;
-        TelemetryEmptyState.Visibility = hasNvmeDrives ? Visibility.Collapsed : Visibility.Visible;
-        TelemetryWorkspacePanel.Visibility = hasNvmeDrives ? Visibility.Visible : Visibility.Collapsed;
-
-        if (!hasNvmeDrives)
+        try
         {
-            _selectedTelemetryDriveNumber = null;
-            TelemetryPanelControl.Reset();
-            return;
+            var nvmeDrives = (await Task.Run(DriveService.GetSystemDrives))
+                .Where(d => d.IsNVMe)
+                .ToList();
+
+            if (refreshId != _telemetryWorkspaceRefreshId)
+                return;
+
+            bool hasNvmeDrives = nvmeDrives.Count > 0;
+            TelemetryEmptyState.Visibility = hasNvmeDrives ? Visibility.Collapsed : Visibility.Visible;
+            TelemetryWorkspacePanel.Visibility = hasNvmeDrives ? Visibility.Visible : Visibility.Collapsed;
+
+            if (!hasNvmeDrives)
+            {
+                _selectedTelemetryDriveNumber = null;
+                TelemetryPanelControl.Reset();
+                return;
+            }
+
+            int? selectedDriveNumber = TelemetryPanelControl.SetDrives(nvmeDrives, _selectedTelemetryDriveNumber);
+            if (selectedDriveNumber is int driveNumber)
+            {
+                _selectedTelemetryDriveNumber = driveNumber;
+                await RefreshTelemetryDataAsync(driveNumber);
+            }
         }
-
-        int? selectedDriveNumber = TelemetryPanelControl.SetDrives(nvmeDrives, _selectedTelemetryDriveNumber);
-        if (selectedDriveNumber is int driveNumber)
+        catch (Exception ex)
         {
-            _selectedTelemetryDriveNumber = driveNumber;
-            await RefreshTelemetryDataAsync(driveNumber);
+            if (refreshId != _telemetryWorkspaceRefreshId)
+                return;
+
+            System.Diagnostics.Debug.WriteLine($"[RefreshTelemetryWorkspaceAsync] {ex}");
+            _selectedTelemetryDriveNumber = null;
+            TelemetryWorkspacePanel.Visibility = Visibility.Collapsed;
+            TelemetryEmptyState.Visibility = Visibility.Visible;
+            TelemetryPanelControl.Reset();
+            TelemetryPanelControl.SetTelemetryStatus(
+                "Telemetry refresh failed. Check the activity log or try again after Windows finishes enumerating storage devices.",
+                "warning");
         }
     }
 
@@ -479,90 +508,103 @@ public partial class MainWindow : Window
         int requestId = Interlocked.Increment(ref _telemetryDataRefreshId);
         _selectedTelemetryDriveNumber = driveNumber;
 
-        TelemetryPanelControl.SetTelemetryStatus(
-            $"Polling Disk {driveNumber} for a fresh health snapshot and trend history.");
-
-        var cachedHealthTask = Task.Run(() =>
+        try
         {
-            try { return DriveService.GetNVMeHealthData(); }
-            catch { return new Dictionary<string, NVMeHealthInfo>(); }
-        });
-        var liveDataTask = Task.Run(async () =>
-        {
-            try { return await NVMeTelemetryService.PollAsync(driveNumber); }
-            catch { return null; }
-        });
+            TelemetryPanelControl.SetTelemetryStatus(
+                $"Polling Disk {driveNumber} for a fresh health snapshot and trend history.");
 
-        // Use individual awaits so a faulted task in one stream doesn't surface as an
-        // AggregateException via WhenAll; either side failing is non-fatal here.
-        var cachedHealth = await cachedHealthTask;
-        var liveData = await liveDataTask;
+            var cachedHealthTask = Task.Run(() =>
+            {
+                try { return DriveService.GetNVMeHealthData(); }
+                catch { return new Dictionary<string, NVMeHealthInfo>(); }
+            });
+            var liveDataTask = Task.Run(async () =>
+            {
+                try { return await NVMeTelemetryService.PollAsync(driveNumber); }
+                catch { return null; }
+            });
 
-        if (requestId != _telemetryDataRefreshId)
-            return;
+            // Use individual awaits so a faulted task in one stream doesn't surface as an
+            // AggregateException via WhenAll; either side failing is non-fatal here.
+            var cachedHealth = await cachedHealthTask;
+            var liveData = await liveDataTask;
 
-        cachedHealth.TryGetValue(driveNumber.ToString(), out NVMeHealthInfo? fallbackHealth);
-        NVMeHealthInfo? currentHealth = liveData is not null
-            ? CreateHealthInfo(liveData)
-            : fallbackHealth;
-
-        if (liveData is not null)
-        {
-            TelemetryRecord? latestRecord = await Task.Run(() => DataService.GetLatestTelemetry(driveNumber));
             if (requestId != _telemetryDataRefreshId)
                 return;
 
-            if (ShouldPersistTelemetry(latestRecord, liveData))
-            {
-                await Task.Run(() => DataService.SaveTelemetry(
-                    driveNumber,
-                    liveData.TemperatureCelsius,
-                    liveData.AvailableSpare,
-                    liveData.PercentageUsed,
-                    ClampToLong(liveData.DataUnitsRead),
-                    ClampToLong(liveData.DataUnitsWritten),
-                    ClampToLong(liveData.PowerOnHours),
-                    ClampToInt(liveData.MediaErrors),
-                    ClampToInt(liveData.UnsafeShutdowns)));
+            cachedHealth.TryGetValue(driveNumber.ToString(), out NVMeHealthInfo? fallbackHealth);
+            NVMeHealthInfo? currentHealth = liveData is not null
+                ? CreateHealthInfo(liveData)
+                : fallbackHealth;
 
+            if (liveData is not null)
+            {
+                TelemetryRecord? latestRecord = await Task.Run(() => DataService.GetLatestTelemetry(driveNumber));
                 if (requestId != _telemetryDataRefreshId)
                     return;
+
+                if (ShouldPersistTelemetry(latestRecord, liveData))
+                {
+                    await Task.Run(() => DataService.SaveTelemetry(
+                        driveNumber,
+                        liveData.TemperatureCelsius,
+                        liveData.AvailableSpare,
+                        liveData.PercentageUsed,
+                        ClampToLong(liveData.DataUnitsRead),
+                        ClampToLong(liveData.DataUnitsWritten),
+                        ClampToLong(liveData.PowerOnHours),
+                        ClampToInt(liveData.MediaErrors),
+                        ClampToInt(liveData.UnsafeShutdowns)));
+
+                    if (requestId != _telemetryDataRefreshId)
+                        return;
+                }
+            }
+
+            var history = await Task.Run(() => DataService.GetTelemetryHistory(driveNumber, TimeSpan.FromDays(7)));
+            if (requestId != _telemetryDataRefreshId)
+                return;
+
+            var tempHistory = history.Select(sample => (sample.Timestamp, sample.TemperatureCelsius)).ToList();
+            var wearHistory = history.Select(sample => (sample.Timestamp, Math.Max(0, 100 - sample.PercentageUsed))).ToList();
+
+            TelemetryPanelControl.UpdateCurrentHealth(currentHealth);
+            TelemetryPanelControl.UpdateTelemetryContext(
+                driveNumber,
+                hasLiveSnapshot: liveData is not null,
+                hasFallbackSnapshot: liveData is null && fallbackHealth is not null,
+                tempHistory,
+                wearHistory);
+            TelemetryPanelControl.UpdateTempHistory(tempHistory);
+            TelemetryPanelControl.UpdateWearHistory(wearHistory);
+
+            if (liveData is not null)
+            {
+                TelemetryPanelControl.SetTelemetryStatus(
+                    $"Live SMART snapshot captured for Disk {driveNumber} at {DateTime.Now:t}. Showing the last 7 days of saved history.",
+                    "success");
+            }
+            else if (currentHealth is not null)
+            {
+                TelemetryPanelControl.SetTelemetryStatus(
+                    $"Direct SMART polling was unavailable for Disk {driveNumber}. Showing Windows storage reliability data and any saved history instead.",
+                    "warning");
+            }
+            else
+            {
+                TelemetryPanelControl.SetTelemetryStatus(
+                    $"No telemetry is available for Disk {driveNumber} yet. Try polling again after confirming Windows can access the drive normally.",
+                    "warning");
             }
         }
-
-        var history = await Task.Run(() => DataService.GetTelemetryHistory(driveNumber, TimeSpan.FromDays(7)));
-        if (requestId != _telemetryDataRefreshId)
-            return;
-
-        var tempHistory = history.Select(sample => (sample.Timestamp, sample.TemperatureCelsius)).ToList();
-        var wearHistory = history.Select(sample => (sample.Timestamp, Math.Max(0, 100 - sample.PercentageUsed))).ToList();
-
-        TelemetryPanelControl.UpdateCurrentHealth(currentHealth);
-        TelemetryPanelControl.UpdateTelemetryContext(
-            driveNumber,
-            hasLiveSnapshot: liveData is not null,
-            hasFallbackSnapshot: liveData is null && fallbackHealth is not null,
-            tempHistory,
-            wearHistory);
-        TelemetryPanelControl.UpdateTempHistory(tempHistory);
-        TelemetryPanelControl.UpdateWearHistory(wearHistory);
-
-        if (liveData is not null)
+        catch (Exception ex)
         {
+            if (requestId != _telemetryDataRefreshId)
+                return;
+
+            System.Diagnostics.Debug.WriteLine($"[RefreshTelemetryDataAsync] {ex}");
             TelemetryPanelControl.SetTelemetryStatus(
-                $"Live SMART snapshot captured for Disk {driveNumber} at {DateTime.Now:t}. Showing the last 7 days of saved history.",
-                "success");
-        }
-        else if (currentHealth is not null)
-        {
-            TelemetryPanelControl.SetTelemetryStatus(
-                $"Direct SMART polling was unavailable for Disk {driveNumber}. Showing Windows storage reliability data and any saved history instead.",
-                "warning");
-        }
-        else
-        {
-            TelemetryPanelControl.SetTelemetryStatus(
-                $"No telemetry is available for Disk {driveNumber} yet. Try polling again after confirming Windows can access the drive normally.",
+                $"Telemetry refresh failed for Disk {driveNumber}. Try again after Windows finishes enumerating the drive.",
                 "warning");
         }
     }
@@ -661,5 +703,22 @@ public partial class MainWindow : Window
         }
 
         return null;
+    }
+
+    private static DialogIcon ResolveConfirmationIcon(string title)
+    {
+        return title.Contains("apply", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("remove", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("restart", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("complete", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("fallback", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("inactive", StringComparison.OrdinalIgnoreCase)
+                ? DialogIcon.Warning
+                : DialogIcon.Question;
+    }
+
+    private static string FormatCount(int count, string singular)
+    {
+        return count == 1 ? $"1 {singular}" : $"{count} {singular}s";
     }
 }

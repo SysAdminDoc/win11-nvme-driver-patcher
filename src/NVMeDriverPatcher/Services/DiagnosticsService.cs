@@ -56,6 +56,10 @@ public static class DiagnosticsService
         var tempZip = outputPath + ".tmp";
         try
         {
+            var outputDir = Path.GetDirectoryName(Path.GetFullPath(outputPath));
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
+
             if (File.Exists(tempZip)) File.Delete(tempZip);
             using (var zip = ZipFile.Open(tempZip, ZipArchiveMode.Create))
             {
@@ -95,8 +99,14 @@ public static class DiagnosticsService
                     foreach (var name in new[] { "crash.log", "crash.log.old" })
                     {
                         var p = Path.Combine(crashDir, name);
-                        if (File.Exists(p))
-                            AddSharedFileEntry(zip, p, $"crash/{name}");
+                        if (!File.Exists(p)) continue;
+
+                        var sanitizedCrashLog = TryCreateShareableLogText(p);
+                        if (!string.IsNullOrWhiteSpace(sanitizedCrashLog))
+                            AddTextEntry(zip, $"crash/{name}", sanitizedCrashLog);
+                        else
+                            AddTextEntry(zip, $"crash/{name}.omitted.txt",
+                                $"{name} was present, but it could not be sanitized safely for inclusion in a shareable bundle.");
                     }
                 }
                 catch { }
@@ -190,12 +200,7 @@ public static class DiagnosticsService
         try
         {
             var text = File.ReadAllText(reportPath);
-            // Regex timeout caps backtracking in case a pathological diagnostic line
-            // (e.g. an embedded stack trace without newlines) slips in.
-            var timeout = TimeSpan.FromSeconds(2);
-            text = Regex.Replace(text, @"^Computer Name:\s*.*$", "Computer Name: [redacted]", RegexOptions.Multiline, timeout);
-            text = Regex.Replace(text, @"^User:\s*.*$", "User: [redacted]", RegexOptions.Multiline, timeout);
-            return text;
+            return RedactShareableText(text);
         }
         catch (RegexMatchTimeoutException)
         {
@@ -205,6 +210,40 @@ public static class DiagnosticsService
         {
             return null;
         }
+    }
+
+    internal static string? TryCreateShareableLogText(string logPath)
+    {
+        try
+        {
+            var text = File.ReadAllText(logPath);
+            return RedactShareableText(text);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string RedactShareableText(string text)
+    {
+        // Regex timeout caps backtracking in case a pathological diagnostic line
+        // (e.g. an embedded stack trace without newlines) slips in.
+        var timeout = TimeSpan.FromSeconds(2);
+        text = Regex.Replace(text, @"^Computer Name:\s*.*$", "Computer Name: [redacted]", RegexOptions.Multiline, timeout);
+        text = Regex.Replace(text, @"^User:\s*.*$", "User: [redacted]", RegexOptions.Multiline, timeout);
+        text = Regex.Replace(text, @"^(\s*PNP ID:\s*).*$", "${1}[redacted]", RegexOptions.Multiline, timeout);
+        text = Regex.Replace(
+            text,
+            @"\b([A-Za-z]:\\Users\\)([^\\\r\n]+)",
+            match => $"{match.Groups[1].Value}[redacted]",
+            RegexOptions.IgnoreCase,
+            timeout);
+        return text;
     }
 
     public static string? Export(
