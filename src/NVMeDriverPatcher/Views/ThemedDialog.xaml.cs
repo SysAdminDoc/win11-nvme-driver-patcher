@@ -43,6 +43,9 @@ public partial class ThemedDialog : Window
         {
             dlg.BtnYes.Visibility = Visibility.Visible;
             dlg.BtnNo.Visibility = Visibility.Visible;
+            var labels = ResolveButtonLabels(title);
+            dlg.BtnYes.Content = labels.affirmative;
+            dlg.BtnNo.Content = labels.dismissive;
             dlg.Result = "No";
         }
         else
@@ -75,19 +78,15 @@ public partial class ThemedDialog : Window
         catch { iconBrush = System.Windows.Media.Brushes.DodgerBlue; }
         try { surfaceBrush = (System.Windows.Media.Brush)bc.ConvertFromString(actionSurface)!; }
         catch { surfaceBrush = System.Windows.Media.Brushes.Black; }
-        dlg.DlgEyebrow.Text = icon switch
-        {
-            DialogIcon.Error => "Stop",
-            DialogIcon.Warning => "Warning",
-            DialogIcon.Question => "Confirmation",
-            _ => "Information"
-        };
+        dlg.DlgEyebrow.Text = ResolveEyebrow(icon, title);
         dlg.DlgEyebrow.Foreground = iconBrush;
         dlg.HeaderAccentBar.Background = iconBrush;
         dlg.BtnYes.Background = surfaceBrush;
         dlg.BtnYes.BorderBrush = iconBrush;
+        dlg.BtnYes.Foreground = ResolveResourceBrush(dlg, "TextPrimary", System.Windows.Media.Brushes.White);
         dlg.BtnOK.Background = surfaceBrush;
         dlg.BtnOK.BorderBrush = iconBrush;
+        dlg.BtnOK.Foreground = ResolveResourceBrush(dlg, "TextPrimary", System.Windows.Media.Brushes.White);
 
         var ellipse = new Ellipse { Width = 28, Height = 28, Fill = iconBrush, Opacity = 0.15 };
         dlg.IconCanvas.Children.Add(ellipse);
@@ -118,6 +117,51 @@ public partial class ThemedDialog : Window
         if (owner is not null) dlg.Owner = owner;
         dlg.ShowDialog();
         return dlg.Result;
+    }
+
+    private static (string affirmative, string dismissive) ResolveButtonLabels(string title)
+    {
+        if (Contains(title, "inactive"))
+            return ("Apply Fallback", "Not Now");
+        if (Contains(title, "fallback applied") || Contains(title, "installation complete") || Contains(title, "removal complete"))
+            return ("Restart", "Not Now");
+        if (Contains(title, "apply patch"))
+            return ("Apply Patch", "Cancel");
+        if (Contains(title, "remove patch"))
+            return ("Remove Patch", "Cancel");
+        if (Contains(title, "clear activity log"))
+            return ("Clear Log", "Cancel");
+        if (Contains(title, "reset tuning"))
+            return ("Reset", "Cancel");
+        if (Contains(title, "apply tuning"))
+            return ("Apply Tuning", "Cancel");
+
+        return ("Continue", "Cancel");
+    }
+
+    private static string ResolveEyebrow(DialogIcon icon, string title)
+    {
+        if (icon == DialogIcon.Error)
+            return "Stop";
+        if (icon == DialogIcon.Warning)
+        {
+            if (Contains(title, "complete") || Contains(title, "restart") || Contains(title, "fallback applied"))
+                return "Restart Prompt";
+            if (Contains(title, "apply") || Contains(title, "remove") || Contains(title, "reset") || Contains(title, "clear"))
+                return "Confirm Change";
+
+            return "Warning";
+        }
+
+        return icon == DialogIcon.Question ? "Confirmation" : "Information";
+    }
+
+    private static bool Contains(string source, string value) =>
+        source.Contains(value, StringComparison.OrdinalIgnoreCase);
+
+    private static Brush ResolveResourceBrush(FrameworkElement element, string key, Brush fallback)
+    {
+        return element.TryFindResource(key) as Brush ?? fallback;
     }
 
     private void BtnOK_Click(object sender, RoutedEventArgs e) { Result = "OK"; Close(); }

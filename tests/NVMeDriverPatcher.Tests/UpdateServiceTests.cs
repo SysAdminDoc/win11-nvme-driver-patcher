@@ -14,18 +14,21 @@ public sealed class UpdateServiceTests
         Assert.Equal(expected, UpdateService.NormalizeVersionString(raw));
     }
 
-    [Theory]
-    [InlineData("https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/tag/v4.3.1")]
-    [InlineData("http://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/tag/v4.3.1")]
-    public void SanitizeReleaseUrl_AllowsGitHubReleaseLinks(string url)
+    [Fact]
+    public void SanitizeReleaseUrl_AllowsHttpsGitHubReleaseLinks()
     {
+        const string url = "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/tag/v4.3.1";
+
         Assert.Equal(url, UpdateService.SanitizeReleaseUrl(url));
     }
 
     [Theory]
+    [InlineData("http://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/tag/v4.3.1")]
     [InlineData("file:///C:/temp/payload.url")]
     [InlineData("ms-settings:windowsupdate")]
     [InlineData("https://example.com/releases/tag/v4.3.1")]
+    [InlineData("https://github.com/other/project/releases/tag/v4.3.1")]
+    [InlineData("https://user:token@github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/tag/v4.3.1")]
     [InlineData("not a url")]
     public void SanitizeReleaseUrl_RejectsUnexpectedSchemesAndHosts(string url)
     {

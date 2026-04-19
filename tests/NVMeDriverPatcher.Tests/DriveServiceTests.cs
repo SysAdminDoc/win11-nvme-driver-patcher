@@ -30,4 +30,18 @@ public sealed class DriveServiceTests
     {
         Assert.Equal("Unknown", DriveService.DescribeOperationalStatus(null));
     }
+
+    [Theory]
+    [InlineData("C:", "C:\\")]
+    [InlineData("c:", "C:\\")]
+    [InlineData("D:\\", "D:\\")]
+    [InlineData(" e: ", "E:\\")]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("1:", null)]
+    [InlineData("AA:", null)]
+    public void NormalizeDriveRoot_AcceptsOnlyDriveRoots(string? raw, string? expected)
+    {
+        Assert.Equal(expected, DriveService.NormalizeDriveRoot(raw));
+    }
 }

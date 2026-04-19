@@ -103,14 +103,14 @@ public static class PatchService
 
             // Step 1: Backup
             log?.Invoke("Step 1/3: Creating system backup...");
-            progress?.Invoke(10, "Creating registry backup...");
+            ReportProgress(progress, 10, "Creating registry backup...");
             RegistryService.ExportRegistryBackup(workingDir, "Pre_Patch");
-            progress?.Invoke(30, "Creating restore point...");
+            ReportProgress(progress, 30, "Creating restore point...");
             CreateRestorePoint("Pre-NVMe-Driver-Patch", log);
 
             // Step 2: Apply registry components
             log?.Invoke($"Step 2/3: Applying {effectiveTotal} registry components...");
-            progress?.Invoke(60, "Applying registry changes...");
+            ReportProgress(progress, 60, "Applying registry changes...");
 
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
 
@@ -231,7 +231,7 @@ public static class PatchService
             try { overrides.Flush(); } catch { }
 
             // Step 3: Validate
-            progress?.Invoke(95, "Validating...");
+            ReportProgress(progress, 95, "Validating...");
             log?.Invoke("Step 3/3: Validating installation...");
             log?.Invoke("========================================");
 
@@ -249,7 +249,7 @@ public static class PatchService
             {
                 log?.Invoke($"[WARNING] Patch Status: PARTIAL - Applied {successCount}/{effectiveTotal} components");
                 log?.Invoke("[WARNING] Rolling back partial installation...");
-                progress?.Invoke(96, "Rolling back...");
+                ReportProgress(progress, 96, "Rolling back...");
 
                 bool rollbackFullyReversed = Rollback(hklm, appliedKeys, log);
                 result.WasRolledBack = true;
@@ -287,14 +287,20 @@ public static class PatchService
     {
         try
         {
-            var sysDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? "C:";
-            var psi = new ProcessStartInfo("manage-bde", $"-protectors -disable {sysDrive} -RebootCount 1")
+            var sysDrive = NormalizeSystemDrive(Environment.GetEnvironmentVariable("SystemDrive"));
+            var psi = new ProcessStartInfo("manage-bde")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            psi.ArgumentList.Add("-protectors");
+            psi.ArgumentList.Add("-disable");
+            psi.ArgumentList.Add(sysDrive);
+            psi.ArgumentList.Add("-RebootCount");
+            psi.ArgumentList.Add("1");
+
             using var proc = Process.Start(psi);
             if (proc is null)
             {
@@ -331,13 +337,32 @@ public static class PatchService
         }
     }
 
+    internal static string NormalizeSystemDrive(string? systemDrive)
+    {
+        var root = DriveService.NormalizeDriveRoot(systemDrive);
+        return string.IsNullOrEmpty(root) ? "C:" : root[..2];
+    }
+
+    internal static void ReportProgress(Action<int, string>? progress, int value, string text)
+    {
+        try
+        {
+            progress?.Invoke(value, text);
+        }
+        catch
+        {
+            // UI progress callbacks are best-effort. They should never change whether a
+            // registry operation succeeds, nor mask rollback/finalization work.
+        }
+    }
+
     private static void FinalizeResult(
         PatchOperationResult result,
         NativeNVMeStatus? nativeStatus,
         BypassIOResult? bypassStatus,
         Action<int, string>? progress)
     {
-        try { progress?.Invoke(0, ""); } catch { }
+        ReportProgress(progress, 0, "");
         try { result.AfterSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus); } catch { }
         try
         {
@@ -373,7 +398,7 @@ public static class PatchService
         log?.Invoke("========================================");
         EventLogService.Write("NVMe Driver Patch removal started");
 
-        progress?.Invoke(10, "Creating backup...");
+        ReportProgress(progress, 10, "Creating backup...");
         RegistryService.ExportRegistryBackup(workingDir, "Pre_Removal");
         int removedCount = 0;
 
@@ -382,7 +407,7 @@ public static class PatchService
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
 
             log?.Invoke("Removing registry components...");
-            progress?.Invoke(30, "Removing feature flags...");
+            ReportProgress(progress, 30, "Removing feature flags...");
 
             using var overrides = hklm.OpenSubKey(AppConfig.RegistrySubKey, writable: true);
             if (overrides is not null)
@@ -409,7 +434,7 @@ public static class PatchService
                 try { overrides.Flush(); } catch { }
             }
 
-            progress?.Invoke(60, "Removing SafeBoot keys...");
+            ReportProgress(progress, 60, "Removing SafeBoot keys...");
 
             // SafeBoot Minimal
             try
@@ -466,7 +491,7 @@ public static class PatchService
             }
             catch (Exception ex) { log?.Invoke($"  [FAIL] SafeBoot Network: {ex.Message}"); }
 
-            progress?.Invoke(90, "Validating...");
+            ReportProgress(progress, 90, "Validating...");
             result.AppliedCount = removedCount;
             result.Success = true;
             result.NeedsRestart = removedCount > 0;
@@ -486,7 +511,7 @@ public static class PatchService
         }
         finally
         {
-            try { progress?.Invoke(0, ""); } catch { }
+            ReportProgress(progress, 0, "");
             try { result.AfterSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus); } catch { }
             try
             {
@@ -588,23 +613,7 @@ public static class PatchService
     {
         try
         {
-            // Single-quote escaping for PowerShell. Strings inside single quotes treat ''
-            // as a literal single quote. We also strip control chars + cap length to avoid
-            // a pathological description making the command line too long.
-            var safeDesc = (description ?? "Pre-NVMe-Driver-Patch")
-                .Replace("'", "''")
-                .Replace("\r", " ")
-                .Replace("\n", " ");
-            if (safeDesc.Length > 200) safeDesc = safeDesc.Substring(0, 200);
-
-            var psi = new ProcessStartInfo("powershell.exe",
-                $"-NoProfile -NonInteractive -Command \"Checkpoint-Computer -Description '{safeDesc}' -RestorePointType 'MODIFY_SETTINGS' -ErrorAction Stop\"")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
+            var psi = CreateRestorePointStartInfo(description);
             using var proc = Process.Start(psi);
             if (proc is null)
             {
@@ -631,6 +640,38 @@ public static class PatchService
         {
             log?.Invoke("[WARNING] Could not create restore point");
         }
+    }
+
+    internal static ProcessStartInfo CreateRestorePointStartInfo(string? description)
+    {
+        var safeDesc = SanitizeRestorePointDescription(description);
+        var psi = new ProcessStartInfo("powershell.exe")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-NonInteractive");
+        psi.ArgumentList.Add("-Command");
+        psi.ArgumentList.Add($"Checkpoint-Computer -Description '{safeDesc}' -RestorePointType 'MODIFY_SETTINGS' -ErrorAction Stop");
+        return psi;
+    }
+
+    internal static string SanitizeRestorePointDescription(string? description)
+    {
+        // Single-quote escaping for PowerShell. Strings inside single quotes treat ''
+        // as a literal single quote. We also strip control chars + cap length to avoid
+        // a pathological description making the command line too long.
+        var safeDesc = string.IsNullOrWhiteSpace(description)
+            ? "Pre-NVMe-Driver-Patch"
+            : description;
+        safeDesc = safeDesc
+            .Replace("'", "''")
+            .Replace("\r", " ")
+            .Replace("\n", " ");
+        return safeDesc.Length > 200 ? safeDesc[..200] : safeDesc;
     }
 
     public static bool InitiateRestart(int delaySeconds, Action<string>? log = null)
@@ -694,13 +735,14 @@ public static class PatchService
     {
         try
         {
-            var psi = new ProcessStartInfo("shutdown.exe", "/a")
+            var psi = new ProcessStartInfo("shutdown.exe")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            psi.ArgumentList.Add("/a");
             using var proc = Process.Start(psi);
             if (proc is null) return false;
             var so = proc.StandardOutput.ReadToEndAsync();
@@ -712,7 +754,7 @@ public static class PatchService
             }
             try { so.GetAwaiter().GetResult(); } catch { }
             try { se.GetAwaiter().GetResult(); } catch { }
-            return true; // exit 0 = canceled, exit 1116 = nothing to cancel — both are fine
+            return IsCancelRestartSuccessExitCode(proc.ExitCode);
         }
         catch (Exception ex)
         {
@@ -720,4 +762,7 @@ public static class PatchService
             return false;
         }
     }
+
+    internal static bool IsCancelRestartSuccessExitCode(int exitCode) =>
+        exitCode is 0 or 1116;
 }

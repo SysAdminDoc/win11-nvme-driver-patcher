@@ -36,7 +36,7 @@
                             Background="{StaticResource SurfaceInset}"
                             BorderBrush="{StaticResource Border}"
                             BorderThickness="1"
-                            CornerRadius="12">
+                            CornerRadius="8">
                         <TextBlock x:Name="TelemetryStatusText"
                                    Foreground="{StaticResource TextDim}"
                                    FontSize="12"
@@ -218,6 +218,7 @@
                                Style="{StaticResource BodyCopy}"/>
                     <Grid Height="220" Margin="0,16,0,0">
                         <lvc:CartesianChart x:Name="TempChart"
+                                            AutomationProperties.Name="Temperature trend chart"
                                             TooltipPosition="Hidden"
                                             LegendPosition="Hidden"/>
                         <Border x:Name="TempHistoryPlaceholder"
@@ -247,6 +248,7 @@
                                Style="{StaticResource BodyCopy}"/>
                     <Grid Height="220" Margin="0,16,0,0">
                         <lvc:CartesianChart x:Name="WearChart"
+                                            AutomationProperties.Name="Wear trend chart"
                                             TooltipPosition="Hidden"
                                             LegendPosition="Hidden"/>
                         <Border x:Name="WearHistoryPlaceholder"

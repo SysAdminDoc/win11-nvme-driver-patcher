@@ -17,7 +17,7 @@
             Background="{StaticResource WindowCanvasBrush}"
             BorderBrush="{StaticResource BorderLight}"
             BorderThickness="1"
-            CornerRadius="18">
+            CornerRadius="12">
         <Border.Effect>
             <StaticResource ResourceKey="WindowShadow"/>
         </Border.Effect>
@@ -33,13 +33,13 @@
                     Height="1"
                     VerticalAlignment="Top"
                     Background="{StaticResource AccentLineBrush}"
-                    CornerRadius="18,18,0,0"
+                    CornerRadius="12,12,0,0"
                     Panel.ZIndex="3"/>
 
             <Border Grid.Row="0"
                     Padding="22,18"
                     Background="{StaticResource WindowCanvasBrush}"
-                    CornerRadius="18,18,0,0">
+                    CornerRadius="12,12,0,0">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -76,7 +76,7 @@
                         Background="{StaticResource SurfaceInset}"
                         BorderBrush="{StaticResource Border}"
                         BorderThickness="1"
-                        CornerRadius="12"
+                        CornerRadius="8"
                         VerticalAlignment="Top">
                     <Canvas x:Name="IconCanvas" Width="28" Height="28" Margin="6"/>
                 </Border>
@@ -98,7 +98,7 @@
                 <WrapPanel HorizontalAlignment="Right">
                 <Button x:Name="BtnNo"
                         Content="Cancel"
-                        Width="96"
+                        MinWidth="96"
                         Margin="0,0,10,0"
                         Style="{StaticResource SecondaryButton}"
                         AutomationProperties.Name="Cancel dialog"
@@ -107,7 +107,7 @@
                         Click="BtnNo_Click"/>
                 <Button x:Name="BtnYes"
                         Content="Continue"
-                        Width="108"
+                        MinWidth="108"
                         Margin="0,0,10,0"
                         Style="{StaticResource ActionButton}"
                         AutomationProperties.Name="Confirm dialog"
@@ -116,7 +116,7 @@
                         Click="BtnYes_Click"/>
                 <Button x:Name="BtnOK"
                         Content="OK"
-                        Width="92"
+                        MinWidth="92"
                         Style="{StaticResource ActionButton}"
                         AutomationProperties.Name="Acknowledge dialog"
                         IsDefault="True"
