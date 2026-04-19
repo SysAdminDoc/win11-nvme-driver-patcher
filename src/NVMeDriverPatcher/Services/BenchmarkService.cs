@@ -75,31 +75,11 @@ public static class BenchmarkService
             cancellationToken.ThrowIfCancellationRequested();
             Directory.CreateDirectory(diskSpdDir);
 
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
+            using var handler = new HttpClientHandler { AllowAutoRedirect = false };
+            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(90) };
             client.DefaultRequestHeaders.UserAgent.ParseAdd($"NVMeDriverPatcher/{Models.AppConfig.AppVersion}");
-            using (var response = await client.GetAsync(DiskSpdArchiveUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
-            {
-                response.EnsureSuccessStatusCode();
-
-                var finalUri = response.RequestMessage?.RequestUri;
-                if (finalUri is null ||
-                    finalUri.Scheme != Uri.UriSchemeHttps ||
-                    !AllowedAssetHosts.Any(h => finalUri.Host.Equals(h, StringComparison.OrdinalIgnoreCase)))
-                {
-                    throw new InvalidOperationException($"Refusing to download DiskSpd from untrusted host '{finalUri?.Host ?? "unknown"}'.");
-                }
-
-                var reportedSize = response.Content.Headers.ContentLength;
-                if (reportedSize is { } expectedSize &&
-                    (expectedSize < MinArchiveBytes || expectedSize > MaxArchiveBytes))
-                {
-                    throw new InvalidOperationException(
-                        $"DiskSpd archive size {expectedSize} bytes is outside the expected range ({MinArchiveBytes}..{MaxArchiveBytes}).");
-                }
-
-                await using var fs = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None);
-                await response.Content.CopyToAsync(fs, cancellationToken).ConfigureAwait(false);
-            }
+            await DownloadTrustedAssetAsync(client, new Uri(DiskSpdArchiveUrl), tempZip, cancellationToken)
+                .ConfigureAwait(false);
 
             var actualSize = new FileInfo(tempZip).Length;
             if (actualSize < MinArchiveBytes || actualSize > MaxArchiveBytes)
@@ -151,6 +131,11 @@ public static class BenchmarkService
 
             log?.Invoke("[ERROR] DiskSpd exe not found in archive");
         }
+        catch (OperationCanceledException)
+        {
+            log?.Invoke("[CANCELED] DiskSpd download canceled");
+            throw;
+        }
         catch (Exception ex)
         {
             log?.Invoke($"[ERROR] Failed to download DiskSpd: {ex.Message}");
@@ -163,6 +148,77 @@ public static class BenchmarkService
         return null;
     }
 
+    internal static bool IsTrustedAssetUri(Uri uri) =>
+        uri.Scheme == Uri.UriSchemeHttps &&
+        AllowedAssetHosts.Any(h => uri.Host.Equals(h, StringComparison.OrdinalIgnoreCase));
+
+    private static async Task DownloadTrustedAssetAsync(
+        HttpClient client,
+        Uri initialUri,
+        string destination,
+        CancellationToken cancellationToken)
+    {
+        var current = initialUri;
+        for (int redirectCount = 0; redirectCount < 6; redirectCount++)
+        {
+            if (!IsTrustedAssetUri(current))
+                throw new InvalidOperationException($"Refusing untrusted DiskSpd download URL: {current}");
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, current);
+            using var response = await client
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (IsRedirect(response.StatusCode))
+            {
+                var location = response.Headers.Location
+                    ?? throw new InvalidOperationException("DiskSpd download redirect did not include a Location header.");
+                var next = location.IsAbsoluteUri ? location : new Uri(current, location);
+                if (!IsTrustedAssetUri(next))
+                    throw new InvalidOperationException($"Refusing DiskSpd redirect to untrusted host: {next.Host}");
+
+                current = next;
+                continue;
+            }
+
+            response.EnsureSuccessStatusCode();
+            if (response.Content.Headers.ContentLength is { } expectedSize &&
+                (expectedSize < MinArchiveBytes || expectedSize > MaxArchiveBytes))
+            {
+                throw new InvalidOperationException(
+                    $"DiskSpd archive size {expectedSize} bytes is outside the expected range ({MinArchiveBytes}..{MaxArchiveBytes}).");
+            }
+
+            await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await using var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None);
+            var buffer = new byte[81920];
+            long total = 0;
+            while (true)
+            {
+                var read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                if (read == 0) break;
+
+                total += read;
+                if (total > MaxArchiveBytes)
+                    throw new InvalidOperationException($"DiskSpd archive exceeded maximum size ({MaxArchiveBytes} bytes).");
+
+                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+            }
+
+            if (total < MinArchiveBytes)
+                throw new InvalidOperationException($"DiskSpd archive was too small ({total} bytes).");
+            return;
+        }
+
+        throw new InvalidOperationException("DiskSpd download followed too many redirects.");
+    }
+
+    private static bool IsRedirect(System.Net.HttpStatusCode statusCode)
+    {
+        var code = (int)statusCode;
+        return code is >= 300 and <= 399;
+    }
+
     public static async Task<BenchmarkResult?> RunBenchmarkAsync(
         string workingDir,
         string label,
@@ -171,8 +227,18 @@ public static class BenchmarkService
         CancellationToken cancellationToken = default)
     {
         // Bail BEFORE downloading DiskSpd if the user has already hit Cancel.
-        cancellationToken.ThrowIfCancellationRequested();
-        var exe = await InstallDiskSpdAsync(workingDir, log, cancellationToken);
+        string? exe;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            exe = await InstallDiskSpdAsync(workingDir, log, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            log?.Invoke("[CANCELED] Benchmark canceled by user");
+            ReportProgress(progress, 0, "");
+            return null;
+        }
         if (exe is null) return null;
 
         // Find a partition on an NVMe drive to benchmark
@@ -230,16 +296,16 @@ public static class BenchmarkService
         {
             cancellationToken.ThrowIfCancellationRequested();
             log?.Invoke("Running 4K random read benchmark (30s)...");
-            progress?.Invoke(20, "Benchmarking reads...");
-            var readOutput = await RunDiskSpd(exe, $"-c128M -d30 -w0 -t4 -o16 -b4K -r -Sh -L \"{testFile}\"", cancellationToken);
+            ReportProgress(progress, 20, "Benchmarking reads...");
+            var readOutput = await RunDiskSpd(exe, CreateDiskSpdArguments(writePercent: 0, testFile), cancellationToken);
             result.Read = ParseDiskSpdOutput(readOutput);
             if (!HasAnyMetrics(result.Read))
                 throw new InvalidOperationException("DiskSpd read benchmark completed, but no parseable metrics were returned.");
 
             cancellationToken.ThrowIfCancellationRequested();
             log?.Invoke("Running 4K random write benchmark (30s)...");
-            progress?.Invoke(60, "Benchmarking writes...");
-            var writeOutput = await RunDiskSpd(exe, $"-c128M -d30 -w100 -t4 -o16 -b4K -r -Sh -L \"{testFile}\"", cancellationToken);
+            ReportProgress(progress, 60, "Benchmarking writes...");
+            var writeOutput = await RunDiskSpd(exe, CreateDiskSpdArguments(writePercent: 100, testFile), cancellationToken);
             result.Write = ParseDiskSpdOutput(writeOutput);
             if (!HasAnyMetrics(result.Write))
                 throw new InvalidOperationException("DiskSpd write benchmark completed, but no parseable metrics were returned.");
@@ -263,21 +329,58 @@ public static class BenchmarkService
             {
                 try { Directory.Delete(benchDir, true); } catch { }
             }
-            progress?.Invoke(0, "");
+            ReportProgress(progress, 0, "");
         }
 
         return result;
     }
 
-    private static async Task<string> RunDiskSpd(string exePath, string args, CancellationToken cancellationToken = default)
+    internal static void ReportProgress(Action<int, string>? progress, int value, string text)
     {
-        var psi = new ProcessStartInfo(exePath, args)
+        try
+        {
+            progress?.Invoke(value, text);
+        }
+        catch
+        {
+            // Progress callbacks are UI niceties; they must never change benchmark outcomes
+            // or mask cleanup failures.
+        }
+    }
+
+    internal static IReadOnlyList<string> CreateDiskSpdArguments(int writePercent, string testFile)
+    {
+        writePercent = Math.Clamp(writePercent, 0, 100);
+        return
+        [
+            "-c128M",
+            "-d30",
+            $"-w{writePercent}",
+            "-t4",
+            "-o16",
+            "-b4K",
+            "-r",
+            "-Sh",
+            "-L",
+            testFile
+        ];
+    }
+
+    private static async Task<string> RunDiskSpd(
+        string exePath,
+        IReadOnlyList<string> args,
+        CancellationToken cancellationToken = default)
+    {
+        var psi = new ProcessStartInfo(exePath)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        foreach (var arg in args)
+            psi.ArgumentList.Add(arg);
+
         using var proc = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start DiskSpd process");
 
@@ -367,7 +470,7 @@ public static class BenchmarkService
                 {
                     var json = File.ReadAllText(benchFile);
                     var parsed = JsonSerializer.Deserialize<List<BenchmarkResult>>(json, JsonOptions);
-                    if (parsed is not null) existing = parsed;
+                    existing = SanitizeBenchmarkHistory(parsed);
                 }
                 catch
                 {
@@ -408,10 +511,27 @@ public static class BenchmarkService
         {
             var json = File.ReadAllText(benchFile);
             var parsed = JsonSerializer.Deserialize<List<BenchmarkResult>>(json, JsonOptions);
-            // Guard against null entries from a manually-edited JSON file.
-            return parsed?.Where(r => r is not null).ToList() ?? [];
+            // Guard against null entries/properties from a manually-edited JSON file.
+            return SanitizeBenchmarkHistory(parsed);
         }
         catch { return []; }
+    }
+
+    internal static List<BenchmarkResult> SanitizeBenchmarkHistory(IEnumerable<BenchmarkResult?>? parsed)
+    {
+        if (parsed is null) return [];
+
+        return parsed
+            .Where(result => result is not null)
+            .Select(result =>
+            {
+                result!.Label = string.IsNullOrWhiteSpace(result.Label) ? "benchmark" : result.Label;
+                result.Timestamp ??= string.Empty;
+                result.Read ??= new BenchmarkMetrics();
+                result.Write ??= new BenchmarkMetrics();
+                return result;
+            })
+            .ToList();
     }
 
     private static bool IsInstalled(string exePath)
@@ -429,6 +549,13 @@ public static class BenchmarkService
 
     private static bool HasAnyMetrics(BenchmarkMetrics metrics) =>
         metrics.IOPS > 0 || metrics.ThroughputMBs > 0 || metrics.AvgLatencyMs > 0;
+
+    private enum DiskSpdMetricKind
+    {
+        Throughput,
+        Iops,
+        Latency
+    }
 
     private static string FirstNonEmpty(params string[] values)
     {
@@ -449,20 +576,66 @@ public static class BenchmarkService
         int iopsIndex,
         int latencyIndex)
     {
-        if (TryParseNumericPart(parts, throughputIndex, culture, out var throughput))
+        if (TryParseNumericPart(parts, throughputIndex, culture, DiskSpdMetricKind.Throughput, out var throughput))
             metrics.ThroughputMBs = Math.Round(throughput, 2);
-        if (TryParseNumericPart(parts, iopsIndex, culture, out var iops))
+        if (TryParseNumericPart(parts, iopsIndex, culture, DiskSpdMetricKind.Iops, out var iops))
             metrics.IOPS = Math.Round(iops, 0);
-        if (TryParseNumericPart(parts, latencyIndex, culture, out var latency))
+        if (TryParseNumericPart(parts, latencyIndex, culture, DiskSpdMetricKind.Latency, out var latency))
             metrics.AvgLatencyMs = Math.Round(latency, 3);
     }
 
-    private static bool TryParseNumericPart(string[] parts, int index, CultureInfo culture, out double value)
+    private static bool TryParseNumericPart(
+        string[] parts,
+        int index,
+        CultureInfo culture,
+        DiskSpdMetricKind kind,
+        out double value)
     {
         value = 0;
         if (index < 0 || index >= parts.Length) return false;
 
-        var numeric = Regex.Replace(parts[index], @"[^\d.,]", "").Replace(',', '.');
-        return double.TryParse(numeric, NumberStyles.Float, culture, out value);
+        var numeric = Regex.Replace(parts[index], @"[^\d.,+-]", "");
+        if (string.IsNullOrWhiteSpace(numeric)) return false;
+
+        var normalized = NormalizeNumericToken(numeric, kind);
+        return double.TryParse(normalized, NumberStyles.Float, culture, out value);
+    }
+
+    private static string NormalizeNumericToken(string raw, DiskSpdMetricKind kind)
+    {
+        int lastDot = raw.LastIndexOf('.');
+        int lastComma = raw.LastIndexOf(',');
+
+        if (lastDot >= 0 && lastComma >= 0)
+        {
+            char decimalSeparator = lastDot > lastComma ? '.' : ',';
+            char groupSeparator = decimalSeparator == '.' ? ',' : '.';
+            return raw
+                .Replace(groupSeparator.ToString(), string.Empty)
+                .Replace(decimalSeparator, '.');
+        }
+
+        if (lastComma >= 0)
+        {
+            bool looksLikeThousandsGroup =
+                LooksLikeGroupedInteger(raw, ',') &&
+                kind != DiskSpdMetricKind.Latency;
+            return looksLikeThousandsGroup
+                ? raw.Replace(",", string.Empty)
+                : raw.Replace(',', '.');
+        }
+
+        if (lastDot >= 0 && kind != DiskSpdMetricKind.Latency && LooksLikeGroupedInteger(raw, '.'))
+            return raw.Replace(".", string.Empty);
+
+        return raw;
+    }
+
+    private static bool LooksLikeGroupedInteger(string raw, char separator)
+    {
+        var pattern = separator == ','
+            ? @"^[+-]?\d{1,3}(,\d{3})+$"
+            : @"^[+-]?\d{1,3}(\.\d{3})+$";
+        return Regex.IsMatch(raw, pattern);
     }
 }

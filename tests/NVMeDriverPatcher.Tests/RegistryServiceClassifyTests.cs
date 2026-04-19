@@ -36,6 +36,7 @@ public sealed class RegistryServiceClassifyTests
         Assert.Equal(PatchAppliedProfile.Safe, c.Profile);
         Assert.True(c.Applied);
         Assert.False(c.Partial);
+        Assert.Equal(3, c.ExpectedTotal);
     }
 
     [Fact]
@@ -49,6 +50,7 @@ public sealed class RegistryServiceClassifyTests
         Assert.Equal(PatchAppliedProfile.Full, c.Profile);
         Assert.True(c.Applied);
         Assert.False(c.Partial);
+        Assert.Equal(5, c.ExpectedTotal);
     }
 
     [Fact]
@@ -63,6 +65,7 @@ public sealed class RegistryServiceClassifyTests
         Assert.Equal(PatchAppliedProfile.Mixed, c.Profile);
         Assert.False(c.Applied);
         Assert.True(c.Partial);
+        Assert.Equal(3, c.ExpectedTotal);
     }
 
     [Fact]
@@ -77,6 +80,7 @@ public sealed class RegistryServiceClassifyTests
         Assert.Equal(PatchAppliedProfile.Mixed, c.Profile);
         Assert.False(c.Applied);
         Assert.True(c.Partial);
+        Assert.Equal(3, c.ExpectedTotal);
     }
 
     [Fact]

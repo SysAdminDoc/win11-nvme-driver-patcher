@@ -262,10 +262,12 @@ reg load HKLM\OFFLINE C:\Windows\System32\config\SYSTEM
 (If C: doesn't work, try D: or E: -- drive letters differ in WinRE)
 3. Remove the patch:
 ```cmd
-reg delete "HKLM\OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f
-reg delete "HKLM\OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f
-reg delete "HKLM\OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f
-reg delete "HKLM\OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f
+for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f
+for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f
+for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f
+for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f
+for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /f
+for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /f
 reg unload HKLM\OFFLINE
 ```
 4. Restart
