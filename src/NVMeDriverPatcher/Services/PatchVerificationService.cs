@@ -138,14 +138,19 @@ public static class PatchVerificationService
     public static void MarkPending(AppConfig config)
     {
         config.PendingVerificationSince = DateTime.UtcNow.ToString("o");
+        config.PendingVerificationProfile = config.PatchProfile.ToString();
         config.LastVerifiedProfile = null;
         config.LastVerificationResult = null;
     }
 
     public static void Clear(AppConfig config, VerificationReport report)
     {
+        var verifiedProfile = string.IsNullOrWhiteSpace(config.PendingVerificationProfile)
+            ? config.PatchProfile.ToString()
+            : config.PendingVerificationProfile;
         config.PendingVerificationSince = null;
-        config.LastVerifiedProfile = config.PatchProfile.ToString();
+        config.PendingVerificationProfile = null;
+        config.LastVerifiedProfile = verifiedProfile;
         config.LastVerificationResult = report.Outcome.ToString();
     }
 

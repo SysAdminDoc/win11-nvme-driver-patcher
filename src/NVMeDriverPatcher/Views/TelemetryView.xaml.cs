@@ -13,11 +13,6 @@ public partial class TelemetryView : UserControl
 {
     private bool _suppressDriveSelectionNotification;
 
-    // Cache frozen brushes for fallback paths. BrushConverter isn't thread-safe and
-    // re-parsing the same hex string on every color update is wasteful.
-    private static readonly Dictionary<string, Brush> _fallbackBrushCache = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly object _fallbackBrushLock = new();
-
     public event Action<int>? DriveSelected;
 
     public TelemetryView()
@@ -350,47 +345,7 @@ public partial class TelemetryView : UserControl
 
     private Brush ResolveBrush(string resourceKey, string fallbackHex)
     {
-        if (TryFindResource(resourceKey) is Brush b) return b;
-        return GetFallbackBrush(fallbackHex);
-    }
-
-    private static Brush GetFallbackBrush(string fallbackHex)
-    {
-        lock (_fallbackBrushLock)
-        {
-            if (_fallbackBrushCache.TryGetValue(fallbackHex, out var cached))
-                return cached;
-
-            var brush = ParseHexBrush(fallbackHex) ?? System.Windows.Media.Brushes.Gray;
-            _fallbackBrushCache[fallbackHex] = brush;
-            return brush;
-        }
-    }
-
-    private static Brush? ParseHexBrush(string hex)
-    {
-        if (string.IsNullOrEmpty(hex) || hex[0] != '#') return null;
-        var digits = hex.AsSpan(1);
-        if (digits.Length != 8 && digits.Length != 6) return null;
-
-        byte a = 0xFF, r, g, b;
-        int i = 0;
-        if (digits.Length == 8)
-        {
-            if (!byte.TryParse(digits.Slice(i, 2), System.Globalization.NumberStyles.HexNumber,
-                System.Globalization.CultureInfo.InvariantCulture, out a)) return null;
-            i += 2;
-        }
-        if (!byte.TryParse(digits.Slice(i, 2), System.Globalization.NumberStyles.HexNumber,
-                System.Globalization.CultureInfo.InvariantCulture, out r)) return null;
-        if (!byte.TryParse(digits.Slice(i + 2, 2), System.Globalization.NumberStyles.HexNumber,
-                System.Globalization.CultureInfo.InvariantCulture, out g)) return null;
-        if (!byte.TryParse(digits.Slice(i + 4, 2), System.Globalization.NumberStyles.HexNumber,
-                System.Globalization.CultureInfo.InvariantCulture, out b)) return null;
-
-        var brush = new SolidColorBrush(Color.FromArgb(a, r, g, b));
-        brush.Freeze();
-        return brush;
+        return BrushResources.Resolve(this, resourceKey, fallbackHex);
     }
 
     private static int ExtractNumericValue(string? value)

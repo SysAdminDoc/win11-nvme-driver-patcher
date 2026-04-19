@@ -117,6 +117,7 @@ public sealed class PatchVerificationServiceTests
             System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.RoundtripKind,
             out _));
+        Assert.Equal("Safe", config.PendingVerificationProfile);
         Assert.Null(config.LastVerifiedProfile);
         Assert.Null(config.LastVerificationResult);
     }
@@ -135,6 +136,25 @@ public sealed class PatchVerificationServiceTests
 
         Assert.Null(config.PendingVerificationSince);
         Assert.Equal("Full", config.LastVerifiedProfile);
+        Assert.Equal("Confirmed", config.LastVerificationResult);
+    }
+
+    [Fact]
+    public void Clear_RecordsPendingProfileEvenIfCurrentSettingChanged()
+    {
+        var config = new AppConfig
+        {
+            PendingVerificationSince = DateTime.UtcNow.ToString("o"),
+            PendingVerificationProfile = "Safe",
+            PatchProfile = PatchProfile.Full
+        };
+        var report = new VerificationReport { Outcome = VerificationOutcome.Confirmed };
+
+        PatchVerificationService.Clear(config, report);
+
+        Assert.Null(config.PendingVerificationSince);
+        Assert.Null(config.PendingVerificationProfile);
+        Assert.Equal("Safe", config.LastVerifiedProfile);
         Assert.Equal("Confirmed", config.LastVerificationResult);
     }
 }
