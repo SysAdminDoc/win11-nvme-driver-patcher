@@ -1712,8 +1712,7 @@ Windows Registry Editor Version 5.00
 ; Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 ;
 ; FROM WINDOWS: Double-click this file and confirm.
-; FROM WinRE:   regedit /s NVMe_Remove_Patch.reg
-;               (may need to load hive first -- see README.txt)
+; FROM WinRE:   Run Remove_NVMe_Patch.bat so the offline SYSTEM hive is loaded.
 ;
 ; Targets both CurrentControlSet (Windows) and ControlSet$controlSetNum (WinRE/offline).
 
@@ -1749,9 +1748,10 @@ echo.
 echo This script works from both Windows and WinRE.
 echo.
 
-:: Detect if running in WinRE (CurrentControlSet won't exist)
-reg query "HKLM\SYSTEM\CurrentControlSet" >nul 2>&1
-if %errorlevel%==0 (
+:: Detect WinRE/WinPE. HKLM\SYSTEM\CurrentControlSet exists in both full Windows
+:: and the recovery environment, so it is not a reliable discriminator.
+reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinPE" >nul 2>&1
+if %errorlevel% neq 0 (
     echo Detected: Running in Windows
     echo.
     set "CS=CurrentControlSet"
@@ -1764,11 +1764,13 @@ echo Searching for Windows installation...
 echo.
 
 set "WINFOUND="
-for %%D in (C D E F G H) do (
+for %%D in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
     if exist "%%D:\Windows\System32\config\SYSTEM" (
-        echo Found Windows on %%D:
-        set "WINFOUND=%%D"
-        goto :found_win
+        if /I not "%%D:"=="%SystemDrive%" (
+            echo Found Windows on %%D:
+            set "WINFOUND=%%D"
+            goto :found_win
+        )
     )
 )
 
@@ -1791,7 +1793,7 @@ echo Registry hive loaded successfully.
 echo.
 
 :: Remove from all control sets in the offline hive
-for /L %%N in (1,1,3) do (
+for /L %%N in (1,1,9) do (
     reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f 2>nul
     reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f 2>nul
     reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f 2>nul

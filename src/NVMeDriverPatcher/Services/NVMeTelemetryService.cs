@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Numerics;
 using Microsoft.Win32.SafeHandles;
 using NVMeDriverPatcher.Interop;
 using NVMeDriverPatcher.Models;
@@ -235,29 +236,20 @@ public static class NVMeTelemetryService
     /// for any practical NVMe SMART counter (data units &lt; 10^15, host commands &lt; 10^16).
     /// Values that genuinely exceed decimal.MaxValue are clamped rather than throwing.
     /// </summary>
-    private static decimal Read128BitLE(byte[]? bytes)
+    internal static decimal Read128BitLE(byte[]? bytes)
     {
         if (bytes is null || bytes.Length < 16)
             return 0m;
 
         try
         {
-            decimal result = 0m;
-            decimal multiplier = 1m;
-            for (int i = 0; i < 16; i += 4)
-            {
-                uint word = BitConverter.ToUInt32(bytes, i);
-                if (word == 0)
-                {
-                    multiplier *= 4_294_967_296m;
-                    continue;
-                }
-                result += word * multiplier;
-                multiplier *= 4_294_967_296m; // 2^32
-            }
-            return result;
+            var value = new BigInteger(bytes.AsSpan(0, 16), isUnsigned: true, isBigEndian: false);
+            if (value > new BigInteger(decimal.MaxValue))
+                return decimal.MaxValue;
+
+            return (decimal)value;
         }
-        catch (OverflowException)
+        catch
         {
             // 128-bit value genuinely exceeds decimal.MaxValue (~7.9e28). Surface the cap rather
             // than letting the parser report a corrupted SMART read.

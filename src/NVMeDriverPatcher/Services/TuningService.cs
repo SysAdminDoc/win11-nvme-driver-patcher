@@ -46,7 +46,7 @@ public static class TuningService
     }
 
     // Safe bounds for StorNVMe parameters — values outside these can cause BSOD or instability
-    private static readonly Dictionary<string, (int Min, int Max)> ParameterBounds = new()
+    private static readonly Dictionary<string, (int Min, int Max)> ParameterBounds = new(StringComparer.OrdinalIgnoreCase)
     {
         [TuningProfile.Key_QueueDepth] = (1, 256),
         [TuningProfile.Key_MaxReadSplit] = (1, 4096),
@@ -58,16 +58,22 @@ public static class TuningService
 
     private static bool ValidateParameter(string name, int value, Action<string>? log = null)
     {
-        if (ParameterBounds.TryGetValue(name, out var bounds))
+        if (!ParameterBounds.TryGetValue(name, out var bounds))
         {
-            if (value < bounds.Min || value > bounds.Max)
-            {
-                log?.Invoke($"  [BLOCKED] {name} = {value} is outside safe range [{bounds.Min}..{bounds.Max}]");
-                return false;
-            }
+            log?.Invoke($"  [BLOCKED] Unknown StorNVMe tuning parameter: {name}");
+            return false;
+        }
+
+        if (value < bounds.Min || value > bounds.Max)
+        {
+            log?.Invoke($"  [BLOCKED] {name} = {value} is outside safe range [{bounds.Min}..{bounds.Max}]");
+            return false;
         }
         return true;
     }
+
+    internal static bool IsKnownParameterName(string name) =>
+        !string.IsNullOrWhiteSpace(name) && ParameterBounds.ContainsKey(name);
 
     /// <summary>
     /// Applies all non-null values from a TuningProfile to the StorNVMe registry parameters.
@@ -148,6 +154,8 @@ public static class TuningService
     /// <returns>The DWORD value, or null if not set.</returns>
     public static int? GetParameter(string name)
     {
+        if (!IsKnownParameterName(name)) return null;
+
         try
         {
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
@@ -199,6 +207,8 @@ public static class TuningService
     /// <returns>True if the value was removed or was already absent.</returns>
     public static bool RemoveParameter(string name)
     {
+        if (!IsKnownParameterName(name)) return false;
+
         try
         {
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);

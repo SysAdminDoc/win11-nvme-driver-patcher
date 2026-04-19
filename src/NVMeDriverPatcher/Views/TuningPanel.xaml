@@ -50,7 +50,7 @@
                             Background="{StaticResource SurfaceInset}"
                             BorderBrush="{StaticResource Border}"
                             BorderThickness="1"
-                            CornerRadius="12">
+                            CornerRadius="8">
                         <StackPanel>
                             <TextBlock Text="Preset Summary" Style="{StaticResource SectionEyebrow}"/>
                             <TextBlock x:Name="ProfileTitleText"
@@ -110,6 +110,7 @@
                                     Maximum="256"
                                     TickFrequency="16"
                                     IsSnapToTickEnabled="True"
+                                    AutomationProperties.Name="Queue depth"
                                     Style="{StaticResource DarkSlider}"
                                     ValueChanged="Slider_Changed"/>
                             <TextBlock x:Name="QueueDepthValue"
@@ -146,6 +147,7 @@
                                     Maximum="1024"
                                     TickFrequency="64"
                                     IsSnapToTickEnabled="True"
+                                    AutomationProperties.Name="Maximum read split"
                                     Style="{StaticResource DarkSlider}"
                                     ValueChanged="Slider_Changed"/>
                             <TextBlock x:Name="ReadSplitValue"
@@ -182,6 +184,7 @@
                                     Maximum="1024"
                                     TickFrequency="64"
                                     IsSnapToTickEnabled="True"
+                                    AutomationProperties.Name="Maximum write split"
                                     Style="{StaticResource DarkSlider}"
                                     ValueChanged="Slider_Changed"/>
                             <TextBlock x:Name="WriteSplitValue"
@@ -218,6 +221,7 @@
                                     Maximum="64"
                                     TickFrequency="1"
                                     IsSnapToTickEnabled="True"
+                                    AutomationProperties.Name="I/O submission queue count"
                                     Style="{StaticResource DarkSlider}"
                                     ValueChanged="Slider_Changed"/>
                             <TextBlock x:Name="QueueCountValue"
@@ -254,6 +258,7 @@
                                     Maximum="500"
                                     TickFrequency="25"
                                     IsSnapToTickEnabled="True"
+                                    AutomationProperties.Name="Idle power timeout"
                                     Style="{StaticResource DarkSlider}"
                                     ValueChanged="Slider_Changed"/>
                             <TextBlock x:Name="IdlePowerValue"
@@ -290,6 +295,7 @@
                                     Maximum="3000"
                                     TickFrequency="100"
                                     IsSnapToTickEnabled="True"
+                                    AutomationProperties.Name="Standby power timeout"
                                     Style="{StaticResource DarkSlider}"
                                     ValueChanged="Slider_Changed"/>
                             <TextBlock x:Name="StandbyPowerValue"
@@ -309,7 +315,7 @@
                             Background="{StaticResource YellowBg}"
                             BorderBrush="{StaticResource Border}"
                             BorderThickness="1"
-                            CornerRadius="14">
+                            CornerRadius="8">
                         <TextBlock Text="Queue count 0 means automatic queue allocation, and timeout values of 0 disable that power-saving path. Benchmark after each reboot so the change earns its keep."
                                    Foreground="{StaticResource TextPrimary}"
                                    FontSize="12"
@@ -360,7 +366,7 @@
                         <Button x:Name="BtnResetTuning"
                                 Content="Reset to Defaults"
                                 Click="ResetTuning_Click"
-                                Style="{StaticResource OutlinedActionButton}"
+                                Style="{StaticResource WarningSecondaryButton}"
                                 AutomationProperties.Name="Reset StorNVMe tuning to defaults"
                                 ToolTip="Remove explicit StorNVMe overrides so Windows defaults return after reboot."/>
                     </WrapPanel>

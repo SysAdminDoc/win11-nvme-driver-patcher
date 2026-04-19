@@ -355,13 +355,17 @@ public static class DriveService
         try
         {
             var systemDrive = NormalizeDriveRoot(Environment.GetEnvironmentVariable("SystemDrive")) ?? "C:\\";
-            var psi = new ProcessStartInfo("fsutil", $"bypassio state {systemDrive}")
+            var psi = new ProcessStartInfo("fsutil")
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            psi.ArgumentList.Add("bypassio");
+            psi.ArgumentList.Add("state");
+            psi.ArgumentList.Add(systemDrive);
+
             using var proc = Process.Start(psi);
             if (proc is null) return result;
             // Read both pipes asynchronously so stderr can't block process exit on failure.
@@ -412,13 +416,13 @@ public static class DriveService
         return result;
     }
 
-    private static string? NormalizeDriveRoot(string? drive)
+    internal static string? NormalizeDriveRoot(string? drive)
     {
         if (string.IsNullOrWhiteSpace(drive))
             return null;
 
         drive = drive.Trim();
-        if (drive.Length >= 2 && char.IsLetter(drive[0]) && drive[1] == ':')
+        if (drive.Length >= 2 && char.IsAsciiLetter(drive[0]) && drive[1] == ':')
             return $"{char.ToUpperInvariant(drive[0])}:\\";
 
         return null;
@@ -665,6 +669,28 @@ public static class DriveService
 
             if (allServices.Any(s => Regex.IsMatch(s, "VeeamAgent|VeeamEndpoint", RegexOptions.IgnoreCase)))
                 found.Add(new() { Name = "Veeam", Severity = "High", Message = "Backup agent cannot detect drives under Storage disks" });
+
+            // Data Deduplication is an optional Windows feature. Microsoft documents storage
+            // stack incompatibilities here, and the legacy PowerShell path already warns on it.
+            try
+            {
+                using var dedupFeatureSearch = new ManagementObjectSearcher(
+                    "SELECT Name, InstallState FROM Win32_OptionalFeature WHERE Name='Dedup-Core'");
+                foreach (var feature in Enumerate(dedupFeatureSearch))
+                {
+                    if (AsInt(feature["InstallState"]) == 1)
+                    {
+                        found.Add(new()
+                        {
+                            Name = "Data Deduplication",
+                            Severity = "High",
+                            Message = "Microsoft documents Data Deduplication as incompatible with the native NVMe path"
+                        });
+                    }
+                    break;
+                }
+            }
+            catch { }
 
             // Storage Spaces
             try
