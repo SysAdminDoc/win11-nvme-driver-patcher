@@ -120,6 +120,7 @@
                 <lvc:CartesianChart x:Name="BenchChart"
                                     Height="260"
                                     Margin="0,16,0,0"
+                                    AutomationProperties.Name="Benchmark trend chart"
                                     TooltipPosition="Hidden"
                                     LegendPosition="Hidden"/>
             </StackPanel>

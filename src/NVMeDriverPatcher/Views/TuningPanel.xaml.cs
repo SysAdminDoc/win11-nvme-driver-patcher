@@ -15,11 +15,6 @@ public partial class TuningPanel : UserControl
     private bool _loadedProfileHasExplicitOverrides;
     private static readonly TuningProfile[] Presets = TuningProfile.GetPresets();
 
-    // Cached frozen brushes for fallback paths. BrushConverter isn't thread-safe
-    // and re-parsing the same hex on every property change is wasteful.
-    private static readonly Dictionary<string, Brush> _fallbackBrushCache = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly object _fallbackBrushLock = new();
-
     public TuningPanel()
     {
         InitializeComponent();
@@ -133,11 +128,27 @@ public partial class TuningPanel : UserControl
     private void ApplyTuning_Click(object sender, RoutedEventArgs e)
     {
         var profile = CreateProfileFromSliders();
+        if (CountDifferences(_loadedProfile, profile) == 0)
+        {
+            SetStatus("No pending tuning changes. Move a control or choose a different preset before applying.", "muted");
+            return;
+        }
+
         var matchedPreset = FindMatchingPreset(profile);
         if (matchedPreset is not null)
         {
             profile.Name = matchedPreset.Name;
             profile.Description = matchedPreset.Description;
+        }
+
+        if (!ConfirmTuningAction(
+                "Apply Tuning Changes",
+                "This writes the pending StorNVMe overrides to the registry. The values take effect after reboot.\n\n" +
+                $"Pending values: {BuildCompactSummary(profile)}\n\n" +
+                "Apply only if you have a clear benchmark or power-management reason for the change."))
+        {
+            SetStatus("Apply canceled. No registry values were changed.", "muted");
+            return;
         }
 
         try
@@ -168,6 +179,21 @@ public partial class TuningPanel : UserControl
 
     private void ResetTuning_Click(object sender, RoutedEventArgs e)
     {
+        if (!_loadedProfileHasExplicitOverrides)
+        {
+            SetStatus("No explicit StorNVMe overrides are stored, so there is nothing to reset.", "muted");
+            return;
+        }
+
+        if (!ConfirmTuningAction(
+                "Reset Tuning Overrides",
+                "This removes explicit StorNVMe tuning overrides from the registry. Windows defaults return after the next reboot.\n\n" +
+                "Reset only if you want this machine to stop carrying custom queue and power values."))
+        {
+            SetStatus("Reset canceled. Existing tuning values were left unchanged.", "muted");
+            return;
+        }
+
         try
         {
             bool success = TuningService.ResetToDefaults(msg => LogMessage?.Invoke(msg));
@@ -224,7 +250,8 @@ public partial class TuningPanel : UserControl
         if (!AreControlsReady()
             || CurrentConfigText is null
             || PendingConfigText is null
-            || BtnApplyTuning is null)
+            || BtnApplyTuning is null
+            || BtnResetTuning is null)
         {
             return;
         }
@@ -243,6 +270,10 @@ public partial class TuningPanel : UserControl
             : $"{changedSettingCount} setting {Pluralize(changedSettingCount, "change")} pending. {(pendingPreset?.Name ?? "Custom")} will write {BuildCompactSummary(pendingProfile)}";
 
         BtnApplyTuning.IsEnabled = changedSettingCount > 0;
+        BtnResetTuning.IsEnabled = _loadedProfileHasExplicitOverrides;
+        BtnResetTuning.ToolTip = _loadedProfileHasExplicitOverrides
+            ? "Remove explicit StorNVMe overrides so Windows defaults return after reboot."
+            : "No explicit StorNVMe overrides are stored for this machine.";
     }
 
     private static TuningProfile? FindMatchingPreset(TuningProfile profile)
@@ -304,43 +335,17 @@ public partial class TuningPanel : UserControl
 
     private Brush ResolveBrush(string resourceKey, string fallbackHex)
     {
-        if (TryFindResource(resourceKey) is Brush b) return b;
-
-        lock (_fallbackBrushLock)
-        {
-            if (_fallbackBrushCache.TryGetValue(fallbackHex, out var cached))
-                return cached;
-
-            var brush = ParseHexBrush(fallbackHex) ?? System.Windows.Media.Brushes.Gray;
-            _fallbackBrushCache[fallbackHex] = brush;
-            return brush;
-        }
+        return BrushResources.Resolve(this, resourceKey, fallbackHex);
     }
 
-    private static Brush? ParseHexBrush(string hex)
+    private bool ConfirmTuningAction(string title, string message)
     {
-        if (string.IsNullOrEmpty(hex) || hex[0] != '#') return null;
-        var digits = hex.AsSpan(1);
-        if (digits.Length != 8 && digits.Length != 6) return null;
-
-        byte a = 0xFF, r, g, b;
-        int i = 0;
-        if (digits.Length == 8)
-        {
-            if (!byte.TryParse(digits.Slice(i, 2), System.Globalization.NumberStyles.HexNumber,
-                System.Globalization.CultureInfo.InvariantCulture, out a)) return null;
-            i += 2;
-        }
-        if (!byte.TryParse(digits.Slice(i, 2), System.Globalization.NumberStyles.HexNumber,
-                System.Globalization.CultureInfo.InvariantCulture, out r)) return null;
-        if (!byte.TryParse(digits.Slice(i + 2, 2), System.Globalization.NumberStyles.HexNumber,
-                System.Globalization.CultureInfo.InvariantCulture, out g)) return null;
-        if (!byte.TryParse(digits.Slice(i + 4, 2), System.Globalization.NumberStyles.HexNumber,
-                System.Globalization.CultureInfo.InvariantCulture, out b)) return null;
-
-        var brush = new SolidColorBrush(Color.FromArgb(a, r, g, b));
-        brush.Freeze();
-        return brush;
+        return ThemedDialog.Show(
+            message,
+            title,
+            DialogButtons.YesNo,
+            DialogIcon.Warning,
+            Window.GetWindow(this)) == "Yes";
     }
 
     private bool AreControlsReady()

@@ -129,10 +129,13 @@ public static class UpdateService
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
             return string.Empty;
 
-        if (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
+        if (uri.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(uri.UserInfo))
             return string.Empty;
 
-        return uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
+        if (!uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+            return string.Empty;
+
+        return uri.AbsolutePath.StartsWith("/SysAdminDoc/win11-nvme-driver-patcher/releases/", StringComparison.OrdinalIgnoreCase)
             ? uri.ToString()
             : string.Empty;
     }

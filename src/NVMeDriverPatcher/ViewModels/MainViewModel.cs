@@ -29,7 +29,7 @@ public partial class MainViewModel : ObservableObject
     public Action<string, string, DialogIcon>? InfoDialog { get; set; }
 
     // Preflight state
-    [ObservableProperty] private string _statusText = "Checking...";
+    [ObservableProperty] private string _statusText = "Checking…";
     [ObservableProperty] private string _statusColor = "#FF71717a";
     [ObservableProperty] private string _driverLabelText = "";
     [ObservableProperty] private string _benchLabelText = "";
@@ -127,7 +127,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isSafeModeSelected = true;
     [ObservableProperty] private bool _isFullModeSelected;
     [ObservableProperty] private string _patchProfileHelpText =
-        "Safe Mode writes only 735209102 — enough to swap the driver with no reports of BSODs tied to it.";
+        "Safe Mode writes only 735209102 — enough to swap the driver with no boot-crash reports tied to it.";
 
     // Lit when post-reboot verification detects that the override was blocked. Surfaces a
     // persistent "Try ViVeTool Fallback" affordance on the Overview card so the user can
@@ -217,8 +217,8 @@ public partial class MainViewModel : ObservableObject
     private void RefreshPatchProfileHelpText()
     {
         PatchProfileHelpText = Config.PatchProfile == PatchProfile.Safe
-            ? "Safe Mode writes only 735209102 — enough to swap the driver with no reports of BSODs tied to it. This is what you want on a daily-driver machine."
-            : "Full Mode adds 1853569164 (UxAccOptimization) and 156965516 (Standalone_Future). Higher peak performance on some drives; community BSOD reports cluster on these two flags. Try Safe Mode first — you can always opt in later.";
+            ? "Safe Mode writes only 735209102 — enough to swap the driver with no boot-crash reports tied to it. This is what you want on a daily-driver machine."
+            : "Full Mode adds 1853569164 (UxAccOptimization) and 156965516 (Standalone_Future). Higher peak performance on some drives; community boot-crash reports cluster on these two flags. Try Safe Mode first — you can always opt in later.";
     }
 
     public void Log(string message, string level = "INFO")
@@ -515,11 +515,10 @@ public partial class MainViewModel : ObservableObject
                             "On those builds the FeatureManagement\\Overrides route is a no-op.\n\n" +
                             "A community fallback exists: ViVeTool writes to a different feature store using IDs 60786016 and 48433719. " +
                             "This works on post-block builds at the cost of an extra dependency.\n\n" +
-                            "Would you like this app to download ViVeTool from its official GitHub repository " +
-                            $"({ViVeToolService.ViVeToolProjectUrl}) and apply the fallback now?\n\n" +
-                            "Yes — download + apply ViVeTool fallback (you will need to restart again afterwards).\n" +
-                            "No — leave things as-is. Your registry backup, restore point, and recovery kit are still in place; " +
-                            "you can remove the patch from this app at any time."
+                            "Choose Apply Fallback to download ViVeTool from its official GitHub repository " +
+                            $"({ViVeToolService.ViVeToolProjectUrl}) and apply the fallback now.\n\n" +
+                            "If you choose Not Now, your registry backup, restore point, and recovery kit stay in place. " +
+                            "You can remove the patch from this app at any time."
                         ) == true;
                         if (tryFallback) await ApplyViVeToolFallback();
                     }));
@@ -590,12 +589,12 @@ public partial class MainViewModel : ObservableObject
 
         SafeBootFlags.Add(new RegistryFlagVM
         {
-            Id = "SafeBoot", Name = "Minimal -- BSOD prevention",
+            Id = "SafeBoot", Name = "Minimal — boot protection",
             IsSet = status.Keys.Contains("SafeBootMinimal")
         });
         SafeBootFlags.Add(new RegistryFlagVM
         {
-            Id = "SafeBoot/Net", Name = "Network -- Safe Mode w/ Networking",
+            Id = "SafeBoot/Net", Name = "Network — Safe Mode with Networking",
             IsSet = status.Keys.Contains("SafeBootNetwork")
         });
     }
@@ -741,7 +740,7 @@ public partial class MainViewModel : ObservableObject
 
     private void ResetOverviewState()
     {
-        StatusText = "Checking...";
+        StatusText = "Checking…";
         StatusColor = "#FF71717a";
         StatusSummaryText = "Scanning your system build, storage layout, and rollback safety.";
         BuildSummaryText = "Windows build check pending";
@@ -1045,7 +1044,7 @@ public partial class MainViewModel : ObservableObject
 
     private string? ResolveLatestDiagnosticsReportPath()
     {
-        if (!string.IsNullOrWhiteSpace(Config.LastDiagnosticsPath) && File.Exists(Config.LastDiagnosticsPath))
+        if (IsExistingTextFile(Config.LastDiagnosticsPath))
             return Config.LastDiagnosticsPath;
 
         if (string.IsNullOrEmpty(Config.WorkingDir) || !Directory.Exists(Config.WorkingDir))
@@ -1063,6 +1062,11 @@ public partial class MainViewModel : ObservableObject
             return null;
         }
     }
+
+    internal static bool IsExistingTextFile(string? path) =>
+        ConfigService.IsUsableAbsolutePath(path)
+        && string.Equals(Path.GetExtension(path), ".txt", StringComparison.OrdinalIgnoreCase)
+        && File.Exists(path);
 
     private void UpdateChangePlan()
     {
@@ -1086,7 +1090,7 @@ public partial class MainViewModel : ObservableObject
         }
 
         var patchStatus = RegistryService.GetPatchStatus();
-        int plannedComponentCount = AppConfig.TotalComponents + (IncludeServerKey ? 1 : 0);
+        int plannedComponentCount = GetPlannedComponentCount();
         bool nativeDriverActive = _preflight.NativeNVMeStatus?.IsActive == true;
 
         if (CriticalCount > 0)
@@ -1203,7 +1207,7 @@ public partial class MainViewModel : ObservableObject
         }
 
         var status = RegistryService.GetPatchStatus();
-        int plannedComponentCount = AppConfig.TotalComponents + (IncludeServerKey ? 1 : 0);
+        int plannedComponentCount = GetPlannedComponentCount();
 
         if (CriticalCount > 0)
         {
@@ -1594,6 +1598,9 @@ public partial class MainViewModel : ObservableObject
     private static string Pluralize(int count, string singular, string? plural = null)
         => count == 1 ? singular : plural ?? $"{singular}s";
 
+    private int GetPlannedComponentCount() =>
+        AppConfig.GetTotalComponents(Config.PatchProfile, IncludeServerKey);
+
     private void CheckPostReboot()
     {
         try
@@ -1675,30 +1682,30 @@ public partial class MainViewModel : ObservableObject
             // BypassIO / DirectStorage — elevated from an afterthought to a first-class
             // warning. nvmedisk.sys vetoes BypassIO, which hurts DirectStorage games.
             if (_preflight.BypassIOStatus?.Supported == true)
-                warnings.Add("DIRECTSTORAGE USERS — Your system drive currently supports BypassIO. The native NVMe driver does NOT, so DirectStorage games (Forspoken, Ratchet & Clank, etc.) will fall back to the slower path after this patch. If you game on this machine, skip the patch or plan to toggle it off for game sessions.");
+                warnings.Add("DirectStorage tradeoff — Your system drive currently supports BypassIO. The native NVMe driver does not, so DirectStorage games can fall back to a slower path after this patch. If this is a gaming machine, skip the patch or keep removal ready for game sessions.");
             else
                 notes.Add("BypassIO is not currently active on the system drive, so DirectStorage games won't notice the switch.");
 
             var ssdTools = _preflight.IncompatibleSoftware.Where(s => s.Message.Contains("SCSI pass-through")).ToList();
             if (ssdTools.Count > 0)
-                warnings.Add($"SSD VENDOR TOOLS — {string.Join(", ", ssdTools.Select(s => s.Name))} talk to drives through stornvme.sys. After the patch they may stop detecting your drive or fail to update firmware. Run any pending firmware updates BEFORE patching.");
+                warnings.Add($"SSD vendor tools — {string.Join(", ", ssdTools.Select(s => s.Name))} talk to drives through stornvme.sys. After the patch they may stop detecting your drive or fail to update firmware. Run any pending firmware updates before patching.");
 
             if (_preflight.BuildDetails is { Is24H2OrLater: false })
-                warnings.Add($"OLDER BUILD — {_preflight.BuildDetails.DisplayVersion}. The patch was designed for Windows 11 24H2+. Behavior on earlier builds is not guaranteed.");
+                warnings.Add($"Older Windows build — {_preflight.BuildDetails.DisplayVersion}. The patch was designed for Windows 11 24H2+. Behavior on earlier builds is not guaranteed.");
 
             if (_preflight.IsLaptop)
-                warnings.Add("LAPTOP — nvmedisk.sys disables APST (Autonomous Power State Transition). Expect ~15% shorter battery life and higher SSD idle temperatures. Desktops are unaffected.");
+                warnings.Add("Laptop power — nvmedisk.sys disables APST (Autonomous Power State Transition). Expect shorter battery life and higher SSD idle temperatures. Desktops are unaffected.");
 
             // Microsoft's Feb/Mar 2026 block — let the user know the patch may silently
             // no-op on the latest Insider builds, and that we'll tell them post-reboot.
-            notes.Add("COMPATIBILITY NOTE — Microsoft began neutering the registry-override path on post-Feb-2026 Insider builds. The patcher will write the keys either way, and on next launch this tool will verify whether Windows actually swapped drivers. If it didn't, you'll get a clear message with no damage done.");
+            notes.Add("Compatibility note — Microsoft began blocking the registry-override path on post-Feb-2026 Insider builds. The patcher will write the keys either way, then verify on next launch whether Windows actually swapped drivers. If it did not, you will get a clear fallback message.");
 
             // Recovery kit freshness. Frame the absence as "we'll make one for you" — not
             // as a scary warning. Emphasize that rollback is always a click away.
             var kitPath = ResolveRecoveryKitPath();
             if (kitPath is null)
             {
-                notes.Add("RECOVERY KIT — You don't have one yet. We'll generate one automatically right after the patch succeeds; copy it to a USB stick for peace of mind.");
+                notes.Add("Recovery kit — You do not have one yet. The app will generate one automatically after the patch succeeds; copy it to removable media for the safest rollback path.");
             }
             else
             {
@@ -1706,12 +1713,12 @@ public partial class MainViewModel : ObservableObject
                 {
                     var age = DateTime.Now - Directory.GetLastWriteTime(kitPath);
                     if (age.TotalDays > 30)
-                        notes.Add($"RECOVERY KIT — Your existing kit is {(int)age.TotalDays} days old. A fresh one will be regenerated automatically post-patch.");
+                        notes.Add($"Recovery kit — Your existing kit is {(int)age.TotalDays} days old. A fresh one will be regenerated automatically after the patch.");
                 }
                 catch { }
             }
 
-            notes.Add("ROLLBACK — This app takes a registry backup, creates a System Restore point, and saves a recovery kit before touching anything. Uninstalling the patch is one click; worst-case recovery is documented in the kit's README.");
+            notes.Add("Rollback — This app takes a registry backup, creates a System Restore point, and saves a recovery kit before touching anything. Uninstalling the patch is one click; worst-case recovery is documented in the kit README.");
         }
 
         string header, body;
@@ -1738,21 +1745,23 @@ public partial class MainViewModel : ObservableObject
 
         if (blockers.Count > 0)
         {
-            sb.Append("\n\n-- CRITICAL --\n");
-            sb.Append(string.Join("\n\n", blockers.Select(s => "[!!] " + s)));
+            sb.Append("\n\nCritical blockers\n");
+            sb.Append(string.Join("\n\n", blockers.Select(s => "• " + s)));
         }
         if (warnings.Count > 0)
         {
-            sb.Append("\n\n-- TRADEOFFS YOU ACCEPT BY CONTINUING --\n");
-            sb.Append(string.Join("\n\n", warnings.Select(s => "[!] " + s)));
+            sb.Append("\n\nTradeoffs to accept\n");
+            sb.Append(string.Join("\n\n", warnings.Select(s => "• " + s)));
         }
         if (notes.Count > 0)
         {
-            sb.Append("\n\n-- GOOD TO KNOW --\n");
-            sb.Append(string.Join("\n\n", notes.Select(s => "[i] " + s)));
+            sb.Append("\n\nGood to know\n");
+            sb.Append(string.Join("\n\n", notes.Select(s => "• " + s)));
         }
 
-        sb.Append("\n\nProceed?");
+        sb.Append(title == "Apply Patch"
+            ? "\n\nChoose Apply Patch only if this matches your plan."
+            : "\n\nChoose Remove Patch only if you are ready to restart back to the legacy path.");
         return sb.ToString();
     }
 
@@ -1781,7 +1790,7 @@ public partial class MainViewModel : ObservableObject
             {
                 Log("[ERROR] BLOCKED: VeraCrypt system encryption detected", "ERROR");
                 InfoDialog?.Invoke("VeraCrypt Incompatibility",
-                    "CANNOT APPLY PATCH\n\nVeraCrypt system encryption detected. Enabling the native NVMe driver (nvmedisk.sys) breaks VeraCrypt boot entirely.\n\nThis block cannot be overridden.",
+                    "VeraCrypt system encryption is a hard stop for this patch.\n\nEnabling the native NVMe driver (nvmedisk.sys) breaks VeraCrypt boot, so this machine should stay on the current driver path unless that configuration changes.\n\nThis block cannot be overridden.",
                     DialogIcon.Error);
                 return;
             }
@@ -1819,7 +1828,10 @@ public partial class MainViewModel : ObservableObject
             if (result.Success)
             {
                 ToastService.Show("NVMe Patch Applied", "All components applied. Restart required.", ToastType.Success, Config.EnableToasts);
-                var verificationScriptPath = RecoveryKitService.GenerateVerificationScript(Config.WorkingDir, Config.IncludeServerKey);
+                var verificationScriptPath = RecoveryKitService.GenerateVerificationScript(
+                    Config.WorkingDir,
+                    Config.PatchProfile,
+                    Config.IncludeServerKey);
                 if (verificationScriptPath is not null)
                     Config.LastVerificationScriptPath = verificationScriptPath;
 
@@ -1839,15 +1851,15 @@ public partial class MainViewModel : ObservableObject
 
                 // Offer restart
                 var restartMsg = $"Patch applied successfully ({result.AppliedCount}/{result.TotalExpected} components).\n\n" +
-                    "Restart your computer now to enable the new NVMe driver?\n\n" +
-                    $"(System will restart in {Config.RestartDelay} seconds if you click Yes)\n\n" +
-                    "After reboot:\n- Drives will move from 'Disk drives' to 'Storage disks'\n" +
-                    "- Driver changes from stornvme.sys to nvmedisk.sys\n" +
-                    "- A recovery kit has been saved (copy to USB for safety)";
+                    "Restart to let Windows activate the native NVMe driver.\n\n" +
+                    $"If you choose Restart, Windows will restart in {Config.RestartDelay} seconds.\n\n" +
+                    "After reboot:\n• Drives move from Disk drives to Storage disks.\n" +
+                    "• The active driver changes from stornvme.sys to nvmedisk.sys.\n" +
+                    "• A recovery kit has been saved; copy it to removable media for the safest rollback path.";
 
                 if (ConfirmDialog?.Invoke("Installation Complete", restartMsg) == true)
                 {
-                    Log($"Initiating system restart in {Config.RestartDelay} seconds...");
+                    Log($"Initiating system restart in {Config.RestartDelay} seconds…");
                     if (!PatchService.InitiateRestart(Config.RestartDelay, m => Log(m, "ERROR")))
                     {
                         InfoDialog?.Invoke("Restart Could Not Be Scheduled",
@@ -1878,6 +1890,10 @@ public partial class MainViewModel : ObservableObject
                 }
             }
         });
+        }
+        catch (Exception ex)
+        {
+            RecoverOperationFailure("Apply Patch", ex);
         }
         finally
         {
@@ -1927,12 +1943,12 @@ public partial class MainViewModel : ObservableObject
                 ToastService.Show("NVMe Patch Removed", "Patch components removed. Restart required.", ToastType.Info, Config.EnableToasts);
 
                 var restartMsg = $"Patch removed successfully ({result.AppliedCount} component(s)).\n\n" +
-                    "Restart your computer now to restore the original NVMe driver?\n\n" +
-                    "After reboot: Drives will return to 'Disk drives' using stornvme.sys";
+                    "Restart to restore the legacy NVMe driver path.\n\n" +
+                    "After reboot, drives return to Disk drives using stornvme.sys.";
 
                 if (ConfirmDialog?.Invoke("Removal Complete", restartMsg) == true)
                 {
-                    Log($"Initiating system restart in {Config.RestartDelay} seconds...");
+                    Log($"Initiating system restart in {Config.RestartDelay} seconds…");
                     if (!PatchService.InitiateRestart(Config.RestartDelay, m => Log(m, "ERROR")))
                     {
                         InfoDialog?.Invoke("Restart Could Not Be Scheduled",
@@ -1942,6 +1958,10 @@ public partial class MainViewModel : ObservableObject
                 }
             }
         });
+        }
+        catch (Exception ex)
+        {
+            RecoverOperationFailure("Remove Patch", ex);
         }
         finally
         {
@@ -2162,7 +2182,7 @@ public partial class MainViewModel : ObservableObject
             Config.ConfigFile);
         if (path is not null)
         {
-            Config.LastDiagnosticsPath = path;
+            Config.LastSupportBundlePath = path;
             ConfigService.Save(Config);
             UpdateOperationalHistory();
             Log($"Support bundle exported: {path}", "SUCCESS");
@@ -2328,7 +2348,7 @@ public partial class MainViewModel : ObservableObject
             }
             if (!Directory.Exists(Config.WorkingDir))
                 Directory.CreateDirectory(Config.WorkingDir);
-            Process.Start("explorer.exe", Config.WorkingDir);
+            Process.Start(CreateExplorerStartInfo(Config.WorkingDir));
         }
         catch (Exception ex)
         {
@@ -2359,11 +2379,7 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = recoveryKitPath,
-                UseShellExecute = true
-            });
+            Process.Start(CreateExplorerStartInfo(recoveryKitPath));
         }
         catch (Exception ex)
         {
@@ -2389,10 +2405,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             // notepad ships with every Windows install, but a hardened SKU can have it stripped.
-            Process.Start(new ProcessStartInfo("notepad.exe", $"\"{verificationScriptPath}\"")
-            {
-                UseShellExecute = true
-            });
+            Process.Start(CreateNotepadStartInfo(verificationScriptPath));
         }
         catch (Exception ex)
         {
@@ -2417,10 +2430,7 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            Process.Start(new ProcessStartInfo("notepad.exe", $"\"{diagnosticsReportPath}\"")
-            {
-                UseShellExecute = true
-            });
+            Process.Start(CreateNotepadStartInfo(diagnosticsReportPath));
         }
         catch (Exception ex)
         {
@@ -2435,7 +2445,10 @@ public partial class MainViewModel : ObservableObject
     private void GenerateVerificationScript()
     {
         SyncConfigFromUI();
-        var verificationScriptPath = RecoveryKitService.GenerateVerificationScript(Config.WorkingDir, Config.IncludeServerKey);
+        var verificationScriptPath = RecoveryKitService.GenerateVerificationScript(
+            Config.WorkingDir,
+            Config.PatchProfile,
+            Config.IncludeServerKey);
         if (verificationScriptPath is null)
         {
             Log("Failed to generate verification script.", "ERROR");
@@ -2467,15 +2480,34 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenDocs() => OpenUrlInBrowser(AppConfig.DocumentationURL);
 
+    internal static ProcessStartInfo CreateExplorerStartInfo(string path)
+    {
+        var psi = new ProcessStartInfo("explorer.exe")
+        {
+            UseShellExecute = false
+        };
+        psi.ArgumentList.Add(path);
+        return psi;
+    }
+
+    internal static ProcessStartInfo CreateNotepadStartInfo(string path)
+    {
+        var psi = new ProcessStartInfo("notepad.exe")
+        {
+            UseShellExecute = false
+        };
+        psi.ArgumentList.Add(path);
+        return psi;
+    }
+
     private void OpenUrlInBrowser(string url)
     {
-        // Defense: only allow http(s) URLs. With UseShellExecute=true any "file:" or custom scheme
-        // would be honored by Windows — this keeps the surface to plain web links only.
-        if (string.IsNullOrEmpty(url) ||
-            !(url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
-              url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)))
+        // Defense: only allow absolute HTTPS URLs. With UseShellExecute=true any "file:" or
+        // custom scheme would be honored by Windows; plain HTTP is also unnecessary here since
+        // every app-owned link is an HTTPS endpoint.
+        if (!IsAllowedBrowserUrl(url))
         {
-            Log($"Refusing to open non-HTTP URL: {url}", "WARNING");
+            Log($"Refusing to open non-HTTPS URL: {url}", "WARNING");
             return;
         }
 
@@ -2490,6 +2522,15 @@ public partial class MainViewModel : ObservableObject
                 $"Windows refused to open the URL:\n{url}\n\n{ex.Message}",
                 DialogIcon.Error);
         }
+    }
+
+    internal static bool IsAllowedBrowserUrl(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return false;
+
+        return uri.Scheme == Uri.UriSchemeHttps
+            && string.IsNullOrEmpty(uri.UserInfo);
     }
 
     public void SyncConfigFromUI()
@@ -2557,6 +2598,29 @@ public partial class MainViewModel : ObservableObject
         ProgressValue = Math.Min(value, 100);
         ProgressText = text;
         ProgressVisible = value > 0 && value < 100;
+    }
+
+    private void RecoverOperationFailure(string operation, Exception ex)
+    {
+        Log($"{operation} failed unexpectedly: {ex.Message}", "ERROR");
+        try
+        {
+            SetProgress(0, "");
+            ButtonsEnabled = true;
+            UpdateRegistryDisplay();
+            UpdateStatusDisplay();
+            UpdateOverviewSummary();
+            UpdateOperationalHistory();
+        }
+        catch
+        {
+            ButtonsEnabled = true;
+        }
+
+        ToastService.Show($"{operation} Failed", "Unexpected error. See activity log.", ToastType.Error, Config.EnableToasts);
+        InfoDialog?.Invoke($"{operation} Failed",
+            $"The operation stopped before it could finish cleanly:\n{ex.Message}\n\nReview the activity log and exported diagnostics before retrying.",
+            DialogIcon.Error);
     }
 
     private const int MaxVisibleLogEntries = 5000;
@@ -2730,6 +2794,15 @@ public class PreflightCheckVM
         CheckStatus.Info => "#FF3b82f6",
         _ => "#FF71717a"
     };
+
+    public string StatusLabel => Status switch
+    {
+        CheckStatus.Pass => "Ready",
+        CheckStatus.Warning => "Review",
+        CheckStatus.Fail => "Blocked",
+        CheckStatus.Info => "Info",
+        _ => "Checking"
+    };
 }
 
 public class RegistryFlagVM
@@ -2740,6 +2813,7 @@ public class RegistryFlagVM
     public bool IsOptional { get; set; }
 
     public string DotColor => IsSet ? "#FF22c55e" : IsOptional ? "#FF71717a" : "#FFef4444";
+    public string StatusLabel => IsSet ? "Present" : IsOptional ? "Optional" : "Missing";
 }
 
 public class AttentionNoteVM

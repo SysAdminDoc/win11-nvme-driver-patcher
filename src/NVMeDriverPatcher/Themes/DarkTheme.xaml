@@ -66,20 +66,20 @@
         <Setter Property="Background" Value="{StaticResource SurfaceCardBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="16"/>
-        <Setter Property="Padding" Value="20,18"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="18,16"/>
     </Style>
 
     <Style x:Key="InsetCard" TargetType="Border" BasedOn="{StaticResource SurfaceCard}">
         <Setter Property="Background" Value="{StaticResource InsetCardBrush}"/>
-        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="Padding" Value="14,12"/>
     </Style>
 
     <Style x:Key="MetricCard" TargetType="Border" BasedOn="{StaticResource SurfaceCard}">
         <Setter Property="Background" Value="{StaticResource BgMedium}"/>
         <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
-        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="Padding" Value="14,12"/>
     </Style>
 
@@ -106,7 +106,7 @@
         <Setter Property="Padding" Value="24,22"/>
         <Setter Property="Background" Value="{StaticResource SurfaceInset}"/>
         <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
-        <Setter Property="CornerRadius" Value="14"/>
+        <Setter Property="CornerRadius" Value="8"/>
     </Style>
 
     <Style x:Key="EmptyStateTitle" TargetType="TextBlock">
@@ -153,7 +153,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="8">
+                            CornerRadius="7">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -163,11 +163,10 @@
                             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="{StaticResource SurfaceRaised}"/>
+                            <Setter TargetName="border" Property="Opacity" Value="0.92"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource Focus}"/>
-                            <Setter TargetName="border" Property="Background" Value="{StaticResource BgLight}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="border" Property="Opacity" Value="0.45"/>
@@ -186,7 +185,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="8">
+                            CornerRadius="7">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -226,20 +225,19 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="10"
+                            CornerRadius="8"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="{StaticResource AccentHover}"/>
+                            <Setter TargetName="border" Property="Effect" Value="{StaticResource SurfaceShadow}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="border" Property="Opacity" Value="0.92"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource Focus}"/>
-                            <Setter TargetName="border" Property="Background" Value="{StaticResource AccentHover}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="border" Property="Opacity" Value="0.38"/>
@@ -269,22 +267,20 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="10"
+                            CornerRadius="8"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="{StaticResource SurfaceRaised}"/>
-                            <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource BorderLight}"/>
+                            <Setter TargetName="border" Property="Effect" Value="{StaticResource SurfaceShadow}"/>
                             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="{StaticResource SurfaceRaised}"/>
+                            <Setter TargetName="border" Property="Opacity" Value="0.92"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource Focus}"/>
-                            <Setter TargetName="border" Property="Background" Value="{StaticResource BgLight}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="border" Property="Opacity" Value="0.45"/>
@@ -301,11 +297,38 @@
         <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
     </Style>
 
+    <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource ActionButton}">
+        <Setter Property="Background" Value="{StaticResource RedBg}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource Red}"/>
+        <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    </Style>
+
+    <Style x:Key="WarningSecondaryButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+        <Setter Property="Background" Value="{StaticResource YellowBg}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource Yellow}"/>
+        <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    </Style>
+
     <Style x:Key="BadgeButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
         <Setter Property="Height" Value="28"/>
         <Setter Property="Padding" Value="10,0"/>
         <Setter Property="FontSize" Value="11"/>
         <Setter Property="Background" Value="{StaticResource SurfaceInset}"/>
+    </Style>
+
+    <Style x:Key="TabBadgeBorder" TargetType="Border">
+        <Setter Property="Margin" Value="8,0,0,0"/>
+        <Setter Property="Padding" Value="6,2"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Background" Value="{StaticResource SurfaceInset}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="999"/>
+    </Style>
+
+    <Style x:Key="TabBadgeText" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
     <Style x:Key="DarkCheckBox" TargetType="CheckBox">
@@ -325,7 +348,7 @@
                                 Background="{StaticResource BgMedium}"
                                 BorderBrush="{StaticResource BorderLight}"
                                 BorderThickness="1.5"
-                                CornerRadius="6">
+                                CornerRadius="5">
                             <Path x:Name="check"
                                   Data="M 3 7 L 7 11 L 14 4"
                                   Margin="1,1,0,0"
@@ -535,7 +558,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="13"
+                            CornerRadius="8"
                             SnapsToDevicePixels="True">
                         <ScrollViewer x:Name="PART_ContentHost"/>
                     </Border>
@@ -625,7 +648,7 @@
                             Margin="2"
                             Padding="{TemplateBinding Padding}"
                             Background="{TemplateBinding Background}"
-                            CornerRadius="10">
+                            CornerRadius="7">
                         <ContentPresenter VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -671,7 +694,7 @@
                                             Background="{TemplateBinding Background}"
                                             BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                                             BorderThickness="{Binding BorderThickness, RelativeSource={RelativeSource AncestorType=ComboBox}}"
-                                            CornerRadius="13">
+                                            CornerRadius="8">
                                         <Grid>
                                             <ContentPresenter Margin="14,0,40,0"
                                                               VerticalAlignment="Center"
@@ -725,7 +748,7 @@
                                     Background="{StaticResource BgDark}"
                                     BorderBrush="{StaticResource BorderLight}"
                                     BorderThickness="1"
-                                    CornerRadius="14"
+                                    CornerRadius="8"
                                     Padding="6">
                                 <ScrollViewer SnapsToDevicePixels="True">
                                     <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
@@ -782,7 +805,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="1"
-                            CornerRadius="10">
+                            CornerRadius="8">
                         <Grid>
                             <Border x:Name="indicator"
                                     Height="1"
@@ -845,7 +868,7 @@
                     <Border Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="12"
+                            CornerRadius="8"
                             Padding="{TemplateBinding Padding}">
                         <Border.Effect>
                             <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.35" Direction="270"/>
@@ -868,7 +891,7 @@
                             Margin="2"
                             Padding="{TemplateBinding Padding}"
                             Background="Transparent"
-                            CornerRadius="8">
+                            CornerRadius="7">
                         <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -956,7 +979,7 @@
                             Background="{StaticResource SurfaceInset}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="10">
+                            CornerRadius="8">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -975,7 +998,7 @@
                                         <Border x:Name="headerBorder"
                                                 Background="{TemplateBinding Background}"
                                                 Padding="{TemplateBinding Padding}"
-                                                CornerRadius="10">
+                                                CornerRadius="8">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>

@@ -32,7 +32,7 @@ class Program
             {
                 Console.Error.WriteLine("Administrator privileges are required for NVMe Driver Patcher CLI operations.");
                 Console.Error.WriteLine("Run an elevated terminal, or launch the published EXE directly so Windows can honor its elevation manifest.");
-                return 5;
+                return 4;
             }
 
             var config = ConfigService.Load();
@@ -161,9 +161,9 @@ class Program
     {
         var preflight = PreflightService.RunAll(msg => Console.WriteLine(msg));
 
-        if (preflight.VeraCryptDetected && !force)
+        if (preflight.VeraCryptDetected)
         {
-            Console.Error.WriteLine("BLOCKED: VeraCrypt system encryption detected. Use --force to override.");
+            Console.Error.WriteLine("BLOCKED: VeraCrypt system encryption detected. This safeguard cannot be bypassed.");
             return 1;
         }
         if (!PreflightService.AllCriticalPassed(preflight.Checks) && !force)
@@ -189,6 +189,11 @@ class Program
         {
             Console.WriteLine($"Restart required. Run 'shutdown /r /t {config.RestartDelay}' to restart.");
         }
+        if (result.Success)
+        {
+            PatchVerificationService.MarkPending(config);
+            ConfigService.Save(config);
+        }
 
         return result.Success ? 0 : 1;
     }
@@ -212,6 +217,8 @@ class Program
         var path = DiagnosticsService.Export(config.WorkingDir, preflight, []);
         if (path is not null)
         {
+            config.LastDiagnosticsPath = path;
+            ConfigService.Save(config);
             Console.WriteLine($"Diagnostics exported to: {path}");
             return 0;
         }
@@ -234,6 +241,8 @@ class Program
         }
         Console.WriteLine();
         Console.WriteLine($"Applied feature ID(s): {string.Join(", ", result.AppliedIDs)}");
+        PatchVerificationService.MarkPending(config);
+        ConfigService.Save(config);
         Console.WriteLine("Restart required. Run: shutdown /r /t 30");
         return 0;
     }
@@ -245,6 +254,8 @@ class Program
         var path = DiagnosticsService.ExportBundle(config.WorkingDir, preflight, [], config.ConfigFile);
         if (path is not null)
         {
+            config.LastSupportBundlePath = path;
+            ConfigService.Save(config);
             Console.WriteLine($"Support bundle saved to: {path}");
             return 0;
         }
@@ -256,14 +267,24 @@ class Program
     {
         Console.WriteLine("Generating recovery kit...");
         var kitDir = RecoveryKitService.Export(config.WorkingDir, msg => Console.WriteLine(msg));
-        return kitDir is not null ? 0 : 1;
+        if (kitDir is null)
+            return 1;
+
+        config.LastRecoveryKitPath = kitDir;
+        ConfigService.Save(config);
+        return 0;
     }
 
     static int VerifyCommand(AppConfig config)
     {
-        var path = RecoveryKitService.GenerateVerificationScript(config.WorkingDir, config.IncludeServerKey);
+        var path = RecoveryKitService.GenerateVerificationScript(
+            config.WorkingDir,
+            config.PatchProfile,
+            config.IncludeServerKey);
         if (path is not null)
         {
+            config.LastVerificationScriptPath = path;
+            ConfigService.Save(config);
             Console.WriteLine($"Verification script created: {path}");
             return 0;
         }
@@ -295,7 +316,7 @@ class Program
         Console.WriteLine("  version             Print the CLI version");
         Console.WriteLine();
         Console.WriteLine("Options:");
-        Console.WriteLine("  --force, -f                Skip safety checks");
+        Console.WriteLine("  --force, -f                Skip overridable safety checks (VeraCrypt remains blocked)");
         Console.WriteLine("  --no-restart               Don't prompt for restart");
         Console.WriteLine("  --safe                     Safe Mode: write primary flag only (735209102) — recommended default");
         Console.WriteLine("  --full                     Full Mode: write all three flags (higher peak perf, higher BSOD risk)");
@@ -314,7 +335,7 @@ class Program
         Console.WriteLine("  1  failure / patch not applied (status)");
         Console.WriteLine("  2  partial state / no NVMe drives");
         Console.WriteLine("  3  unknown command or no args");
-        Console.WriteLine("  5  Administrator privileges required");
+        Console.WriteLine("  4  Administrator privileges required");
         Console.WriteLine("  99 unhandled error");
     }
 }

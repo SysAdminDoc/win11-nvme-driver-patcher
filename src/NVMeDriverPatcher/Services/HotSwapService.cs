@@ -80,13 +80,57 @@ public static class HotSwapService
             // the NoAutoMount policy is set (common on servers). Re-attaching by the volume's
             // GUID is the only robust path back.
             List<MountedVolume> volumesCaptured = [];
+            List<MountedVolume> volumesToRestore = [];
+
+            void TrackRemountOutcome(RemountSummary remount)
+            {
+                result.FailedRemountLetters = remount.Failed;
+                if (remount.Failed.Count == 0)
+                {
+                    volumesToRestore.Clear();
+                    return;
+                }
+
+                var failed = remount.Failed.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                volumesToRestore = volumesToRestore
+                    .Where(v => failed.Contains(v.Letter))
+                    .ToList();
+            }
+
+            void RestoreCapturedVolumes(string reason)
+            {
+                if (volumesToRestore.Count == 0)
+                    return;
+
+                log?.Invoke($"Attempting to restore drive letters after {reason}...");
+                var remount = RemountVolumes(volumesToRestore, log);
+                TrackRemountOutcome(remount);
+                if (remount.Failed.Count == 0)
+                    log?.Invoke("  [OK] All previously dismounted volumes were reattached");
+                else
+                {
+                    log?.Invoke("[WARNING] Some volumes could not be reattached automatically:");
+                    foreach (var letter in remount.Failed)
+                        log?.Invoke($"  - {letter} (use Disk Management -> Online to restore manually)");
+                }
+            }
+
             try
             {
                 // ================================================================
                 // Step 2: Get volume mount points for this physical drive
                 // ================================================================
                 log?.Invoke("Step 1/4: Identifying mounted volumes...");
-                volumesCaptured = GetVolumesForDrive(drive.Number);
+                var volumeCapture = GetVolumesForDrive(drive.Number);
+                if (!volumeCapture.Succeeded)
+                {
+                    result.ErrorMessage = "ABORTED: Could not enumerate mounted volumes for this drive. Close Disk Management/storage tools and retry.";
+                    if (!string.IsNullOrWhiteSpace(volumeCapture.ErrorMessage))
+                        result.ErrorMessage += $" Details: {volumeCapture.ErrorMessage}";
+                    log?.Invoke($"[ERROR] {result.ErrorMessage}");
+                    return result;
+                }
+                volumesCaptured = volumeCapture.Volumes;
 
                 if (volumesCaptured.Count > 0)
                 {
@@ -122,7 +166,10 @@ public static class HotSwapService
                     foreach (var vol in volumesCaptured)
                     {
                         if (DismountVolume(vol.Letter))
+                        {
+                            volumesToRestore.Add(vol);
                             log?.Invoke($"  [OK] Dismounted {vol.Letter}");
+                        }
                         else
                         {
                             log?.Invoke($"  [FAIL] Could not dismount {vol.Letter} - open handles present");
@@ -133,7 +180,7 @@ public static class HotSwapService
                     {
                         // Best-effort restore of any volumes we already dismounted so the user
                         // isn't left in a worse state than they started.
-                        RemountVolumes(volumesCaptured, log);
+                        RestoreCapturedVolumes("partial dismount failure");
                         result.ErrorMessage = "ABORTED: One or more volumes could not be dismounted. Close all files on this drive and retry.";
                         log?.Invoke($"[ERROR] {result.ErrorMessage}");
                         return result;
@@ -173,6 +220,7 @@ public static class HotSwapService
                 {
                     result.ErrorMessage = $"Failed to locate device node (CM error: 0x{cmResult:X8})";
                     log?.Invoke($"  [ERROR] {result.ErrorMessage}");
+                    RestoreCapturedVolumes("device-node lookup failure");
                     return result;
                 }
 
@@ -184,6 +232,7 @@ public static class HotSwapService
                 {
                     result.ErrorMessage = $"Device re-enumeration failed (CM error: 0x{cmResult:X8})";
                     log?.Invoke($"  [ERROR] {result.ErrorMessage}");
+                    RestoreCapturedVolumes("device re-enumeration failure");
                     return result;
                 }
 
@@ -218,14 +267,14 @@ public static class HotSwapService
                     // Explicitly reattach any letters we dismounted. Rely on the captured
                     // (letter, volume GUID) pairing rather than trusting auto-mount, which
                     // can be disabled system-wide (SAN hosts, servers, hardened workstations).
-                    if (volumesCaptured.Count > 0)
+                    if (volumesToRestore.Count > 0)
                     {
                         // Partitions don't always materialize on the moment CM_Reenumerate_DevNode
                         // returns — give the storage stack a brief window to rediscover them.
                         // Without this delay, mountvol can race and fail with "volume not found".
                         Thread.Sleep(1500);
-                        var remount = RemountVolumes(volumesCaptured, log);
-                        result.FailedRemountLetters = remount.Failed;
+                        var remount = RemountVolumes(volumesToRestore, log);
+                        TrackRemountOutcome(remount);
                         if (remount.Failed.Count > 0)
                         {
                             log?.Invoke("[WARNING] Some volumes could not be reattached automatically:");
@@ -263,6 +312,11 @@ public static class HotSwapService
                             result.DeviceReturned = true;
                             result.RequiredRetry = true;
                             log?.Invoke("[OK] Device returned after recovery re-enumeration");
+                            if (volumesCaptured.Count > 0)
+                            {
+                                Thread.Sleep(1500);
+                                RestoreCapturedVolumes("recovery re-enumeration");
+                            }
                         }
                     }
 
@@ -270,6 +324,7 @@ public static class HotSwapService
                     {
                         result.ErrorMessage = "Device did not return after hot-swap. A reboot may be required to restore the drive.";
                         log?.Invoke($"[ERROR] {result.ErrorMessage}");
+                        RestoreCapturedVolumes("device-return timeout");
                         EventLogService.Write(
                             $"NVMe hot-swap FAILED for Drive {drive.Number} ({drive.Name}) - device did not return",
                             EventLogEntryType.Error, 3002);
@@ -280,6 +335,7 @@ public static class HotSwapService
             {
                 result.ErrorMessage = $"Hot-swap failed with exception: {ex.Message}";
                 log?.Invoke($"[ERROR] {result.ErrorMessage}");
+                RestoreCapturedVolumes("hot-swap exception");
                 EventLogService.Write(
                     $"NVMe hot-swap exception for Drive {drive.Number}: {ex.Message}",
                     EventLogEntryType.Error, 3003);
@@ -297,6 +353,13 @@ public static class HotSwapService
     /// </summary>
     private sealed record MountedVolume(string Letter, string VolumeGuidPath);
 
+    private sealed class VolumeCaptureResult
+    {
+        public bool Succeeded { get; init; }
+        public string? ErrorMessage { get; init; }
+        public List<MountedVolume> Volumes { get; init; } = [];
+    }
+
     /// <summary>Pairs the successful and failed re-attach results so the caller can
     /// surface unrecoverable volumes to the user without inferring them from counts.</summary>
     public sealed class RemountSummary
@@ -310,11 +373,15 @@ public static class HotSwapService
     /// drive letter and the volume GUID path. The GUID path is stable across re-enumeration
     /// and is what we use to reattach the letter after the hot-swap.
     /// </summary>
-    private static List<MountedVolume> GetVolumesForDrive(int driveNumber)
+    private static VolumeCaptureResult GetVolumesForDrive(int driveNumber)
     {
         var volumes = new List<MountedVolume>();
         if (driveNumber < 0)
-            return volumes;
+            return new VolumeCaptureResult
+            {
+                Succeeded = false,
+                ErrorMessage = "Drive number was invalid."
+            };
 
         try
         {
@@ -344,21 +411,33 @@ public static class HotSwapService
                             if (string.IsNullOrEmpty(letter)) continue;
 
                             var guidPath = TryResolveVolumeGuid(letter);
-                            // Only record the volume if we could resolve its GUID — otherwise
-                            // we have no reliable way to reattach it after re-enumeration.
-                            if (!string.IsNullOrEmpty(guidPath))
-                                volumes.Add(new MountedVolume(letter, guidPath));
+                            // If a logical drive exists but we cannot resolve its stable GUID,
+                            // abort the swap. Treating it as "no volume" could dismount a user's
+                            // drive letter with no reliable way to put it back afterwards.
+                            if (string.IsNullOrEmpty(guidPath))
+                            {
+                                return new VolumeCaptureResult
+                                {
+                                    Succeeded = false,
+                                    ErrorMessage = $"Could not resolve stable volume GUID for {letter}."
+                                };
+                            }
+
+                            volumes.Add(new MountedVolume(letter, guidPath));
                         }
                     }
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Best effort — enumeration failures surface as "no volumes found" and the caller
-            // reports "raw/unpartitioned drive", which is still safe.
+            return new VolumeCaptureResult
+            {
+                Succeeded = false,
+                ErrorMessage = ex.Message
+            };
         }
-        return volumes;
+        return new VolumeCaptureResult { Succeeded = true, Volumes = volumes };
     }
 
     /// <summary>
@@ -422,7 +501,7 @@ public static class HotSwapService
     /// </summary>
     private static string? TryResolveVolumeGuid(string driveLetter)
     {
-        if (string.IsNullOrWhiteSpace(driveLetter) || driveLetter.Length < 2 || driveLetter[1] != ':')
+        if (!IsSimpleDriveLetter(driveLetter))
             return null;
         try
         {
@@ -517,7 +596,7 @@ public static class HotSwapService
     /// </summary>
     private static bool IsLetterBoundToVolume(string driveLetter, string volumeGuidPath)
     {
-        if (string.IsNullOrEmpty(driveLetter) || string.IsNullOrEmpty(volumeGuidPath)) return false;
+        if (!IsSimpleDriveLetter(driveLetter) || string.IsNullOrEmpty(volumeGuidPath)) return false;
         try
         {
             var escaped = EscapeWmiSingleQuotes(driveLetter);
@@ -547,9 +626,7 @@ public static class HotSwapService
     /// </summary>
     private static bool Mount(string driveLetter, string volumeGuidPath, Action<string>? log)
     {
-        if (string.IsNullOrWhiteSpace(driveLetter) ||
-            driveLetter.Length < 2 || driveLetter[1] != ':' ||
-            !char.IsLetter(driveLetter[0]))
+        if (!IsSimpleDriveLetter(driveLetter))
             return false;
         // Volume GUID paths have a very specific shape; refuse anything that doesn't look
         // like one so a corrupted input can't smuggle arbitrary arguments into mountvol.
@@ -612,27 +689,33 @@ public static class HotSwapService
             .Replace("'", "\\'");
     }
 
+    internal static bool IsSimpleDriveLetter(string? driveLetter) =>
+        !string.IsNullOrWhiteSpace(driveLetter)
+        && driveLetter.Length == 2
+        && char.IsAsciiLetter(driveLetter[0])
+        && driveLetter[1] == ':';
+
     /// <summary>
     /// Dismounts a volume by its drive letter using mountvol.
     /// </summary>
     private static bool DismountVolume(string driveLetter)
     {
-        if (string.IsNullOrWhiteSpace(driveLetter))
-            return false;
-        // Defensive: only allow simple drive letters like "C:" — never let arbitrary text be
+        // Defensive: only allow simple drive letters like "C:" - never let arbitrary text be
         // appended to a process command line.
-        if (driveLetter.Length < 2 || driveLetter[1] != ':' || !char.IsLetter(driveLetter[0]))
+        if (!IsSimpleDriveLetter(driveLetter))
             return false;
 
         try
         {
-            var psi = new ProcessStartInfo("mountvol", $"{driveLetter[0]}:\\ /P")
+            var psi = new ProcessStartInfo("mountvol")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            psi.ArgumentList.Add($"{char.ToUpperInvariant(driveLetter[0])}:\\");
+            psi.ArgumentList.Add("/P");
 
             using var proc = Process.Start(psi);
             if (proc is null) return false;

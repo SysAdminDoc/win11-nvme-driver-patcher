@@ -12,7 +12,7 @@ public enum CheckStatus
 public class PreflightCheck
 {
     public CheckStatus Status { get; set; } = CheckStatus.Checking;
-    public string Message { get; set; } = "Checking...";
+    public string Message { get; set; } = "Checking…";
     public bool Critical { get; set; }
 
     public PreflightCheck() { }

@@ -19,7 +19,7 @@
                 Background="{StaticResource WindowCanvasBrush}"
                 BorderBrush="{StaticResource Border}"
                 BorderThickness="1"
-                CornerRadius="18"
+                CornerRadius="14"
                 ClipToBounds="False">
             <Border.Effect>
                 <StaticResource ResourceKey="WindowShadow"/>
@@ -30,7 +30,7 @@
                         Height="1"
                         VerticalAlignment="Top"
                         Background="{StaticResource AccentLineBrush}"
-                        CornerRadius="18,18,0,0"
+                        CornerRadius="14,14,0,0"
                         Panel.ZIndex="2"/>
 
                 <Grid>
@@ -59,7 +59,7 @@
                                         Background="{StaticResource SurfaceInset}"
                                         BorderBrush="{StaticResource Border}"
                                         BorderThickness="1"
-                                        CornerRadius="12">
+                                        CornerRadius="8">
                                     <Grid>
                                         <TextBlock Text="NVMe"
                                                    FontSize="11"
@@ -89,6 +89,7 @@
                                         Margin="0,0,10,0"
                                         Background="{StaticResource YellowBg}"
                                         Foreground="{StaticResource Yellow}"
+                                        AutomationProperties.Name="Open available update"
                                         Visibility="{Binding UpdateAvailable, Converter={StaticResource BoolVis}}"
                                         Command="{Binding OpenUpdateUrlCommand}"
                                         ToolTip="{Binding UpdateTooltip}">
@@ -100,7 +101,7 @@
                                         Background="{StaticResource SurfaceInset}"
                                         BorderBrush="{StaticResource Border}"
                                         BorderThickness="1"
-                                        CornerRadius="10">
+                                        CornerRadius="8">
                                     <TextBlock Text="{Binding VersionText}"
                                                FontSize="11"
                                                FontWeight="SemiBold"
@@ -166,7 +167,7 @@
                                             Background="{StaticResource YellowBg}"
                                             BorderBrush="{StaticResource Border}"
                                             BorderThickness="1"
-                                            CornerRadius="12"
+                                            CornerRadius="8"
                                             Visibility="{Binding ShowViVeToolFallbackBadge, Converter={StaticResource BoolVis}}">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -378,7 +379,7 @@
                                                         Background="{StaticResource BgMedium}"
                                                         BorderBrush="{StaticResource Border}"
                                                         BorderThickness="1"
-                                                        CornerRadius="10">
+                                                        CornerRadius="8">
                                                     <Border.Style>
                                                         <Style TargetType="Border">
                                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -413,7 +414,7 @@
                                                                     Background="{StaticResource BgMedium}"
                                                                     BorderBrush="{StaticResource Border}"
                                                                     BorderThickness="1"
-                                                                    CornerRadius="10">
+                                                                    CornerRadius="8">
                                                                 <StackPanel>
                                                                     <TextBlock Text="{Binding Title}"
                                                                                Foreground="{Binding ToneColor, Converter={StaticResource StrToBrush}}"
@@ -455,7 +456,7 @@
                                             MinWidth="220"
                                             MaxWidth="320"
                                             Margin="0,0,0,12"
-                                            Style="{StaticResource OutlinedActionButton}"
+                                            Style="{StaticResource DangerButton}"
                                             AutomationProperties.Name="Remove patch"
                                             IsEnabled="{Binding RemoveEnabled}"
                                             ToolTip="{Binding RemoveButtonTooltipText}"
@@ -468,7 +469,7 @@
                                           Background="{StaticResource BgMedium}"
                                           BorderBrush="{StaticResource Border}"
                                           BorderThickness="1"
-                                          CornerRadius="12">
+                                          CornerRadius="8">
                                       <TextBlock Text="{Binding ActionReadinessText}"
                                                  Foreground="{Binding ActionReadinessColor, Converter={StaticResource StrToBrush}}"
                                                  FontSize="12"
@@ -509,7 +510,7 @@
                                                       MinWidth="168"
                                                       MaxWidth="220"
                                                       Margin="0,0,12,12"
-                                                      Style="{StaticResource SecondaryButton}"
+                                                      Style="{StaticResource WarningSecondaryButton}"
                                                       ToolTip="Stop the current DiskSpd run. Partial data is discarded."
                                                       AutomationProperties.Name="Cancel running benchmark"
                                                       Visibility="{Binding BenchmarkRunning, Converter={StaticResource BoolVis}}"
@@ -556,7 +557,7 @@
                                                           Background="{StaticResource BgMedium}"
                                                           BorderBrush="{StaticResource Border}"
                                                           BorderThickness="1"
-                                                          CornerRadius="10">
+                                                          CornerRadius="8">
                                                       <StackPanel>
                                                           <TextBlock Text="Registry Backups" Style="{StaticResource SectionEyebrow}"/>
                                                           <TextBlock Text="{Binding BackupHistoryText}"
@@ -572,7 +573,7 @@
                                                           Background="{StaticResource BgMedium}"
                                                           BorderBrush="{StaticResource Border}"
                                                           BorderThickness="1"
-                                                          CornerRadius="10">
+                                                          CornerRadius="8">
                                                       <StackPanel>
                                                           <TextBlock Text="Change Snapshots" Style="{StaticResource SectionEyebrow}"/>
                                                           <TextBlock Text="{Binding SnapshotHistoryText}"
@@ -588,7 +589,7 @@
                                                           Background="{StaticResource BgMedium}"
                                                           BorderBrush="{StaticResource Border}"
                                                           BorderThickness="1"
-                                                          CornerRadius="10">
+                                                          CornerRadius="8">
                                                       <StackPanel>
                                                           <TextBlock Text="Benchmark Runs" Style="{StaticResource SectionEyebrow}"/>
                                                           <TextBlock Text="{Binding BenchmarkHistoryText}"
@@ -644,19 +645,35 @@
                                                                 Background="{StaticResource BgMedium}"
                                                                 BorderBrush="{StaticResource Border}"
                                                                 BorderThickness="1"
-                                                                CornerRadius="12"
+                                                                CornerRadius="8"
                                                                 ToolTip="{Binding Tooltip}">
                                                             <StackPanel>
-                                                                <StackPanel Orientation="Horizontal">
-                                                                    <Ellipse Width="9"
-                                                                             Height="9"
-                                                                             Margin="0,0,10,0"
-                                                                             VerticalAlignment="Center"
-                                                                             Fill="{Binding Color, Converter={StaticResource StrToBrush}}"/>
-                                                                    <TextBlock Text="{Binding Label}"
-                                                                               Foreground="{StaticResource TextSecondary}"
-                                                                               FontWeight="SemiBold"/>
-                                                                </StackPanel>
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+
+                                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                        <Ellipse Width="9"
+                                                                                 Height="9"
+                                                                                 Margin="0,0,10,0"
+                                                                                 VerticalAlignment="Center"
+                                                                                 Fill="{Binding Color, Converter={StaticResource StrToBrush}}"/>
+                                                                        <TextBlock Text="{Binding Label}"
+                                                                                   Foreground="{StaticResource TextSecondary}"
+                                                                                   FontWeight="SemiBold"/>
+                                                                    </StackPanel>
+
+                                                                    <Border Grid.Column="1"
+                                                                            Margin="12,0,0,0"
+                                                                            Style="{StaticResource StatusChipBorder}"
+                                                                            BorderBrush="{Binding Color, Converter={StaticResource StrToBrush}}">
+                                                                        <TextBlock Text="{Binding StatusLabel}"
+                                                                                   Style="{StaticResource StatusChipText}"
+                                                                                   Foreground="{Binding Color, Converter={StaticResource StrToBrush}}"/>
+                                                                    </Border>
+                                                                </Grid>
                                                                 <TextBlock Text="{Binding Message}"
                                                                            Margin="19,8,0,0"
                                                                            Foreground="{Binding Color, Converter={StaticResource StrToBrush}}"
@@ -676,19 +693,35 @@
                                                                 Background="{StaticResource BgMedium}"
                                                                 BorderBrush="{StaticResource Border}"
                                                                 BorderThickness="1"
-                                                                CornerRadius="12"
+                                                                CornerRadius="8"
                                                                 ToolTip="{Binding Tooltip}">
                                                             <StackPanel>
-                                                                <StackPanel Orientation="Horizontal">
-                                                                    <Ellipse Width="9"
-                                                                             Height="9"
-                                                                             Margin="0,0,10,0"
-                                                                             VerticalAlignment="Center"
-                                                                             Fill="{Binding Color, Converter={StaticResource StrToBrush}}"/>
-                                                                    <TextBlock Text="{Binding Label}"
-                                                                               Foreground="{StaticResource TextSecondary}"
-                                                                               FontWeight="SemiBold"/>
-                                                                </StackPanel>
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+
+                                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                        <Ellipse Width="9"
+                                                                                 Height="9"
+                                                                                 Margin="0,0,10,0"
+                                                                                 VerticalAlignment="Center"
+                                                                                 Fill="{Binding Color, Converter={StaticResource StrToBrush}}"/>
+                                                                        <TextBlock Text="{Binding Label}"
+                                                                                   Foreground="{StaticResource TextSecondary}"
+                                                                                   FontWeight="SemiBold"/>
+                                                                    </StackPanel>
+
+                                                                    <Border Grid.Column="1"
+                                                                            Margin="12,0,0,0"
+                                                                            Style="{StaticResource StatusChipBorder}"
+                                                                            BorderBrush="{Binding Color, Converter={StaticResource StrToBrush}}">
+                                                                        <TextBlock Text="{Binding StatusLabel}"
+                                                                                   Style="{StaticResource StatusChipText}"
+                                                                                   Foreground="{Binding Color, Converter={StaticResource StrToBrush}}"/>
+                                                                    </Border>
+                                                                </Grid>
                                                                 <TextBlock Text="{Binding Message}"
                                                                            Margin="19,8,0,0"
                                                                            Foreground="{Binding Color, Converter={StaticResource StrToBrush}}"
@@ -715,7 +748,7 @@
                                                 Background="{StaticResource SurfaceInset}"
                                                 BorderBrush="{StaticResource Border}"
                                                 BorderThickness="1"
-                                                CornerRadius="14">
+                                                CornerRadius="8">
                                             <Border.Style>
                                                 <Style TargetType="Border">
                                                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -757,7 +790,7 @@
                                                             Background="{StaticResource BgMedium}"
                                                             BorderBrush="{StaticResource Border}"
                                                             BorderThickness="1"
-                                                            CornerRadius="14">
+                                                            CornerRadius="8">
                                                         <Grid>
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="Auto"/>
@@ -829,7 +862,7 @@
                                                 <RadioButton Content="Full Mode — all three feature flags"
                                                              Style="{StaticResource DarkRadioButton}"
                                                              GroupName="PatchProfile"
-                                                             ToolTip="Adds 1853569164 (UxAccOptimization) and 156965516 (Standalone_Future). Higher peak performance on some drives, higher BSOD risk on others."
+                                                             ToolTip="Adds 1853569164 (UxAccOptimization) and 156965516 (Standalone_Future). Higher peak performance on some drives, higher boot-crash risk on others."
                                                              IsChecked="{Binding IsFullModeSelected}"/>
                                                 <TextBlock Text="{Binding PatchProfileHelpText}"
                                                            Margin="0,8,0,0"
@@ -849,7 +882,7 @@
                                                         Background="{StaticResource SurfaceInset}"
                                                         BorderBrush="{StaticResource Border}"
                                                         BorderThickness="1"
-                                                        CornerRadius="12">
+                                                        CornerRadius="8">
                                                     <TextBlock Text="Safe Mode is still the safest default for most systems. Add the Server 2025 key only when you need the broader compatibility path."
                                                                Foreground="{StaticResource TextSecondary}"
                                                                FontSize="12"
@@ -861,7 +894,7 @@
                                                         Background="{StaticResource YellowBg}"
                                                         BorderBrush="{StaticResource Border}"
                                                         BorderThickness="1"
-                                                        CornerRadius="12">
+                                                        CornerRadius="8">
                                                     <TextBlock Text="Heads-up for gamers: nvmedisk.sys does not honor BypassIO, so DirectStorage titles fall back to the slower path. Skip the patch on your gaming rig, or keep a one-click removal ready."
                                                                Foreground="{StaticResource Yellow}"
                                                                FontSize="12"
@@ -975,7 +1008,7 @@
                                                                 Background="{StaticResource BgMedium}"
                                                                 BorderBrush="{StaticResource Border}"
                                                                 BorderThickness="1"
-                                                                CornerRadius="12">
+                                                                CornerRadius="8">
                                                             <Grid>
                                                                 <Grid.ColumnDefinitions>
                                                                     <ColumnDefinition Width="*"/>
@@ -1097,8 +1130,12 @@
                                                                         Background="{StaticResource BgMedium}"
                                                                         BorderBrush="{StaticResource Border}"
                                                                         BorderThickness="1"
-                                                                        CornerRadius="12">
+                                                                        CornerRadius="8">
                                                                     <Grid>
+                                                                        <Grid.RowDefinitions>
+                                                                            <RowDefinition Height="Auto"/>
+                                                                            <RowDefinition Height="Auto"/>
+                                                                        </Grid.RowDefinitions>
                                                                         <Grid.ColumnDefinitions>
                                                                             <ColumnDefinition Width="Auto"/>
                                                                             <ColumnDefinition Width="120"/>
@@ -1121,6 +1158,17 @@
                                                                                    Foreground="{StaticResource TextMuted}"
                                                                                    FontSize="12"
                                                                                    TextWrapping="Wrap"/>
+                                                                        <Border Grid.Row="1"
+                                                                                Grid.Column="1"
+                                                                                Grid.ColumnSpan="2"
+                                                                                Margin="0,8,0,0"
+                                                                                HorizontalAlignment="Left"
+                                                                                Style="{StaticResource StatusChipBorder}"
+                                                                                BorderBrush="{Binding DotColor, Converter={StaticResource StrToBrush}}">
+                                                                            <TextBlock Text="{Binding StatusLabel}"
+                                                                                       Style="{StaticResource StatusChipText}"
+                                                                                       Foreground="{Binding DotColor, Converter={StaticResource StrToBrush}}"/>
+                                                                        </Border>
                                                                     </Grid>
                                                                 </Border>
                                                             </DataTemplate>
@@ -1147,8 +1195,12 @@
                                                                         Background="{StaticResource BgMedium}"
                                                                         BorderBrush="{StaticResource Border}"
                                                                         BorderThickness="1"
-                                                                        CornerRadius="12">
+                                                                        CornerRadius="8">
                                                                     <Grid>
+                                                                        <Grid.RowDefinitions>
+                                                                            <RowDefinition Height="Auto"/>
+                                                                            <RowDefinition Height="Auto"/>
+                                                                        </Grid.RowDefinitions>
                                                                         <Grid.ColumnDefinitions>
                                                                             <ColumnDefinition Width="Auto"/>
                                                                             <ColumnDefinition Width="120"/>
@@ -1171,6 +1223,17 @@
                                                                                    Foreground="{StaticResource TextMuted}"
                                                                                    FontSize="12"
                                                                                    TextWrapping="Wrap"/>
+                                                                        <Border Grid.Row="1"
+                                                                                Grid.Column="1"
+                                                                                Grid.ColumnSpan="2"
+                                                                                Margin="0,8,0,0"
+                                                                                HorizontalAlignment="Left"
+                                                                                Style="{StaticResource StatusChipBorder}"
+                                                                                BorderBrush="{Binding DotColor, Converter={StaticResource StrToBrush}}">
+                                                                            <TextBlock Text="{Binding StatusLabel}"
+                                                                                       Style="{StaticResource StatusChipText}"
+                                                                                       Foreground="{Binding DotColor, Converter={StaticResource StrToBrush}}"/>
+                                                                        </Border>
                                                                     </Grid>
                                                                 </Border>
                                                             </DataTemplate>
@@ -1188,8 +1251,10 @@
                                       Grid.Row="0"
                                       Grid.Column="1"
                                       Width="6"
+                                      Focusable="True"
                                       HorizontalAlignment="Center"
                                       VerticalAlignment="Stretch"
+                                      AutomationProperties.Name="Resize overview and validation panels"
                                       Background="Transparent"
                                       Cursor="SizeWE"
                                       ShowsPreview="True"/>
@@ -1218,7 +1283,19 @@
                                             KeyboardNavigation.TabNavigation="Cycle"
                                             AutomationProperties.Name="Workspace tabs"
                                             SelectionChanged="WorkspaceTabs_SelectionChanged">
-                                    <TabItem Style="{StaticResource WorkspaceTabItem}" Header="Activity">
+                                    <TabItem Style="{StaticResource WorkspaceTabItem}">
+                                        <TabItem.Header>
+                                            <StackPanel Orientation="Horizontal"
+                                                        DataContext="{Binding DataContext, ElementName=WorkspaceTabs}">
+                                                <TextBlock Text="Activity"/>
+                                                <Border Style="{StaticResource TabBadgeBorder}"
+                                                        BorderBrush="{Binding ActivityTabBadgeColor, Converter={StaticResource StrToBrush}}">
+                                                    <TextBlock Text="{Binding ActivityTabBadgeText}"
+                                                               Foreground="{Binding ActivityTabBadgeColor, Converter={StaticResource StrToBrush}}"
+                                                               Style="{StaticResource TabBadgeText}"/>
+                                                </Border>
+                                            </StackPanel>
+                                        </TabItem.Header>
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
@@ -1246,18 +1323,45 @@
                                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="16,0,0,0">
                                                     <Button Content="Copy"
                                                             Margin="0,0,8,0"
-                                                            Style="{StaticResource SecondaryButton}"
                                                             AutomationProperties.Name="Copy activity log"
-                                                            Command="{Binding CopyLogCommand}"/>
+                                                            Command="{Binding CopyLogCommand}">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding LogEntryCount}" Value="0">
+                                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
                                                     <Button Content="Export"
                                                             Margin="0,0,8,0"
-                                                            Style="{StaticResource SecondaryButton}"
                                                             AutomationProperties.Name="Export activity log"
-                                                            Command="{Binding ExportLogCommand}"/>
+                                                            Command="{Binding ExportLogCommand}">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding LogEntryCount}" Value="0">
+                                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
                                                     <Button Content="Clear"
-                                                            Style="{StaticResource SecondaryButton}"
                                                             AutomationProperties.Name="Clear activity log"
-                                                            Click="ClearLog_Click"/>
+                                                            Click="ClearLog_Click">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource WarningSecondaryButton}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding LogEntryCount}" Value="0">
+                                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
                                                 </StackPanel>
                                             </Grid>
 
@@ -1388,17 +1492,32 @@
                                                              Value="{Binding ProgressValue}"
                                                              Foreground="{StaticResource Accent}"
                                                              Template="{StaticResource RoundProgress}"
+                                                             AutomationProperties.Name="Current operation progress"
+                                                             AutomationProperties.LiveSetting="Polite"
                                                              Visibility="{Binding ProgressVisible, Converter={StaticResource BoolVis}}"/>
                                                 <TextBlock Text="{Binding ProgressText}"
                                                            Margin="0,8,0,0"
                                                            Foreground="{StaticResource TextDim}"
                                                            FontSize="11"
+                                                           AutomationProperties.LiveSetting="Polite"
                                                            Visibility="{Binding ProgressVisible, Converter={StaticResource BoolVis}}"/>
                                             </StackPanel>
                                         </Grid>
                                     </TabItem>
 
-                                    <TabItem Style="{StaticResource WorkspaceTabItem}" Header="Benchmark">
+                                    <TabItem Style="{StaticResource WorkspaceTabItem}">
+                                        <TabItem.Header>
+                                            <StackPanel Orientation="Horizontal"
+                                                        DataContext="{Binding DataContext, ElementName=WorkspaceTabs}">
+                                                <TextBlock Text="Benchmark"/>
+                                                <Border Style="{StaticResource TabBadgeBorder}"
+                                                        BorderBrush="{Binding BenchmarkTabBadgeColor, Converter={StaticResource StrToBrush}}">
+                                                    <TextBlock Text="{Binding BenchmarkTabBadgeText}"
+                                                               Foreground="{Binding BenchmarkTabBadgeColor, Converter={StaticResource StrToBrush}}"
+                                                               Style="{StaticResource TabBadgeText}"/>
+                                                </Border>
+                                            </StackPanel>
+                                        </TabItem.Header>
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
@@ -1452,7 +1571,19 @@
                                         </Grid>
                                     </TabItem>
 
-                                    <TabItem Style="{StaticResource WorkspaceTabItem}" Header="Telemetry">
+                                    <TabItem Style="{StaticResource WorkspaceTabItem}">
+                                        <TabItem.Header>
+                                            <StackPanel Orientation="Horizontal"
+                                                        DataContext="{Binding DataContext, ElementName=WorkspaceTabs}">
+                                                <TextBlock Text="Telemetry"/>
+                                                <Border Style="{StaticResource TabBadgeBorder}"
+                                                        BorderBrush="{Binding TelemetryTabBadgeColor, Converter={StaticResource StrToBrush}}">
+                                                    <TextBlock Text="{Binding TelemetryTabBadgeText}"
+                                                               Foreground="{Binding TelemetryTabBadgeColor, Converter={StaticResource StrToBrush}}"
+                                                               Style="{StaticResource TabBadgeText}"/>
+                                                </Border>
+                                            </StackPanel>
+                                        </TabItem.Header>
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
@@ -1520,7 +1651,19 @@
                                         </Grid>
                                     </TabItem>
 
-                                    <TabItem Style="{StaticResource WorkspaceTabItem}" Header="Recovery">
+                                    <TabItem Style="{StaticResource WorkspaceTabItem}">
+                                        <TabItem.Header>
+                                            <StackPanel Orientation="Horizontal"
+                                                        DataContext="{Binding DataContext, ElementName=WorkspaceTabs}">
+                                                <TextBlock Text="Recovery"/>
+                                                <Border Style="{StaticResource TabBadgeBorder}"
+                                                        BorderBrush="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}">
+                                                    <TextBlock Text="{Binding RecoveryTabBadgeText}"
+                                                               Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"
+                                                               Style="{StaticResource TabBadgeText}"/>
+                                                </Border>
+                                            </StackPanel>
+                                        </TabItem.Header>
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
@@ -1889,7 +2032,7 @@
                                                     Background="{StaticResource YellowBg}"
                                                     BorderBrush="{StaticResource Border}"
                                                     BorderThickness="1"
-                                                    CornerRadius="12">
+                                                    CornerRadius="8">
                                                 <StackPanel>
                                                     <TextBlock Text="Keep One Copy Off-Device"
                                                                Foreground="{StaticResource Yellow}"
@@ -1905,7 +2048,18 @@
                                         </Grid>
                                     </TabItem>
 
-                                    <TabItem Style="{StaticResource WorkspaceTabItem}" Header="Tuning">
+                                    <TabItem Style="{StaticResource WorkspaceTabItem}">
+                                        <TabItem.Header>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Tuning"/>
+                                                <Border Style="{StaticResource TabBadgeBorder}"
+                                                        BorderBrush="{StaticResource TextDimmer}">
+                                                    <TextBlock Text="Advanced"
+                                                               Foreground="{StaticResource TextDim}"
+                                                               Style="{StaticResource TabBadgeText}"/>
+                                                </Border>
+                                            </StackPanel>
+                                        </TabItem.Header>
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
@@ -1948,6 +2102,8 @@
                                                  VerticalAlignment="Center"
                                                  Value="{Binding ProgressValue}"
                                                  Foreground="{StaticResource Accent}"
+                                                 AutomationProperties.Name="Footer operation progress"
+                                                 AutomationProperties.LiveSetting="Polite"
                                                  Template="{StaticResource RoundProgress}"/>
                                 </WrapPanel>
                             </StackPanel>
@@ -1982,6 +2138,8 @@
 
                 <Border Panel.ZIndex="4"
                         Background="#AA09090B"
+                        AutomationProperties.Name="Readiness refresh overlay"
+                        AutomationProperties.LiveSetting="Polite"
                         Visibility="{Binding IsLoading, Converter={StaticResource BoolVis}}">
                     <Grid>
                         <Border MaxWidth="560"
@@ -1990,7 +2148,7 @@
                                 Background="{StaticResource BgDark}"
                                 BorderBrush="{StaticResource BorderLight}"
                                 BorderThickness="1"
-                                CornerRadius="22"
+                                CornerRadius="8"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
                             <Border.Effect>
@@ -2009,6 +2167,8 @@
                                 <ProgressBar Margin="0,22,0,0"
                                              Height="8"
                                              Foreground="{StaticResource Accent}"
+                                             AutomationProperties.Name="Refreshing readiness progress"
+                                             AutomationProperties.LiveSetting="Polite"
                                              Template="{StaticResource RoundProgressIndeterminate}"/>
 
                                 <WrapPanel Margin="0,22,0,0">

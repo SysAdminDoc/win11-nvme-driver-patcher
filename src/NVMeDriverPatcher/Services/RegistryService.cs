@@ -76,6 +76,7 @@ public static class RegistryService
         var classification = ClassifyPatchState(primarySet, extendedA, extendedB, safeBootMin, safeBootNet, count);
         status.DetectedProfile = classification.Profile;
         status.Count = count;
+        status.Total = classification.ExpectedTotal;
         status.Keys = keys;
         status.Applied = classification.Applied;
         status.Partial = classification.Partial;
@@ -98,7 +99,11 @@ public static class RegistryService
     /// Applied is true for either clean profile; Partial is the leftover "something is set
     /// but it's not a clean install" bucket.
     /// </summary>
-    internal readonly record struct PatchClassification(PatchAppliedProfile Profile, bool Applied, bool Partial);
+    internal readonly record struct PatchClassification(
+        PatchAppliedProfile Profile,
+        bool Applied,
+        bool Partial,
+        int ExpectedTotal);
 
     internal static PatchClassification ClassifyPatchState(
         bool primarySet,
@@ -109,7 +114,11 @@ public static class RegistryService
         int count)
     {
         if (count <= 0)
-            return new PatchClassification(PatchAppliedProfile.None, Applied: false, Partial: false);
+            return new PatchClassification(
+                PatchAppliedProfile.None,
+                Applied: false,
+                Partial: false,
+                ExpectedTotal: AppConfig.GetTotalComponents(PatchProfile.Safe, includeServerKey: false));
 
         // Both SafeBoot keys are required for either profile to count as clean; either one
         // missing demotes the install to Mixed even if the feature flags look right.
@@ -117,10 +126,26 @@ public static class RegistryService
         bool cleanFull = primarySet && extendedA && extendedB && safeBootMin && safeBootNet;
 
         if (cleanSafe)
-            return new PatchClassification(PatchAppliedProfile.Safe, Applied: true, Partial: false);
+            return new PatchClassification(
+                PatchAppliedProfile.Safe,
+                Applied: true,
+                Partial: false,
+                ExpectedTotal: AppConfig.GetTotalComponents(PatchProfile.Safe, includeServerKey: false));
         if (cleanFull)
-            return new PatchClassification(PatchAppliedProfile.Full, Applied: true, Partial: false);
-        return new PatchClassification(PatchAppliedProfile.Mixed, Applied: false, Partial: true);
+            return new PatchClassification(
+                PatchAppliedProfile.Full,
+                Applied: true,
+                Partial: false,
+                ExpectedTotal: AppConfig.GetTotalComponents(PatchProfile.Full, includeServerKey: false));
+
+        bool looksLikeFullAttempt = extendedA || extendedB;
+        return new PatchClassification(
+            PatchAppliedProfile.Mixed,
+            Applied: false,
+            Partial: true,
+            ExpectedTotal: AppConfig.GetTotalComponents(
+                looksLikeFullAttempt ? PatchProfile.Full : PatchProfile.Safe,
+                includeServerKey: false));
     }
 
     public static string? ExportRegistryBackup(string workingDir, string description = "NVMe_Backup")

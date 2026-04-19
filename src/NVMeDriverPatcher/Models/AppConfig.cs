@@ -112,12 +112,14 @@ public class AppConfig
     public string? LastRun { get; set; }
     public string? LastRecoveryKitPath { get; set; }
     public string? LastDiagnosticsPath { get; set; }
+    public string? LastSupportBundlePath { get; set; }
     public string? LastVerificationScriptPath { get; set; }
 
     // Set on successful patch apply; cleared after a post-reboot verification confirms
     // nvmedisk.sys actually bound (or flagged the user that the override was blocked).
     // ISO-8601 UTC timestamp so the next launch can compare vs OS boot time.
     public string? PendingVerificationSince { get; set; }
+    public string? PendingVerificationProfile { get; set; }
     public string? LastVerifiedProfile { get; set; }
     public string? LastVerificationResult { get; set; }
 
@@ -145,8 +147,13 @@ public class AppConfig
             if (!string.IsNullOrEmpty(localAppData))
             {
                 var dir = Path.Combine(localAppData, "NVMePatcher");
-                if (Directory.Exists(dir)) return dir;
+                if (Directory.Exists(dir))
+                {
+                    WorkingDirFallbackReason = null;
+                    return dir;
+                }
                 Directory.CreateDirectory(dir);
+                WorkingDirFallbackReason = null;
                 return dir;
             }
             localAppDataError = "LocalAppData path was empty";

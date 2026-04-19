@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
 
@@ -46,7 +47,7 @@ public static class RecoveryKitService
 ; Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}
 ;
 ; FROM WINDOWS: Double-click this file and confirm.
-; FROM WinRE:   regedit /s NVMe_Remove_Patch.reg
+; FROM WinRE:   Run Remove_NVMe_Patch.bat so the offline SYSTEM hive is loaded.
 
 [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides]
 ""735209102""=-
@@ -73,6 +74,7 @@ public static class RecoveryKitService
         catch (Exception ex)
         {
             log?.Invoke($"[ERROR] Could not write NVMe_Remove_Patch.reg: {ex.Message}");
+            DeleteDirectoryBestEffort(stagingDir);
             return null;
         }
 
@@ -84,8 +86,10 @@ echo  Removes all native NVMe registry patches
 echo ============================================
 echo.
 
-reg query ""HKLM\SYSTEM\CurrentControlSet"" >nul 2>&1
-if %errorlevel%==0 (
+rem Detect WinRE/WinPE. HKLM\SYSTEM\CurrentControlSet exists in both full Windows
+rem and the recovery environment, so it is not a reliable discriminator.
+reg query ""HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinPE"" >nul 2>&1
+if %errorlevel% neq 0 (
     echo Detected: Running in Windows
     set ""CS=CurrentControlSet""
     goto :do_remove
@@ -96,11 +100,13 @@ echo Searching for Windows installation...
 echo.
 
 set ""WINFOUND=""
-for %%D in (C D E F G H) do (
+for %%D in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
     if exist ""%%D:\Windows\System32\config\SYSTEM"" (
-        echo Found Windows on %%D:
-        set ""WINFOUND=%%D""
-        goto :found_win
+        if /I not ""%%D:""==""%SystemDrive%"" (
+            echo Found Windows on %%D:
+            set ""WINFOUND=%%D""
+            goto :found_win
+        )
     )
 )
 
@@ -153,6 +159,7 @@ pause";
         catch (Exception ex)
         {
             log?.Invoke($"[ERROR] Could not write Remove_NVMe_Patch.bat: {ex.Message}");
+            DeleteDirectoryBestEffort(stagingDir);
             return null;
         }
 
@@ -235,25 +242,43 @@ FILES:
 
     public static string? GenerateVerificationScript(string workingDir, bool includeServerKey)
     {
+        // Compatibility overload for older callers. The historical script checked all core
+        // feature flags, which corresponds to Full mode.
+        return GenerateVerificationScript(workingDir, PatchProfile.Full, includeServerKey);
+    }
+
+    public static string? GenerateVerificationScript(string workingDir, PatchProfile profile, bool includeServerKey)
+    {
         if (string.IsNullOrEmpty(workingDir))
             return null;
         try { Directory.CreateDirectory(workingDir); } catch { return null; }
 
         var outputPath = Path.Combine(workingDir, "Verify_NVMe_Patch.ps1");
-        var serverKeyValue = includeServerKey ? "$true" : "$false";
+        var expectedFeatureIds = AppConfig.GetFeatureIDsForProfile(profile).ToList();
+        if (includeServerKey)
+            expectedFeatureIds.Add(AppConfig.ServerFeatureID);
+
+        var featureEntries = string.Join(
+            ",\r\n",
+            expectedFeatureIds.Select(id =>
+            {
+                var name = AppConfig.FeatureNames.TryGetValue(id, out var friendlyName)
+                    ? friendlyName
+                    : "Feature flag";
+                return $@"    @{{ ID = ""{id}""; Name = ""{EscapePowerShellString(name)}"" }}";
+            }));
 
         var script = $@"#Requires -RunAsAdministrator
 $Host.UI.RawUI.WindowTitle = ""NVMe Patch Verification""
 Write-Host ""NVMe Driver Patch Verification"" -ForegroundColor Cyan
 Write-Host ""=================================="" -ForegroundColor Cyan
 Write-Host """"
+Write-Host ""Expected profile: {profile}"" -ForegroundColor Yellow
+Write-Host """"
 $registryPath = ""HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides""
 $featureIDs = @(
-    @{{ ID = ""735209102""; Name = ""NativeNVMeStackForGeClient"" }},
-    @{{ ID = ""1853569164""; Name = ""UxAccOptimization"" }},
-    @{{ ID = ""156965516""; Name = ""Standalone_Future"" }}
+{featureEntries}
 )
-if ({serverKeyValue}) {{ $featureIDs += @{{ ID = ""1176759950""; Name = ""Server 2025 key"" }} }}
 $passCount = 0; $totalChecks = $featureIDs.Count + 2
 foreach ($feat in $featureIDs) {{
     $val = Get-ItemProperty -Path $registryPath -Name $feat.ID -ErrorAction SilentlyContinue
@@ -279,6 +304,9 @@ Write-Host """"; Write-Host ""Press any key...""; $null = $Host.UI.RawUI.ReadKey
         catch { return null; }
     }
 
+    private static string EscapePowerShellString(string value) =>
+        value.Replace("`", "``").Replace("$", "`$").Replace("\"", "`\"");
+
     private static void WriteAllTextAtomic(string path, string content, System.Text.Encoding encoding)
     {
         var directory = Path.GetDirectoryName(path);
@@ -288,7 +316,13 @@ Write-Host """"; Write-Host ""Press any key...""; $null = $Host.UI.RawUI.ReadKey
         var tempPath = path + ".tmp";
         try
         {
-            File.WriteAllText(tempPath, content, encoding);
+            using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var sw = new StreamWriter(fs, encoding))
+            {
+                sw.Write(content);
+                sw.Flush();
+                fs.Flush(flushToDisk: true);
+            }
             File.Move(tempPath, path, overwrite: true);
         }
         catch
@@ -296,5 +330,15 @@ Write-Host """"; Write-Host ""Press any key...""; $null = $Host.UI.RawUI.ReadKey
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
             throw;
         }
+    }
+
+    private static void DeleteDirectoryBestEffort(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch { }
     }
 }

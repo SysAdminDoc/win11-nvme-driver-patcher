@@ -122,7 +122,8 @@ public static class ViVeToolService
             return result;
         }
 
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
+        using var handler = new HttpClientHandler { AllowAutoRedirect = false };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(90) };
         client.DefaultRequestHeaders.UserAgent.ParseAdd($"NVMeDriverPatcher/{AppConfig.AppVersion}");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
 
@@ -173,14 +174,9 @@ public static class ViVeToolService
 
         // Host whitelist. If a future release's JSON points `browser_download_url` at a host
         // we don't trust (compromise, typo, repo transfer), we refuse before fetching anything.
-        if (!Uri.TryCreate(assetUrl, UriKind.Absolute, out var assetUri) || assetUri.Scheme != Uri.UriSchemeHttps)
+        if (!Uri.TryCreate(assetUrl, UriKind.Absolute, out var assetUri) || !IsTrustedAssetUri(assetUri))
         {
-            result.Message = $"Asset URL is not a valid HTTPS URL: {assetUrl}";
-            return result;
-        }
-        if (!AllowedAssetHosts.Any(h => assetUri.Host.Equals(h, StringComparison.OrdinalIgnoreCase)))
-        {
-            result.Message = $"Asset URL host '{assetUri.Host}' is not in the trusted list; refusing download.";
+            result.Message = $"Asset URL is not a trusted HTTPS GitHub asset URL: {assetUrl}";
             return result;
         }
 
@@ -198,12 +194,7 @@ public static class ViVeToolService
         try
         {
             log?.Invoke($"Downloading ViVeTool {(tagName ?? "latest")} from {assetUri}");
-            using (var response = await client.GetAsync(assetUri, HttpCompletionOption.ResponseContentRead).ConfigureAwait(false))
-            {
-                response.EnsureSuccessStatusCode();
-                await using var fs = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None);
-                await response.Content.CopyToAsync(fs).ConfigureAwait(false);
-            }
+            await DownloadTrustedAssetAsync(client, assetUri, tempZip).ConfigureAwait(false);
 
             // Verify the downloaded file size matches what the API told us, and fits our bounds.
             var actualSize = new FileInfo(tempZip).Length;
@@ -244,8 +235,8 @@ public static class ViVeToolService
                 }
             }
 
-            var stagedExe = Path.Combine(stagingDir, "ViVeTool.exe");
-            if (!File.Exists(stagedExe))
+            var payloadRoot = FindViVeToolPayloadRoot(stagingDir);
+            if (payloadRoot is null)
             {
                 result.Message = "ViVeTool.exe missing from the extracted archive.";
                 return result;
@@ -253,9 +244,9 @@ public static class ViVeToolService
 
             // Promote every staged file into the final tools/ folder. ViVeTool.exe expects its
             // sibling DLLs alongside it; we preserve the layout the archive shipped with.
-            foreach (var src in Directory.EnumerateFiles(stagingDir, "*", SearchOption.AllDirectories))
+            foreach (var src in Directory.EnumerateFiles(payloadRoot, "*", SearchOption.AllDirectories))
             {
-                var rel = Path.GetRelativePath(stagingDir, src);
+                var rel = Path.GetRelativePath(payloadRoot, src);
                 var dst = Path.Combine(ToolsDir(workingDir), rel);
                 var dstDir = Path.GetDirectoryName(dst);
                 if (!string.IsNullOrEmpty(dstDir)) Directory.CreateDirectory(dstDir);
@@ -285,6 +276,93 @@ public static class ViVeToolService
         result.Message = $"Installed ViVeTool {(tagName ?? "latest")}";
         log?.Invoke(result.Message);
         return result;
+    }
+
+    internal static bool IsTrustedAssetUri(Uri uri) =>
+        uri.Scheme == Uri.UriSchemeHttps &&
+        AllowedAssetHosts.Any(h => uri.Host.Equals(h, StringComparison.OrdinalIgnoreCase));
+
+    internal static string? FindViVeToolPayloadRoot(string stagingDir)
+    {
+        try
+        {
+            return Directory
+                .EnumerateFiles(stagingDir, "ViVeTool.exe", SearchOption.AllDirectories)
+                .Select(path => new
+                {
+                    Path = path,
+                    Depth = System.IO.Path.GetRelativePath(stagingDir, path)
+                        .Count(c => c == System.IO.Path.DirectorySeparatorChar || c == System.IO.Path.AltDirectorySeparatorChar)
+                })
+                .OrderBy(candidate => candidate.Depth)
+                .Select(candidate => System.IO.Path.GetDirectoryName(candidate.Path))
+                .FirstOrDefault(path => !string.IsNullOrWhiteSpace(path));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static async Task DownloadTrustedAssetAsync(HttpClient client, Uri initialUri, string destination)
+    {
+        var current = initialUri;
+        for (int redirectCount = 0; redirectCount < 6; redirectCount++)
+        {
+            if (!IsTrustedAssetUri(current))
+                throw new InvalidOperationException($"Refusing untrusted download URL: {current}");
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, current);
+            using var response = await client
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
+                .ConfigureAwait(false);
+
+            if (IsRedirect(response.StatusCode))
+            {
+                var location = response.Headers.Location
+                    ?? throw new InvalidOperationException("Download redirect did not include a Location header.");
+                var next = location.IsAbsoluteUri ? location : new Uri(current, location);
+                if (!IsTrustedAssetUri(next))
+                    throw new InvalidOperationException($"Refusing redirect to untrusted host: {next.Host}");
+
+                current = next;
+                continue;
+            }
+
+            response.EnsureSuccessStatusCode();
+            if (response.Content.Headers.ContentLength is { } length &&
+                (length < MinAssetBytes || length > MaxAssetBytes))
+            {
+                throw new InvalidOperationException(
+                    $"Download Content-Length {length} bytes is outside expected range ({MinAssetBytes}..{MaxAssetBytes}).");
+            }
+
+            await using var input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            await using var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None);
+            var buffer = new byte[81920];
+            long total = 0;
+            while (true)
+            {
+                var read = await input.ReadAsync(buffer).ConfigureAwait(false);
+                if (read == 0) break;
+                total += read;
+                if (total > MaxAssetBytes)
+                    throw new InvalidOperationException($"Download exceeded maximum size ({MaxAssetBytes} bytes).");
+                await output.WriteAsync(buffer.AsMemory(0, read)).ConfigureAwait(false);
+            }
+
+            if (total < MinAssetBytes)
+                throw new InvalidOperationException($"Download was too small ({total} bytes).");
+            return;
+        }
+
+        throw new InvalidOperationException("Download followed too many redirects.");
+    }
+
+    private static bool IsRedirect(System.Net.HttpStatusCode statusCode)
+    {
+        var code = (int)statusCode;
+        return code is >= 300 and <= 399;
     }
 
     // Runs ViVeTool.exe /enable for each supplied feature ID. Returns on first failure —
@@ -371,7 +449,7 @@ public static class ViVeToolService
                 log?.Invoke($"[ERROR] ViVeTool.exe {argsDisplay} exit {proc.ExitCode}");
                 return false;
             }
-            log?.Invoke($"  [OK] ViVeTool {args}");
+            log?.Invoke($"  [OK] ViVeTool {argsDisplay}");
             return true;
         }
         catch (Exception ex)

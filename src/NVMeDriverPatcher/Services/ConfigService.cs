@@ -1,5 +1,7 @@
 using System.IO;
+using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
@@ -14,7 +16,8 @@ public static class ConfigService
         {
             // Persist enums like PatchProfile as "Safe"/"Full" strings — config.json is a file
             // sysadmins open by hand, and numeric enum values would be opaque.
-            new System.Text.Json.Serialization.JsonStringEnumConverter()
+            new LenientPatchProfileJsonConverter(),
+            new JsonStringEnumConverter()
         }
     };
 
@@ -53,9 +56,11 @@ public static class ConfigService
             // Drop stale recovery/diagnostics paths whose targets no longer exist —
             // otherwise the workspace shows a "ready" status pointing at missing files.
             config.LastRecoveryKitPath = ExistingDir(saved.LastRecoveryKitPath);
-            config.LastDiagnosticsPath = ExistingFile(saved.LastDiagnosticsPath);
+            config.LastDiagnosticsPath = ExistingFileWithExtension(saved.LastDiagnosticsPath, ".txt");
+            config.LastSupportBundlePath = ExistingFileWithExtension(saved.LastSupportBundlePath, ".zip");
             config.LastVerificationScriptPath = ExistingFile(saved.LastVerificationScriptPath);
             config.PendingVerificationSince = saved.PendingVerificationSince;
+            config.PendingVerificationProfile = saved.PendingVerificationProfile;
             config.LastVerifiedProfile = saved.LastVerifiedProfile;
             config.LastVerificationResult = saved.LastVerificationResult;
         }
@@ -75,10 +80,47 @@ public static class ConfigService
     }
 
     private static string? ExistingDir(string? path)
-        => string.IsNullOrWhiteSpace(path) || !Directory.Exists(path) ? null : path;
+    {
+        if (!IsUsableAbsolutePath(path))
+            return null;
+
+        return Directory.Exists(path) ? Path.GetFullPath(path) : null;
+    }
 
     private static string? ExistingFile(string? path)
-        => string.IsNullOrWhiteSpace(path) || !File.Exists(path) ? null : path;
+    {
+        if (!IsUsableAbsolutePath(path))
+            return null;
+
+        return File.Exists(path) ? Path.GetFullPath(path) : null;
+    }
+
+    internal static bool IsUsableAbsolutePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        try
+        {
+            return Path.IsPathFullyQualified(path)
+                && path.IndexOfAny(Path.GetInvalidPathChars()) < 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    internal static string? ExistingFileWithExtension(string? path, string extension)
+    {
+        var existing = ExistingFile(path);
+        if (existing is null)
+            return null;
+
+        return string.Equals(Path.GetExtension(existing), extension, StringComparison.OrdinalIgnoreCase)
+            ? existing
+            : null;
+    }
 
     public static void Save(AppConfig config)
     {
@@ -104,8 +146,10 @@ public static class ConfigService
                 config.ConfigVersion,
                 config.LastRecoveryKitPath,
                 config.LastDiagnosticsPath,
+                config.LastSupportBundlePath,
                 config.LastVerificationScriptPath,
                 config.PendingVerificationSince,
+                config.PendingVerificationProfile,
                 config.LastVerifiedProfile,
                 config.LastVerificationResult,
                 LastRun = DateTime.Now.ToString("o")
@@ -126,5 +170,46 @@ public static class ConfigService
             File.Move(tempFile, config.ConfigFile, overwrite: true);
         }
         catch { /* Config save best-effort */ }
+    }
+
+    internal sealed class LenientPatchProfileJsonConverter : JsonConverter<PatchProfile>
+    {
+        public override PatchProfile Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.String)
+            {
+                var text = reader.GetString();
+                if (Enum.TryParse<PatchProfile>(text, ignoreCase: true, out var parsed) &&
+                    Enum.IsDefined(typeof(PatchProfile), parsed))
+                    return parsed;
+
+                if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numeric) &&
+                    Enum.IsDefined(typeof(PatchProfile), numeric))
+                    return (PatchProfile)numeric;
+
+                return PatchProfile.Safe;
+            }
+
+            if (reader.TokenType == JsonTokenType.Number &&
+                reader.TryGetInt32(out var value) &&
+                Enum.IsDefined(typeof(PatchProfile), value))
+                return (PatchProfile)value;
+
+            try { reader.Skip(); } catch { }
+            return PatchProfile.Safe;
+        }
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            PatchProfile value,
+            JsonSerializerOptions options)
+        {
+            writer.WriteStringValue(Enum.IsDefined(typeof(PatchProfile), value)
+                ? value.ToString()
+                : PatchProfile.Safe.ToString());
+        }
     }
 }
