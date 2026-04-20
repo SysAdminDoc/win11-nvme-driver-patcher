@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Non-admin system-tray agent. Reads the same config.json / watchdog.json that the main
+    GUI writes, renders a tray icon reflecting patch + watchdog state, and exposes a
+    right-click menu that launches the elevated GUI on demand. Intentionally has NO admin
+    manifest — a sysadmin can drop this in the Startup folder and get ambient status
+    without routinely prompting UAC.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>NVMeDriverPatcher.Tray</AssemblyName>
+    <RootNamespace>NVMeDriverPatcher.Tray</RootNamespace>
+    <Version>4.5.0</Version>
+    <AssemblyVersion>4.5.0.0</AssemblyVersion>
+    <FileVersion>4.5.0.0</FileVersion>
+    <Company>SysAdminDoc</Company>
+    <Product>NVMe Driver Patcher Tray Agent</Product>
+    <Description>Non-admin status agent — shows patch state + watchdog verdict from the system tray.</Description>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NVMeDriverPatcher\NVMeDriverPatcher.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -27,6 +27,13 @@ public class TuningProfile
     public const string Key_IdlePowerTimeout = "IdlePowerTimeout";
     public const string Key_StandbyPowerTimeout = "StandbyPowerTimeout";
 
+    // v4.5.0 additions (ROADMAP §2.3 — expanded tuning surface).
+    public const string Key_AsyncEventNotificationEnabled = "AsyncEventNotificationEnabled";
+    public const string Key_ThermalMgmtEnabled = "ThermalMgmtEnabled";
+    public const string Key_PowerStateTransitionLatency = "PowerStateTransitionLatency";
+    public const string Key_NoLowPowerTransitions = "NoLowPowerTransitions";
+    public const string Key_ApstIdleTimeout = "ApstIdleTimeout";
+
     // ========================================================================
     // Tunable Parameters
     // ========================================================================
@@ -72,6 +79,35 @@ public class TuningProfile
     /// Default: 0 (disabled), PowerSave: 2000.
     /// </summary>
     public int? StandbyPowerTimeout { get; set; }
+
+    /// <summary>
+    /// Async Event Notification enable flag (v4.5).
+    /// Controls whether stornvme processes AEN events (thermal, wear warnings). Disabling can
+    /// shave a sliver of CPU on very chatty controllers but costs diagnostics visibility.
+    /// </summary>
+    public int? AsyncEventNotificationEnabled { get; set; }
+
+    /// <summary>
+    /// Thermal management enable flag (v4.5). 1 = stornvme honors controller thermal limits.
+    /// </summary>
+    public int? ThermalMgmtEnabled { get; set; }
+
+    /// <summary>
+    /// Power state transition latency ceiling in microseconds (v4.5). Caps how long the driver
+    /// will block waiting for a power-state change before timing out.
+    /// </summary>
+    public int? PowerStateTransitionLatency { get; set; }
+
+    /// <summary>
+    /// Disable low-power transitions entirely (v4.5). 1 = drive stays in active state — removes
+    /// the APST regression at the cost of ~15% battery life on laptops.
+    /// </summary>
+    public int? NoLowPowerTransitions { get; set; }
+
+    /// <summary>
+    /// APST idle timeout override in microseconds (v4.5). Mirrors ApstInspectorService surface.
+    /// </summary>
+    public int? ApstIdleTimeout { get; set; }
 
     /// <summary>Profile display name.</summary>
     public string Name { get; set; } = "Custom";

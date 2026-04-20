@@ -169,6 +169,9 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel()
     {
         Config = ConfigService.Load();
+        // GPO overlay wins over per-user config — a pinned fleet policy shouldn't be
+        // quietly overridden by a stale local setting.
+        try { GpoPolicyService.ApplyTo(Config, GpoPolicyService.Read()); } catch { }
         VersionText = $"v{AppConfig.AppVersion}";
         _suppressConfigWrites = true;
         try
@@ -1846,6 +1849,9 @@ public partial class MainViewModel : ObservableObject
                 // bound, so we can surface a clear message if Microsoft's block neutered
                 // the override on this build.
                 PatchVerificationService.MarkPending(Config);
+                // Open the post-patch watchdog window. Any Storport/disk/bugcheck events
+                // inside this window feed the Unstable verdict + auto-revert path on next run.
+                EventLogWatchdogService.Arm(Config);
                 ConfigService.Save(Config);
                 UpdateOperationalHistory();
 
@@ -1940,6 +1946,9 @@ public partial class MainViewModel : ObservableObject
 
             if (result.Success)
             {
+                // Close the watchdog window — no more post-patch monitoring makes sense
+                // after an explicit uninstall. Safe even if it was never armed.
+                try { EventLogWatchdogService.Disarm(Config); } catch { }
                 ToastService.Show("NVMe Patch Removed", "Patch components removed. Restart required.", ToastType.Info, Config.EnableToasts);
 
                 var restartMsg = $"Patch removed successfully ({result.AppliedCount} component(s)).\n\n" +
@@ -2776,6 +2785,91 @@ public partial class MainViewModel : ObservableObject
             }
         }
         Log("====================================");
+    }
+
+    // =====================================================================
+    // v4.4 additions — watchdog / reliability / minidump / dry-run commands.
+    // Bindable from MainWindow.xaml; also exercised by tests without requiring the XAML.
+    // Kept at the bottom of the class so the existing UI layout is untouched.
+    // =====================================================================
+
+    [ObservableProperty] private string _watchdogVerdictText = "";
+    [ObservableProperty] private string _reliabilitySummaryText = "";
+    [ObservableProperty] private string _minidumpSummaryText = "";
+    [ObservableProperty] private string _dryRunPreviewText = "";
+
+    [RelayCommand]
+    private void RefreshWatchdogStatus()
+    {
+        try
+        {
+            var report = EventLogWatchdogService.Evaluate(Config);
+            WatchdogVerdictText = $"{report.Verdict}: {report.Summary}";
+            Log($"Watchdog: {report.Summary}");
+        }
+        catch (Exception ex)
+        {
+            WatchdogVerdictText = $"Watchdog check failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void RefreshReliability()
+    {
+        try
+        {
+            DateTime? patchTs = null;
+            if (!string.IsNullOrWhiteSpace(Config.PendingVerificationSince) &&
+                DateTime.TryParse(Config.PendingVerificationSince,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out var ts))
+                patchTs = ts;
+            var report = ReliabilityService.GetCorrelation(patchTs);
+            ReliabilitySummaryText = report.Summary;
+            Log($"Reliability: {report.Summary}");
+        }
+        catch (Exception ex)
+        {
+            ReliabilitySummaryText = $"Reliability check failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void TriageMinidumps()
+    {
+        try
+        {
+            DateTime? patchTs = null;
+            if (!string.IsNullOrWhiteSpace(Config.PendingVerificationSince) &&
+                DateTime.TryParse(Config.PendingVerificationSince,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out var ts))
+                patchTs = ts;
+            var report = MinidumpTriageService.Analyze(patchTs);
+            MinidumpSummaryText = report.Summary;
+            Log($"Minidump triage: {report.Summary}");
+            foreach (var d in report.Dumps.Where(d => d.MentionsNVMeStack))
+                Log($"  [NVMe] {d.CreatedUtc:u} — {Path.GetFileName(d.FilePath)}: {d.Notes}", "WARN");
+        }
+        catch (Exception ex)
+        {
+            MinidumpSummaryText = $"Minidump scan failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void PreviewDryRun()
+    {
+        try
+        {
+            var report = DryRunService.PlanInstall(Config, _preflight);
+            DryRunPreviewText = DryRunService.RenderMarkdown(report);
+            Log($"Dry-run: {report.Summary}");
+        }
+        catch (Exception ex)
+        {
+            DryRunPreviewText = $"Dry-run preview failed: {ex.Message}";
+        }
     }
 }
 
