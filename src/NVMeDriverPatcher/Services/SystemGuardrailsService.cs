@@ -33,9 +33,56 @@ public static class SystemGuardrailsService
         try { report.Findings.Add(CheckWdac()); } catch { }
         try { report.Findings.Add(CheckVroc()); } catch { }
         try { report.Findings.Add(CheckSystemDriveCompression()); } catch { }
+        try { report.Findings.Add(CheckAppLockerOrSrp()); } catch { }
         report.Findings = report.Findings.Where(f => f is not null).ToList();
         report.Summary = BuildSummary(report);
         return report;
+    }
+
+    internal static GuardrailFinding CheckAppLockerOrSrp()
+    {
+        // AppLocker enforced rules live under HKLM\SOFTWARE\Policies\Microsoft\Windows\SrpV2\
+        // with EnforcementMode values. SRP lives under \Safer\CodeIdentifiers\. Either mode
+        // being non-audit will refuse our ViVeTool download + MSI side-load path. Warn — but
+        // never block; a well-pinned fleet may have exceptions already.
+        try
+        {
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var srpv2 = hklm.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\SrpV2");
+            if (srpv2 is not null)
+            {
+                foreach (var name in srpv2.GetSubKeyNames())
+                {
+                    using var sub = srpv2.OpenSubKey(name);
+                    if (sub?.GetValue("EnforcementMode") is int mode && mode == 1)
+                    {
+                        return new GuardrailFinding
+                        {
+                            Name = "AppLocker",
+                            Severity = GuardrailSeverity.Warning,
+                            Detail = $"AppLocker collection '{name}' is in Enforced mode. Downloaded binaries (ViVeTool) may be blocked — pre-approve or whitelist the hash."
+                        };
+                    }
+                }
+            }
+            using var srp = hklm.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\Safer\CodeIdentifiers");
+            if (srp?.GetValue("DefaultLevel") is int def && def != 0x40000)
+            {
+                return new GuardrailFinding
+                {
+                    Name = "Software Restriction Policies",
+                    Severity = GuardrailSeverity.Warning,
+                    Detail = "SRP default level is not 'Unrestricted'. Side-loaded binaries may be refused."
+                };
+            }
+        }
+        catch { }
+        return new GuardrailFinding
+        {
+            Name = "AppLocker / SRP",
+            Severity = GuardrailSeverity.Info,
+            Detail = "No AppLocker or SRP enforcement detected."
+        };
     }
 
     internal static GuardrailFinding CheckHvci()
