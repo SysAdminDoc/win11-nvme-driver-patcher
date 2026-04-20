@@ -2,7 +2,7 @@
 <p align="center"><img src="icon.png" width="128" alt="win11 nvme driver patcher"></p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-4.0.0-58A6FF?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-4.5.0-58A6FF?style=for-the-badge">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-4ade80?style=for-the-badge">
   <img alt="Platform" src="https://img.shields.io/badge/platform-PowerShell-58A6FF?style=for-the-badge">
 </p>
@@ -81,6 +81,22 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 - **Skip warnings checkbox** -- for experienced users who don't need confirmation dialogs
 - **Silent/CLI mode** for scripting and automation
 
+**v4.4 — Stability, correlation, enterprise (new)**
+- **Post-patch event-log watchdog** -- scans `System` channel for Storport ID 129, disk ID 51/153, Kernel-Power 41, and BugCheck 1001 inside a configurable window (default 48h). Crosses the revert threshold? Stages an auto-revert on next boot.
+- **Reliability Monitor correlation** -- pulls `Win32_ReliabilityStabilityMetrics`, overlays the patch-apply timestamp, reports pre/post stability averages with delta.
+- **Minidump triage** -- scans `C:\Windows\Minidump` for dumps newer than the patch and flags any that reference `nvmedisk.sys`, `stornvme.sys`, `storport.sys`, `disk.sys`.
+- **Firmware + controller compat JSON** -- shipped `compat.json` maps `{controller, firmware}` → `{Good, Caution, Bad}`. Preflight consults it before proceeding.
+- **Per-drive scope** -- exclude specific NVMe drives from the swap by serial or model pattern (e.g. keep a DirectStorage gaming drive on `stornvme.sys` while the OS drive moves to `nvmedisk.sys`).
+- **Dry-run preview** (`--dry-run` / "Preview Changes") -- prints every registry write the patch would perform, without touching the registry.
+- **ETW storage trace** (`etw`) -- wraps `wpr.exe` for 60-second pre/post captures; ETL files land in `%LocalAppData%\NVMePatcher\etl\`.
+- **WinPE recovery USB builder** (`winpe`) -- detects the Windows ADK + WinPE add-on and produces a bootable tree/ISO with the Recovery Kit pre-staged and a custom `startnet.cmd`.
+- **Opt-in compatibility telemetry** -- build an anonymized `{controller, firmware, OS build, profile, verification, watchdog, reliability delta}` JSON and optionally `POST` it to a user-configured HTTPS endpoint. No serials, machine names, drive letters, or user names.
+- **Driver Verifier harness** (`verifier-on` / `-off` / `-status`) -- dev/tester-mode wrapper around `verifier.exe` for kernel-level stress checks on the NVMe stack.
+- **GPO / ADMX templates** (`packaging/admx/`) -- pin Safe/Full profile, IncludeServerKey, SkipWarnings, watchdog behavior, and telemetry across a fleet via `HKLM\SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher`. Policy overrides local config.
+- **winget manifest** (`packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml`) -- `winget install SysAdminDoc.NVMeDriverPatcher`.
+- **Non-admin status tray agent** (`NVMeDriverPatcher.Tray`) -- separate exe, no UAC. Shows patch state + watchdog verdict from the system tray; right-click → "Open Main App (elevated)" for the admin GUI.
+- **Rotating logs** -- `crash.log`, `activity.log`, `watchdog.log`, `diagnostics.log` rotate at 5MB each with 5 generations retained.
+
 ## CLI Usage
 
 All CLI operations require Administrator privileges.
@@ -107,6 +123,42 @@ All CLI operations require Administrator privileges.
 
 # Generate WinRE-compatible recovery kit
 .\NVMe_Driver_Patcher.ps1 -ExportRecoveryKit
+```
+
+### Extended CLI (v4.4, C# CLI binary)
+
+```powershell
+# Preview every registry change without touching the system
+NVMeDriverPatcher.Cli apply --dry-run
+
+# Read the post-patch watchdog verdict (exit: 0=healthy, 1=unstable, 2=warning)
+NVMeDriverPatcher.Cli watchdog
+
+# Correlate Reliability Monitor stability index with the patch timestamp
+NVMeDriverPatcher.Cli reliability
+
+# Scan C:\Windows\Minidump for NVMe-stack crashes since the patch
+NVMeDriverPatcher.Cli minidump
+
+# List bundled controller/firmware compat entries (compat.json)
+NVMeDriverPatcher.Cli firmware
+
+# Show per-drive include/exclude decisions from drive_scope.json
+NVMeDriverPatcher.Cli scope
+
+# Capture a 60s ETW storage trace via wpr.exe
+NVMeDriverPatcher.Cli etw
+
+# Build a WinPE recovery USB tree/ISO from the current Recovery Kit
+NVMeDriverPatcher.Cli winpe --output=E:\
+
+# Build (and optionally submit) the anonymized compat report
+NVMeDriverPatcher.Cli telemetry --endpoint=https://example.com/nvme/compat
+
+# Driver Verifier harness (dev testing; requires reboot)
+NVMeDriverPatcher.Cli verifier-on
+NVMeDriverPatcher.Cli verifier-status
+NVMeDriverPatcher.Cli verifier-off
 ```
 
 **Exit Codes (Silent Mode):**

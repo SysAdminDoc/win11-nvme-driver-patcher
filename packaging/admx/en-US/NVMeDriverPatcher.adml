@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources revision="1.0" schemaVersion="1.0"
+                           xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                           xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <displayName>NVMe Driver Patcher Policy Definitions</displayName>
+  <description>Group Policy settings for the NVMe Driver Patcher tool.</description>
+  <resources>
+    <stringTable>
+      <string id="SUPPORTED_Win11_22000">Windows 11 (build 22000 or later)</string>
+
+      <string id="CAT_NVMeDriverPatcher">NVMe Driver Patcher</string>
+      <string id="CAT_NVMeDriverPatcher_Explain">Settings for the NVMe Driver Patcher tool that enables the Server 2025 native NVMe driver (nvmedisk.sys) on Windows 11.</string>
+
+      <string id="POL_PatchProfile">Patch profile (Safe / Full)</string>
+      <string id="POL_PatchProfile_Explain">Controls which set of feature flags the tool writes.
+
+Enabled = Safe (primary feature flag only — community-recommended, lowest BSOD risk).
+Disabled = Full (primary + two extended flags — matches the original Server 2025 release notes; higher performance, higher BSOD correlation).
+Not configured = user choice, defaulting to Safe.</string>
+
+      <string id="POL_IncludeServerKey">Include Microsoft Server 2025 feature key (1176759950)</string>
+      <string id="POL_IncludeServerKey_Explain">When enabled, the optional Microsoft Server 2025 feature flag is included in the patch. Recommended — without it, the new I/O scheduler may not activate.</string>
+
+      <string id="POL_SkipWarnings">Skip confirmation dialogs (unattended)</string>
+      <string id="POL_SkipWarnings_Explain">Suppresses the pre-patch confirmation dialogs. Use only for imaging and attended lab deployments.</string>
+
+      <string id="POL_WatchdogAutoRevert">Enable watchdog auto-revert on instability</string>
+      <string id="POL_WatchdogAutoRevert_Explain">When enabled, the post-patch watchdog can stage an automatic revert on the next boot if storage-stack event counts (Storport 129, disk 51/153, BugCheck 1001, Kernel-Power 41) exceed the configured threshold within the watchdog window.</string>
+
+      <string id="POL_WatchdogWindowHours">Watchdog observation window (hours)</string>
+      <string id="POL_WatchdogWindowHours_Explain">Number of hours after a patch apply during which the watchdog will track storage-stack events. Valid range: 1–168 (1 hour to 7 days). Default is 48.</string>
+
+      <string id="POL_CompatTelemetry">Enable opt-in compatibility telemetry</string>
+      <string id="POL_CompatTelemetry_Explain">Allows the tool to submit anonymized compatibility data (controller model, firmware version, OS build, verification outcome, watchdog counts) to the configured endpoint. No serials, machine names, drive letters, or user names are included.</string>
+    </stringTable>
+  </resources>
+</policyDefinitionResources>

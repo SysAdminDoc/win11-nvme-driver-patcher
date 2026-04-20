@@ -73,6 +73,42 @@ public partial class App : Application
         }
         catch { /* Best-effort local data store */ }
 
+        // Rotate local log files before any service starts writing. Bounded retention keeps
+        // the support-bundle ZIP small for users who've been running the app for months.
+        try
+        {
+            var tempConfig = new Models.AppConfig { WorkingDir = Models.AppConfig.GetWorkingDir() };
+            Services.LogRotationService.RotateAll(tempConfig);
+        }
+        catch { }
+
+        // v4.5: ensure Event Log source is registered once (admin required — already elevated).
+        try { Services.EventLogRegistrationService.EnsureRegistered(); } catch { }
+
+        // v4.5: watchdog auto-revert consumer. If the previous boot's watchdog window saw
+        // enough storage-stack distress to cross the revert threshold AND the user opted in,
+        // uninstall the patch before the rest of startup proceeds.
+        try
+        {
+            var arConfig = Services.ConfigService.Load();
+            Services.GpoPolicyService.ApplyTo(arConfig, Services.GpoPolicyService.Read());
+            var outcome = Services.AutoRevertService.MaybeRun(arConfig, m => WriteCrashEntry("AutoRevert", new InvalidOperationException(m)));
+            if (outcome.Executed)
+            {
+                // We can't unilaterally reboot — surface a one-shot notice and let the user
+                // restart when convenient. The watchdog has already been disarmed.
+                try
+                {
+                    TryShowThemedMessage(
+                        "Auto-revert executed",
+                        outcome.Summary + "\n\nA restart is required to return to the legacy NVMe driver.",
+                        DialogIcon.Warning);
+                }
+                catch { }
+            }
+        }
+        catch { }
+
         // If GetWorkingDir() had to fall back off LocalAppData, stamp a crash-log entry so
         // we have a breadcrumb if the app is writing to an unexpected directory.
         var fallbackReason = Models.AppConfig.WorkingDirFallbackReason;
