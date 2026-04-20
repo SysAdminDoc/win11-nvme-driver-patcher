@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitions revision="1.0" schemaVersion="1.0" xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <policyNamespaces>
+    <target prefix="nvmedriver" namespace="SysAdminDoc.Policies.NVMeDriverPatcher" />
+    <using prefix="windows" namespace="Microsoft.Policies.Windows" />
+  </policyNamespaces>
+  <resources minRequiredRevision="1.0" />
+  <supportedOn>
+    <definitions>
+      <definition name="SUPPORTED_Win11_22000"
+                  displayName="$(string.SUPPORTED_Win11_22000)" />
+    </definitions>
+  </supportedOn>
+  <categories>
+    <category name="NVMeDriverPatcher"
+              displayName="$(string.CAT_NVMeDriverPatcher)"
+              explainText="$(string.CAT_NVMeDriverPatcher_Explain)" />
+  </categories>
+  <policies>
+
+    <policy name="PatchProfile"
+            class="Machine"
+            displayName="$(string.POL_PatchProfile)"
+            explainText="$(string.POL_PatchProfile_Explain)"
+            key="SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher"
+            valueName="PatchProfile">
+      <parentCategory ref="NVMeDriverPatcher" />
+      <supportedOn ref="SUPPORTED_Win11_22000" />
+      <enabledValue><string>Safe</string></enabledValue>
+      <disabledValue><string>Full</string></disabledValue>
+    </policy>
+
+    <policy name="IncludeServerKey"
+            class="Machine"
+            displayName="$(string.POL_IncludeServerKey)"
+            explainText="$(string.POL_IncludeServerKey_Explain)"
+            key="SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher"
+            valueName="IncludeServerKey">
+      <parentCategory ref="NVMeDriverPatcher" />
+      <supportedOn ref="SUPPORTED_Win11_22000" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+
+    <policy name="SkipWarnings"
+            class="Machine"
+            displayName="$(string.POL_SkipWarnings)"
+            explainText="$(string.POL_SkipWarnings_Explain)"
+            key="SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher"
+            valueName="SkipWarnings">
+      <parentCategory ref="NVMeDriverPatcher" />
+      <supportedOn ref="SUPPORTED_Win11_22000" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+
+    <policy name="WatchdogAutoRevert"
+            class="Machine"
+            displayName="$(string.POL_WatchdogAutoRevert)"
+            explainText="$(string.POL_WatchdogAutoRevert_Explain)"
+            key="SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher"
+            valueName="WatchdogAutoRevert">
+      <parentCategory ref="NVMeDriverPatcher" />
+      <supportedOn ref="SUPPORTED_Win11_22000" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+
+    <policy name="WatchdogWindowHours"
+            class="Machine"
+            displayName="$(string.POL_WatchdogWindowHours)"
+            explainText="$(string.POL_WatchdogWindowHours_Explain)"
+            key="SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher">
+      <parentCategory ref="NVMeDriverPatcher" />
+      <supportedOn ref="SUPPORTED_Win11_22000" />
+      <elements>
+        <decimal id="WatchdogWindowHours"
+                 valueName="WatchdogWindowHours"
+                 minValue="1" maxValue="168" />
+      </elements>
+    </policy>
+
+    <policy name="CompatTelemetryEnabled"
+            class="Machine"
+            displayName="$(string.POL_CompatTelemetry)"
+            explainText="$(string.POL_CompatTelemetry_Explain)"
+            key="SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher"
+            valueName="CompatTelemetryEnabled">
+      <parentCategory ref="NVMeDriverPatcher" />
+      <supportedOn ref="SUPPORTED_Win11_22000" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+
+  </policies>
+</policyDefinitions>

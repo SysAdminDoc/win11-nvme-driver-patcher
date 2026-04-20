@@ -2,6 +2,221 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [v4.5.0] - 2026-04-19
+
+Feature release — closes every outstanding ROADMAP item that still fit the scope rule, plus
+the five loose ends from v4.4.0. 18 new services, 21 new CLI subcommands, an MSI (WiX v4)
+scaffold, a Cloudflare Worker reference implementation for the opt-in compat-telemetry
+receiver, and a light-theme resource dictionary.
+
+### Added — Watchdog auto-revert path (v4.4 loose end #1)
+
+- **`AutoRevertService`** — runs once on `App.OnStartup` and via the CLI's `watchdog --auto-revert`
+  path. Reads `EventLogWatchdogService.Evaluate` + `ShouldAutoRevert`; if Unstable AND the
+  user (or GPO) opted into `AutoRevertEnabled`, calls `PatchService.Uninstall` then
+  `EventLogWatchdogService.Disarm`. Writes a themed one-shot notice in the GUI path and an
+  Event Log record (Warning, ID 3010).
+- **`SchedulerService`** — `schtasks` wrapper that registers two tasks under `\SysAdminDoc\
+  NVMePatcher\`: `BootVerify` (runs at system startup as SYSTEM) and `WatchdogSweep` (every
+  60min). `BootVerify` invokes `NVMeDriverPatcher.Cli watchdog --auto-revert` so the consumer
+  runs even when the user never launches the GUI. New CLI commands: `register-tasks` / `unregister-tasks`.
+
+### Added — Event Log source registration (v4.4 loose end #5)
+
+- **`EventLogRegistrationService`** — idempotent call in both `App.OnStartup` and
+  `Program.Main`. Creates the `"NVMe Driver Patcher"` source under the `Application` log so
+  `EventLogService.Write` stops falling back to the generic source. Silent no-op if not
+  elevated (admin is already a prereq but the call is defensive).
+
+### Added — Safety depth
+
+- **`SystemGuardrailsService`** — HVCI / Memory Integrity detection via
+  `root\Microsoft\Windows\DeviceGuard\Win32_DeviceGuard.SecurityServicesRunning`, WDAC
+  enforcement via `HKLM\...\Control\CI\Protected\EnforceMode`, Intel VROC via
+  `Win32_SystemDriver` filter for `iaStorAfs` / `iaStorVD` / `iaVROC`, and NTFS compression
+  on `%SystemDrive%`. New CLI: `guardrails`. Blocker-severity VROC aborts with exit 1.
+- **`BackupIntegrityService`** — round-trip sanity check on the `.reg` backup file before we
+  trust it as our rollback path. Validates `Windows Registry Editor` header, counts key
+  sections + value assignments, and cleans up any staging scratch on every exit. New CLI:
+  `verify-backup [--import=<path>]` — defaults to the most recent `Pre_*_Backup_*.reg`.
+
+### Added — Enterprise / deployment
+
+- **Silent / unattended CLI** (ROADMAP §1.1). New flag `--unattended` on `apply`: implies
+  `--skip-warnings`, pairs with existing `--no-restart`. CLI still respects preflight
+  blockers unless `--force` is also passed.
+- **`ConfigMigrationService`** (§1.4) — runs before `GpoPolicyService.ApplyTo`. Ships a v1→v2
+  no-op hook and a v2→v3 hook that stamps `ConfigVersion = 3` so the v4.5 watchdog fields
+  have a precedent to migrate from.
+- **`ConfigImportExportService`** (§2.9) — `config-export` / `config-import` CLI commands.
+  Bundles AppConfig (user-safe subset), `drive_scope.json`, and `watchdog.json` into a single
+  portable JSON.
+- **`PortableModeService`** (§2.7) — `portable-enable` / `portable-disable` CLI commands.
+  Creates `portable.flag` beside the exe; future launches redirect to `Data\` beside the exe
+  instead of `%LocalAppData%`. Lets field techs carry the patcher on a USB stick without
+  installer state.
+- **`AutoUpdaterService`** — downloads the latest GitHub release asset (.exe) into a staging
+  dir, validates the allowed host list (mirrors `ViVeToolService`), and emits a PowerShell
+  one-liner the user runs post-exit to swap the file. New CLI: `update-check`.
+
+### Added — Observability / correlation
+
+- **`PerControllerAuditService`** (§2.1) — per-controller version of
+  `PatchVerificationService`. Enumerates `Win32_PnPSignedDriver WHERE DeviceClass='SCSIAdapter'
+  OR 'DiskDrive'`, filters to NVMe-matching drivers, reports which controllers have `nvmedisk`
+  bound vs `stornvme`. New CLI: `controllers` / `per-controller`.
+- **`EventLogTailService`** (§2.2) — ad-hoc tail of the last N minutes of `System` events
+  filtered to the NVMe stack providers (nvmedisk, stornvme, storport, storahci, disk,
+  partmgr, volmgr, Kernel-Power). Single XPath query so chatty systems don't time out.
+  New CLI: `tail` / `events-tail`.
+- **`PhysicalDiskTelemetryService`** (§2.4) — `MSFT_PhysicalDisk` + `MSFT_StorageReliabilityCounter`
+  rollup (health, operational status, media type, bus type, temperature, wear, PoH,
+  uncorrected read/write errors). Degrades gracefully on minimal SKUs. New CLI:
+  `physical-disks`.
+- **`BypassIoInspectorService`** (§2.5) — per-volume `fsutil bypassio state <drive>` wrapper
+  for every fixed drive. Parses the stack + enabled state; caps output length. New CLI:
+  `bypassio`.
+- **`AutoBenchmarkService`** (§2.6 partial) — persistent `baseline.json` with read/write IOPS
+  + latency. `Compare` returns a `RegressionVerdict` with per-arm percent deltas and a
+  configurable threshold. New CLI: `compare-benchmarks --threshold=<percent>`.
+
+### Added — Tuning surface
+
+- **`TuningProfile` expansion** (§2.3) — added `AsyncEventNotificationEnabled`,
+  `ThermalMgmtEnabled`, `PowerStateTransitionLatency`, `NoLowPowerTransitions`,
+  `ApstIdleTimeout`. Registry key constants added alongside.
+- **`ApstInspectorService`** (§3.2) — reads `stornvme\Parameters\Device` for APST flags +
+  enumerates per-state entry/exit latency + idle times. `OverrideIdleTimeout` clamps user
+  input to 250µs–60s and writes the override. New CLI: `apst`.
+- **`TuningProfileIoService`** (§1.2) — named-bundle `tuning-export` / `tuning-import` CLI
+  commands so fleet admins can ship a curated profile across machines.
+- **`NvmeIdentifyService`** (§2.8) — raw NVMe Admin Identify Controller via
+  `IOCTL_STORAGE_PROTOCOL_COMMAND`. Pulls VID / SSVID / serial / firmware / model from the
+  4KB response payload — fields WMI doesn't expose. Feeds `FirmwareCompatService` with the
+  authoritative identity. New CLI: `identify`.
+
+### Added — Integrity
+
+- **`CompatChecksumService`** — SHA-256 of the loaded `compat.json` compared against the
+  shipped default. Flags user customizations in the support bundle. New CLI: `compat-checksum`.
+
+### Added — Packaging
+
+- **`packaging/wix/NVMeDriverPatcher.wxs`** (WiX v4) — per-machine MSI installer with three
+  features (Main / TrayAgent / AdmxTemplates), `util:EventSource` registration for the
+  `NVMe Driver Patcher` source, Start-Menu shortcut, and Programs-and-Features entry with
+  proper upgrade-code handling. `packaging/wix/README.md` documents the build steps +
+  signtool invocation.
+- **`packaging/telemetry-receiver/`** — reference Cloudflare Worker implementation for the
+  compat-telemetry endpoint. Rehashes anonId with a server-side SALT so leaked client IDs
+  can't replay. 16KB payload cap, 1-year KV TTL. Deploy doc included.
+- **`src/NVMeDriverPatcher/Themes/LightTheme.xaml`** — companion to DarkTheme. Same key set,
+  light palette (zinc-50 / slate-100 / blue-600 accent). Dark stays the default per the
+  global CLAUDE.md rule.
+
+### Changed
+
+- `AppConfig.AppVersion` and all `csproj` `<Version>` strings bumped to `4.5.0`.
+- `App.xaml.cs` now: rotates logs → registers Event Log source → runs `AutoRevertService.MaybeRun`
+  → proceeds with normal startup. Failures in any of the new hooks are swallowed (non-fatal).
+- CLI `Program.cs` now: migrates config → applies GPO overlay → rotates logs → registers
+  Event Log source → initializes EventLog → dispatches command.
+- CLI command table grew from 12 to 33 recognized operational commands.
+
+### Internal
+
+- 18 new services, 1 new XAML resource dictionary, 3 new packaging subdirectories.
+- No breaking changes to existing public service APIs.
+
+## [v4.4.0] - 2026-04-19
+
+Feature release. Fourteen new capabilities across stability correlation, enterprise
+deployment, and non-admin ambient status. Scope-rule preserved: every item improves how
+the patch is enabled, disabled, verified, or rolled back.
+
+### Added — Safety & auto-recovery
+
+- **`EventLogWatchdogService`** — post-patch stability watchdog. Armed on a successful
+  Install (`PatchVerificationService.MarkPending` is paired with `EventLogWatchdogService.Arm`),
+  disarmed on Uninstall. Watches the `System` channel for Storport ID 129, disk ID 51/153,
+  Kernel-Power 41, and BugCheck 1001 inside a configurable window (default 48h / 3-warn / 6-revert).
+  Verdicts: `Healthy` / `Warning` / `Unstable` / `Completed` / `Idle`. `Unstable` + opt-in
+  `AutoRevertEnabled` is what the next-boot auto-revert path keys on.
+- **`MinidumpTriageService`** — scans `C:\Windows\Minidump` + `LiveKernelReports` for dumps
+  newer than the patch apply timestamp. Lightweight ASCII string-match for `nvmedisk.sys`,
+  `stornvme.sys`, `storport.sys`, `disk.sys`, `partmgr.sys`, `volmgr.sys`. Caps per-file
+  scan at 8MB and max 20 dumps so we never chew minutes on giant `LiveKernelReports` files.
+- **`ReliabilityService`** — pulls `Win32_ReliabilityStabilityMetrics` (last 30 days),
+  computes pre-patch / post-patch averages, and produces a human-readable delta summary.
+  Degrades gracefully to "data unavailable" on hardened SKUs where the service is disabled.
+- **`FirmwareCompatService` + shipped `compat.json`** — curated
+  `{controller substring, firmware or '*'}` → `{Good, Caution, Bad, Unknown}` table. Copy
+  precedence: `%LocalAppData%\NVMePatcher\compat.json` (user-editable) → app base directory
+  (shipped default). Worst-level wins on ties; exact firmware beats wildcard.
+
+### Added — Deployment control
+
+- **`PerDriveScopeService`** — `drive_scope.json` lets users exclude specific NVMe drives
+  from the global swap by serial (from `PNPDeviceID`) or model pattern. Pure decision function;
+  preflight renders "3 drives — 1 excluded by scope, 2 will swap."
+- **`DryRunService`** — computes exactly what `PatchService.Install` would write, without
+  touching the registry. Produces a Markdown table: `WRITE/CREATE/DELETE`, target path, value
+  name, `before → after`, kind, note. Wired to CLI `apply --dry-run` and ViewModel
+  `PreviewDryRunCommand`. Replays preflight blockers + warnings in the output.
+- **`EtwTraceService`** — wraps `wpr.exe` for 60-second pre/post storage-IO captures using
+  the inbox `GeneralProfile.Storage` profile. ETL files land in
+  `%LocalAppData%\NVMePatcher\etl\`. Cancellation-safe (`wpr -cancel` on abort). Skips
+  gracefully when `wpr.exe` is missing on minimal SKUs.
+- **`WinPERecoveryBuilderService`** — detects the Windows ADK + WinPE add-on at the two
+  canonical install paths, wraps `copype.cmd` + `MakeWinPEMedia.cmd`, copies the existing
+  Recovery Kit into the WinPE media root as `NVMe_Recovery_Kit\`, and produces a custom
+  `startnet.cmd` that auto-announces the recovery path on boot. x64 only for v4.4.
+- **`DriverVerifierService`** — dev-mode harness around `verifier.exe`. `EnableForNVMeStack`
+  runs `/standard /driver nvmedisk.sys stornvme.sys disk.sys`; `/reset` backs it out.
+  Narrow by design — never enables `/all`. 15s timeout on query, 30s on enable/reset.
+
+### Added — Enterprise & distribution
+
+- **`packaging/admx/NVMeDriverPatcher.admx` + `en-US/NVMeDriverPatcher.adml`** — machine-scope
+  policies at `HKLM\SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher`: PatchProfile (Safe/Full),
+  IncludeServerKey, SkipWarnings, WatchdogAutoRevert, WatchdogWindowHours (1–168),
+  CompatTelemetryEnabled.
+- **`GpoPolicyService`** — reads the policy overlay and `ApplyTo`s the loaded `AppConfig`.
+  Called in both `App.OnStartup` (GUI) and `Program.Main` (CLI) so a pinned fleet policy
+  isn't overridden by stale local config.
+- **`packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml`** — portable-installer manifest at
+  manifest version 1.6.0. `winget install SysAdminDoc.NVMeDriverPatcher` post-release.
+- **`NVMeDriverPatcher.Tray` (new project)** — non-admin system-tray agent. Named-mutex
+  single-instance, 30s poll of `RegistryService.GetPatchStatus` + `PatchVerificationService`
+  + `EventLogWatchdogService`. Right-click → "Open Main App (elevated)" shells the main
+  exe via `runas`. Ships no manifest — the whole point is it doesn't prompt UAC.
+- **`CompatTelemetryService`** — opt-in crowdsourced compat report. `BuildReport` composes
+  `{anonId (Guid cached in anon_id.txt), appVersion, osBuild, cpu (sanitised),
+  controllers[{model, firmware, migrated}], profile, verification, watchdog, watchdogEvents,
+  reliabilityDelta, benchmarkDeltaPercent}`. `SubmitAsync` POSTs to a user-provided HTTPS
+  endpoint; `SaveReport` writes `compat_report.json` locally. Never contains serials,
+  machine names, drive letters, or user names.
+
+### Added — Housekeeping
+
+- **`LogRotationService`** — called in `App.OnStartup` and `Program.Main` before any service
+  writes. Rotates `crash.log`, `activity.log`, `watchdog.log`, `diagnostics.log` at 5MB with
+  5 generations retained (25MB headroom per-log).
+- **CLI** (`Program.cs`) — new subcommands: `dry-run` / `preview`, `watchdog`, `reliability`,
+  `minidump` / `triage`, `firmware` / `compat`, `scope`, `etw`, `winpe`, `telemetry`,
+  `verifier-on` / `-off` / `-status`. New options: `--dry-run`, `--output=<dir>`,
+  `--endpoint=<url>`. `apply --dry-run` shortcuts to the preview path without taking
+  Admin-gated actions.
+- **`MainViewModel`** — new `[RelayCommand]`s (`RefreshWatchdogStatus`, `RefreshReliability`,
+  `TriageMinidumps`, `PreviewDryRun`) plus observable text properties for future XAML
+  binding. Watchdog arm/disarm wired into the Install/Uninstall flows.
+
+### Internal
+
+- `AppConfig.AppVersion` and all `csproj` `<Version>` strings bumped to `4.4.0`.
+- Tray project added to `NVMeDriverPatcher.sln` as guid `{D4E5F6A7-B8C9-0123-DEF0-234567890123}`.
+- `compat.json` marked `CopyToOutputDirectory=PreserveNewest` so the publish drop picks it up.
+
 ## [v4.3.7] - 2026-04-17
 
 ### Refactored
