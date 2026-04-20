@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/packaging/schemas/watchdog.schema.json",
+  "title": "NVMe Driver Patcher Watchdog State",
+  "description": "Schema for watchdog.json. Persists post-patch watchdog state across app launches.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "PatchAppliedAt":     { "type": ["string", "null"], "format": "date-time" },
+    "WindowHours":        { "type": "integer", "minimum": 1, "maximum": 168, "default": 48 },
+    "WarnThreshold":      { "type": "integer", "minimum": 1, "default": 3 },
+    "RevertThreshold":    { "type": "integer", "minimum": 1, "default": 6 },
+    "AutoRevertEnabled":  { "type": "boolean", "default": true },
+    "LastVerdict":        { "type": ["string", "null"] },
+    "LastEvaluatedAt":    { "type": ["string", "null"], "format": "date-time" },
+    "CumulativeEvents":   { "type": "integer", "minimum": 0, "default": 0 }
+  }
+}

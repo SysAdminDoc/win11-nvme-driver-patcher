@@ -88,6 +88,35 @@ jobs:
             -out publish/NVMeDriverPatcher-${{ steps.tag.outputs.version }}.msi
         continue-on-error: true   # WiX is best-effort for now; portable exe remains the primary artifact.
 
+      - name: Authenticode sign (if secret present)
+        # No-op unless the caller configured the CODE_SIGN_PFX_BASE64 + CODE_SIGN_PFX_PASSWORD
+        # secrets. This keeps the release path unblocked when the project is unsigned — a
+        # signed build simply becomes available the moment secrets are configured.
+        if: ${{ env.CODE_SIGN_PFX_BASE64 != '' }}
+        env:
+          CODE_SIGN_PFX_BASE64: ${{ secrets.CODE_SIGN_PFX_BASE64 }}
+          CODE_SIGN_PFX_PASSWORD: ${{ secrets.CODE_SIGN_PFX_PASSWORD }}
+        shell: pwsh
+        run: |
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CODE_SIGN_PFX_BASE64))
+          $targets = @(
+            'publish/gui/NVMeDriverPatcher.exe',
+            'publish/cli/NVMeDriverPatcher.Cli.exe',
+            'publish/tray/NVMeDriverPatcher.Tray.exe',
+            "publish/NVMeDriverPatcher-${{ steps.tag.outputs.version }}.msi"
+          )
+          foreach ($file in $targets) {
+            if (Test-Path $file) {
+              & signtool.exe sign `
+                /f $pfxPath /p $env:CODE_SIGN_PFX_PASSWORD `
+                /tr http://timestamp.sectigo.com /td sha256 /fd sha256 `
+                $file
+              if ($LASTEXITCODE -ne 0) { throw "signtool failed on $file" }
+            }
+          }
+          Remove-Item $pfxPath -Force
+
       - name: Generate SHA256 checksums
         shell: pwsh
         run: |
