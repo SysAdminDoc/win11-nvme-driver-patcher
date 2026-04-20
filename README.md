@@ -1,6 +1,11 @@
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/68963fd7-fc98-4d91-bd83-b13768fff161" alt="Astra Deck" width="300">
+</p>
+
 # NVMe Driver Patcher for Windows 11
 
 A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driver (nvmedisk.sys) on Windows 11, replacing the legacy SCSI translation layer for improved NVMe performance.
+
 
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue?logo=powershell)
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows11)
