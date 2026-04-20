@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read the docs first
+    url: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/blob/main/README.md
+    about: The README covers install, profiles, recovery, and all known compat traps.
+  - name: CLI help / offline docs
+    url: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/blob/main/README.md#cli-usage
+    about: Run `NVMeDriverPatcher.Cli docs` for curated offline answers — most questions land there.

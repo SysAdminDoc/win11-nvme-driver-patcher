@@ -139,6 +139,13 @@ class Program
                 "winre" => WinReCommand(),
                 "featurestore" or "feature-store" => FeatureStoreCommand(config),
                 "kit-freshness" or "recovery-kit-freshness" => RecoveryKitFreshnessCommand(config),
+                "docs" or "help-topic" => DocsCommand(args.Skip(1).FirstOrDefault()),
+                "clean-data" => CleanDataCommand(config),
+                "dashboard" or "html-report" => DashboardCommand(config),
+                "fw-nudge" or "firmware-nudge" => FirmwareNudgeCommand(args.Skip(1).FirstOrDefault(), args.Skip(2).FirstOrDefault()),
+                "safemode-verify" => SafeModeVerifyCommand(config),
+                "accessibility" or "a11y" => AccessibilityCommand(),
+                "maintenance-window" or "window" => MaintenanceWindowCommand(config),
                 _ => Unknown(command)
             };
         }
@@ -188,8 +195,90 @@ class Program
         "winre" => true,
         "featurestore" or "feature-store" => true,
         "kit-freshness" or "recovery-kit-freshness" => true,
+        "docs" or "help-topic" => true,
+        "clean-data" => true,
+        "dashboard" or "html-report" => true,
+        "fw-nudge" or "firmware-nudge" => true,
+        "safemode-verify" => true,
+        "accessibility" or "a11y" => true,
+        "maintenance-window" or "window" => true,
         _ => false
     };
+
+    static int DocsCommand(string? topic)
+    {
+        Console.WriteLine(DocsService.Render(topic ?? "index"));
+        return 0;
+    }
+
+    static int CleanDataCommand(AppConfig config)
+    {
+        var result = CleanDataService.Clean(config);
+        Console.WriteLine(result.Summary);
+        foreach (var e in result.Errors) Console.Error.WriteLine($"  [WARN] {e}");
+        return result.Success ? 0 : 1;
+    }
+
+    static int DashboardCommand(AppConfig config)
+    {
+        var preflight = PreflightService.RunAll();
+        var verification = PatchVerificationService.Evaluate(config);
+        var watchdog = EventLogWatchdogService.Evaluate(config);
+        var reliability = ReliabilityService.GetCorrelation(verification.PatchAppliedAt);
+        var minidump = MinidumpTriageService.Analyze(verification.PatchAppliedAt);
+        var guardrails = SystemGuardrailsService.Evaluate();
+        var controllers = PerControllerAuditService.Audit();
+        var html = HtmlDashboardService.Render(config, preflight, verification, watchdog, reliability, minidump, guardrails, controllers);
+        var path = HtmlDashboardService.SaveTo(config, html);
+        Console.WriteLine($"Dashboard written to: {path}");
+        return 0;
+    }
+
+    static int FirmwareNudgeCommand(string? model, string? firmware)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            // Emit nudges for every NVMe drive the preflight sees.
+            var preflight = PreflightService.RunAll();
+            foreach (var d in preflight.CachedDrives.Where(d => d.IsNVMe))
+            {
+                var fw = preflight.DriverInfo?.FirmwareVersions.TryGetValue(d.Name, out var f) == true ? f : string.Empty;
+                var nudge = FirmwareUpdateNudgeService.Lookup(d.Name ?? string.Empty, fw);
+                Console.WriteLine($"  {d.Name}  ({fw})  -> {nudge.Summary}");
+            }
+            return 0;
+        }
+        var single = FirmwareUpdateNudgeService.Lookup(model, firmware ?? string.Empty);
+        Console.WriteLine(single.Summary);
+        Console.WriteLine($"  Vendor: {single.Vendor}");
+        Console.WriteLine($"  URL:    {single.UpdateToolUrl}");
+        return 0;
+    }
+
+    static int SafeModeVerifyCommand(AppConfig config)
+    {
+        var path = SafeModeVerifyScriptService.Generate(config);
+        Console.WriteLine($"Safe Mode verify script written to: {path}");
+        Console.WriteLine("Boot into Safe Mode and run the script to confirm nvmedisk.sys bound cleanly.");
+        return 0;
+    }
+
+    static int AccessibilityCommand()
+    {
+        var snap = AccessibilityService.Probe();
+        Console.WriteLine(snap.Summary);
+        Console.WriteLine($"  HighContrast={snap.HighContrastActive}  Narrator={snap.NarratorInstalled}  ReducedMotion={snap.ReducedMotion}  TextScale={snap.TextScalePercent:0}%");
+        return 0;
+    }
+
+    static int MaintenanceWindowCommand(AppConfig config)
+    {
+        var window = MaintenanceWindowService.Load(config);
+        Console.WriteLine(MaintenanceWindowService.Summarize(window));
+        Console.WriteLine($"  InWindow now: {MaintenanceWindowService.IsInWindow(window)}");
+        Console.WriteLine($"  Config file : {MaintenanceWindowService.WindowPath(config)}");
+        return 0;
+    }
 
     static int ApplyCommand(AppConfig config, bool force, bool noRestart, bool unattended)
     {

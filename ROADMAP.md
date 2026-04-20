@@ -1,6 +1,14 @@
 # NVMe Driver Patcher — Roadmap
 
-Living document. Current ship: **v4.5.1** (2026-04-19). See [CHANGELOG.md](CHANGELOG.md) for what's landed.
+Living document. Current ship: **v4.6.0** (2026-04-19). See [CHANGELOG.md](CHANGELOG.md) for what's landed.
+
+v4.6.0 lights up the GUI Diagnostics+ tab, adds nine "live with the patch" services
+(accessibility / maintenance window / clean-data / HTML dashboard / firmware nudge /
+Safe-Mode verify / docs / AppLocker-SRP guardrail / real-time watchdog service), a full
+packaging pipeline (PSGallery module, Intune/SCCM detection, JSON schemas, issue
+templates), and Authenticode signing hooks in the release workflow. All published
+ROADMAP items are now shipped — future work is follow-up polish + scope-rule-compliant
+new ideas as they surface.
 
 v4.5.1 closes the last three open ROADMAP items from the published list (§1.5 recovery-kit
 persistent CTA — `RecoveryKitFreshnessService`; §3.1 native FeatureStore writer — stubbed

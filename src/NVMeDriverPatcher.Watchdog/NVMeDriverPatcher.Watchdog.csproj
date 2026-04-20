@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Optional Windows Service — a real-time companion to the polling watchdog. When installed
+    (`NVMeDriverPatcher.Watchdog.exe /install`), it subscribes to the System event log via
+    EventLogWatcher and persists event counts continuously, shortening the "time-to-detection"
+    from the scheduler's 60-minute sweep to near-real-time. Pure addition to v4.6 — the existing
+    poll path remains the default; this service is opt-in for homelab/sysadmin users.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>NVMeDriverPatcher.Watchdog</AssemblyName>
+    <RootNamespace>NVMeDriverPatcher.Watchdog</RootNamespace>
+    <Version>4.6.0</Version>
+    <AssemblyVersion>4.6.0.0</AssemblyVersion>
+    <FileVersion>4.6.0.0</FileVersion>
+    <Company>SysAdminDoc</Company>
+    <Product>NVMe Driver Patcher Realtime Watchdog</Product>
+    <Description>Windows Service that subscribes to System event log and feeds the watchdog state in real time.</Description>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <ApplicationManifest>..\NVMeDriverPatcher\app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NVMeDriverPatcher\NVMeDriverPatcher.csproj" />
+  </ItemGroup>
+
+</Project>
