@@ -1,0 +1,48 @@
+# winget manifest for Windows Package Manager
+#
+# Submit via:
+#   winget validate --manifest packaging/winget/
+#   winget install --manifest packaging/winget/ (local test)
+#   (PR to https://github.com/microsoft/winget-pkgs for public availability)
+#
+# InstallerUrl + InstallerSha256 need to be replaced on each release with the real values
+# from the GitHub Release artifacts.
+
+PackageIdentifier: SysAdminDoc.NVMeDriverPatcher
+PackageVersion: 4.5.0
+PackageLocale: en-US
+Publisher: SysAdminDoc
+PublisherUrl: https://github.com/SysAdminDoc
+PublisherSupportUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/issues
+Author: SysAdminDoc
+PackageName: NVMe Driver Patcher
+PackageUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher
+License: MIT
+LicenseUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/blob/main/LICENSE
+ShortDescription: Enable the Server 2025 Native NVMe driver on Windows 11.
+Description: |
+  A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driver
+  (nvmedisk.sys) on Windows 11, replacing the legacy SCSI translation layer for
+  improved NVMe performance. Includes Safe Mode + Full Mode profiles, BitLocker
+  auto-suspend, VeraCrypt detection, registry backup + rollback, recovery kit
+  generation, post-reboot verification, automated ViVeTool fallback for post-block
+  Insider builds, and a post-patch stability watchdog with auto-revert.
+Moniker: nvmedriverpatcher
+Tags:
+  - nvme
+  - storage
+  - performance
+  - driver
+  - windows11
+  - sysadmin
+ReleaseNotesUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest
+Installers:
+  - Architecture: x64
+    InstallerType: portable
+    InstallerUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v4.5.0/NVMeDriverPatcher.exe
+    InstallerSha256: REPLACE_ME_WITH_RELEASE_SHA256
+    ElevationRequirement: elevatesSelf
+    Commands:
+      - NVMeDriverPatcher
+ManifestType: singleton
+ManifestVersion: 1.6.0

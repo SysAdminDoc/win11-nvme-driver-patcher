@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "updated": "2026-04-19",
+  "note": "Curated from community BSOD threads and vendor forums. 'level' applies to Native NVMe (nvmedisk.sys) operation. Patterns: controller substring (case-insensitive), firmware exact (case-insensitive) or '*' wildcard. Prefix with '=' for exact controller match. Unknown entries are treated as 'proceed with caution' in the UI.",
+  "entries": [
+    {
+      "controller": "Samsung SSD 990 PRO",
+      "firmware": "0B2QJXD7",
+      "level": "Caution",
+      "note": "Pre-firmware-update build. Update to 4B2QJXD7 via Samsung Magician before enabling Native NVMe."
+    },
+    {
+      "controller": "Samsung SSD 990 PRO",
+      "firmware": "*",
+      "level": "Good",
+      "note": "Reported stable on 4B2QJXD7 and later."
+    },
+    {
+      "controller": "Samsung SSD 980 PRO",
+      "firmware": "5B2QGXA7",
+      "level": "Caution",
+      "note": "Known stutter with older firmware. Update to 5B2QGXA8+ before enabling Native NVMe."
+    },
+    {
+      "controller": "Samsung SSD 980 PRO",
+      "firmware": "*",
+      "level": "Good",
+      "note": "Reported stable on 5B2QGXA8 and later."
+    },
+    {
+      "controller": "WD_BLACK SN850X",
+      "firmware": "*",
+      "level": "Good",
+      "note": "Stable on latest 620331WD and later firmware."
+    },
+    {
+      "controller": "WD_BLACK SN770",
+      "firmware": "*",
+      "level": "Good",
+      "note": "No BSOD reports. SN770 on latest firmware is the most common 'works fine' report."
+    },
+    {
+      "controller": "CT1000P3",
+      "firmware": "*",
+      "level": "Caution",
+      "note": "Crucial P3 — some reports of paging errors under sustained 4K random write on early firmware. Benchmark with the watchdog active."
+    },
+    {
+      "controller": "SK hynix Platinum P41",
+      "firmware": "*",
+      "level": "Good",
+      "note": "Phison E18 controller, stable."
+    },
+    {
+      "controller": "KINGSTON SKC3000",
+      "firmware": "*",
+      "level": "Good",
+      "note": "Phison E18, stable."
+    },
+    {
+      "controller": "Intel SSDPEKNU",
+      "firmware": "*",
+      "level": "Bad",
+      "note": "Intel 670p / 665p — known to hang under Native NVMe. Keep on stornvme.sys."
+    },
+    {
+      "controller": "Sabrent Rocket",
+      "firmware": "*",
+      "level": "Caution",
+      "note": "Phison controllers — stable on current firmware, update first."
+    },
+    {
+      "controller": "Phison",
+      "firmware": "EIFM72.1",
+      "level": "Bad",
+      "note": "Early Phison E18 firmware — avoid Native NVMe, update drive first."
+    }
+  ]
+}
