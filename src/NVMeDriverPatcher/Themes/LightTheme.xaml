@@ -1,0 +1,34 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Light theme companion to DarkTheme.xaml. Keys mirror the dark dictionary so a theme
+        swap is a one-line MergedDictionaries change. The GUI rule is "dark by default" —
+        light is an opt-in preference surfaced in Settings.
+    -->
+    <SolidColorBrush x:Key="BgDarkest" Color="#FFF4F6FA"/>
+    <SolidColorBrush x:Key="BgDark" Color="#FFF9FBFE"/>
+    <SolidColorBrush x:Key="BgMedium" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="BgLight" Color="#FFFDFEFF"/>
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="SurfaceInset" Color="#FFEEF1F6"/>
+    <SolidColorBrush x:Key="Border" Color="#FFD5DCE6"/>
+    <SolidColorBrush x:Key="BorderLight" Color="#FFE1E7EF"/>
+    <SolidColorBrush x:Key="BorderStrong" Color="#FFB8C4D3"/>
+    <SolidColorBrush x:Key="TextPrimary" Color="#FF0B1220"/>
+    <SolidColorBrush x:Key="TextSecondary" Color="#FF1E2A3B"/>
+    <SolidColorBrush x:Key="TextMuted" Color="#FF4A5668"/>
+    <SolidColorBrush x:Key="TextDim" Color="#FF6B7788"/>
+    <SolidColorBrush x:Key="TextDimmer" Color="#FF8E99AA"/>
+    <SolidColorBrush x:Key="Accent" Color="#FF2563EB"/>
+    <SolidColorBrush x:Key="AccentHover" Color="#FF1D4ED8"/>
+    <SolidColorBrush x:Key="AccentBg" Color="#FFDBEAFE"/>
+    <SolidColorBrush x:Key="AccentSoft" Color="#FFE0ECFE"/>
+    <SolidColorBrush x:Key="Green" Color="#FF047857"/>
+    <SolidColorBrush x:Key="GreenBg" Color="#FFD1FAE5"/>
+    <SolidColorBrush x:Key="Yellow" Color="#FFB45309"/>
+    <SolidColorBrush x:Key="YellowBg" Color="#FFFEF3C7"/>
+    <SolidColorBrush x:Key="Red" Color="#FFB91C1C"/>
+    <SolidColorBrush x:Key="RedBg" Color="#FFFEE2E2"/>
+    <SolidColorBrush x:Key="Focus" Color="#FF2563EB"/>
+    <SolidColorBrush x:Key="FocusGlow" Color="#332563EB"/>
+</ResourceDictionary>
