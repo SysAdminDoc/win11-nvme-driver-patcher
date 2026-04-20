@@ -56,12 +56,46 @@ jobs:
       - name: Build CLI (self-contained single file)
         run: dotnet publish src/NVMeDriverPatcher.Cli -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:Version=${{ steps.tag.outputs.version }} -p:AssemblyVersion=${{ steps.tag.outputs.version }}.0 -p:FileVersion=${{ steps.tag.outputs.version }}.0 -o publish/cli
 
+      - name: Build Tray (non-admin status agent)
+        run: dotnet publish src/NVMeDriverPatcher.Tray -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:Version=${{ steps.tag.outputs.version }} -p:AssemblyVersion=${{ steps.tag.outputs.version }}.0 -p:FileVersion=${{ steps.tag.outputs.version }}.0 -o publish/tray
+
+      - name: Stage MSI inputs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path publish/msi-staging | Out-Null
+          Copy-Item publish/gui/NVMeDriverPatcher.exe         publish/msi-staging/ -Force
+          Copy-Item publish/cli/NVMeDriverPatcher.Cli.exe     publish/msi-staging/ -Force
+          Copy-Item publish/tray/NVMeDriverPatcher.Tray.exe   publish/msi-staging/ -Force
+          Copy-Item src/NVMeDriverPatcher/compat.json         publish/msi-staging/ -Force
+          Copy-Item icon.ico                                  publish/msi-staging/ -Force
+
+      - name: Install WiX v4
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix 2>$null
+          wix --version
+          wix extension add WixToolset.UI.wixext
+          wix extension add WixToolset.Util.wixext
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          wix build packaging/wix/NVMeDriverPatcher.wxs `
+            -d PublishDir="${{ github.workspace }}/publish/msi-staging" `
+            -d ProjectRoot="${{ github.workspace }}" `
+            -ext WixToolset.UI.wixext `
+            -ext WixToolset.Util.wixext `
+            -out publish/NVMeDriverPatcher-${{ steps.tag.outputs.version }}.msi
+        continue-on-error: true   # WiX is best-effort for now; portable exe remains the primary artifact.
+
       - name: Generate SHA256 checksums
         shell: pwsh
         run: |
           $files = @(
             'publish/gui/NVMeDriverPatcher.exe',
             'publish/cli/NVMeDriverPatcher.Cli.exe',
+            'publish/tray/NVMeDriverPatcher.Tray.exe',
+            "publish/NVMeDriverPatcher-${{ steps.tag.outputs.version }}.msi",
             'NVMe_Driver_Patcher.ps1'
           )
           $lines = foreach ($f in $files) {
@@ -72,6 +106,21 @@ jobs:
             }
           }
           $lines | Out-File -FilePath 'publish/SHA256SUMS.txt' -Encoding ascii
+
+      - name: Compute winget InstallerSha256 for GUI exe
+        id: winget
+        shell: pwsh
+        run: |
+          $sha = (Get-FileHash -Algorithm SHA256 -Path 'publish/gui/NVMeDriverPatcher.exe').Hash.ToUpper()
+          "sha256=$sha" >> $env:GITHUB_OUTPUT
+
+      - name: Emit winget manifest with real SHA256
+        shell: pwsh
+        run: |
+          $yaml = Get-Content -Raw packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml
+          $yaml = $yaml -replace 'REPLACE_ME_WITH_RELEASE_SHA256', '${{ steps.winget.outputs.sha256 }}'
+          $yaml = $yaml -replace 'PackageVersion:.*', ('PackageVersion: ' + '${{ steps.tag.outputs.version }}')
+          $yaml | Out-File -FilePath 'publish/SysAdminDoc.NVMeDriverPatcher.yaml' -Encoding utf8
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -105,7 +154,10 @@ jobs:
           files: |
             publish/gui/NVMeDriverPatcher.exe
             publish/cli/NVMeDriverPatcher.Cli.exe
+            publish/tray/NVMeDriverPatcher.Tray.exe
+            publish/NVMeDriverPatcher-${{ steps.tag.outputs.version }}.msi
             publish/SHA256SUMS.txt
+            publish/SysAdminDoc.NVMeDriverPatcher.yaml
             NVMe_Driver_Patcher.ps1
           draft: false
           prerelease: false
