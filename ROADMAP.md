@@ -1,6 +1,13 @@
 # NVMe Driver Patcher — Roadmap
 
-Living document. Current ship: **v4.5.0** (2026-04-19). See [CHANGELOG.md](CHANGELOG.md) for what's landed.
+Living document. Current ship: **v4.5.1** (2026-04-19). See [CHANGELOG.md](CHANGELOG.md) for what's landed.
+
+v4.5.1 closes the last three open ROADMAP items from the published list (§1.5 recovery-kit
+persistent CTA — `RecoveryKitFreshnessService`; §3.1 native FeatureStore writer — stubbed
+with a stable contract + fallback-evidence probe; §3.3 WinRE BCD prep — probe-only via
+`WinReBcdPrepService` with `EnableWinRe` helper). Driver-injection into the WinRE image
+remains future work. Test coverage added for 12 v4.4/v4.5 service surfaces; PR-gated CI
+workflow added.
 
 ## ✅ v4.5.0 closed ROADMAP items
 Tier 1 §1.1 (silent/unattended CLI), §1.2 (tuning profile import/export JSON), §1.3

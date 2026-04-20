@@ -43,7 +43,7 @@ public class AppConfig
             if (asmVer is not null) return $"{asmVer.Major}.{asmVer.Minor}.{asmVer.Build}";
         }
         catch { /* fall through to literal */ }
-        return "4.5.0";
+        return "4.5.1";
     }
     public const string RegistryPath = @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
     public const string RegistrySubKey = @"SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
@@ -137,6 +137,23 @@ public class AppConfig
 
     public static string GetWorkingDir()
     {
+        // Portable mode (v4.5) trumps everything — if the user opted in via portable.flag
+        // we write state to Data\ beside the exe instead of %LocalAppData%. Catch-all on the
+        // portable path so a flaky exe-dir permission doesn't wedge startup.
+        try
+        {
+            if (Services.PortableModeService.IsPortable())
+            {
+                var portable = Services.PortableModeService.PortableDataPath();
+                if (!string.IsNullOrEmpty(portable))
+                {
+                    WorkingDirFallbackReason = null;
+                    return portable;
+                }
+            }
+        }
+        catch { /* fall through to per-user path */ }
+
         // Try in order: LocalAppData (preferred), TEMP fallback, current directory last-resort.
         // Each step is independently try-wrapped so a denied LocalAppData (rare, hardened SKUs)
         // still gets us a usable working folder instead of NRE'ing the rest of the app.

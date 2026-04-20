@@ -136,6 +136,9 @@ class Program
                 "portable-enable" => PortableEnableCommand(),
                 "portable-disable" => PortableDisableCommand(),
                 "update-check" => UpdateCheckCommand().GetAwaiter().GetResult(),
+                "winre" => WinReCommand(),
+                "featurestore" or "feature-store" => FeatureStoreCommand(config),
+                "kit-freshness" or "recovery-kit-freshness" => RecoveryKitFreshnessCommand(config),
                 _ => Unknown(command)
             };
         }
@@ -182,6 +185,9 @@ class Program
         "register-tasks" or "unregister-tasks" => true,
         "portable-enable" or "portable-disable" => true,
         "update-check" => true,
+        "winre" => true,
+        "featurestore" or "feature-store" => true,
+        "kit-freshness" or "recovery-kit-freshness" => true,
         _ => false
     };
 
@@ -375,6 +381,35 @@ class Program
     static int PortableDisableCommand()
     {
         return PortableModeService.Disable(Console.WriteLine) ? 0 : 1;
+    }
+
+    static int WinReCommand()
+    {
+        var info = WinReBcdPrepService.Probe();
+        Console.WriteLine(info.Summary);
+        if (!string.IsNullOrEmpty(info.WinReLocation)) Console.WriteLine($"  Location: {info.WinReLocation}");
+        if (!string.IsNullOrEmpty(info.ImagePath))    Console.WriteLine($"  ImagePath: {info.ImagePath}");
+        if (!string.IsNullOrEmpty(info.DeviceGuid))   Console.WriteLine($"  BCD GUID : {info.DeviceGuid}");
+        return info.WinReEnabled ? 0 : 1;
+    }
+
+    static int FeatureStoreCommand(AppConfig config)
+    {
+        bool hasFallback = FeatureStoreWriterService.HasFallbackEvidence();
+        Console.WriteLine($"FeatureStore fallback evidence: {(hasFallback ? "PRESENT" : "not detected")}");
+        var exportPath = Path.Combine(config.WorkingDir, "featurestore_snapshot.bin");
+        var snapshot = FeatureStoreWriterService.ExportBlob(exportPath);
+        Console.WriteLine(snapshot is null
+            ? "No FeatureStore blob to export."
+            : $"FeatureStore blob exported to: {snapshot}");
+        return 0;
+    }
+
+    static int RecoveryKitFreshnessCommand(AppConfig config)
+    {
+        var report = RecoveryKitFreshnessService.Evaluate(config);
+        Console.WriteLine(report.Summary);
+        return report.ShouldNag ? 1 : 0;
     }
 
     static async Task<int> UpdateCheckCommand()

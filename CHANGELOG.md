@@ -2,6 +2,85 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [v4.5.1] - 2026-04-19
+
+Follow-up to v4.5.0 that closes the last three open ROADMAP items, lights up CI test
+coverage for the v4.4/v4.5 service layer, adds a dedicated CI workflow, and finishes the
+portable-mode wiring.
+
+### Added
+
+- **`RecoveryKitFreshnessService`** (closes ROADMAP §1.5) — pure function that returns
+  `Missing` / `Fresh` / `Stale` / `Unknown` based on the newest file in
+  `LastRecoveryKitPath`. Staleness threshold is 30 days. Used to drive the persistent
+  hero-card CTA and the new `kit-freshness` CLI subcommand. Exit code 1 when nagging is
+  warranted (Stale or Missing) — lets scripts gate on it.
+- **`FeatureStoreWriterService`** (ROADMAP §3.1 — stub) — seats the surface for a future
+  native FeatureStore encoder that replaces the ViVeTool download path. Ships today with:
+  `WriteOverrides` returning a `not yet implemented` result (stable contract for callers
+  that will use the real encoder once it lands); `HasFallbackEvidence` probes the blob for
+  little-endian occurrences of the two post-block feature IDs (60786016, 48433719);
+  `ExportBlob` dumps the raw blob + an ASCII hex sidecar for support bundles. New CLI:
+  `featurestore`.
+- **`WinReBcdPrepService`** (closes ROADMAP §3.3, probe-only for v4.5.1) — wraps
+  `reagentc /info` + `bcdedit /enum <guid> /v` to report WinRE enabled state, location,
+  BCD identifier, and image path. `EnableWinRe()` shells `reagentc /enable` for systems
+  with WinRE staged but the entry missing. Driver-injection into the WinRE image is still
+  deferred (out of scope for this bump). New CLI: `winre`.
+- **`PortableModeService` wiring** — `AppConfig.GetWorkingDir` now honors `portable.flag`
+  beside the exe and redirects writable state to `Data\`. Takes precedence over the
+  LocalAppData / TEMP / CurrentDir fallback chain.
+- **`.github/workflows/ci.yml`** — PR + push CI: restore → debug build → `dotnet test`
+  against the full solution → upload `test-results.trx` → release-mode compile smoke.
+  Cancels in-flight older runs on a new push to the same ref.
+- **Release workflow extension** — also publishes `NVMeDriverPatcher.Tray.exe`, produces
+  a WiX v4 MSI (continue-on-error during the transition so portable exe release is never
+  blocked by MSI tooling), stages it into `publish/`, computes real SHA-256 for the
+  winget manifest's `InstallerSha256` field, and emits a release-ready
+  `SysAdminDoc.NVMeDriverPatcher.yaml` with the version + sha pre-filled.
+
+### Tests — cover the v4.4 + v4.5 pure surfaces
+
+- **`DryRunServiceTests`** — 5 fixtures pinning Safe/Full profile item counts, Server-key
+  inclusion, VeraCrypt blocker propagation, Markdown render completeness.
+- **`FirmwareCompatServiceTests`** — 6 fixtures covering no-match default, wildcard match,
+  exact-firmware-beats-wildcard precedence, `=` exact-controller syntax, worst-severity
+  tiebreak, empty-model short-circuit.
+- **`PerDriveScopeServiceTests`** — 5 fixtures covering disabled-scope passthrough, serial
+  match, model-pattern match, serial-over-pattern precedence, summary-count correctness.
+- **`LogRotationServiceTests`** — 4 fixtures in a per-test TEMP dir: below-limit no-op,
+  oversized rotation, multi-generation shift, missing-file no-op.
+- **`AutoBenchmarkServiceTests`** — 5 fixtures for the regression compare: both-arms
+  improved, read-regressed, write-regressed, zero-baseline safe, within-threshold tolerated.
+- **`ConfigMigrationServiceTests`** — 4 fixtures: v0→current, v2→current, up-to-date
+  no-change, idempotency.
+- **`CompatChecksumServiceTests`** — 4 fixtures in TEMP: identical files, differing files,
+  missing local (fall back to shipped), both missing.
+- **`EventLogWatchdogServiceTests`** — 6 fixtures pin BuildSummary + BuildDetail messaging
+  across Healthy / Warning / Unstable / Completed / Idle verdicts and threshold printing.
+- **`MinidumpTriageServiceTests`** — 4 fixtures pin BuildSummary across no-dumps,
+  old-only, new-non-NVMe, and NVMe-referencing outcomes.
+- **`AutoUpdaterServiceTests`** — 4 fixtures covering all pre-network rejection paths
+  (non-HTTPS, unknown-host, path-traversal asset name, malformed URI).
+- **`RecoveryKitFreshnessServiceTests`** — 5 fixtures: null path, missing dir, empty dir,
+  fresh file, stale file.
+- **`FeatureStoreWriterServiceTests`** — 5 fixtures: `IndexOfBytes` positive/negative/empty
+  needle, stub contract stability, pinned post-block feature IDs.
+
+### CLI additions
+
+- `winre` — WinRE enabled state, location, image path, BCD identifier.
+- `featurestore` / `feature-store` — fallback-evidence probe + blob export.
+- `kit-freshness` / `recovery-kit-freshness` — freshness report with exit code.
+
+### Changed
+
+- `AppConfig.GetWorkingDir` short-circuits to `PortableModeService.PortableDataPath()`
+  when `portable.flag` is present. Existing fallback chain (LocalAppData → TEMP → CWD)
+  runs unchanged when portable mode is inactive.
+- All csproj `<Version>` strings bumped to `4.5.1`. Winget manifest version + download
+  URL updated. WiX `.wxs` product version updated.
+
 ## [v4.5.0] - 2026-04-19
 
 Feature release — closes every outstanding ROADMAP item that still fit the scope rule, plus

@@ -2,7 +2,7 @@
 <p align="center"><img src="icon.png" width="128" alt="win11 nvme driver patcher"></p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-4.5.0-58A6FF?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-4.5.1-58A6FF?style=for-the-badge">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-4ade80?style=for-the-badge">
   <img alt="Platform" src="https://img.shields.io/badge/platform-PowerShell-58A6FF?style=for-the-badge">
 </p>
