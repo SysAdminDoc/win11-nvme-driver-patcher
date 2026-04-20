@@ -2,6 +2,116 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [v4.6.0] - 2026-04-19
+
+Quality-of-life release. Diagnostics tab exposed in the GUI, nine new services for the
+"live with the patch" phase, full packaging pipeline (PowerShell module, Intune/SCCM
+detection, JSON schemas, issue templates), optional real-time Windows Service, and
+Authenticode-signing hooks in the release workflow.
+
+### Added — GUI
+
+- **Diagnostics+ tab in MainWindow.xaml** — four new buttons bound to the existing
+  `RefreshWatchdogStatusCommand` / `RefreshReliabilityCommand` / `TriageMinidumpsCommand` /
+  `PreviewDryRunCommand` RelayCommands. Summary text properties render into a dark-theme
+  InsetCard with a scrollable Cascadia Code text box for the dry-run Markdown. Finishes
+  the v4.4 loose-end "XAML bindings for new commands" that was deferred for two releases.
+
+### Added — Services
+
+- **`AccessibilityService`** — probes HighContrast, Narrator install, ReducedMotion,
+  TextScaleFactor from HKCU / HKLM. Gives support bundles visibility when the user is on
+  an accessible-settings profile the dark theme should consider.
+- **`MaintenanceWindowService`** — user-definable window (start hour, end hour, active days)
+  with overnight-wrap handling. `IsInWindow` is a pure function covered by 5 fixtures.
+  `AutoRevertService` now consults this — eligible verdicts outside the window defer to
+  the next run so we don't yank the driver mid-workday.
+- **`CleanDataService`** — named-target purge for `%LocalAppData%\NVMePatcher\`. Targets:
+  logs, etl, backups, db, bundles, staging. Default purges everything; CLI `clean-data`
+  invokes it. Reports bytes freed + per-file errors.
+- **`HtmlDashboardService`** — single-file HTML report composing verification, watchdog,
+  reliability, minidump, guardrails, per-controller audit into a dark-themed shareable
+  snapshot. Escapes hostile chars in every summary (pinned by test). CLI: `dashboard`.
+- **`FirmwareUpdateNudgeService`** — `{vendor substring → vendor update-tool URL}` map for
+  13 common NVMe vendors (Samsung, WD, Crucial, SK hynix, Kingston, Sabrent, Intel/Solidigm,
+  Seagate, Corsair, ADATA, Phison, Micron). CLI: `fw-nudge [model] [firmware]` — iterates
+  all detected NVMe drives when no model is given.
+- **`SafeModeVerifyScriptService`** — emits `Verify-NVMeSafeMode.ps1` beside the existing
+  verification script. Run FROM Safe Mode to confirm SafeBoot keys actually bound
+  nvmedisk.sys. Distinct from the normal post-reboot verify. CLI: `safemode-verify`.
+- **`DocsService`** — curated offline help. 10 topics covering overview, profiles, recovery,
+  watchdog, vivetool, firmware, gpo, portable, telemetry, uninstall. CLI: `docs [topic]`.
+- **`SystemGuardrailsService.CheckAppLockerOrSrp`** — extends the HVCI / WDAC / VROC /
+  NTFS-compression suite with AppLocker EnforcementMode + SRP DefaultLevel detection.
+  Both refuse our ViVeTool download path when enforced — warn early so the user can pre-
+  approve rather than discovering it mid-reboot.
+
+### Added — Packaging
+
+- **`packaging/powershell/`** — PSGallery-ready module (`NVMeDriverPatcher.psd1` +
+  `.psm1` + README). Cmdlets: `Get-NvmePatchStatus`, `Invoke-NvmePatchApply`,
+  `Invoke-NvmePatchRemove`, `Get-NvmeWatchdogReport`, `Get-NvmeControllerAudit`,
+  `Invoke-NvmeDryRun`, `Export-NvmeDiagnostics`, `Export-NvmeDashboard`. Parses CLI
+  output defensively — a CLI-messaging change degrades fields to null rather than
+  breaking the module.
+- **`packaging/intune/`** — `Detect-NVMeDriverPatcher.ps1` for Intune Win32 custom
+  detection, plus a README covering Intune + SCCM deployment modes with the exact
+  `msiexec` commands and product code.
+- **`packaging/schemas/`** — JSON Schema files for `config.json`, `drive_scope.json`,
+  `watchdog.json`, `maintenance_window.json`. Third-party tooling (VS Code, validators)
+  can now lint user-edited config files against the shipped schema.
+- **`.github/ISSUE_TEMPLATE/`** — bug_report.yml, feature_request.yml, config.yml. Bug
+  reports ask for a support bundle up front; feature requests reference the scope rule.
+
+### Added — Optional Windows Service
+
+- **`NVMeDriverPatcher.Watchdog` new project** — Microsoft.Extensions.Hosting-based Windows
+  Service. Subscribes to `System` event log via `EventLogWatcher` (push, not poll) for
+  nvmedisk/stornvme/storport/storahci/disk/BugCheck/Kernel-Power providers. Flushes every
+  5 minutes; shares the same `watchdog.json` the CLI/GUI read. `/install` / `/uninstall`
+  wrap `sc.exe`. Fully opt-in — polling path remains the default for users who'd rather
+  not run a persistent service.
+- Added to `NVMeDriverPatcher.sln` as `{E5F6A7B8-C9D0-1234-EF01-345678901234}`.
+
+### Added — CI/CD
+
+- **Authenticode signing step in release.yml** — conditionally signs the GUI, CLI, Tray,
+  and MSI when `CODE_SIGN_PFX_BASE64` + `CODE_SIGN_PFX_PASSWORD` repository secrets are
+  configured. No-op otherwise so the release pipeline keeps working for unsigned builds.
+  Timestamps via `timestamp.sectigo.com`. Sha-256 digest.
+
+### Added — CLI (10 new subcommands)
+
+- `docs [topic]` / `help-topic` — offline help.
+- `clean-data` — purge per-user working dir.
+- `dashboard` / `html-report` — generate the HTML diagnostics report.
+- `fw-nudge [model] [firmware]` / `firmware-nudge` — vendor update-tool nudge.
+- `safemode-verify` — emit the Safe-Mode PS verify script.
+- `accessibility` / `a11y` — probe user accessibility flags.
+- `maintenance-window` / `window` — show window config + current in/out state.
+
+### Added — Tests
+
+- **MaintenanceWindowServiceTests** — 5 fixtures: disabled, same-day inside/outside,
+  overnight wrap, inactive day, zero-width window.
+- **FirmwareUpdateNudgeServiceTests** — theory across 9 known vendors + unknown + empty
+  model.
+- **DocsServiceTests** — theory across all 10 documented topics + unknown/empty/case
+  insensitivity.
+- **CleanDataServiceTests** — 4 fixtures with per-test TEMP dir: missing dir,
+  clean-all-defaults, selective targets, unrelated-files-preserved.
+- **HtmlDashboardServiceTests** — 3 fixtures: skeleton structure, watchdog table
+  population, HTML-escape of hostile summary strings.
+- **WinReBcdPrepServiceTests** — 1 fixture pinning non-null report contract.
+
+### Changed
+
+- `AutoRevertService.MaybeRun` now consults `MaintenanceWindowService` before running
+  the uninstall — eligible but outside the window defers silently.
+- `SystemGuardrailsService.Evaluate` grew a 5th finding (AppLocker / SRP).
+- All csproj `<Version>` strings, winget manifest, WiX, and the README badge bumped to `4.6.0`.
+- `NVMeDriverPatcher.sln` now has 5 projects (GUI, CLI, Tests, Tray, Watchdog).
+
 ## [v4.5.1] - 2026-04-19
 
 Follow-up to v4.5.0 that closes the last three open ROADMAP items, lights up CI test
