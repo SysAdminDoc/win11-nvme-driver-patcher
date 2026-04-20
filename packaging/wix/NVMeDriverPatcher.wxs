@@ -14,7 +14,7 @@
   <Package
     Name="NVMe Driver Patcher"
     Manufacturer="SysAdminDoc"
-    Version="4.5.1.0"
+    Version="4.6.0.0"
     UpgradeCode="9C2E3F01-6B91-4C1A-8F4D-09F7D8B4A3C2"
     Scope="perMachine">
 
