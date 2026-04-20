@@ -1,13 +1,3 @@
-<!-- codex-branding:start -->
-<p align="center"><img src="icon.png" width="128" alt="win11 nvme driver patcher"></p>
-
-<p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-4.5.1-58A6FF?style=for-the-badge">
-  <img alt="License" src="https://img.shields.io/badge/license-MIT-4ade80?style=for-the-badge">
-  <img alt="Platform" src="https://img.shields.io/badge/platform-PowerShell-58A6FF?style=for-the-badge">
-</p>
-<!-- codex-branding:end -->
-
 # NVMe Driver Patcher for Windows 11
 
 A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driver (nvmedisk.sys) on Windows 11, replacing the legacy SCSI translation layer for improved NVMe performance.
