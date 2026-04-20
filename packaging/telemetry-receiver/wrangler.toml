@@ -1,0 +1,16 @@
+# wrangler.toml — sample config for the NVMe Driver Patcher compat-telemetry receiver.
+# Replace <account-id>, <KV-namespace-id>, and the SALT secret before deploying.
+
+name = "nvme-driver-patcher-compat"
+main = "cloudflare-worker.js"
+compatibility_date = "2026-04-19"
+
+account_id = "<account-id>"
+
+[vars]
+# No vars required for the default deployment. `env.SALT` (below) rotates the anonId hash —
+# set it via `wrangler secret put SALT`.
+
+kv_namespaces = [
+  { binding = "COMPAT", id = "<KV-namespace-id>" }
+]

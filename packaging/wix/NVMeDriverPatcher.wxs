@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX v4 authoring for the NVMe Driver Patcher MSI. Produces a single-file, per-machine
+  installer that drops the main GUI exe, the CLI exe, the Tray exe, and the shipped
+  compat.json into C:\Program Files\NVMe Driver Patcher\. Registers the Event Log source,
+  creates the SchedulerService boot-time verifier task, and authors an ADMX-aware policy
+  store registration.
+
+  Build: `wix build packaging\wix\NVMeDriverPatcher.wxs -ext WixToolset.Util.wixext`
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Package
+    Name="NVMe Driver Patcher"
+    Manufacturer="SysAdminDoc"
+    Version="4.5.0.0"
+    UpgradeCode="9C2E3F01-6B91-4C1A-8F4D-09F7D8B4A3C2"
+    Scope="perMachine">
+
+    <MajorUpgrade
+      DowngradeErrorMessage="A newer version of NVMe Driver Patcher is already installed."
+      Schedule="afterInstallInitialize" />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="Main" Title="NVMe Driver Patcher" Level="1" Display="expand">
+      <ComponentGroupRef Id="MainFiles" />
+      <ComponentGroupRef Id="Shortcuts" />
+      <ComponentGroupRef Id="EventLogSource" />
+    </Feature>
+
+    <Feature Id="TrayAgent" Title="Status Tray Agent" Level="1">
+      <ComponentGroupRef Id="TrayFiles" />
+    </Feature>
+
+    <Feature Id="AdmxTemplates" Title="Group Policy Templates (ADMX + ADML)" Level="1">
+      <ComponentGroupRef Id="AdmxFiles" />
+    </Feature>
+
+    <UI>
+      <ui:WixUI Id="WixUI_InstallDir" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui" />
+    </UI>
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="NVMe Driver Patcher" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="NVMe Driver Patcher" />
+    </StandardDirectory>
+
+    <!--
+      Component groups reference the published output of `dotnet publish`. The build pipeline
+      is expected to place the assets at $(var.PublishDir)\... before invoking `wix build`.
+    -->
+    <ComponentGroup Id="MainFiles" Directory="INSTALLFOLDER">
+      <Component Id="MainExe" Guid="*">
+        <File Source="$(var.PublishDir)\NVMeDriverPatcher.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="CliExe" Guid="*">
+        <File Source="$(var.PublishDir)\NVMeDriverPatcher.Cli.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="CompatJson" Guid="*">
+        <File Source="$(var.PublishDir)\compat.json" KeyPath="yes" />
+      </Component>
+      <Component Id="IconFile" Guid="*">
+        <File Source="$(var.PublishDir)\icon.ico" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="TrayFiles" Directory="INSTALLFOLDER">
+      <Component Id="TrayExe" Guid="*">
+        <File Source="$(var.PublishDir)\NVMeDriverPatcher.Tray.exe" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="Shortcuts" Directory="ApplicationProgramsFolder">
+      <Component Id="StartMenuShortcut" Guid="*">
+        <Shortcut Id="MainShortcut"
+                  Name="NVMe Driver Patcher"
+                  Description="Enable the Server 2025 Native NVMe driver on Windows 11"
+                  Target="[INSTALLFOLDER]NVMeDriverPatcher.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="MainIcon.ico" />
+        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\SysAdminDoc\NVMeDriverPatcher"
+                       Name="StartMenuShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="EventLogSource" Directory="INSTALLFOLDER">
+      <Component Id="EventLogSourceReg" Guid="*">
+        <util:EventSource Log="Application"
+                          Name="NVMe Driver Patcher"
+                          EventMessageFile="[INSTALLFOLDER]NVMeDriverPatcher.exe" />
+        <RegistryValue Root="HKLM"
+                       Key="Software\SysAdminDoc\NVMeDriverPatcher"
+                       Name="EventLogSourceRegistered"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="AdmxFiles" Directory="INSTALLFOLDER">
+      <Component Id="AdmxTemplate" Guid="*">
+        <File Id="AdmxFile"
+              Source="$(var.ProjectRoot)\packaging\admx\NVMeDriverPatcher.admx"
+              KeyPath="yes" />
+      </Component>
+      <Component Id="AdmlTemplate" Guid="*">
+        <File Id="AdmlFile"
+              Source="$(var.ProjectRoot)\packaging\admx\en-US\NVMeDriverPatcher.adml"
+              KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Icon Id="MainIcon.ico" SourceFile="$(var.PublishDir)\icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="MainIcon.ico" />
+  </Package>
+</Wix>
