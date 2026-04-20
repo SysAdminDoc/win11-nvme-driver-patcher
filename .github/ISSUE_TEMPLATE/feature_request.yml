@@ -1,0 +1,40 @@
+name: Feature request
+description: Something you wish the patcher could do
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Scope rule: everything this project ships must improve the core function —
+        enabling, disabling, verifying, or rolling back the Native NVMe driver swap.
+        Ideas that drift outside that boundary (general storage tooling, benchmark
+        suites, unrelated Windows tweaks) usually get deferred.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What should it do?
+      description: One paragraph describing the behavior, not the implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why — what is it solving?
+      description: The user outcome. "Because X doesn't work today" beats "because Y is cool".
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Where does it sit on the tier ladder?
+      description: See ROADMAP.md. Rough is fine.
+      options:
+        - "Safety (catch a failure mode not currently caught)"
+        - "Deploy (improve how the patch is delivered)"
+        - "Observe (improve visibility of what it did)"
+        - "Tune (expand per-drive / per-controller control)"
+        - "Not sure"

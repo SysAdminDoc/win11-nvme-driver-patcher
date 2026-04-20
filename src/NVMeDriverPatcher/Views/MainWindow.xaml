@@ -2076,6 +2076,79 @@
                                                                Margin="0,16,0,0"/>
                                         </Grid>
                                     </TabItem>
+
+                                    <!--
+                                        v4.6 Diagnostics tab — surfaces the watchdog / reliability / minidump / dry-run
+                                        RelayCommands that the ViewModel exposes. Intentionally simple: four buttons
+                                        that populate the observable text properties, plus a multi-line read-only
+                                        TextBox to show the rendered output.
+                                    -->
+                                    <TabItem Style="{StaticResource WorkspaceTabItem}">
+                                        <TabItem.Header>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Diagnostics+"/>
+                                                <Border Style="{StaticResource TabBadgeBorder}"
+                                                        BorderBrush="{StaticResource AccentSoft}">
+                                                    <TextBlock Text="v4.6"
+                                                               Foreground="{StaticResource Accent}"
+                                                               Style="{StaticResource TabBadgeText}"/>
+                                                </Border>
+                                            </StackPanel>
+                                        </TabItem.Header>
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+
+                                            <Border Style="{StaticResource InsetCard}">
+                                                <TextBlock Text="Post-patch diagnostics. Each button runs a read-only probe and writes its result into the output panel below."
+                                                           Style="{StaticResource BodyCopy}"/>
+                                            </Border>
+
+                                            <WrapPanel Grid.Row="1" Margin="0,12,0,0">
+                                                <Button Content="Watchdog status"
+                                                        Command="{Binding RefreshWatchdogStatusCommand}"
+                                                        Margin="0,0,8,8"/>
+                                                <Button Content="Reliability correlation"
+                                                        Command="{Binding RefreshReliabilityCommand}"
+                                                        Margin="0,0,8,8"/>
+                                                <Button Content="Triage minidumps"
+                                                        Command="{Binding TriageMinidumpsCommand}"
+                                                        Margin="0,0,8,8"/>
+                                                <Button Content="Preview dry-run"
+                                                        Command="{Binding PreviewDryRunCommand}"
+                                                        Margin="0,0,8,8"/>
+                                            </WrapPanel>
+
+                                            <Border Grid.Row="2" Style="{StaticResource InsetCard}" Margin="0,12,0,0">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding WatchdogVerdictText}"
+                                                               TextWrapping="Wrap"
+                                                               Foreground="{StaticResource TextPrimary}"
+                                                               Margin="0,0,0,6"/>
+                                                    <TextBlock Text="{Binding ReliabilitySummaryText}"
+                                                               TextWrapping="Wrap"
+                                                               Foreground="{StaticResource TextSecondary}"
+                                                               Margin="0,0,0,6"/>
+                                                    <TextBlock Text="{Binding MinidumpSummaryText}"
+                                                               TextWrapping="Wrap"
+                                                               Foreground="{StaticResource TextSecondary}"
+                                                               Margin="0,0,0,6"/>
+                                                    <TextBox Text="{Binding DryRunPreviewText, Mode=OneWay}"
+                                                             IsReadOnly="True"
+                                                             TextWrapping="Wrap"
+                                                             AcceptsReturn="True"
+                                                             VerticalScrollBarVisibility="Auto"
+                                                             FontFamily="Cascadia Code, Consolas, monospace"
+                                                             FontSize="12"
+                                                             MinHeight="120"
+                                                             Margin="0,6,0,0"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                    </TabItem>
                                 </TabControl>
                             </Grid>
                         </Border>

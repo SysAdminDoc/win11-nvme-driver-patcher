@@ -9,7 +9,7 @@
 # from the GitHub Release artifacts.
 
 PackageIdentifier: SysAdminDoc.NVMeDriverPatcher
-PackageVersion: 4.5.1
+PackageVersion: 4.6.0
 PackageLocale: en-US
 Publisher: SysAdminDoc
 PublisherUrl: https://github.com/SysAdminDoc
@@ -39,7 +39,7 @@ ReleaseNotesUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releas
 Installers:
   - Architecture: x64
     InstallerType: portable
-    InstallerUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v4.5.1/NVMeDriverPatcher.exe
+    InstallerUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v4.6.0/NVMeDriverPatcher.exe
     InstallerSha256: REPLACE_ME_WITH_RELEASE_SHA256
     ElevationRequirement: elevatesSelf
     Commands:

@@ -1,0 +1,56 @@
+name: Bug report
+description: Something the NVMe Driver Patcher did (or didn't do) that you think is wrong
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Please generate a support bundle first** so we have the
+        context we'd ask for anyway. Run:
+
+        ```powershell
+        NVMeDriverPatcher.Cli.exe bundle
+        ```
+
+        and attach the resulting `support_bundle_*.zip`. If you can't generate a bundle,
+        paste the `dashboard` HTML or at least `NVMeDriverPatcher.Cli.exe status` output.
+
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Output of `NVMeDriverPatcher.Cli.exe version`
+      placeholder: v4.6.0
+    validations:
+      required: true
+
+  - type: input
+    id: win-build
+    attributes:
+      label: Windows build
+      description: Output of `winver` (e.g. 22631.4602)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Patch profile when the bug happened
+      options: [Safe, Full, "Not patched / N/A"]
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: What happened, what you expected
+      description: Include the exact steps. Copy-paste beats paraphrasing.
+    validations:
+      required: true
+
+  - type: textarea
+    id: bundle
+    attributes:
+      label: Support bundle attached?
+      description: Drag-drop the .zip into this box, or paste the path.

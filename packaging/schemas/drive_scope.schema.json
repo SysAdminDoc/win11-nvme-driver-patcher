@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/packaging/schemas/drive_scope.schema.json",
+  "title": "NVMe Driver Patcher Drive Scope",
+  "description": "Schema for drive_scope.json. Controls which NVMe drives are included in or excluded from the swap.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "Enabled":               { "type": "boolean", "default": false },
+    "ExcludedSerials":       { "type": "array", "items": { "type": "string" }, "default": [] },
+    "ExcludedModelPatterns": { "type": "array", "items": { "type": "string" }, "default": [] }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/packaging/schemas/config.schema.json",
+  "title": "NVMe Driver Patcher Config",
+  "description": "Schema for %LocalAppData%\\NVMePatcher\\config.json (and the portable-mode Data\\config.json). Matches the AppConfig class in src/NVMeDriverPatcher/Models/AppConfig.cs.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "AutoSaveLog":                     { "type": "boolean", "default": true },
+    "EnableToasts":                    { "type": "boolean", "default": true },
+    "WriteEventLog":                   { "type": "boolean", "default": true },
+    "RestartDelay":                    { "type": "integer", "minimum": 0, "maximum": 3600, "default": 30 },
+    "IncludeServerKey":                { "type": "boolean", "default": false },
+    "SkipWarnings":                    { "type": "boolean", "default": false },
+    "PatchProfile":                    { "type": "string", "enum": ["Safe", "Full"], "default": "Safe" },
+    "ConfigVersion":                   { "type": "integer", "minimum": 1, "default": 3 },
+    "LastRecoveryKitPath":             { "type": ["string", "null"] },
+    "LastDiagnosticsPath":             { "type": ["string", "null"] },
+    "LastSupportBundlePath":           { "type": ["string", "null"] },
+    "LastVerificationScriptPath":      { "type": ["string", "null"] },
+    "PendingVerificationSince":        { "type": ["string", "null"], "format": "date-time" },
+    "PendingVerificationProfile":      { "type": ["string", "null"], "enum": ["Safe", "Full", null] },
+    "LastVerifiedProfile":             { "type": ["string", "null"] },
+    "LastVerificationResult":          { "type": ["string", "null"] },
+    "LastRun":                         { "type": ["string", "null"], "format": "date-time" }
+  }
+}

@@ -32,6 +32,16 @@ public static class AutoRevertService
                 return outcome;
             }
 
+            // v4.6: honor the maintenance window. Eligible but outside the window? Defer until
+            // the next run — prevents yanking the driver mid-workday when the user is on a
+            // Teams call, at the cost of letting an unstable patch run until the window opens.
+            var window = MaintenanceWindowService.Load(config);
+            if (window.Enabled && !MaintenanceWindowService.IsInWindow(window))
+            {
+                outcome.Summary = $"Auto-revert deferred — outside maintenance window ({MaintenanceWindowService.Summarize(window)}).";
+                return outcome;
+            }
+
             log?.Invoke("[AUTO-REVERT] Watchdog verdict Unstable — initiating automatic patch removal.");
             EventLogService.Write(
                 $"NVMe Driver Patcher auto-revert triggered — {report.TotalEvents} storage-stack events in watchdog window.",
