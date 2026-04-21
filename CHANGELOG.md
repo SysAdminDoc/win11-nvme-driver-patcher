@@ -2,6 +2,39 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [v4.6.1] - 2026-04-21
+
+Patch fix for SafeBoot regression on Windows 11 24H2/25H2 after KB5079391 (March 2026).
+
+### Fixed
+
+- **SafeBoot service-name entry missing on 25H2 / KB5079391 systems** — KB5079391 (released
+  March 26, 2026, re-packaged as KB5086672 on March 31) tightened how Windows resolves
+  kernel-mode storage drivers at Safe Mode boot. The existing device-class GUID entry
+  (`{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}`) was sufficient on 24H2 and earlier, but
+  25H2 (build 26200) and patched 24H2 systems (build 26100.8117+) now also require the
+  canonical **service-name-based** SafeBoot entry — the same pattern used natively by
+  storport, stornvme, and storahci — to reliably load nvmedisk.sys during a Safe Mode boot.
+
+  The patcher now writes `HKLM\...\SafeBoot\Minimal\nvmedisk` and
+  `HKLM\...\SafeBoot\Network\nvmedisk` (default value `"Service"`) alongside the existing
+  GUID entry on both Install and Rollback/Uninstall cleanup. These writes are best-effort:
+  a failure is logged as `[WARN]` but never causes the patch to fail or roll back on
+  pre-25H2 systems. (Fixes [#1](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/issues/1))
+
+### Changed
+
+- **`RegistryService` — backup and snapshot** — `ExportRegistryBackup` now includes the
+  service-name SafeBoot keys in the `.reg` backup when present. `GetPatchSnapshot` adds
+  `SafeBootMinimalService` and `SafeBootNetworkService` to the components map so diagnostic
+  snapshots surface 25H2 compat state.
+
+- **`SafeModeVerifyScriptService` — enhanced PS1 report** — the emitted
+  `Verify-NVMeSafeMode.ps1` now independently checks both the GUID key and the service-name
+  key for each scope (Minimal / Network). Per-key `[OK]` / `[MISS]` status plus a
+  color-coded `[PASS]` / `[WARN]` / `[FAIL]` summary clearly communicates whether the
+  system is safe on the current Windows build.
+
 ## [v4.6.0] - 2026-04-19
 
 Quality-of-life release. Diagnostics tab exposed in the GUI, nine new services for the
