@@ -51,6 +51,14 @@ public class AppConfig
     public const string SafeBootNetworkPath = @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}";
     public const string SafeBootGuid = "{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}";
     public const string SafeBootValue = "Storage Disks";
+    // Service-name SafeBoot entries written alongside the GUID entries for Windows 25H2
+    // compatibility. KB5079391 (March 2026) changed how Safe Mode resolves storage drivers —
+    // 25H2 now requires the canonical service-name pattern used by storport/stornvme/storahci.
+    // These are supplemental (best-effort, not counted in TotalComponents).
+    public const string SafeBootServiceName = "nvmedisk";
+    public const string SafeBootMinimalServicePath = @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\nvmedisk";
+    public const string SafeBootNetworkServicePath = @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network\nvmedisk";
+    public const string SafeBootServiceValue = "Service";
     public const int MinWinBuild = 22000;
     public const int RecommendedBuild = 26100;
     public const string ServerFeatureID = "1176759950";
@@ -105,6 +113,7 @@ public class AppConfig
     }
     public bool IncludeServerKey { get; set; }
     public bool SkipWarnings { get; set; }
+    public AppThemeMode ThemeMode { get; set; } = AppThemeMode.System;
     // Default to Safe — primary flag only. Users can opt into Full after reading the tradeoff.
     public PatchProfile PatchProfile { get; set; } = PatchProfile.Safe;
     // Schema version for future migrations. Leave loose — unknown values fall back to Safe.
