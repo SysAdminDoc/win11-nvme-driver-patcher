@@ -227,6 +227,35 @@ public static class PatchService
                 try { using var probe = hklm.OpenSubKey(AppConfig.SafeBootNetworkPath); if (probe is not null && !appliedKeys.Contains(("SafeBoot", "Network"))) appliedKeys.Add(("SafeBoot", "Network")); } catch { }
             }
 
+            // Supplemental service-name SafeBoot entries for Windows 25H2 compatibility.
+            // KB5079391 (March 2026) tightened how Safe Mode resolves storage drivers — the
+            // GUID-class approach above is sufficient on 24H2 and earlier, but 25H2 now
+            // requires the canonical service-name entry used by storport/stornvme/storahci.
+            // These are BEST-EFFORT: they do NOT count toward successCount/effectiveTotal
+            // and are NOT tracked in appliedKeys. A failure here is logged but never causes
+            // the patch to fail or roll back on pre-25H2 machines.
+            try
+            {
+                using var svcMin = hklm.CreateSubKey(AppConfig.SafeBootMinimalServicePath);
+                if (svcMin is not null)
+                {
+                    svcMin.SetValue("", AppConfig.SafeBootServiceValue);
+                    log?.Invoke("  [OK] SafeBoot Minimal (service name) -- 25H2 compat");
+                }
+            }
+            catch (Exception ex) { log?.Invoke($"  [WARN] SafeBoot Minimal service entry: {ex.Message}"); }
+
+            try
+            {
+                using var svcNet = hklm.CreateSubKey(AppConfig.SafeBootNetworkServicePath);
+                if (svcNet is not null)
+                {
+                    svcNet.SetValue("", AppConfig.SafeBootServiceValue);
+                    log?.Invoke("  [OK] SafeBoot Network (service name) -- 25H2 compat");
+                }
+            }
+            catch (Exception ex) { log?.Invoke($"  [WARN] SafeBoot Network service entry: {ex.Message}"); }
+
             // Flush registry to disk so a hard power cycle before reboot doesn't lose the writes.
             try { overrides.Flush(); } catch { }
 
@@ -491,6 +520,36 @@ public static class PatchService
             }
             catch (Exception ex) { log?.Invoke($"  [FAIL] SafeBoot Network: {ex.Message}"); }
 
+            // Also remove supplemental service-name SafeBoot entries written for 25H2 compat.
+            // Best-effort — not counted in removedCount, never fail the uninstall.
+            try
+            {
+                using var safeMinParent = hklm.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal", writable: true);
+                if (safeMinParent is not null)
+                {
+                    bool existed;
+                    using (var probe = safeMinParent.OpenSubKey(AppConfig.SafeBootServiceName))
+                        existed = probe is not null;
+                    safeMinParent.DeleteSubKeyTree(AppConfig.SafeBootServiceName, throwOnMissingSubKey: false);
+                    if (existed) log?.Invoke("  [REMOVED] SafeBoot Minimal (service name)");
+                }
+            }
+            catch { }
+
+            try
+            {
+                using var safeNetParent = hklm.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\SafeBoot\Network", writable: true);
+                if (safeNetParent is not null)
+                {
+                    bool existed;
+                    using (var probe = safeNetParent.OpenSubKey(AppConfig.SafeBootServiceName))
+                        existed = probe is not null;
+                    safeNetParent.DeleteSubKeyTree(AppConfig.SafeBootServiceName, throwOnMissingSubKey: false);
+                    if (existed) log?.Invoke("  [REMOVED] SafeBoot Network (service name)");
+                }
+            }
+            catch { }
+
             ReportProgress(progress, 90, "Validating...");
             result.AppliedCount = removedCount;
             result.Success = true;
@@ -603,6 +662,22 @@ public static class PatchService
                 allReversed = false;
             }
         }
+
+        // Unconditionally clean up supplemental service-name SafeBoot entries. These are
+        // not tracked in appliedKeys (best-effort compat writes during Install), but must
+        // still be removed on rollback to avoid leaking them into a reverted state.
+        try
+        {
+            using var safeMinParent = hklm.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal", writable: true);
+            safeMinParent?.DeleteSubKeyTree(AppConfig.SafeBootServiceName, throwOnMissingSubKey: false);
+        }
+        catch { }
+        try
+        {
+            using var safeNetParent = hklm.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\SafeBoot\Network", writable: true);
+            safeNetParent?.DeleteSubKeyTree(AppConfig.SafeBootServiceName, throwOnMissingSubKey: false);
+        }
+        catch { }
 
         try { overrides?.Flush(); } catch { }
         try { overrides?.Dispose(); } catch { }
