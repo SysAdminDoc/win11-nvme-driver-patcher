@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Win32;
 using NVMeDriverPatcher.Models;
 
@@ -158,7 +159,15 @@ public static class RegistryService
         foreach (var bad in System.IO.Path.GetInvalidFileNameChars())
             safeDesc = safeDesc.Replace(bad, '_');
 
-        try { Directory.CreateDirectory(workingDir); } catch { }
+        try
+        {
+            Directory.CreateDirectory(workingDir);
+        }
+        catch (Exception ex)
+        {
+            try { EventLogService.Write($"[RegistryService] Cannot create backup directory '{workingDir}': {ex.Message}", EventLogEntryType.Warning); } catch { }
+            return null;
+        }
 
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         var backupFile = Path.Combine(workingDir, $"{safeDesc}_{timestamp}.reg");
@@ -209,6 +218,27 @@ public static class RegistryService
             {
                 lines.Add($@"[HKEY_LOCAL_MACHINE\{AppConfig.SafeBootNetworkPath}]");
                 var val = safeNet.GetValue("") as string;
+                if (!string.IsNullOrEmpty(val))
+                    lines.Add($"@=\"{val}\"");
+                lines.Add("");
+            }
+
+            // Supplemental service-name SafeBoot entries (25H2 compat)
+            using var safeMinSvc = hklm.OpenSubKey(AppConfig.SafeBootMinimalServicePath);
+            if (safeMinSvc is not null)
+            {
+                lines.Add($@"[HKEY_LOCAL_MACHINE\{AppConfig.SafeBootMinimalServicePath}]");
+                var val = safeMinSvc.GetValue("") as string;
+                if (!string.IsNullOrEmpty(val))
+                    lines.Add($"@=\"{val}\"");
+                lines.Add("");
+            }
+
+            using var safeNetSvc = hklm.OpenSubKey(AppConfig.SafeBootNetworkServicePath);
+            if (safeNetSvc is not null)
+            {
+                lines.Add($@"[HKEY_LOCAL_MACHINE\{AppConfig.SafeBootNetworkServicePath}]");
+                var val = safeNetSvc.GetValue("") as string;
                 if (!string.IsNullOrEmpty(val))
                     lines.Add($"@=\"{val}\"");
                 lines.Add("");
@@ -280,6 +310,13 @@ public static class RegistryService
 
             using var safeNet = hklm.OpenSubKey(AppConfig.SafeBootNetworkPath);
             snapshot.Components["SafeBootNetwork"] = safeNet is not null ? "Present" : "Absent";
+
+            // Supplemental service-name entries (25H2 compat)
+            using var safeMinSvc = hklm.OpenSubKey(AppConfig.SafeBootMinimalServicePath);
+            snapshot.Components["SafeBootMinimalService"] = safeMinSvc is not null ? "Present" : "Absent";
+
+            using var safeNetSvc = hklm.OpenSubKey(AppConfig.SafeBootNetworkServicePath);
+            snapshot.Components["SafeBootNetworkService"] = safeNetSvc is not null ? "Present" : "Absent";
         }
         catch
         {
@@ -289,6 +326,8 @@ public static class RegistryService
             snapshot.Components.TryAdd(AppConfig.ServerFeatureID, "Unknown");
             snapshot.Components.TryAdd("SafeBootMinimal", "Unknown");
             snapshot.Components.TryAdd("SafeBootNetwork", "Unknown");
+            snapshot.Components.TryAdd("SafeBootMinimalService", "Unknown");
+            snapshot.Components.TryAdd("SafeBootNetworkService", "Unknown");
         }
 
         return snapshot;
