@@ -11,9 +11,9 @@
     <AssemblyName>NVMeDriverPatcher</AssemblyName>
     <RootNamespace>NVMeDriverPatcher</RootNamespace>
     <ApplicationIcon>nvme.ico</ApplicationIcon>
-    <Version>4.6.1</Version>
-    <AssemblyVersion>4.6.1.0</AssemblyVersion>
-    <FileVersion>4.6.1.0</FileVersion>
+    <Version>4.7.0</Version>
+    <AssemblyVersion>4.7.0.0</AssemblyVersion>
+    <FileVersion>4.7.0.0</FileVersion>
     <Company>SysAdminDoc</Company>
     <Product>NVMe Driver Patcher</Product>
     <Description>Enable the Server 2025 Native NVMe driver on Windows 11</Description>
