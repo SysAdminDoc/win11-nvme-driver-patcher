@@ -15,9 +15,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>NVMeDriverPatcher.Tray</AssemblyName>
     <RootNamespace>NVMeDriverPatcher.Tray</RootNamespace>
-    <Version>4.7.0</Version>
-    <AssemblyVersion>4.7.0.0</AssemblyVersion>
-    <FileVersion>4.7.0.0</FileVersion>
+    <Version>4.6.0</Version>
+    <AssemblyVersion>4.6.0.0</AssemblyVersion>
+    <FileVersion>4.6.0.0</FileVersion>
     <Company>SysAdminDoc</Company>
     <Product>NVMe Driver Patcher Tray Agent</Product>
     <Description>Non-admin status agent — shows patch state + watchdog verdict from the system tray.</Description>
