@@ -27,10 +27,13 @@ public static class DataService
             var record = new BenchmarkRecord
             {
                 Label = result.Label ?? string.Empty,
+                // Persist UTC so prune windows + sort order stay stable across DST transitions
+                // and timezone moves. UI renders as local time.
                 Timestamp = DateTime.TryParse(result.Timestamp,
                     System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.RoundtripKind, out var ts)
-                    ? ts : DateTime.Now,
+                    System.Globalization.DateTimeStyles.RoundtripKind | System.Globalization.DateTimeStyles.AssumeUniversal,
+                    out var ts)
+                    ? ts.ToUniversalTime() : DateTime.UtcNow,
                 ReadIOPS = result.Read?.IOPS ?? 0,
                 ReadThroughputMBs = result.Read?.ThroughputMBs ?? 0,
                 ReadLatencyMs = result.Read?.AvgLatencyMs ?? 0,
@@ -75,10 +78,12 @@ public static class DataService
 
             var record = new SnapshotRecord
             {
+                // Persist UTC so retention / prune windows stay correct across DST.
                 Timestamp = DateTime.TryParse(snapshot.Timestamp,
                     System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.RoundtripKind, out var ts)
-                    ? ts : DateTime.Now,
+                    System.Globalization.DateTimeStyles.RoundtripKind | System.Globalization.DateTimeStyles.AssumeUniversal,
+                    out var ts)
+                    ? ts.ToUniversalTime() : DateTime.UtcNow,
                 Description = description ?? string.Empty,
                 RegistryStateJson = JsonSerializer.Serialize(snapshot.Components ?? [], _jsonOpts),
                 // Include Total and Keys too — without them, replaying a snapshot from disk loses
@@ -146,7 +151,7 @@ public static class DataService
             var record = new TelemetryRecord
             {
                 DriveNumber = driveNumber,
-                Timestamp = DateTime.Now,
+                Timestamp = DateTime.UtcNow,
                 TemperatureCelsius = temperatureCelsius,
                 AvailableSparePercent = availableSparePercent,
                 PercentageUsed = percentageUsed,
@@ -173,7 +178,10 @@ public static class DataService
         try
         {
             using var db = new AppDbContext();
-            var cutoff = DateTime.Now - window;
+            // UTC across the board so queries over the Timestamp column stay stable against
+            // DST transitions — otherwise rows written at 02:00 on a DST spring-forward day
+            // could fall outside or inside the window depending on when the query ran.
+            var cutoff = DateTime.UtcNow - window;
             return db.Telemetry
                 .Where(t => t.DriveNumber == driveNumber && t.Timestamp >= cutoff)
                 .OrderBy(t => t.Timestamp)
@@ -216,7 +224,7 @@ public static class DataService
         {
             using var db = new AppDbContext();
             var window = retention ?? TimeSpan.FromDays(90);
-            var cutoff = DateTime.Now - window;
+            var cutoff = DateTime.UtcNow - window;
             return db.Telemetry.Where(t => t.Timestamp < cutoff).ExecuteDelete();
         }
         catch (Exception ex)

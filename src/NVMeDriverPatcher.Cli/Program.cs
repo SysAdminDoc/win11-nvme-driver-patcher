@@ -242,9 +242,10 @@ class Program
             var preflight = PreflightService.RunAll();
             foreach (var d in preflight.CachedDrives.Where(d => d.IsNVMe))
             {
-                var fw = preflight.DriverInfo?.FirmwareVersions.TryGetValue(d.Name, out var f) == true ? f : string.Empty;
-                var nudge = FirmwareUpdateNudgeService.Lookup(d.Name ?? string.Empty, fw);
-                Console.WriteLine($"  {d.Name}  ({fw})  -> {nudge.Summary}");
+                var driveName = d.Name ?? string.Empty;
+                var fw = preflight.DriverInfo?.FirmwareVersions.TryGetValue(driveName, out var f) == true ? f : string.Empty;
+                var nudge = FirmwareUpdateNudgeService.Lookup(driveName, fw);
+                Console.WriteLine($"  {driveName}  ({fw})  -> {nudge.Summary}");
             }
             return 0;
         }
@@ -285,7 +286,7 @@ class Program
         // v4.5: unattended mode = silent apply + auto-reboot (if --no-restart is not also set).
         // Unattended implies SkipWarnings for the run.
         if (unattended) config.SkipWarnings = true;
-        return ApplyCommand(config, force, noRestart);
+        return ApplyCommandInner(config, force, noRestart, autoRestart: unattended && !noRestart);
     }
 
     static int WatchdogAutoRevertCommand(AppConfig config)
@@ -720,7 +721,7 @@ class Program
         return status.Applied ? 0 : status.Partial ? 2 : 1;
     }
 
-    static int ApplyCommand(AppConfig config, bool force, bool noRestart)
+    static int ApplyCommandInner(AppConfig config, bool force, bool noRestart, bool autoRestart)
     {
         var preflight = PreflightService.RunAll(msg => Console.WriteLine(msg));
 
@@ -748,10 +749,6 @@ class Program
             preflight.BypassIOStatus,
             msg => Console.WriteLine(msg));
 
-        if (result.Success && result.NeedsRestart && !noRestart)
-        {
-            Console.WriteLine($"Restart required. Run 'shutdown /r /t {config.RestartDelay}' to restart.");
-        }
         if (result.Success)
         {
             PatchVerificationService.MarkPending(config);
@@ -759,6 +756,28 @@ class Program
             // (if the user opted into auto-revert in config / GPO).
             EventLogWatchdogService.Arm(config);
             ConfigService.Save(config);
+        }
+
+        if (result.Success && result.NeedsRestart && !noRestart)
+        {
+            if (autoRestart)
+            {
+                // --unattended flow: schedule the reboot ourselves via shutdown.exe /r /t <delay>.
+                // Persisted + armed verification state is already written above, so the post-reboot
+                // launch will pick up exactly the patch we applied. Fall back to printing the
+                // command if shutdown.exe refuses (rare — we already hold Administrator).
+                Console.WriteLine(
+                    $"[UNATTENDED] Scheduling auto-restart in {config.RestartDelay}s...");
+                if (!PatchService.InitiateRestart(config.RestartDelay, msg => Console.WriteLine(msg)))
+                {
+                    Console.Error.WriteLine(
+                        $"[WARNING] Auto-restart could not be scheduled. Run 'shutdown /r /t {config.RestartDelay}' manually.");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"Restart required. Run 'shutdown /r /t {config.RestartDelay}' to restart.");
+            }
         }
 
         return result.Success ? 0 : 1;
@@ -813,6 +832,11 @@ class Program
         }
         Console.WriteLine();
         Console.WriteLine($"Applied feature ID(s): {string.Join(", ", result.AppliedIDs)}");
+        // Expose the integrity-verification signal so unattended callers can audit how the
+        // third-party binary was trusted. `sha256` means a published hash matched the archive
+        // byte-for-byte; `weak` means we fell back to size + host allowlist (upstream ViVeTool
+        // does not currently publish sidecars — activates automatically once they do).
+        Console.WriteLine($"Integrity check: {result.IntegritySignal}");
         PatchVerificationService.MarkPending(config);
         ConfigService.Save(config);
         Console.WriteLine("Restart required. Run: shutdown /r /t 30");

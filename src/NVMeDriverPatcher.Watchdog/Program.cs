@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Eventing.Reader;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Extensions.Logging;
@@ -68,9 +69,24 @@ internal static class Program
         foreach (var a in args) psi.ArgumentList.Add(a);
         using var proc = Process.Start(psi);
         if (proc is null) { Console.Error.WriteLine("sc.exe did not start."); return 1; }
-        proc.WaitForExit(30_000);
-        Console.WriteLine(proc.StandardOutput.ReadToEnd());
-        if (proc.ExitCode != 0) Console.Error.WriteLine(proc.StandardError.ReadToEnd());
+
+        // Start the pipe reads BEFORE waiting for exit — a chatty sc.exe error (localized
+        // failure detail, for example) can fill the stdout/stderr pipe buffers and deadlock
+        // the child while we sit in WaitForExit. Draining async keeps both sides moving.
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+        if (!proc.WaitForExit(30_000))
+        {
+            try { proc.Kill(true); } catch { }
+            Console.Error.WriteLine("sc.exe timed out after 30s.");
+            return 1;
+        }
+
+        string stdout = string.Empty, stderr = string.Empty;
+        try { stdout = stdoutTask.GetAwaiter().GetResult(); } catch { }
+        try { stderr = stderrTask.GetAwaiter().GetResult(); } catch { }
+        if (!string.IsNullOrEmpty(stdout)) Console.WriteLine(stdout);
+        if (proc.ExitCode != 0 && !string.IsNullOrEmpty(stderr)) Console.Error.WriteLine(stderr);
         return proc.ExitCode;
     }
 }

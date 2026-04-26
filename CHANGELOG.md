@@ -2,6 +2,128 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [Unreleased] — hardening pass
+
+A multi-stage production-hardening sweep. Every change preserves the existing public API
+and ships with regression tests. Build is clean (0 warnings, 0 errors) and all tests pass.
+
+### Security
+
+- **Auto-updater now verifies every download.** `AutoUpdaterService.StageUpdateAsync`
+  refuses to promote a downloaded binary into the staging path unless one of two
+  integrity signals validates: (a) the release's per-asset `<asset>.sha256` sidecar
+  matches the downloaded bytes, or (b) the binary carries a valid Authenticode signature
+  that `signtool verify /pa` accepts. If neither signal is available the download is
+  deleted and staging fails closed — host allowlisting alone is no longer treated as a
+  sufficient defense. The CI release workflow now emits `<asset>.sha256` sidecars
+  alongside the combined `SHA256SUMS.txt`.
+- **ViVeTool downloader** learned the same SHA-256 sidecar check (opportunistic —
+  activates automatically when upstream publishes sidecars). A user-visible log entry
+  notes whether the install used `sha256`, `authenticode`, or `weak` (size + host match
+  only) integrity so operators can audit the assurance level.
+
+### Fixed (critical)
+
+- **`PhysicalDiskTelemetryService` — per-drive reliability counters were identical
+  across every disk.** The reliability WMI query used `WHERE DeviceId LIKE '%'` + `break`
+  at the first row, so every NVMe in the Telemetry tab showed the wear / temperature /
+  error counts of whichever disk happened to enumerate first. Now scopes by `DeviceId`
+  with a fallback to `ASSOCIATORS OF {MSFT_PhysicalDisk.ObjectId=…}` when DeviceId is
+  empty, and applies consistent WQL escaping.
+
+### Fixed (high)
+
+- **`PatchService.Install` — BitLocker suspension failure now routes through the shared
+  `finally` block.** Previously `Install` early-returned and never captured the
+  after-snapshot or cleared the progress bar — inconsistent with the sibling VeraCrypt
+  path. A private `PatchAbortedException` sentinel threads the abort through the
+  existing cleanup.
+- **`MainViewModel` — ViVeTool fallback dialog was an async-void in disguise.** Moved
+  the post-preflight dialog flow into `HandlePendingVerificationDialogAsync` so
+  exceptions from `ApplyViVeToolFallback()` propagate through a real `Task`, get logged
+  to the activity rail, and write to the Windows Event Log.
+- **`Watchdog` service-control / `EtwTraceService` / `SchedulerService.IsRegistered`
+  — pipe-buffer deadlocks.** All three spawned processes with redirected stdout+stderr
+  but only drained the pipes *after* `WaitForExit`, so a chatty child could block on
+  write forever. Each now drains asynchronously before awaiting exit, matching the
+  pattern used elsewhere in the codebase.
+- **`MainWindow.OnContentRendered` — catastrophic preflight failures no longer leave a
+  blank "Checking…" UI.** Errors are now logged to the activity rail + Windows Event
+  Log, and a themed dialog explains what happened and points the user at Refresh.
+- **`EventLogWatchdogService.CountEvents` — unbounded scan loop.** Capped at 10 000
+  records per evaluation; the verdict is already locked in well before that on any
+  genuinely unstable system, and the cap prevents a chatty event log from stalling the
+  watchdog.
+
+### Fixed (medium)
+
+- **`ConfigService.Save` — silent swallow on persistent save failure.** Retries up to
+  5× with 100 ms backoff on transient `IOException` / `UnauthorizedAccessException`
+  (AV scanner, file-explorer locks), then writes a Warning to the Windows Event Log
+  when it finally gives up. Stale `.tmp` files are cleaned up.
+- **`ConfigMigrationService` — no downgrade detection.** If a user ran an older build
+  against a `config.json` written by a newer build, the migration silently proceeded.
+  Now detects `ConfigVersion > CurrentSchemaVersion`, preserves the file untouched, and
+  surfaces a warning summary.
+- **`DiagnosticsService.ExportBundle` — `.tmp` sidecar leak.** Outer `finally` now
+  sweeps `<reportPath>.tmp` in addition to `reportPath`; bundle promote uses
+  `File.Move(overwrite:true)` atomically.
+- **`ViVeToolService.RunViVeToolAsync` — `Task.Run(() => proc.WaitForExit(30000))`
+  anti-pattern** replaced with `proc.WaitForExitAsync(timeoutCts.Token)` + linked CTS.
+- **`MainViewModel.OnClosing` — `_settingsSaveDebouncer` DispatcherTimer wasn't stopped
+  before the final synchronous Save**, so a pending tick could fire after close. Now
+  stopped explicitly.
+- **`HtmlDashboardService.SaveTo` — wasn't atomic.** Now uses the `.tmp → flush(true) →
+  File.Move(overwrite)` pattern. Also creates the output directory when writing to a
+  custom path.
+- **`EventLogWatchdogService.SaveState`** hardened with the same flush-then-rename
+  pattern.
+
+### Changed
+
+- **⚠ Behavior change: `NVMeDriverPatcher.Cli apply --unattended`.** Previously this
+  flag set `SkipWarnings = true` and *printed* `shutdown /r /t <delay>` to stdout
+  without executing it — MDT / Intune / Autopilot workflows relying on it for
+  unattended auto-restart never actually rebooted. The flag now invokes
+  `PatchService.InitiateRestart()` for real when `--no-restart` is not also passed.
+  Scripted callers that want the old "advise only" behavior can add `--no-restart`
+  explicitly.
+- **`Tray` agent reloads `config.json` every poll tick** (30 s) so settings changes
+  made in the main GUI (auto-revert toggle, verification state, renamed working
+  directory) surface in the tray tooltip within one interval instead of requiring a
+  tray restart.
+
+### Added — tests
+
+- 36 new regression tests covering SHA-256 parsing + restart-command escaping
+  (`AutoUpdaterService`), forward-schema preservation (`ConfigMigrationService`), WQL
+  escaping + status-code mapping (`PhysicalDiskTelemetryService`), and the shared
+  `VerifiedDownloader` pure helpers (hash parsing against NIST test vectors, sidecar
+  host-allowlist rejection). Suite now runs 306 tests (previously 270).
+
+### Known limitations
+
+- **Telemetry rows written before this release retain their original local-time stamp.**
+  New rows are UTC; retention window (`PruneTelemetry`, default 90 days) self-heals the
+  legacy rows. An in-place DST-safe migration was considered but rejected — the
+  ambiguity around spring-forward rows would risk permanent loss of a sample, which is
+  a worse outcome than the short-lived wear-trend smoothing that retention repairs.
+  See `Data/TelemetryRecord.cs` XML-doc for context.
+
+- **DiskSpd downloads use `weak` integrity (size + host allowlist only).** The benchmark
+  workflow pulls Microsoft's [diskspd](https://github.com/microsoft/diskspd) archive
+  from `github.com/microsoft/diskspd/releases/latest/download/DiskSpd.ZIP`. Microsoft
+  does not publish a `.sha256` sidecar for DiskSpd, and the archive isn't Authenticode-
+  signed as a zip, so our download path enforces size caps + the host allowlist only.
+  Our own `AutoUpdaterService` and the `ViVeToolService` fallback both use stronger
+  signals (sidecar + Authenticode fallback for the app's own updater; opportunistic
+  sidecar for ViVeTool, activating the moment upstream publishes one). To upgrade
+  DiskSpd to the same trust level, file an issue against `microsoft/diskspd` asking for
+  per-asset `.sha256` sidecars — once they're present, `VerifiedDownloader` picks them
+  up automatically with no code change required. Until then, the zip-slip defense in
+  `BenchmarkService` plus the post-extraction exe size floor remain the last line of
+  defense.
+
 ## [v4.6.1] - 2026-04-21
 
 Patch fix for SafeBoot regression on Windows 11 24H2/25H2 after KB5079391 (March 2026).

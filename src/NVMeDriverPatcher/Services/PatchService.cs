@@ -89,14 +89,18 @@ public static class PatchService
 
         try
         {
-            // Step 0: Suspend BitLocker — MUST succeed before touching drivers
+            // Step 0: Suspend BitLocker — MUST succeed before touching drivers.
+            // On failure we abort, but route through the outer `finally` so the progress bar
+            // clears and an after-snapshot is still captured — matches the VeraCrypt branch
+            // above. Throwing here is the cleanest way to reuse that cleanup path without
+            // duplicating FinalizeResult at every early return.
             if (bitLockerEnabled)
             {
                 log?.Invoke("Suspending BitLocker for one reboot cycle...");
                 if (!SuspendBitLocker(log))
                 {
                     EventLogService.Write("Patch aborted: BitLocker suspension failed", EventLogEntryType.Error, 3002);
-                    return result;
+                    throw new PatchAbortedException("BitLocker suspension failed — patch aborted before any registry writes.");
                 }
                 log?.Invoke("[SUCCESS] BitLocker suspended - will auto-resume after reboot");
             }
@@ -300,6 +304,11 @@ public static class PatchService
                 }
             }
         }
+        catch (PatchAbortedException)
+        {
+            // Already logged + event-logged at the throw site. Fall through to finally
+            // so the progress bar clears and we still capture an after-snapshot.
+        }
         catch (Exception ex)
         {
             log?.Invoke($"[ERROR] INSTALLATION FAILED: {ex.Message}");
@@ -310,6 +319,14 @@ public static class PatchService
             FinalizeResult(result, nativeStatus, bypassStatus, progress);
         }
         return result;
+    }
+
+    // Internal sentinel used by Install() to abort cleanly through the shared finally
+    // block without emitting a second "INSTALLATION FAILED" log line. Not thrown outside
+    // this class.
+    private sealed class PatchAbortedException : Exception
+    {
+        public PatchAbortedException(string message) : base(message) { }
     }
 
     private static bool SuspendBitLocker(Action<string>? log)

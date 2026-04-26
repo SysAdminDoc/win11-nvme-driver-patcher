@@ -6,22 +6,21 @@
         Background="Transparent"
         ResizeMode="NoResize"
         SizeToContent="WidthAndHeight"
-        MinWidth="440"
-        MaxWidth="660"
+        MinWidth="520"
+        MaxWidth="760"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
+        SnapsToDevicePixels="True"
+        UseLayoutRounding="True"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
-    <Border Margin="14"
+    <Border Margin="10"
             Padding="0"
-            Background="{StaticResource WindowCanvasBrush}"
-            BorderBrush="{StaticResource BorderLight}"
+            Background="{DynamicResource WindowCanvasBrush}"
+            BorderBrush="{DynamicResource BorderLight}"
             BorderThickness="1"
-            CornerRadius="12">
-        <Border.Effect>
-            <StaticResource ResourceKey="WindowShadow"/>
-        </Border.Effect>
-
+            CornerRadius="7"
+            Effect="{DynamicResource WindowShadow}">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -32,14 +31,14 @@
             <Border x:Name="HeaderAccentBar"
                     Height="1"
                     VerticalAlignment="Top"
-                    Background="{StaticResource AccentLineBrush}"
-                    CornerRadius="12,12,0,0"
+                    Background="{DynamicResource AccentLineBrush}"
+                    CornerRadius="7,7,0,0"
                     Panel.ZIndex="3"/>
 
             <Border Grid.Row="0"
-                    Padding="22,18"
-                    Background="{StaticResource WindowCanvasBrush}"
-                    CornerRadius="12,12,0,0">
+                    Padding="22,16"
+                    Background="{DynamicResource WindowCanvasBrush}"
+                    CornerRadius="7,7,0,0">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -49,10 +48,10 @@
                     <StackPanel>
                         <TextBlock x:Name="DlgEyebrow" Text="Confirmation" Style="{StaticResource SectionEyebrow}"/>
                         <TextBlock x:Name="DlgTitle"
-                                   Margin="0,8,0,0"
+                                   Margin="0,5,0,0"
                                    FontSize="20"
                                    FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextPrimary}"/>
+                                   Foreground="{DynamicResource TextPrimary}"/>
                     </StackPanel>
 
                     <Button x:Name="BtnClose"
@@ -64,37 +63,42 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="1" Margin="22,20,22,18">
+            <Grid Grid.Row="1" Margin="22,16,22,14">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="14"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
                 <Border Width="40"
                         Height="40"
-                        Background="{StaticResource SurfaceInset}"
-                        BorderBrush="{StaticResource Border}"
+                        Background="{DynamicResource SurfaceInset}"
+                        BorderBrush="{DynamicResource Border}"
                         BorderThickness="1"
-                        CornerRadius="8"
+                        CornerRadius="5"
                         VerticalAlignment="Top">
-                    <Canvas x:Name="IconCanvas" Width="28" Height="28" Margin="6"/>
+                    <Canvas x:Name="IconCanvas" Width="28" Height="28" Margin="5"/>
                 </Border>
 
-                <ScrollViewer Grid.Column="2" MaxHeight="420" VerticalScrollBarVisibility="Auto">
-                    <TextBlock x:Name="DlgMessage"
-                               MaxWidth="520"
-                               FontSize="13.5"
-                               LineHeight="21"
-                               Foreground="{StaticResource TextSecondary}"
-                               TextWrapping="Wrap"/>
-                </ScrollViewer>
+                <FlowDocumentScrollViewer Grid.Column="2"
+                                          MaxHeight="430"
+                                          VerticalScrollBarVisibility="Auto"
+                                          IsToolBarVisible="False"
+                                          Focusable="False"
+                                          AutomationProperties.LiveSetting="Assertive">
+                    <FlowDocument x:Name="DlgMessageDocument"
+                                  PagePadding="0"
+                                  FontFamily="Segoe UI Variable Text, Segoe UI"
+                                  FontSize="13.5"
+                                  Foreground="{DynamicResource TextSecondary}"
+                                  TextAlignment="Left"/>
+                </FlowDocumentScrollViewer>
             </Grid>
 
             <Border Grid.Row="2"
-                    BorderBrush="{StaticResource Border}"
+                    BorderBrush="{DynamicResource Border}"
                     BorderThickness="0,1,0,0"
-                    Padding="22,14,22,20">
+                    Padding="22,12,22,16">
                 <WrapPanel HorizontalAlignment="Right">
                 <Button x:Name="BtnNo"
                         Content="Cancel"

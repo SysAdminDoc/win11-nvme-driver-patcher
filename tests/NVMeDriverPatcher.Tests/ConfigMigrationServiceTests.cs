@@ -43,4 +43,21 @@ public sealed class ConfigMigrationServiceTests
         var (changedSecond, _) = ConfigMigrationService.Migrate(config);
         Assert.False(changedSecond);
     }
+
+    [Fact]
+    public void FutureConfigVersion_PreservesVersionAndReportsWarning()
+    {
+        // Simulates running an older build of the app against a config.json that was
+        // written by a newer version. Migrate() must NOT downgrade or mutate the version —
+        // we'd otherwise overwrite the file and drop unknown fields the newer build stored.
+        const int futureVersion = ConfigMigrationService.CurrentSchemaVersion + 5;
+        var config = new AppConfig { ConfigVersion = futureVersion };
+
+        var (changed, summary) = ConfigMigrationService.Migrate(config);
+
+        Assert.False(changed);
+        Assert.Equal(futureVersion, config.ConfigVersion);
+        Assert.Contains("newer than this build", summary);
+        Assert.Contains(futureVersion.ToString(), summary);
+    }
 }

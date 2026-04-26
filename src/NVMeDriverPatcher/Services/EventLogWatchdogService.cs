@@ -112,7 +112,16 @@ public static class EventLogWatchdogService
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
             var json = JsonSerializer.Serialize(state, JsonOptions);
             var tmp = path + ".tmp";
-            File.WriteAllText(tmp, json, new UTF8Encoding(false));
+            // Atomic write with fsync — without Flush(flushToDisk:true), a power loss between
+            // the WriteAllText return and the File.Move can leave the real file empty. Matches
+            // the hardened pattern in ConfigService / RegistryService.
+            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
+            {
+                sw.Write(json);
+                sw.Flush();
+                fs.Flush(flushToDisk: true);
+            }
             File.Move(tmp, path, overwrite: true);
         }
         catch { /* best-effort — watchdog state lossy is acceptable */ }
@@ -236,6 +245,13 @@ public static class EventLogWatchdogService
         return sb.ToString();
     }
 
+    // Safety cap on the per-evaluation event loop. Above this many matching records we stop
+    // reading — the verdict would already be locked in as Unstable (revert threshold is
+    // typically 6, not thousands), and walking the remaining tail only costs memory and IO.
+    // Sized so a burst of genuine distress signals still gets full counts in the summary, but
+    // an unrelated flood (e.g. a driver re-install spamming disk 153 events) can't wedge us.
+    private const int MaxEventsScanned = 10_000;
+
     private static List<WatchdogEventCount> CountEvents(DateTime since)
     {
         var results = WatchEvents
@@ -255,6 +271,7 @@ public static class EventLogWatchdogService
             var query = new EventLogQuery("System", PathType.LogName, xpath);
             using var reader = new EventLogReader(query);
             EventRecord? record;
+            int scanned = 0;
             while ((record = TryReadNext(reader)) is not null)
             {
                 try
@@ -277,6 +294,8 @@ public static class EventLogWatchdogService
                 {
                     try { record.Dispose(); } catch { }
                 }
+
+                if (++scanned >= MaxEventsScanned) break;
             }
         }
         catch

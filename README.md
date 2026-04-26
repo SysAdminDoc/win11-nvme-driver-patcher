@@ -23,6 +23,25 @@ irm https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/dow
 
 Or download `NVMe_Driver_Patcher.ps1` from [Releases](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases) and right-click > **Run with PowerShell**.
 
+### Verify the download (recommended)
+
+Every release artifact ships with a matching `<asset>.sha256` sidecar and a combined
+`SHA256SUMS.txt`. Verify before running — this catches a tampered CDN, a corrupted
+download, or a masquerading file under the same name:
+
+```powershell
+# Verify any single artifact against its .sha256 sidecar
+$file = 'NVMe_Driver_Patcher.ps1'
+$expected = (Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/$file.sha256").Content.Split(' ')[0].Trim()
+$actual = (Get-FileHash -Algorithm SHA256 -Path $file).Hash.ToLower()
+if ($expected -eq $actual) { "OK: $file" } else { "MISMATCH: expected $expected, got $actual" }
+```
+
+The GUI's in-app auto-updater (**Help → Check for updates**) performs the same
+SHA-256 sidecar check automatically and refuses to stage any binary that either
+fails the hash or has no sidecar / Authenticode signature available — this is
+load-bearing supply-chain defense, not just UI polish.
+
 ## What Does This Do?
 
 Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the legacy SCSI translation layer, allowing direct communication with NVMe drives. This driver is available in Windows 11 (24H2+) but disabled by default. Microsoft has stated they are ["absolutely exploring"](https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353) bringing it broadly to the entire Windows codebase.
