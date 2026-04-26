@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using NVMeDriverPatcher.Services;
 using NVMeDriverPatcher.Views;
 
 namespace NVMeDriverPatcher;
@@ -22,6 +23,14 @@ public partial class App : Application
         DispatcherUnhandledException += App_DispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += AppDomain_UnhandledException;
         TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
+        try
+        {
+            ThemeService.ApplyMode(ConfigService.Load().ThemeMode);
+        }
+        catch
+        {
+            ThemeService.ApplySystemTheme();
+        }
 
         bool createdNew = true;
         try

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 using NVMeDriverPatcher.Models;
@@ -11,7 +12,7 @@ public class StatusToColorConverter : IValueConverter
     private static readonly SolidColorBrush WarningBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xf5, 0x9e, 0x0b)));
     private static readonly SolidColorBrush FailBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xef, 0x44, 0x44)));
     private static readonly SolidColorBrush InfoBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x3b, 0x82, 0xf6)));
-    private static readonly SolidColorBrush DefaultBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x71, 0x71, 0x7a)));
+    internal static readonly SolidColorBrush DefaultBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x71, 0x71, 0x7a)));
 
     private static SolidColorBrush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
 
@@ -19,16 +20,19 @@ public class StatusToColorConverter : IValueConverter
     {
         return value switch
         {
-            CheckStatus.Pass => PassBrush,
-            CheckStatus.Warning => WarningBrush,
-            CheckStatus.Fail => FailBrush,
-            CheckStatus.Info => InfoBrush,
-            _ => DefaultBrush
+            CheckStatus.Pass => ResolveBrush("Green", PassBrush),
+            CheckStatus.Warning => ResolveBrush("Yellow", WarningBrush),
+            CheckStatus.Fail => ResolveBrush("Red", FailBrush),
+            CheckStatus.Info => ResolveBrush("Accent", InfoBrush),
+            _ => ResolveBrush("TextDim", DefaultBrush)
         };
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => System.Windows.Data.Binding.DoNothing;
+
+    private static Brush ResolveBrush(string key, Brush fallback) =>
+        Application.Current?.TryFindResource(key) as Brush ?? fallback;
 }
 
 public class BoolToVisibilityConverter : IValueConverter
@@ -53,12 +57,16 @@ public class StringToColorConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
-        if (value is string hex && !string.IsNullOrEmpty(hex))
+        if (value is string token && !string.IsNullOrWhiteSpace(token))
         {
-            try { return (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex); }
+            if (Application.Current?.TryFindResource(token) is SolidColorBrush resourceBrush)
+                return resourceBrush.Color;
+
+            try { return (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(token); }
             catch { }
         }
-        return System.Windows.Media.Colors.Gray;
+        return (Application.Current?.TryFindResource("TextDim") as SolidColorBrush)?.Color
+               ?? StatusToColorConverter.DefaultBrush.Color;
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
@@ -71,12 +79,16 @@ public class StringToBrushConverter : IValueConverter
 
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
-        if (value is string hex && !string.IsNullOrEmpty(hex))
+        if (value is string token && !string.IsNullOrWhiteSpace(token))
         {
-            try { return (Brush)BC.ConvertFromString(hex)!; }
+            if (Application.Current?.TryFindResource(token) is Brush resourceBrush)
+                return resourceBrush;
+
+            try { return (Brush)BC.ConvertFromString(token)!; }
             catch { }
         }
-        return System.Windows.Media.Brushes.Gray;
+        return Application.Current?.TryFindResource("TextDim") as Brush
+               ?? StatusToColorConverter.DefaultBrush;
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
