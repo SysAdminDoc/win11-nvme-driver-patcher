@@ -7,8 +7,9 @@ using NVMeDriverPatcher.Services;
 namespace NVMeDriverPatcher.Tray;
 
 // System tray agent — reads config + watchdog state every N seconds, renders a tray tooltip
-// + colored icon reflecting patch state. Single-instance via named mutex. Exits cleanly on
-// the Exit menu, or when signalled via shared mutex by the main GUI on uninstall.
+// + colored icon reflecting patch state. Single-instance via named mutex. The agent exits
+// cleanly on the Exit menu, and also exits at startup when another tray instance already
+// owns the named mutex (keeps the tray idempotent across re-launches).
 internal static class Program
 {
     private const string MutexName = "Global\\NVMeDriverPatcher.Tray.Single";
@@ -79,6 +80,13 @@ internal static class Program
     {
         try
         {
+            // Reload config on every tick so changes the user makes in the main GUI (auto-revert
+            // toggle, verification state after apply, renamed working directory) surface in the
+            // tray tooltip within one PollInterval. Without this, the tray would show the config
+            // state it saw at startup forever. Best-effort — if the file is mid-write we keep
+            // the previous config and re-try next tick.
+            try { _config = ConfigService.Load(); } catch { }
+
             var status = RegistryService.GetPatchStatus();
             var verification = PatchVerificationService.Evaluate(_config);
             var watchdog = EventLogWatchdogService.Evaluate(_config);
