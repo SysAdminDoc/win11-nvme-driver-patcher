@@ -2,10 +2,11 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
-## [Unreleased] — hardening pass
+## [Unreleased]
 
-A multi-stage production-hardening sweep. Every change preserves the existing public API
-and ships with regression tests. Build is clean (0 warnings, 0 errors) and all tests pass.
+## [v4.7.0] - 2026-04-25 — production-hardening release
+
+A multi-stage production-hardening sweep covering the auto-updater integrity chain (SHA-256 sidecars + Authenticode), the ViVeTool downloader, the WPF/CLI/tray/watchdog surfaces, and a refreshed telemetry receiver. Every change preserves the existing public API and ships with regression tests. Build is clean (0 warnings, 0 errors) and all tests pass.
 
 ### Security
 
