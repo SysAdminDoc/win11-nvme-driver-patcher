@@ -1,7 +1,7 @@
 using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Shapes;
 using WpfPath = System.Windows.Shapes.Path;
 
 namespace NVMeDriverPatcher.Views;
@@ -37,7 +37,6 @@ public partial class ThemedDialog : Window
     {
         var dlg = new ThemedDialog();
         dlg.DlgTitle.Text = string.IsNullOrWhiteSpace(title) ? "NVMe Driver Patcher" : title;
-        dlg.DlgMessage.Text = message ?? string.Empty;
 
         if (buttons == DialogButtons.YesNo)
         {
@@ -54,42 +53,28 @@ public partial class ThemedDialog : Window
             dlg.Result = "OK";
         }
 
-        // Draw icon
-        var iconColor = icon switch
+        var iconBrush = icon switch
         {
-            DialogIcon.Error => "#FFef4444",
-            DialogIcon.Warning => "#FFf59e0b",
-            DialogIcon.Question => "#FF3b82f6",
-            _ => "#FF3b82f6"
+            DialogIcon.Error => ResolveResourceBrush(dlg, "Red"),
+            DialogIcon.Warning => ResolveResourceBrush(dlg, "Yellow"),
+            _ => ResolveResourceBrush(dlg, "Accent")
         };
-        var actionSurface = icon switch
+        var surfaceBrush = icon switch
         {
-            DialogIcon.Error => "#FF3E1A1F",
-            DialogIcon.Warning => "#FF4A3516",
-            DialogIcon.Question => "#FF133256",
-            _ => "#FF133256"
+            DialogIcon.Error => ResolveResourceBrush(dlg, "RedBg"),
+            DialogIcon.Warning => ResolveResourceBrush(dlg, "YellowBg"),
+            _ => ResolveResourceBrush(dlg, "AccentBg")
         };
-        var bc = new BrushConverter();
-        // Defensive: BrushConverter.ConvertFromString can throw on a malformed color string.
-        // The literals here are static, but keep this resilient against future refactors.
-        System.Windows.Media.Brush iconBrush;
-        System.Windows.Media.Brush surfaceBrush;
-        try { iconBrush = (System.Windows.Media.Brush)bc.ConvertFromString(iconColor)!; }
-        catch { iconBrush = System.Windows.Media.Brushes.DodgerBlue; }
-        try { surfaceBrush = (System.Windows.Media.Brush)bc.ConvertFromString(actionSurface)!; }
-        catch { surfaceBrush = System.Windows.Media.Brushes.Black; }
         dlg.DlgEyebrow.Text = ResolveEyebrow(icon, title);
         dlg.DlgEyebrow.Foreground = iconBrush;
         dlg.HeaderAccentBar.Background = iconBrush;
+        dlg.SetMessage(message ?? string.Empty, iconBrush);
         dlg.BtnYes.Background = surfaceBrush;
         dlg.BtnYes.BorderBrush = iconBrush;
-        dlg.BtnYes.Foreground = ResolveResourceBrush(dlg, "TextPrimary", System.Windows.Media.Brushes.White);
+        dlg.BtnYes.Foreground = ResolveResourceBrush(dlg, "TextPrimary");
         dlg.BtnOK.Background = surfaceBrush;
         dlg.BtnOK.BorderBrush = iconBrush;
-        dlg.BtnOK.Foreground = ResolveResourceBrush(dlg, "TextPrimary", System.Windows.Media.Brushes.White);
-
-        var ellipse = new Ellipse { Width = 28, Height = 28, Fill = iconBrush, Opacity = 0.15 };
-        dlg.IconCanvas.Children.Add(ellipse);
+        dlg.BtnOK.Foreground = ResolveResourceBrush(dlg, "TextPrimary");
 
         var iconPath = new WpfPath { Stroke = iconBrush, StrokeThickness = 2 };
         iconPath.Data = icon switch
@@ -117,6 +102,110 @@ public partial class ThemedDialog : Window
         if (owner is not null) dlg.Owner = owner;
         dlg.ShowDialog();
         return dlg.Result;
+    }
+
+    private void SetMessage(string message, Brush accentBrush)
+    {
+        var primaryBrush = ResolveResourceBrush(this, "TextPrimary");
+        var secondaryBrush = ResolveResourceBrush(this, "TextSecondary");
+        var mutedBrush = ResolveResourceBrush(this, "TextMuted");
+
+        DlgMessageDocument.Blocks.Clear();
+        DlgMessageDocument.Foreground = secondaryBrush;
+
+        var normalized = message.Replace("\r\n", "\n").Replace('\r', '\n');
+        var segments = normalized
+            .Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(segment => segment.Trim())
+            .Where(segment => segment.Length > 0)
+            .ToList();
+
+        System.Windows.Documents.List? currentList = null;
+
+        for (int i = 0; i < segments.Count; i++)
+        {
+            var lines = segments[i]
+                .Split('\n')
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0)
+                .ToList();
+            if (lines.Count == 0)
+                continue;
+
+            if (i == 0)
+            {
+                DlgMessageDocument.Blocks.Add(new Paragraph(new Run(lines[0]))
+                {
+                    Margin = new Thickness(0, 0, 0, 10),
+                    Foreground = primaryBrush,
+                    FontSize = 15,
+                    FontWeight = FontWeights.SemiBold,
+                    LineHeight = 22
+                });
+                currentList = null;
+                continue;
+            }
+
+            if (IsSectionHeading(lines[0]))
+            {
+                DlgMessageDocument.Blocks.Add(new Paragraph(new Run(lines[0]))
+                {
+                    Margin = new Thickness(0, 12, 0, 6),
+                    Foreground = accentBrush,
+                    FontSize = 12,
+                    FontWeight = FontWeights.SemiBold,
+                    LineHeight = 17
+                });
+                currentList = null;
+
+                foreach (var line in lines.Skip(1))
+                    AddContentLine(line, ref currentList);
+                continue;
+            }
+
+            foreach (var line in lines)
+                AddContentLine(line, ref currentList);
+        }
+
+        void AddContentLine(string line, ref System.Windows.Documents.List? list)
+        {
+            if (line.StartsWith("•", StringComparison.Ordinal))
+            {
+                list ??= CreateList();
+                list.ListItems.Add(new ListItem(new Paragraph(new Run(line.TrimStart('•', ' ')))
+                {
+                    Margin = new Thickness(0, 0, 0, 6),
+                    Foreground = secondaryBrush,
+                    FontSize = 13.25,
+                    LineHeight = 20
+                }));
+                return;
+            }
+
+            list = null;
+            var isDecisionLine = line.StartsWith("Choose ", StringComparison.OrdinalIgnoreCase);
+            DlgMessageDocument.Blocks.Add(new Paragraph(new Run(line))
+            {
+                Margin = new Thickness(0, isDecisionLine ? 12 : 0, 0, isDecisionLine ? 0 : 10),
+                Foreground = isDecisionLine ? primaryBrush : secondaryBrush,
+                FontSize = isDecisionLine ? 13.5 : 13.25,
+                FontWeight = isDecisionLine ? FontWeights.SemiBold : FontWeights.Normal,
+                LineHeight = isDecisionLine ? 20 : 21
+            });
+        }
+
+        System.Windows.Documents.List CreateList()
+        {
+            var list = new System.Windows.Documents.List
+            {
+                MarkerStyle = TextMarkerStyle.Disc,
+                Margin = new Thickness(0, 0, 0, 4),
+                Padding = new Thickness(18, 0, 0, 0),
+                Foreground = mutedBrush
+            };
+            DlgMessageDocument.Blocks.Add(list);
+            return list;
+        }
     }
 
     private static (string affirmative, string dismissive) ResolveButtonLabels(string title)
@@ -156,12 +245,17 @@ public partial class ThemedDialog : Window
         return icon == DialogIcon.Question ? "Confirmation" : "Information";
     }
 
+    private static bool IsSectionHeading(string text) =>
+        text.Equals("Critical blockers", StringComparison.OrdinalIgnoreCase) ||
+        text.Equals("Tradeoffs to accept", StringComparison.OrdinalIgnoreCase) ||
+        text.Equals("Good to know", StringComparison.OrdinalIgnoreCase);
+
     private static bool Contains(string source, string value) =>
         source.Contains(value, StringComparison.OrdinalIgnoreCase);
 
-    private static Brush ResolveResourceBrush(FrameworkElement element, string key, Brush fallback)
+    private static Brush ResolveResourceBrush(FrameworkElement element, string key)
     {
-        return element.TryFindResource(key) as Brush ?? fallback;
+        return BrushResources.Resolve(element, key);
     }
 
     private void BtnOK_Click(object sender, RoutedEventArgs e) { Result = "OK"; Close(); }

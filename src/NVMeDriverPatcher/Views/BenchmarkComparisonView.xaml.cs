@@ -1,22 +1,31 @@
+using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
 using NVMeDriverPatcher.Models;
+using NVMeDriverPatcher.Services;
 using SkiaSharp;
 
 namespace NVMeDriverPatcher.Views;
 
 public partial class BenchmarkComparisonView : UserControl
 {
+    private List<BenchmarkResult> _lastHistory = [];
+
     public BenchmarkComparisonView()
     {
         InitializeComponent();
+        ThemeService.ThemeChanged += ThemeService_ThemeChanged;
+        Unloaded += BenchmarkComparisonView_Unloaded;
     }
 
     public void UpdateChart(List<BenchmarkResult>? history)
     {
-        history ??= new List<BenchmarkResult>();
+        _lastHistory = history?.ToList() ?? [];
+        history = _lastHistory;
+
         if (history.Count == 0)
         {
             RunCountValue.Text = "0";
@@ -27,7 +36,7 @@ public partial class BenchmarkComparisonView : UserControl
             WriteIopsValue.Text = "-";
             ReadDelta.Text = "";
             WriteDelta.Text = "";
-            ApplyBenchmarkState("Waiting", NeutralBrush, NeutralBgBrush, NeutralBorderBrush);
+            ApplyBenchmarkState("Waiting", "TextDim", "SurfaceInset", "Border");
             BenchChart.Series = [];
             return;
         }
@@ -47,17 +56,17 @@ public partial class BenchmarkComparisonView : UserControl
             WriteDelta.Foreground = DeltaBrush(prev.Write.IOPS, latest.Write.IOPS);
             BenchmarkSummaryText.Text = $"Comparing {latest.Label} against the previous run shows whether the most recent change helped sustained 4K random performance or simply shifted the tradeoff.";
             TrendHintText.Text = "Use the chart to confirm whether the latest change moved both read and write performance in the direction you expected, not just one headline metric.";
-            ApplyBenchmarkState("Comparison Ready", PositiveBrush, SuccessBgBrush, SuccessBorderBrush);
+            ApplyBenchmarkState("Comparison Ready", "Green", "GreenBg", "Green");
         }
         else
         {
             ReadDelta.Text = "Baseline captured";
-            ReadDelta.Foreground = NeutralBrush;
+            ReadDelta.Foreground = ResolveBrush("TextDim");
             WriteDelta.Text = "Run another benchmark after a driver change to compare.";
-            WriteDelta.Foreground = NeutralBrush;
+            WriteDelta.Foreground = ResolveBrush("TextDim");
             BenchmarkSummaryText.Text = "This first run is your baseline. Capture another run after applying or removing the patch so the comparison view can show direction, not just raw numbers.";
             TrendHintText.Text = "The chart currently reflects one baseline run. Add a post-change run to reveal direction instead of a single point in time.";
-            ApplyBenchmarkState("Baseline Only", AccentBrush, AccentBgBrush, AccentBrush);
+            ApplyBenchmarkState("Baseline Only", "Accent", "AccentBg", "Accent");
         }
 
         var labels = history.Select((h, index) => $"{h.Label}\n{BuildAxisSubLabel(h.Timestamp, index)}").ToArray();
@@ -70,7 +79,7 @@ public partial class BenchmarkComparisonView : UserControl
             {
                 Values = readValues,
                 Name = "Read IOPS",
-                Fill = new SolidColorPaint(new SKColor(105, 174, 255)),
+                Fill = new SolidColorPaint(ResolveSkColor("Accent")),
                 MaxBarWidth = 24,
                 Padding = 4
             },
@@ -78,7 +87,7 @@ public partial class BenchmarkComparisonView : UserControl
             {
                 Values = writeValues,
                 Name = "Write IOPS",
-                Fill = new SolidColorPaint(new SKColor(255, 200, 108)),
+                Fill = new SolidColorPaint(ResolveSkColor("Yellow")),
                 MaxBarWidth = 24,
                 Padding = 4
             }
@@ -89,9 +98,9 @@ public partial class BenchmarkComparisonView : UserControl
             new Axis
             {
                 Labels = labels,
-                LabelsPaint = new SolidColorPaint(new SKColor(131, 147, 173)),
+                LabelsPaint = new SolidColorPaint(ResolveSkColor("TextDim")),
                 TextSize = 10,
-                SeparatorsPaint = new SolidColorPaint(new SKColor(34, 49, 70))
+                SeparatorsPaint = new SolidColorPaint(ResolveSkColor("Border"))
             }
         };
 
@@ -99,9 +108,9 @@ public partial class BenchmarkComparisonView : UserControl
         {
             new Axis
             {
-                LabelsPaint = new SolidColorPaint(new SKColor(131, 147, 173)),
+                LabelsPaint = new SolidColorPaint(ResolveSkColor("TextDim")),
                 TextSize = 10,
-                SeparatorsPaint = new SolidColorPaint(new SKColor(34, 49, 70)),
+                SeparatorsPaint = new SolidColorPaint(ResolveSkColor("Border")),
                 MinLimit = 0
             }
         };
@@ -109,10 +118,14 @@ public partial class BenchmarkComparisonView : UserControl
 
     private void ApplyBenchmarkState(
         string label,
-        System.Windows.Media.SolidColorBrush foreground,
-        System.Windows.Media.SolidColorBrush background,
-        System.Windows.Media.SolidColorBrush border)
+        string foregroundKey,
+        string backgroundKey,
+        string borderKey)
     {
+        var foreground = ResolveBrush(foregroundKey);
+        var background = ResolveBrush(backgroundKey);
+        var border = ResolveBrush(borderKey);
+
         BenchmarkStateText.Text = label;
         BenchmarkStateText.Foreground = foreground;
         BenchmarkStateBadge.Background = background;
@@ -128,28 +141,33 @@ public partial class BenchmarkComparisonView : UserControl
         return $"vs previous run: {(pct >= 0 ? "+" : "")}{pct}%";
     }
 
-    // Frozen brushes: safe to share across threads, bypass BrushConverter (not thread-safe),
-    // and let WPF skip change-tracking overhead.
-    private static readonly System.Windows.Media.SolidColorBrush PositiveBrush = ToBrush(0xFF, 0x50, 0xDD, 0x9D);
-    private static readonly System.Windows.Media.SolidColorBrush NegativeBrush = ToBrush(0xFF, 0xFF, 0x85, 0x85);
-    private static readonly System.Windows.Media.SolidColorBrush NeutralBrush = ToBrush(0xFF, 0x83, 0x93, 0xAD);
-    private static readonly System.Windows.Media.SolidColorBrush AccentBrush = ToBrush(0xFF, 0x69, 0xAE, 0xFF);
-    private static readonly System.Windows.Media.SolidColorBrush AccentBgBrush = ToBrush(0xFF, 0x10, 0x28, 0x45);
-    private static readonly System.Windows.Media.SolidColorBrush SuccessBgBrush = ToBrush(0xFF, 0x13, 0x39, 0x2C);
-    private static readonly System.Windows.Media.SolidColorBrush SuccessBorderBrush = ToBrush(0xFF, 0x50, 0xDD, 0x9D);
-    private static readonly System.Windows.Media.SolidColorBrush NeutralBgBrush = ToBrush(0xFF, 0x13, 0x1C, 0x29);
-    private static readonly System.Windows.Media.SolidColorBrush NeutralBorderBrush = ToBrush(0xFF, 0x34, 0x4B, 0x69);
-
-    private static System.Windows.Media.SolidColorBrush ToBrush(byte a, byte r, byte g, byte b)
+    private void ThemeService_ThemeChanged(object? sender, EventArgs e)
     {
-        var brush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(a, r, g, b));
-        brush.Freeze();
-        return brush;
+        UpdateChart(_lastHistory);
     }
 
-    private static System.Windows.Media.SolidColorBrush DeltaBrush(double prev, double current)
+    private void BenchmarkComparisonView_Unloaded(object sender, RoutedEventArgs e)
     {
-        return current >= prev ? PositiveBrush : NegativeBrush;
+        ThemeService.ThemeChanged -= ThemeService_ThemeChanged;
+        Unloaded -= BenchmarkComparisonView_Unloaded;
+    }
+
+    private Brush DeltaBrush(double prev, double current)
+    {
+        return current >= prev
+            ? ResolveBrush("Green")
+            : ResolveBrush("Red");
+    }
+
+    private Brush ResolveBrush(string resourceKey)
+    {
+        return BrushResources.Resolve(this, resourceKey);
+    }
+
+    private SKColor ResolveSkColor(string resourceKey, byte? alpha = null)
+    {
+        var color = BrushResources.ResolveColor(this, resourceKey);
+        return new SKColor(color.R, color.G, color.B, alpha ?? color.A);
     }
 
     private static string FormatTimestamp(string? rawTimestamp)

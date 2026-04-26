@@ -23,6 +23,24 @@ public sealed class HtmlDashboardServiceTests
     }
 
     [Fact]
+    public void Render_UsesAdaptiveThemeCss()
+    {
+        var html = HtmlDashboardService.Render(
+            config: new AppConfig(),
+            preflight: new PreflightResult(),
+            verification: null,
+            watchdog: null,
+            reliability: null,
+            minidump: null,
+            guardrails: null,
+            controllers: null);
+
+        Assert.Contains("color-scheme:dark light", html);
+        Assert.Contains("prefers-color-scheme:light", html);
+        Assert.Contains("prefers-contrast:more", html);
+    }
+
+    [Fact]
     public void Render_IncludesWatchdogTableWhenPresent()
     {
         var watchdog = new WatchdogReport
