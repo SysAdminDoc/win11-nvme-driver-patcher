@@ -15,6 +15,14 @@ public static class DiagnosticsService
         WriteIndented = true
     };
 
+    // Backtracking guard: cap per-call regex time so a pathological diagnostic line
+    // (e.g. a stack trace without newlines) cannot stall the export thread.
+    private static readonly TimeSpan RedactTimeout = TimeSpan.FromSeconds(2);
+    private static readonly Regex RxRedactComputerName = new(@"^Computer Name:\s*.*$",                RegexOptions.Multiline | RegexOptions.Compiled, RedactTimeout);
+    private static readonly Regex RxRedactUser         = new(@"^User:\s*.*$",                         RegexOptions.Multiline | RegexOptions.Compiled, RedactTimeout);
+    private static readonly Regex RxRedactPnpId        = new(@"^(\s*PNP ID:\s*).*$",                  RegexOptions.Multiline | RegexOptions.Compiled, RedactTimeout);
+    private static readonly Regex RxRedactUserPath     = new(@"\b([A-Za-z]:\\Users\\)([^\\\r\n]+)",   RegexOptions.IgnoreCase | RegexOptions.Compiled, RedactTimeout);
+
     public static async Task<string?> ExportAsync(
         string workingDir,
         PreflightResult? preflight,
@@ -164,9 +172,10 @@ public static class DiagnosticsService
                 AddTextEntry(zip, "MANIFEST.txt", manifest.ToString());
             }
 
-            // Atomic promote — bundle never appears half-written.
-            if (File.Exists(outputPath)) File.Delete(outputPath);
-            File.Move(tempZip, outputPath);
+            // Atomic promote — bundle never appears half-written. File.Move(overwrite:true)
+            // is atomic on NTFS, so the final path never transiently disappears (unlike the
+            // previous Delete + Move sequence, which had a small window where both were gone).
+            File.Move(tempZip, outputPath, overwrite: true);
             return outputPath;
         }
         catch
@@ -176,7 +185,15 @@ public static class DiagnosticsService
         }
         finally
         {
+            // Export() internally writes `<reportPath>.tmp` then renames — if it threw between
+            // the two, the sidecar can leak. Sweep both to keep %TEMP% clean.
             try { if (File.Exists(reportPath)) File.Delete(reportPath); } catch { }
+            try
+            {
+                var reportTemp = reportPath + ".tmp";
+                if (File.Exists(reportTemp)) File.Delete(reportTemp);
+            }
+            catch { }
         }
     }
 
@@ -231,18 +248,10 @@ public static class DiagnosticsService
 
     private static string RedactShareableText(string text)
     {
-        // Regex timeout caps backtracking in case a pathological diagnostic line
-        // (e.g. an embedded stack trace without newlines) slips in.
-        var timeout = TimeSpan.FromSeconds(2);
-        text = Regex.Replace(text, @"^Computer Name:\s*.*$", "Computer Name: [redacted]", RegexOptions.Multiline, timeout);
-        text = Regex.Replace(text, @"^User:\s*.*$", "User: [redacted]", RegexOptions.Multiline, timeout);
-        text = Regex.Replace(text, @"^(\s*PNP ID:\s*).*$", "${1}[redacted]", RegexOptions.Multiline, timeout);
-        text = Regex.Replace(
-            text,
-            @"\b([A-Za-z]:\\Users\\)([^\\\r\n]+)",
-            match => $"{match.Groups[1].Value}[redacted]",
-            RegexOptions.IgnoreCase,
-            timeout);
+        text = RxRedactComputerName.Replace(text, "Computer Name: [redacted]");
+        text = RxRedactUser.Replace(text, "User: [redacted]");
+        text = RxRedactPnpId.Replace(text, "${1}[redacted]");
+        text = RxRedactUserPath.Replace(text, match => $"{match.Groups[1].Value}[redacted]");
         return text;
     }
 

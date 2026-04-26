@@ -12,16 +12,17 @@ public class BackupIntegrityResult
     public int ValueCount { get; set; }
 }
 
-// Round-trip verifies a .reg backup by loading it into a staging HKLM\NVMeBackupTest hive
-// via `reg import`, enumerating the expected keys, and unloading cleanly. Catches the
-// failure mode where a restore-from-backup attempt hits an invalid/truncated .reg file.
+// Best-effort integrity check on a .reg backup: verifies the Windows Registry Editor header
+// and counts the `[HKLM\…]` section headers + `"name"=` or `@=` value assignments. Intentionally
+// text-only — a real `reg import` would overwrite live paths (the .reg's own targets are real
+// HKLM locations), which is exactly the failure the backup is meant to protect against.
 //
-// Uses the scratch hive approach so we NEVER touch CurrentControlSet. The staging hive is
-// unloaded whether the test passed or not.
+// A historical revision of this code eagerly created and deleted an HKLM\SYSTEM\NVMeBackupVerifyStaging
+// scratch subkey, believing it would be used for a future dry-run import. That import path was
+// never wired up (it would have been destructive anyway), so the staging key was pure registry
+// pollution on every verify. Removed in v4.7.
 public static class BackupIntegrityService
 {
-    private const string StagingSubkey = @"SYSTEM\NVMeBackupVerifyStaging";
-
     public static BackupIntegrityResult Verify(string regFilePath, Action<string>? log = null)
     {
         var result = new BackupIntegrityResult();
@@ -31,7 +32,7 @@ public static class BackupIntegrityService
             return result;
         }
 
-        // Sanity-check the .reg header so we don't hand obvious garbage to reg.exe.
+        // Sanity-check the .reg header so we don't treat obvious garbage as a valid backup.
         try
         {
             using var sr = new StreamReader(regFilePath);
@@ -51,23 +52,6 @@ public static class BackupIntegrityService
 
         try
         {
-            // Ensure the staging subkey exists as a fresh, empty scratch area.
-            using var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(
-                Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64);
-            try { hklm.DeleteSubKeyTree(StagingSubkey, throwOnMissingSubKey: false); } catch { }
-            using var staging = hklm.CreateSubKey(StagingSubkey, writable: true);
-            if (staging is null)
-            {
-                result.Summary = "Could not create staging registry scratch area.";
-                return result;
-            }
-
-            // reg.exe's /reg:64 import parses the .reg. We don't route it through our staging
-            // area (reg import writes to the paths named in the file); instead we just verify
-            // the file parses by doing a syntax-only pass via `reg query` after a throwaway
-            // HKLM-wide import would be destructive. To stay safe: parse the file by counting
-            // `[HKEY_LOCAL_MACHINE\...]` headers and `"name"=` lines — this is a best-effort
-            // integrity pass, not a full import dry-run.
             int sections = 0, values = 0;
             foreach (var line in File.ReadLines(regFilePath))
             {
@@ -89,16 +73,6 @@ public static class BackupIntegrityService
         catch (Exception ex)
         {
             result.Summary = $"Backup verification failed: {ex.Message}";
-        }
-        finally
-        {
-            try
-            {
-                using var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(
-                    Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64);
-                hklm.DeleteSubKeyTree(StagingSubkey, throwOnMissingSubKey: false);
-            }
-            catch { }
         }
         return result;
     }

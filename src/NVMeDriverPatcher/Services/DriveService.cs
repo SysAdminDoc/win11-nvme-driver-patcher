@@ -39,6 +39,22 @@ public static class DriveService
         catch { return null; }
     }
 
+    // Pre-compiled patterns for incompatible-software detection. Compiling once avoids
+    // re-interpreting the same pattern string for every service name on each preflight run.
+    private static readonly Regex RxAcronis    = new(@"acronis|AcronisAgent",          RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxMacrium    = new(@"macrium|ReflectService",         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxVirtualBox = new(@"VBox",                           RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxIntelRst   = new(@"iaStorAC|iaStorE|iaLPSS",        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxIntelVmd   = new(@"^vmd$|vmd_bus",                  RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxHyperV     = new(@"^vmms$|^LxssManager$",           RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxVeeam      = new(@"VeeamAgent|VeeamEndpoint",       RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Pre-compiled patterns for fsutil bypassio output parsing.
+    private static readonly Regex RxStorageType   = new(@"Storage Type:\s*(.+)",   RegexOptions.Compiled);
+    private static readonly Regex RxStorageDriver = new(@"Storage Driver:\s*(.+)", RegexOptions.Compiled);
+    private static readonly Regex RxDriverName    = new(@"Driver Name:\s*(.+)",    RegexOptions.Compiled);
+    private static readonly Regex RxDriverSys     = new(@"Driver:\s*(\S+\.sys)",   RegexOptions.Compiled);
+
     public static List<SystemDrive> GetSystemDrives()
     {
         var drives = new List<SystemDrive>();
@@ -392,17 +408,17 @@ public static class DriveService
             if (output.Contains("is currently supported")) result.Supported = true;
             else if (output.Contains("is not currently supported")) result.Supported = false;
 
-            var storageMatch = Regex.Match(output, @"Storage Type:\s*(.+)");
+            var storageMatch = RxStorageType.Match(output);
             if (storageMatch.Success) result.StorageType = storageMatch.Groups[1].Value.Trim();
 
-            var driverMatch = Regex.Match(output, @"Storage Driver:\s*(.+)");
+            var driverMatch = RxStorageDriver.Match(output);
             if (driverMatch.Success) result.DriverCompat = driverMatch.Groups[1].Value.Trim();
 
-            var blockedMatch = Regex.Match(output, @"Driver Name:\s*(.+)");
+            var blockedMatch = RxDriverName.Match(output);
             if (blockedMatch.Success) result.BlockedBy = blockedMatch.Groups[1].Value.Trim();
             else
             {
-                var blockedAlt = Regex.Match(output, @"Driver:\s*(\S+\.sys)");
+                var blockedAlt = RxDriverSys.Match(output);
                 if (blockedAlt.Success) result.BlockedBy = blockedAlt.Groups[1].Value.Trim();
             }
 
@@ -648,26 +664,28 @@ public static class DriveService
                 if (!string.IsNullOrEmpty(name)) allServices.Add(name);
             }
 
-            if (allServices.Any(s => Regex.IsMatch(s, "acronis|AcronisAgent", RegexOptions.IgnoreCase)))
+            if (allServices.Any(s => RxAcronis.IsMatch(s)))
                 found.Add(new() { Name = "Acronis", Severity = "High", Message = "Backup cannot see drives under Storage disks category" });
 
-            if (allServices.Any(s => Regex.IsMatch(s, "macrium|ReflectService", RegexOptions.IgnoreCase)))
+            if (allServices.Any(s => RxMacrium.IsMatch(s)))
                 found.Add(new() { Name = "Macrium Reflect", Severity = "Medium", Message = "May need update for Storage disks compatibility" });
 
-            if (allServices.Any(s => Regex.IsMatch(s, "VBox", RegexOptions.IgnoreCase)))
+            if (allServices.Any(s => RxVirtualBox.IsMatch(s)))
                 found.Add(new() { Name = "VirtualBox", Severity = "Low", Message = "Storage filter drivers may conflict" });
 
-            if (allServices.Any(s => Regex.IsMatch(s, "iaStorAC|iaStorE|iaLPSS", RegexOptions.IgnoreCase)))
-                found.Add(new() { Name = "Intel RST", Severity = "High", Message = "Conflicts with nvmedisk.sys -- may cause BSOD on boot" });
+            // Intel RST and VMD are hard blockers — community reports confirm BSOD on boot
+            // and boot failures. Severity = Critical so PreflightService surfaces these as
+            // a blocking Fail rather than a warning that can be clicked past.
+            if (allServices.Any(s => RxIntelRst.IsMatch(s)))
+                found.Add(new() { Name = "Intel RST", Severity = "Critical", Message = "Conflicts with nvmedisk.sys -- BSOD on boot reported. Remove Intel RST before patching." });
 
-            bool hasVmd = allServices.Any(s => Regex.IsMatch(s, @"^vmd$|vmd_bus", RegexOptions.IgnoreCase));
-            if (hasVmd)
-                found.Add(new() { Name = "Intel VMD", Severity = "High", Message = "Boot failures reported on Intel VMD systems" });
+            if (allServices.Any(s => RxIntelVmd.IsMatch(s)))
+                found.Add(new() { Name = "Intel VMD", Severity = "Critical", Message = "Boot failures reported on Intel VMD systems. Do not patch while VMD is active." });
 
-            if (allServices.Any(s => Regex.IsMatch(s, @"^vmms$|^LxssManager$", RegexOptions.IgnoreCase)))
+            if (allServices.Any(s => RxHyperV.IsMatch(s)))
                 found.Add(new() { Name = "Hyper-V/WSL2", Severity = "Medium", Message = "WSL2 disk I/O ~40% slower with native NVMe (no paravirt)" });
 
-            if (allServices.Any(s => Regex.IsMatch(s, "VeeamAgent|VeeamEndpoint", RegexOptions.IgnoreCase)))
+            if (allServices.Any(s => RxVeeam.IsMatch(s)))
                 found.Add(new() { Name = "Veeam", Severity = "High", Message = "Backup agent cannot detect drives under Storage disks" });
 
             // Data Deduplication is an optional Windows feature. Microsoft documents storage

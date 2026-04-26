@@ -201,3 +201,64 @@ Sources that drove the current priority list:
 **This project is the only NVMe enabler with:** Safe/Full mode split with safer default, BitLocker auto-suspend, VeraCrypt detection/block, system restore-point creation, registry backup + rollback, preflight safety, recovery kit, support-bundle ZIP, post-reboot verification, automated ViVeTool fallback, WPF dark UI, C# native.
 
 **Gaps vs community practice (all in Tier 2+):** per-controller patch scoping (2.1), live Event Log visibility after patch (2.2), expanded StorNVMe tuning surface (2.3), regression detection over time (2.6).
+
+## Open-Source Research (Round 2)
+
+### Related OSS Projects
+- https://github.com/ken-yossy/nvmetool-win — NVMe IOCTL sample via Windows inbox driver (reference for read-only controller queries without switching drivers)
+- https://github.com/lheer/nvmetool-win-exe — prebuilt fork of nvmetool-win, useful as a dependency for diagnostics
+- https://github.com/jtjones1001/nvme_info — cross-platform NVMe info CLI (Win + Linux), good CLI UX reference
+- https://github.com/gigaherz/nvmewin — OpenFabrics NVMe Windows driver mirror (historical context for StorNVMe vs OFA driver)
+- https://github.com/MicrosoftDocs/windows-driver-docs — authoritative StorNVMe + SCSI translation docs, pin specific commits in your docs
+- https://github.com/maurice-daly/DriverAutomationTool — PowerShell WPF driver management UX reference (CMTrace log viewer, dark/light runtime toggle, curl.exe download with hash verification + retry)
+- https://github.com/lostindark/DriverStoreExplorer — Driver Store GUI with PnPUtil/DISM/native-API backend auto-detection
+- https://github.com/microsoft/Windows-driver-samples — DevCon source + install samples, cite for why you chose PnPUtil over DevCon
+- https://hochwald.net/post/enabling-native-nvme-drivers-windows-11-server-2025/ — reference write-up on the nvmedisk.sys swap (community prior art)
+
+### Features to Borrow
+- CMTrace-compatible XML logging with a built-in log viewer — DriverAutomationTool; complements your existing diagnostics export
+- curl.exe-based downloads with HTTP resume + configurable retry + SHA256 hash verification for the driver payload — DriverAutomationTool
+- Multi-backend abstraction (Native Win32 API / DISM / PnPUtil) with auto-detection + capability probe — DriverStoreExplorer
+- "Old drivers" heuristic pass that flags stale stornvme versions in the driver store and offers cleanup — DriverStoreExplorer
+- Offline Windows image mode: apply/remove the patch against a mounted WIM for Intune/SCCM image builds — DriverStoreExplorer offline mode
+- Portable-EXE publishing mode (no installer required) for the CLI — DriverAutomationTool; you already self-contain .NET 9 but ship as ZIP vs MSI
+- Read-only NVMe controller identify dump in Diagnostics+ tab using nvmetool-win IOCTLs — powers a pre-patch compatibility matrix (vendor/firmware → known-good list)
+- Device association view — show which physical NVMe disks each StorNVMe instance backs (by bus/target/LUN) — DriverStoreExplorer "Device Association"
+- Light/dark runtime theme toggle without app restart — DriverAutomationTool (your Catppuccin-style WPF resource dictionary can already hot-swap)
+- PSGallery parity: also publish CLI subcommands as a pure-PowerShell module variant — DriverAutomationTool distribution pattern
+
+### Patterns & Architectures Worth Studying
+- DriverAutomationTool's single-file WPF app architecture: no installer, $PSScriptRoot + embedded XAML, self-contained logs dir — contrasts with your 5-project solution and is worth documenting in README as a deliberate trade-off
+- DriverStoreExplorer's backend-capability probe (try PnPUtil → DISM → Native API) wrapped behind an `IDriverStoreBackend` interface — port to your service layer so the Watchdog service can operate headless without WPF dependencies
+- PnPUtil `/enum-drivers /class {4d36e967-e325-11ce-bfc1-08002be10318}` filter for enumerating *only* disk-class drivers — reduces noise vs `/enum-drivers` full dump
+- Microsoft's deprecation note on DevCon → use as a design-decision reference in CLAUDE.md (you already use pnputil; cite the doc commit so future contributors don't "simplify" back to DevCon)
+- Hochwald's nvmedisk.sys migration verification flow (compare before/after `Get-PnpDevice -Class SCSIAdapter`) — formalize as a pester test fixture
+
+## Implementation Deep Dive (Round 3)
+
+### Reference Implementations to Study
+- **dotnet/docs `windows-service.md`** — https://github.com/dotnet/docs/blob/main/docs/core/extensions/windows-service.md — canonical .NET 9 `BackgroundService` + `.UseWindowsService()` registration; direct template for the watchdog service.
+- **habiburrahman-mu/Dotnet-BackgroundWorkerExamples** — https://github.com/habiburrahman-mu/Dotnet-BackgroundWorkerExamples — side-by-side IHostedService / BackgroundService / WorkerService / Hangfire patterns; useful for comparing the watchdog architecture to alternatives.
+- **CommunityToolkit/MVVM-Samples** — https://github.com/CommunityToolkit/MVVM-Samples — `[ObservableProperty]` + `[RelayCommand]` source generators; reference for the Diagnostics+ tab bindings.
+- **microsoft/winget-cli `src/Microsoft.WinGet.Client`** — https://github.com/microsoft/winget-cli — PowerShell module reference for Intune/SCCM detection flows.
+- **DevExpress-Examples/wpf-mvvm-framework-windowservice** — https://github.com/DevExpress-Examples/wpf-mvvm-framework-windowservice — MVVM-first window/dialog coordination (useful for the tray → GUI invocation).
+- **Microsoft Learn `Create Windows Service using BackgroundService`** — https://learn.microsoft.com/en-us/dotnet/core/extensions/windows-service — `Microsoft.Extensions.Hosting.WindowsServices` 9.0.x wiring; required for the service project.
+- **jeremybytes/backgroundworker-dotnet6** — https://github.com/jeremybytes/backgroundworker-dotnet6 — `BGW.MVVM` branch shows WPF MVVM + BackgroundWorker with progress/cancellation; adapt for Patcher's long-running DISM operations.
+
+### Known Pitfalls from Similar Projects
+- `sc.exe create` with an unquoted binPath containing spaces silently fails — always wrap `"C:\Path With Spaces\svc.exe"` in extra quotes inside the command string.
+- `BackgroundService.ExecuteAsync` unhandled exception after .NET 6 kills the host by default — set `HostOptions.BackgroundServiceExceptionBehavior = Ignore` if you want the watchdog to survive transient failures (https://learn.microsoft.com/en-us/dotnet/core/extensions/windows-service).
+- Authenticode-signing a self-contained .NET 9 single-file exe requires signing the extracted apphost, not the wrapper — use `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256` on both the bundle and every AOT-extracted assembly.
+- `Microsoft.Extensions.Hosting.WindowsServices` 9.0.x requires running under SYSTEM or a service account — `UseWindowsService()` throws `PlatformNotSupportedException` if launched as a regular user from Visual Studio debug.
+- Intune `.intunewin` packages expect a detection script that exits 0 on "present"; returning a non-empty stdout without exit 0 causes spurious "failed" status.
+- AppLocker/SRP rules cached in GPO can block unsigned PowerShell modules even after signing — publish to PSGallery (signed) and require module installation via `Install-Module -Scope AllUsers`.
+- WPF `RelayCommand.CanExecuteChanged` must raise on the UI thread — `CommunityToolkit.Mvvm` handles this, but manual `ICommand` impls cause stale-button bugs.
+
+### Library Integration Checklist
+- `Microsoft.Extensions.Hosting==9.0.1` + `Microsoft.Extensions.Hosting.WindowsServices==9.0.1` — key API: `Host.CreateDefaultBuilder(args).UseWindowsService(opts => opts.ServiceName = "NvmePatcherWatchdog")`. Gotcha: must reference both packages; `UseWindowsService` extension lives in the second.
+- `CommunityToolkit.Mvvm==8.3.2` — `[ObservableProperty]`, `[RelayCommand]` source gen. Gotcha: private fields must use underscore prefix OR `[field:]` attribute targeting.
+- `Microsoft.WinGet.Client==1.9.25200` — Intune/SCCM package-detection. Gotcha: on LTSC builds without App Installer, call `Repair-WinGetPackageManager -AllUsers` first.
+- `Serilog.Sinks.EventLog==4.0.0` — required for the watchdog to write to Windows Event Log properly (source registration must happen as admin once).
+- `Microsoft.Win32.TaskScheduler==2.11.0` — https://www.nuget.org/packages/TaskScheduler — managed wrapper for scheduled-task creation (firmware-nudge service); gotcha: PowerShell `Register-ScheduledTask` is simpler if already in an admin context.
+- `System.Management.Automation==7.4.6` — host PowerShell runspace inside the WPF process for live script execution. Gotcha: redistributable `System.Management.Automation` is framework-dependent only — self-contained publish requires PSHost fork.
+- `Wix==5.0.2` (or `WixToolset.UI.wixext==5.0.2`) — MSI for SCCM deployment; gotcha: Wix 4+ changed schema, old v3 `.wxs` files fail to compile.

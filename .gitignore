@@ -17,6 +17,7 @@ config.json
 
 # Old versioned scripts
 NVMe_Driver_Patcher_v*.ps1
+NVMe_Driver_Patcher.ps1
 
 # Backup and test scripts
 *_backup.ps1
@@ -40,3 +41,7 @@ publish/
 packages/
 *.nupkg
 CLAUDE.md
+
+# Build artifacts (publish to GH releases instead)
+artifacts/v*/
+

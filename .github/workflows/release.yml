@@ -120,6 +120,13 @@ jobs:
       - name: Generate SHA256 checksums
         shell: pwsh
         run: |
+          # Two outputs here serve different consumers:
+          #   * publish/SHA256SUMS.txt  — the combined sha256sum manifest humans copy-paste.
+          #   * publish/<asset>.sha256  — per-asset sidecars. The in-app auto-updater
+          #     (AutoUpdaterService) fetches "<asset>.sha256" alongside each download and
+          #     refuses to stage the binary if the sidecar is missing or mismatched. Without
+          #     these files, the auto-updater falls back to Authenticode, and if the build
+          #     isn't signed, updates fail closed. Emitting both keeps every release verifiable.
           $files = @(
             'publish/gui/NVMeDriverPatcher.exe',
             'publish/cli/NVMeDriverPatcher.Cli.exe',
@@ -131,6 +138,11 @@ jobs:
             if (Test-Path $f) {
               $hash = (Get-FileHash -Algorithm SHA256 -Path $f).Hash.ToLower()
               $name = Split-Path $f -Leaf
+              # Per-asset sidecar in publish/ so the upload step can pick it up by a simple
+              # glob; the body matches the sha256sum format ("<hash>  <name>") that
+              # AutoUpdaterService.ExtractSha256 already parses.
+              $sidecarPath = "publish/$name.sha256"
+              "$hash  $name" | Out-File -FilePath $sidecarPath -Encoding ascii -NoNewline
               "$hash  $name"
             }
           }
@@ -186,6 +198,7 @@ jobs:
             publish/tray/NVMeDriverPatcher.Tray.exe
             publish/NVMeDriverPatcher-${{ steps.tag.outputs.version }}.msi
             publish/SHA256SUMS.txt
+            publish/*.sha256
             publish/SysAdminDoc.NVMeDriverPatcher.yaml
             NVMe_Driver_Patcher.ps1
           draft: false

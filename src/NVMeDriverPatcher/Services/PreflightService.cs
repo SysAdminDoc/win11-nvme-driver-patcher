@@ -18,6 +18,14 @@ public class PreflightResult
     public Dictionary<string, NVMeHealthInfo> CachedHealth { get; set; } = [];
     public StorageMigrationResult? CachedMigration { get; set; }
     public UpdateInfo? UpdateAvailable { get; set; }
+
+    /// <summary>
+    /// Background task resolving the GitHub update-check. Non-null when the check was kicked
+    /// off during preflight; callers can `await` it (usually with a short timeout) to pull in
+    /// a late-arriving result without having blocked the preflight render for it. See
+    /// <see cref="PreflightService.RunAll"/>.
+    /// </summary>
+    public Task<UpdateInfo?>? UpdateCheckTask { get; set; }
 }
 
 public static class PreflightService
@@ -127,8 +135,21 @@ public static class PreflightService
         try
         {
             result.IncompatibleSoftware = DriveService.GetIncompatibleSoftware() ?? [];
-            var warnSw = result.IncompatibleSoftware.Where(s => s.Severity != "Critical").ToList();
-            if (warnSw.Count > 0)
+
+            // Critical items (Intel RST, Intel VMD) are hard blockers — they cause BSOD/boot
+            // failures and must surface as a blocking Fail, not a dismissible warning.
+            var criticalSw = result.IncompatibleSoftware.Where(s => s.Severity == "Critical").ToList();
+            var warnSw     = result.IncompatibleSoftware.Where(s => s.Severity != "Critical").ToList();
+
+            if (criticalSw.Count > 0)
+            {
+                var names = criticalSw.Select(s => s.Name).ToList();
+                string msg = names.Count <= 3
+                    ? string.Join(", ", names)
+                    : $"{string.Join(", ", names.Take(3))} +{names.Count - 3} more";
+                checks["Compatibility"] = new(CheckStatus.Fail, $"BLOCKS PATCH: {msg}", critical: true);
+            }
+            else if (warnSw.Count > 0)
             {
                 var names = warnSw.Select(s => s.Name).ToList();
                 string msg = names.Count <= 3 ? string.Join(", ", names) : $"{string.Join(", ", names.Take(3))} +{names.Count - 3} more";
@@ -226,15 +247,16 @@ public static class PreflightService
         try { result.CachedHealth = DriveService.GetNVMeHealthData() ?? []; } catch { }
         try { result.CachedMigration = DriveService.GetStorageDiskMigration(); } catch { }
 
-        // Update check — fire-and-forget on its own thread so a slow / unreachable GitHub API
-        // never holds the preflight UI hostage. The caller can re-render whenever this finishes.
+        // Update check — previously we waited up to 3 seconds for GitHub to reply so the badge
+        // could render on the first preflight pass. On slow networks that's 3 seconds of
+        // user-visible dead time before the rest of the UI wakes up. Kick it off here but
+        // don't block: the viewmodel stashes the Task on `UpdateCheckTask`, and a small async
+        // helper awaits it (with its own timeout) on a background continuation, firing a UI
+        // refresh only if a result arrives. UpdateService.Check is already cached and short-
+        // circuits repeat callers so kicking the task off multiple times is cheap.
         try
         {
-            // We still wait briefly so the first preflight render usually has the badge,
-            // but we cap the cost at 3s instead of the previous synchronous 5s.
-            var t = System.Threading.Tasks.Task.Run(UpdateService.Check);
-            if (t.Wait(TimeSpan.FromSeconds(3)))
-                result.UpdateAvailable = t.Result;
+            result.UpdateCheckTask = Task.Run<UpdateInfo?>(UpdateService.Check);
         }
         catch { }
 

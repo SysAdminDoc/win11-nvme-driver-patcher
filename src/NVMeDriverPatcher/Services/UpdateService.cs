@@ -22,6 +22,19 @@ public static class UpdateService
     private static readonly TimeSpan SuccessCacheLifetime = TimeSpan.FromHours(6);
     private static readonly TimeSpan FailureCacheLifetime = TimeSpan.FromMinutes(15);
 
+    // Single shared client — creating one per check wastes sockets and triggers OS ephemeral-port
+    // exhaustion under rapid retries (HttpClient is designed to be reused).
+    private static readonly HttpClient SharedClient = CreateSharedClient();
+
+    private static HttpClient CreateSharedClient()
+    {
+        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd($"NVMeDriverPatcher/{AppConfig.AppVersion}");
+        // GitHub's API expects this Accept header; pinning it future-proofs against schema changes.
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        return client;
+    }
+
     public static UpdateInfo? Check()
     {
         try
@@ -62,13 +75,7 @@ public static class UpdateService
 
     private static async Task<UpdateInfo?> CheckAsync()
     {
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd($"NVMeDriverPatcher/{AppConfig.AppVersion}");
-        // GitHub's API expects "Accept: application/vnd.github+json"; sending it sticks us to the
-        // documented schema even if they roll out a default change later.
-        client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
-
-        var response = await client.GetStringAsync(AppConfig.GitHubApiReleasesUrl).ConfigureAwait(false);
+        var response = await SharedClient.GetStringAsync(AppConfig.GitHubApiReleasesUrl).ConfigureAwait(false);
         using var doc = JsonDocument.Parse(response);
         var root = doc.RootElement;
 

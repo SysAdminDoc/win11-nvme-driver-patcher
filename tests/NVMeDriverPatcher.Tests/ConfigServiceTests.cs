@@ -41,6 +41,41 @@ public sealed class ConfigServiceTests
         Assert.Equal("\"Full\"", json);
     }
 
+    [Theory]
+    [InlineData("\"System\"", AppThemeMode.System)]
+    [InlineData("\"system\"", AppThemeMode.System)]
+    [InlineData("\"Light\"", AppThemeMode.Light)]
+    [InlineData("\"Dark\"", AppThemeMode.Dark)]
+    [InlineData("\"HighContrast\"", AppThemeMode.HighContrast)]
+    [InlineData("\"High Contrast\"", AppThemeMode.HighContrast)]
+    [InlineData("\"high-contrast\"", AppThemeMode.HighContrast)]
+    [InlineData("\"accessible contrast\"", AppThemeMode.HighContrast)]
+    [InlineData("3", AppThemeMode.HighContrast)]
+    [InlineData("\"FutureTheme\"", AppThemeMode.System)]
+    [InlineData("999", AppThemeMode.System)]
+    public void LenientThemeModeJsonConverter_FallsBackForUnknownValues(
+        string jsonValue,
+        AppThemeMode expected)
+    {
+        var config = DeserializeConfig($$"""
+            {
+              "ThemeMode": {{jsonValue}}
+            }
+            """);
+
+        Assert.Equal(expected, config.ThemeMode);
+    }
+
+    [Fact]
+    public void LenientThemeModeJsonConverter_WritesReadableModeName()
+    {
+        var options = CreateOptions();
+
+        var json = JsonSerializer.Serialize(AppThemeMode.HighContrast, options);
+
+        Assert.Equal("\"HighContrast\"", json);
+    }
+
     [Fact]
     public void ExistingFileWithExtension_RejectsExistingFileWithWrongExtension()
     {
@@ -87,6 +122,7 @@ public sealed class ConfigServiceTests
     {
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         options.Converters.Add(new ConfigService.LenientPatchProfileJsonConverter());
+        options.Converters.Add(new ConfigService.LenientThemeModeJsonConverter());
         return options;
     }
 }

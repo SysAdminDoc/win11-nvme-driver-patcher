@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using LiveChartsCore;
@@ -5,19 +7,26 @@ using LiveChartsCore.Defaults;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
 using NVMeDriverPatcher.Models;
+using NVMeDriverPatcher.Services;
 using SkiaSharp;
 
 namespace NVMeDriverPatcher.Views;
 
 public partial class TelemetryView : UserControl
 {
+    private static readonly Regex RxDigitsOnly = new(@"[^0-9]", RegexOptions.Compiled);
+
     private bool _suppressDriveSelectionNotification;
+    private List<(DateTime Time, int TempC)> _lastTempHistory = [];
+    private List<(DateTime Time, int WearPct)> _lastWearHistory = [];
 
     public event Action<int>? DriveSelected;
 
     public TelemetryView()
     {
         InitializeComponent();
+        ThemeService.ThemeChanged += ThemeService_ThemeChanged;
+        Unloaded += TelemetryView_Unloaded;
         SetupChartDefaults();
         Reset();
     }
@@ -35,11 +44,16 @@ public partial class TelemetryView : UserControl
 
             foreach (var drive in (drives ?? new List<SystemDrive>()).Where(d => d.IsNVMe))
             {
-                DriveSelector.Items.Add(new ComboBoxItem
+                var driveItem = new ComboBoxItem
                 {
                     Content = $"Disk {drive.Number}: {drive.Name}",
                     Tag = drive.Number
-                });
+                };
+
+                if (TryFindResource("DarkComboBoxItem") is Style itemStyle)
+                    driveItem.Style = itemStyle;
+
+                DriveSelector.Items.Add(driveItem);
 
                 if (selectedDriveNumber == drive.Number)
                     selectedIndex = currentIndex;
@@ -47,7 +61,7 @@ public partial class TelemetryView : UserControl
                 currentIndex++;
             }
 
-            DriveSelector.IsEnabled = DriveSelector.Items.Count > 1;
+            DriveSelector.IsEnabled = DriveSelector.Items.Count > 0;
 
             if (DriveSelector.Items.Count == 0)
             {
@@ -90,59 +104,41 @@ public partial class TelemetryView : UserControl
         TelemetryStatusText.Text = message;
 
         string foregroundKey;
-        string foregroundFallback;
         string backgroundKey;
-        string backgroundFallback;
         string borderKey;
-        string borderFallback;
 
         switch (tone)
         {
             case "success":
                 foregroundKey = "Green";
-                foregroundFallback = "#FF50DD9D";
                 backgroundKey = "GreenBg";
-                backgroundFallback = "#FF13392C";
                 borderKey = "Green";
-                borderFallback = "#FF50DD9D";
                 break;
             case "warning":
                 foregroundKey = "Yellow";
-                foregroundFallback = "#FFFFC86C";
                 backgroundKey = "YellowBg";
-                backgroundFallback = "#FF3A2A11";
                 borderKey = "Yellow";
-                borderFallback = "#FFFFC86C";
                 break;
             case "danger":
                 foregroundKey = "Red";
-                foregroundFallback = "#FFFF8585";
                 backgroundKey = "RedBg";
-                backgroundFallback = "#FF3A1A1D";
                 borderKey = "Red";
-                borderFallback = "#FFFF8585";
                 break;
             case "info":
                 foregroundKey = "Accent";
-                foregroundFallback = "#FF69AEFF";
                 backgroundKey = "AccentBg";
-                backgroundFallback = "#FF102845";
                 borderKey = "Accent";
-                borderFallback = "#FF69AEFF";
                 break;
             default:
                 foregroundKey = "TextDim";
-                foregroundFallback = "#FF8393AD";
                 backgroundKey = "SurfaceInset";
-                backgroundFallback = "#FF09111B";
                 borderKey = "Border";
-                borderFallback = "#FF213146";
                 break;
         }
 
-        TelemetryStatusText.Foreground = ResolveBrush(foregroundKey, foregroundFallback);
-        TelemetryStatusCard.Background = ResolveBrush(backgroundKey, backgroundFallback);
-        TelemetryStatusCard.BorderBrush = ResolveBrush(borderKey, borderFallback);
+        TelemetryStatusText.Foreground = ResolveBrush(foregroundKey);
+        TelemetryStatusCard.Background = ResolveBrush(backgroundKey);
+        TelemetryStatusCard.BorderBrush = ResolveBrush(borderKey);
     }
 
     public void UpdateCurrentHealth(NVMeHealthInfo? health)
@@ -165,7 +161,7 @@ public partial class TelemetryView : UserControl
         WearValue.Text = health.Wear;
         PohValue.Text = health.PowerOnHours;
         ErrorsValue.Text = health.MediaErrors.ToString();
-        PohValue.Foreground = ResolveBrush("Accent", "#FF69AEFF");
+        PohValue.Foreground = ResolveBrush("Accent");
 
         var tooltip = string.IsNullOrWhiteSpace(health.SmartTooltip) ? null : health.SmartTooltip;
         TempValue.ToolTip = tooltip;
@@ -176,23 +172,22 @@ public partial class TelemetryView : UserControl
         // Color temp gauge
         int temp = ExtractNumericValue(health.Temperature);
         TempValue.Foreground = ResolveBrush(
-            temp >= 70 ? "Red" : temp >= 50 ? "Yellow" : "Green",
-            temp >= 70 ? "#FFFF8585" : temp >= 50 ? "#FFFFC86C" : "#FF50DD9D");
+            temp >= 70 ? "Red" : temp >= 50 ? "Yellow" : "Green");
 
         int lifeRemaining = ExtractNumericValue(health.Wear);
         WearValue.Foreground = ResolveBrush(
-            lifeRemaining <= 20 ? "Red" : lifeRemaining <= 50 ? "Yellow" : "Green",
-            lifeRemaining <= 20 ? "#FFFF8585" : lifeRemaining <= 50 ? "#FFFFC86C" : "#FF50DD9D");
+            lifeRemaining <= 20 ? "Red" : lifeRemaining <= 50 ? "Yellow" : "Green");
 
         // Color errors gauge
         ErrorsValue.Foreground = health.MediaErrors > 0
-            ? ResolveBrush("Red", "#FFFF8585")
-            : ResolveBrush("TextSecondary", "#FFD9E4F4");
+            ? ResolveBrush("Red")
+            : ResolveBrush("TextSecondary");
     }
 
     public void UpdateTempHistory(List<(DateTime Time, int TempC)>? data)
     {
         data ??= new List<(DateTime, int)>();
+        _lastTempHistory = data.ToList();
         if (data.Count == 0)
         {
             TempChart.Series = [];
@@ -207,8 +202,8 @@ public partial class TelemetryView : UserControl
             new LineSeries<ObservablePoint>
             {
                 Values = data.Select(d => new ObservablePoint(d.Time.Ticks, d.TempC)).ToArray(),
-                Stroke = new SolidColorPaint(new SKColor(255, 133, 133), 2),
-                Fill = new SolidColorPaint(new SKColor(255, 133, 133, 36)),
+                Stroke = new SolidColorPaint(ResolveSkColor("Red"), 2),
+                Fill = new SolidColorPaint(ResolveSkColor("Red", 36)),
                 GeometrySize = 0,
                 LineSmoothness = 0.3
             }
@@ -218,6 +213,7 @@ public partial class TelemetryView : UserControl
     public void UpdateWearHistory(List<(DateTime Time, int WearPct)>? data)
     {
         data ??= new List<(DateTime, int)>();
+        _lastWearHistory = data.ToList();
         if (data.Count == 0)
         {
             WearChart.Series = [];
@@ -232,8 +228,8 @@ public partial class TelemetryView : UserControl
             new LineSeries<ObservablePoint>
             {
                 Values = data.Select(d => new ObservablePoint(d.Time.Ticks, d.WearPct)).ToArray(),
-                Stroke = new SolidColorPaint(new SKColor(80, 221, 157), 2),
-                Fill = new SolidColorPaint(new SKColor(80, 221, 157, 36)),
+                Stroke = new SolidColorPaint(ResolveSkColor("Green"), 2),
+                Fill = new SolidColorPaint(ResolveSkColor("Green", 36)),
                 GeometrySize = 0,
                 LineSmoothness = 0.3
             }
@@ -250,19 +246,19 @@ public partial class TelemetryView : UserControl
         if (hasLiveSnapshot)
         {
             TelemetrySourceValue.Text = "Live SMART";
-            TelemetrySourceValue.Foreground = ResolveBrush("Green", "#FF50DD9D");
+            TelemetrySourceValue.Foreground = ResolveBrush("Green");
             TelemetrySourceDetail.Text = $"Disk {driveNumber} returned a direct controller snapshot during this refresh.";
         }
         else if (hasFallbackSnapshot)
         {
             TelemetrySourceValue.Text = "Windows fallback";
-            TelemetrySourceValue.Foreground = ResolveBrush("Yellow", "#FFFFC86C");
+            TelemetrySourceValue.Foreground = ResolveBrush("Yellow");
             TelemetrySourceDetail.Text = $"Disk {driveNumber} is using Windows reliability counters because direct SMART polling was unavailable.";
         }
         else
         {
             TelemetrySourceValue.Text = "No current snapshot";
-            TelemetrySourceValue.Foreground = ResolveBrush("TextDim", "#FF8393AD");
+            TelemetrySourceValue.Foreground = ResolveBrush("TextDim");
             TelemetrySourceDetail.Text = $"Disk {driveNumber} has no live or fallback health snapshot yet.";
         }
 
@@ -295,17 +291,32 @@ public partial class TelemetryView : UserControl
 
     private void SetupChartDefaults()
     {
+        var labelPaint = new SolidColorPaint(ResolveSkColor("TextDim"));
+        var separatorPaint = new SolidColorPaint(ResolveSkColor("Border"));
         var darkAxis = new Axis
         {
-            LabelsPaint = new SolidColorPaint(new SKColor(131, 147, 173)),
+            LabelsPaint = labelPaint,
             TextSize = 10,
-            SeparatorsPaint = new SolidColorPaint(new SKColor(34, 49, 70))
+            SeparatorsPaint = separatorPaint
         };
 
         TempChart.XAxes = new[] { new Axis { IsVisible = false } };
         TempChart.YAxes = new[] { new Axis { LabelsPaint = darkAxis.LabelsPaint, TextSize = 10, SeparatorsPaint = darkAxis.SeparatorsPaint, Labeler = v => $"{v}C" } };
         WearChart.XAxes = new[] { new Axis { IsVisible = false } };
         WearChart.YAxes = new[] { new Axis { LabelsPaint = darkAxis.LabelsPaint, TextSize = 10, SeparatorsPaint = darkAxis.SeparatorsPaint, MinLimit = 0, MaxLimit = 100, Labeler = v => $"{v}%" } };
+    }
+
+    private void ThemeService_ThemeChanged(object? sender, EventArgs e)
+    {
+        SetupChartDefaults();
+        UpdateTempHistory(_lastTempHistory);
+        UpdateWearHistory(_lastWearHistory);
+    }
+
+    private void TelemetryView_Unloaded(object sender, RoutedEventArgs e)
+    {
+        ThemeService.ThemeChanged -= ThemeService_ThemeChanged;
+        Unloaded -= TelemetryView_Unloaded;
     }
 
     private void DriveSelector_Changed(object sender, SelectionChangedEventArgs e)
@@ -319,16 +330,16 @@ public partial class TelemetryView : UserControl
 
     private void ApplyDefaultMetricBrushes()
     {
-        TempValue.Foreground = ResolveBrush("TextSecondary", "#FFD9E4F4");
-        WearValue.Foreground = ResolveBrush("TextSecondary", "#FFD9E4F4");
-        PohValue.Foreground = ResolveBrush("Accent", "#FF69AEFF");
-        ErrorsValue.Foreground = ResolveBrush("TextSecondary", "#FFD9E4F4");
+        TempValue.Foreground = ResolveBrush("TextSecondary");
+        WearValue.Foreground = ResolveBrush("TextSecondary");
+        PohValue.Foreground = ResolveBrush("Accent");
+        ErrorsValue.Foreground = ResolveBrush("TextSecondary");
     }
 
     private void ResetTelemetryContext()
     {
         TelemetrySourceValue.Text = "Waiting for a drive";
-        TelemetrySourceValue.Foreground = ResolveBrush("Accent", "#FF69AEFF");
+        TelemetrySourceValue.Foreground = ResolveBrush("Accent");
         TelemetrySourceDetail.Text = "Choose an NVMe drive to see whether the current snapshot comes from live SMART or Windows fallback data.";
         TelemetryHistoryValue.Text = "No saved history";
         TelemetryHistoryDetail.Text = "Saved samples will appear here once this machine records local telemetry over time.";
@@ -343,15 +354,21 @@ public partial class TelemetryView : UserControl
             : null;
     }
 
-    private Brush ResolveBrush(string resourceKey, string fallbackHex)
+    private Brush ResolveBrush(string resourceKey)
     {
-        return BrushResources.Resolve(this, resourceKey, fallbackHex);
+        return BrushResources.Resolve(this, resourceKey);
+    }
+
+    private SKColor ResolveSkColor(string resourceKey, byte? alpha = null)
+    {
+        var color = BrushResources.ResolveColor(this, resourceKey);
+        return new SKColor(color.R, color.G, color.B, alpha ?? color.A);
     }
 
     private static int ExtractNumericValue(string? value)
     {
         if (string.IsNullOrEmpty(value)) return 0;
-        return int.TryParse(System.Text.RegularExpressions.Regex.Replace(value, @"[^0-9]", ""), out int numericValue)
+        return int.TryParse(RxDigitsOnly.Replace(value, ""), out int numericValue)
             ? numericValue
             : 0;
     }

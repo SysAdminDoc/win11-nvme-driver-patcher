@@ -1,0 +1,46 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="DarkTheme.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- Accessible contrast companion. Keys mirror DarkTheme.xaml so every shared style resolves cleanly. -->
+    <SolidColorBrush x:Key="BgDarkest" Color="#FF000000"/>
+    <SolidColorBrush x:Key="BgDark" Color="#FF050505"/>
+    <SolidColorBrush x:Key="BgMedium" Color="#FF0B0B0B"/>
+    <SolidColorBrush x:Key="BgLight" Color="#FF151515"/>
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#FF101010"/>
+    <SolidColorBrush x:Key="SurfaceInset" Color="#FF000000"/>
+    <SolidColorBrush x:Key="Border" Color="#FF777777"/>
+    <SolidColorBrush x:Key="BorderLight" Color="#FFB8B8B8"/>
+    <SolidColorBrush x:Key="BorderStrong" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="TextPrimary" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="TextSecondary" Color="#FFF2F2F2"/>
+    <SolidColorBrush x:Key="TextMuted" Color="#FFD6D6D6"/>
+    <SolidColorBrush x:Key="TextDim" Color="#FFBDBDBD"/>
+    <SolidColorBrush x:Key="TextDimmer" Color="#FF9E9E9E"/>
+    <SolidColorBrush x:Key="Accent" Color="#FF66D9FF"/>
+    <SolidColorBrush x:Key="AccentHover" Color="#FF9BE7FF"/>
+    <SolidColorBrush x:Key="AccentForeground" Color="#FF000000"/>
+    <SolidColorBrush x:Key="AccentBg" Color="#FF00384C"/>
+    <SolidColorBrush x:Key="AccentSoft" Color="#FF006E93"/>
+    <SolidColorBrush x:Key="Green" Color="#FF6DFFB1"/>
+    <SolidColorBrush x:Key="GreenBg" Color="#FF003B20"/>
+    <SolidColorBrush x:Key="Yellow" Color="#FFFFE066"/>
+    <SolidColorBrush x:Key="YellowBg" Color="#FF4D3F00"/>
+    <SolidColorBrush x:Key="Red" Color="#FFFF8A8A"/>
+    <SolidColorBrush x:Key="RedBg" Color="#FF4A0000"/>
+    <SolidColorBrush x:Key="Focus" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="FocusGlow" Color="#AA66D9FF"/>
+    <SolidColorBrush x:Key="WindowCanvasBrush" Color="#FF000000"/>
+    <SolidColorBrush x:Key="HeroSurfaceBrush" Color="#FF050505"/>
+    <SolidColorBrush x:Key="SurfaceCardBrush" Color="#FF060606"/>
+    <SolidColorBrush x:Key="InsetCardBrush" Color="#FF000000"/>
+    <SolidColorBrush x:Key="DisabledSurfaceBrush" Color="#FF1B1B1B"/>
+    <SolidColorBrush x:Key="OverlayScrimBrush" Color="#E6000000"/>
+    <SolidColorBrush x:Key="AccentLineBrush" Color="#FFFFFFFF"/>
+    <DropShadowEffect x:Key="WindowShadow" BlurRadius="0" ShadowDepth="0" Opacity="0" Color="#FF000000"/>
+    <DropShadowEffect x:Key="SurfaceShadow" BlurRadius="0" ShadowDepth="0" Opacity="0" Color="#FF000000"/>
+    <DropShadowEffect x:Key="ToolTipShadow" BlurRadius="0" ShadowDepth="0" Opacity="0" Color="#FF000000"/>
+    <DropShadowEffect x:Key="PopupShadow" BlurRadius="0" ShadowDepth="0" Opacity="0" Color="#FF000000"/>
+</ResourceDictionary>

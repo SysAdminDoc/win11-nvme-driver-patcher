@@ -1,7 +1,9 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using NVMeDriverPatcher.Data;
 using NVMeDriverPatcher.Models;
@@ -12,7 +14,10 @@ namespace NVMeDriverPatcher.Views;
 
 public partial class MainWindow : Window
 {
-    private const double CompactLayoutThreshold = 1380;
+    private const double CompactLayoutThreshold = 1100;
+    private const int DwmwaUseImmersiveDarkMode = 20;
+    private const int DwmwaCaptionColor = 35;
+    private const int DwmwaTextColor = 36;
 
     private readonly MainViewModel _vm;
     private int? _selectedTelemetryDriveNumber;
@@ -21,10 +26,12 @@ public partial class MainWindow : Window
 
     private bool _initialized;
     private bool _compactLayoutApplied;
+    private bool _syncingThemeModeSelector;
 
     public MainWindow()
     {
         InitializeComponent();
+        AddHandler(PreviewMouseWheelEvent, new MouseWheelEventHandler(MainWindow_PreviewMouseWheel), true);
         _vm = new MainViewModel();
         _vm.ConfirmDialog = ShowConfirmDialog;
         _vm.InfoDialog = ShowInfoDialog;
@@ -32,6 +39,9 @@ public partial class MainWindow : Window
         _vm.PropertyChanged += ViewModel_PropertyChanged;
         TelemetryPanelControl.DriveSelected += TelemetryPanel_DriveSelected;
         TuningPanelControl.LogMessage += TuningPanel_LogMessage;
+        ThemeService.ThemeChanged += ThemeService_ThemeChanged;
+        UpdateThemeToggleButton();
+        SyncThemeModeSelector();
 
         // Set window icon from embedded resource (pack URI fails in single-file publish)
         try
@@ -41,10 +51,11 @@ public partial class MainWindow : Window
         }
         catch { /* Icon load best-effort */ }
 
-        var workArea = SystemParameters.WorkArea;
-        if (Height > workArea.Height) Height = workArea.Height - 20;
-        if (Width > workArea.Width) Width = workArea.Width - 20;
+        var workArea = GetPrimaryWorkArea();
+        if (Height > workArea.Height - 32) Height = Math.Max(MinHeight, workArea.Height - 32);
+        if (Width > workArea.Width - 32) Width = Math.Max(MinWidth, workArea.Width - 32);
 
+        SourceInitialized += MainWindow_SourceInitialized;
         ContentRendered += OnContentRendered;
         Closing += MainWindow_Closing;
         StateChanged += MainWindow_StateChanged;
@@ -52,8 +63,15 @@ public partial class MainWindow : Window
         Loaded += MainWindow_Loaded;
     }
 
+    private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+    {
+        ApplyScreenAwareStartupBounds();
+    }
+
     private void MainWindow_Loaded(object? sender, RoutedEventArgs e)
     {
+        EnsureWindowWithinWorkArea();
+        ApplyNativeTitleBarTheme();
         UpdateWindowPresentation();
         UpdateAdaptiveLayout();
     }
@@ -74,7 +92,30 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            // Preflight shouldn't throw — RunPreflightAsync has its own try/catch — but a
+            // dispatcher or WMI teardown mid-boot can still bubble. Log to the activity rail
+            // (so the user sees SOMETHING instead of a blank "Checking…" state) and event log.
             System.Diagnostics.Debug.WriteLine($"[OnContentRendered] {ex}");
+            try { _vm.Log($"Startup preflight failed: {ex.Message}", "ERROR"); } catch { }
+            try
+            {
+                EventLogService.Write(
+                    $"Startup preflight failed: {ex}",
+                    System.Diagnostics.EventLogEntryType.Error,
+                    3105);
+            }
+            catch { }
+            try
+            {
+                ThemedDialog.Show(
+                    "The readiness scan could not finish. You can still use Refresh on the toolbar, but drive details may be incomplete until it succeeds.\n\n" +
+                    $"Detail: {ex.Message}",
+                    "Readiness scan failed",
+                    DialogButtons.OK,
+                    DialogIcon.Warning,
+                    this);
+            }
+            catch { }
         }
     }
 
@@ -84,9 +125,42 @@ public partial class MainWindow : Window
         try { _vm.PropertyChanged -= ViewModel_PropertyChanged; } catch { }
         try { TelemetryPanelControl.DriveSelected -= TelemetryPanel_DriveSelected; } catch { }
         try { TuningPanelControl.LogMessage -= TuningPanel_LogMessage; } catch { }
+        try { ThemeService.ThemeChanged -= ThemeService_ThemeChanged; } catch { }
+        try { SourceInitialized -= MainWindow_SourceInitialized; } catch { }
         try { Loaded -= MainWindow_Loaded; } catch { }
         try { StateChanged -= MainWindow_StateChanged; } catch { }
         try { SizeChanged -= MainWindow_SizeChanged; } catch { }
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+    private void ApplyNativeTitleBarTheme()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero)
+                return;
+
+            bool dark = ThemeService.CurrentTheme is AppTheme.Dark or AppTheme.HighContrast;
+            int useDarkMode = dark ? 1 : 0;
+            DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkMode, ref useDarkMode, sizeof(int));
+
+            int captionColor = ThemeService.CurrentTheme switch
+            {
+                AppTheme.HighContrast => 0x00000000,
+                AppTheme.Dark => 0x00191411,
+                _ => 0x00FEFBF9
+            };
+            int textColor = dark ? 0x00FFFFFF : 0x0020120B;
+            DwmSetWindowAttribute(hwnd, DwmwaCaptionColor, ref captionColor, sizeof(int));
+            DwmSetWindowAttribute(hwnd, DwmwaTextColor, ref textColor, sizeof(int));
+        }
+        catch
+        {
+            // Native title-bar tinting is best-effort and unavailable on older Windows builds.
+        }
     }
 
     private bool ShowConfirmDialog(string title, string message)
@@ -124,6 +198,34 @@ public partial class MainWindow : Window
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void MaximizeRestore_Click(object sender, RoutedEventArgs e) => ToggleMaximizeRestore();
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
+    private void ThemeToggle_Click(object sender, RoutedEventArgs e)
+    {
+        var nextMode = ThemeService.CurrentTheme is AppTheme.Dark or AppTheme.HighContrast
+            ? AppThemeMode.Light
+            : AppThemeMode.Dark;
+        _vm.SetThemeMode(nextMode);
+        UpdateWindowPresentation();
+    }
+
+    private void ThemeService_ThemeChanged(object? sender, EventArgs e)
+    {
+        _vm.RefreshThemeModeSummary();
+        UpdateThemeToggleButton();
+        SyncThemeModeSelector();
+        ApplyNativeTitleBarTheme();
+    }
+
+    private void ThemeModeSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingThemeModeSelector || ThemeModeSelector.SelectedItem is not ComboBoxItem item)
+            return;
+
+        if (!Enum.TryParse<AppThemeMode>(item.Tag?.ToString(), ignoreCase: true, out var mode))
+            mode = AppThemeMode.System;
+
+        _vm.SetThemeMode(mode);
+        UpdateWindowPresentation();
+    }
 
     private void MainWindow_StateChanged(object? sender, EventArgs e)
     {
@@ -134,6 +236,27 @@ public partial class MainWindow : Window
     private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         UpdateAdaptiveLayout();
+    }
+
+    private void MainWindow_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source)
+            return;
+
+        if (FindAncestor<System.Windows.Controls.ComboBox>(source)?.IsDropDownOpen == true)
+            return;
+
+        var scroller = FindAncestor<ScrollViewer>(source);
+        while (scroller is not null)
+        {
+            if (TryScrollViewer(scroller, e.Delta))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            scroller = FindAncestor<ScrollViewer>(GetVisualParent(scroller));
+        }
     }
 
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -157,6 +280,7 @@ public partial class MainWindow : Window
             Key.D3 or Key.NumPad3 => 2,
             Key.D4 or Key.NumPad4 => 3,
             Key.D5 or Key.NumPad5 => 4,
+            Key.D6 or Key.NumPad6 => 5,
             _ => null
         };
 
@@ -181,12 +305,10 @@ public partial class MainWindow : Window
     {
         bool maximized = WindowState == WindowState.Maximized;
 
-        RootFrame.Margin = maximized ? new Thickness(0) : new Thickness(16);
-        ShellBorder.CornerRadius = maximized ? new CornerRadius(0) : new CornerRadius(14);
-        ShellAccentBar.CornerRadius = maximized ? new CornerRadius(0) : new CornerRadius(14, 14, 0, 0);
-        ShellBorder.Effect = maximized
-            ? null
-            : TryFindResource("WindowShadow") as System.Windows.Media.Effects.Effect;
+        RootFrame.Margin = new Thickness(0);
+        ShellBorder.CornerRadius = new CornerRadius(0);
+        ShellAccentBar.CornerRadius = new CornerRadius(0);
+        ShellBorder.Effect = null;
 
         MaximizeRestoreButton.Content = maximized ? "❐" : "□";
         MaximizeRestoreButton.ToolTip = maximized ? "Restore down" : "Maximize";
@@ -195,17 +317,95 @@ public partial class MainWindow : Window
             maximized ? "Restore window" : "Maximize window");
     }
 
+    private void EnsureWindowWithinWorkArea()
+    {
+        if (WindowState != WindowState.Normal)
+            return;
+
+        double width = ActualWidth > 0 ? ActualWidth : Width;
+        double height = ActualHeight > 0 ? ActualHeight : Height;
+        var center = new System.Windows.Point(Left + width / 2, Top + height / 2);
+        var virtualBounds = new Rect(
+            SystemParameters.VirtualScreenLeft,
+            SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth,
+            SystemParameters.VirtualScreenHeight);
+
+        if (virtualBounds.Contains(center))
+            return;
+
+        var workArea = GetCurrentWorkArea();
+        Left = workArea.Left + Math.Max(16, (workArea.Width - width) / 2);
+        Top = workArea.Top + Math.Max(16, (workArea.Height - height) / 2);
+
+        if (Left + width > workArea.Right - 16)
+            Left = Math.Max(workArea.Left + 16, workArea.Right - width - 16);
+
+        if (Top + height > workArea.Bottom - 16)
+            Top = Math.Max(workArea.Top + 16, workArea.Bottom - height - 16);
+    }
+
+    private void ApplyScreenAwareStartupBounds()
+    {
+        if (WindowState != WindowState.Normal)
+            return;
+
+        var workArea = GetCurrentWorkArea();
+        const double horizontalMargin = 16;
+        double maxWidth = Math.Max(MinWidth, workArea.Width - horizontalMargin * 2);
+        double requestedWidth = double.IsNaN(Width) || Width <= 0 ? MinWidth : Width;
+
+        Width = Math.Min(Math.Max(MinWidth, requestedWidth), maxWidth);
+        Height = Math.Max(MinHeight, workArea.Height);
+        Left = workArea.Left + Math.Max(0, (workArea.Width - Width) / 2);
+        Top = workArea.Top;
+    }
+
+    private static Rect GetPrimaryWorkArea()
+    {
+        // WPF window sizing is in device-independent units; SystemParameters returns
+        // the matching work area while WinForms reports physical pixels on high-DPI screens.
+        return SystemParameters.WorkArea;
+    }
+
+    private Rect GetCurrentWorkArea()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero)
+            return GetPrimaryWorkArea();
+
+        try
+        {
+            var screen = System.Windows.Forms.Screen.FromHandle(hwnd);
+            return DevicePixelsToDips(screen.WorkingArea, hwnd);
+        }
+        catch
+        {
+            return GetPrimaryWorkArea();
+        }
+    }
+
+    private static Rect DevicePixelsToDips(System.Drawing.Rectangle pixels, IntPtr hwnd)
+    {
+        var source = HwndSource.FromHwnd(hwnd);
+        var transform = source?.CompositionTarget?.TransformFromDevice ?? System.Windows.Media.Matrix.Identity;
+        var topLeft = transform.Transform(new System.Windows.Point(pixels.Left, pixels.Top));
+        var bottomRight = transform.Transform(new System.Windows.Point(pixels.Right, pixels.Bottom));
+        return new Rect(topLeft, bottomRight);
+    }
+
     private void UpdateAdaptiveLayout()
     {
         bool compact = ActualWidth < CompactLayoutThreshold;
         _compactLayoutApplied = compact;
 
         TitleBarRegion.Padding = compact
-            ? new Thickness(24, 20, 24, 0)
-            : new Thickness(32, 24, 32, 0);
-        OverviewSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(20);
-        MainContentSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(20);
-        MainContentSplitter.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            ? new Thickness(16, 8, 16, 0)
+            : new Thickness(20, 8, 20, 0);
+        OverviewSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(16);
+        MainContentSpacerColumn.Width = new GridLength(0);
+        MainContentSplitter.Visibility = Visibility.Collapsed;
+        OverviewTabs.Visibility = Visibility.Collapsed;
         MainContentSecondaryRow.Height = compact
             ? new GridLength(1, GridUnitType.Star)
             : GridLength.Auto;
@@ -213,8 +413,10 @@ public partial class MainWindow : Window
         ControlsCard.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
         WorkspaceSurface.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
         FooterActionsPanel.Margin = compact ? new Thickness(0, 12, 0, 0) : new Thickness(0);
-        SettingsSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(16);
+        SettingsSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(12);
         AuditAlertsCard.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
+        ActivityRailSpacerColumn.Width = compact ? new GridLength(8) : new GridLength(10);
+        ActivityRailColumn.Width = compact ? new GridLength(340) : new GridLength(400);
 
         if (compact)
         {
@@ -226,11 +428,7 @@ public partial class MainWindow : Window
             Grid.SetColumn(ControlsCard, 0);
             Grid.SetColumnSpan(ControlsCard, 3);
 
-            Grid.SetRow(OverviewScrollViewer, 0);
-            Grid.SetColumn(OverviewScrollViewer, 0);
-            Grid.SetColumnSpan(OverviewScrollViewer, 3);
-
-            Grid.SetRow(WorkspaceSurface, 1);
+            Grid.SetRow(WorkspaceSurface, 0);
             Grid.SetColumn(WorkspaceSurface, 0);
             Grid.SetColumnSpan(WorkspaceSurface, 3);
 
@@ -252,13 +450,9 @@ public partial class MainWindow : Window
             Grid.SetColumn(ControlsCard, 2);
             Grid.SetColumnSpan(ControlsCard, 1);
 
-            Grid.SetRow(OverviewScrollViewer, 0);
-            Grid.SetColumn(OverviewScrollViewer, 0);
-            Grid.SetColumnSpan(OverviewScrollViewer, 1);
-
             Grid.SetRow(WorkspaceSurface, 0);
-            Grid.SetColumn(WorkspaceSurface, 2);
-            Grid.SetColumnSpan(WorkspaceSurface, 1);
+            Grid.SetColumn(WorkspaceSurface, 0);
+            Grid.SetColumnSpan(WorkspaceSurface, 3);
 
             Grid.SetRow(PatchDefaultsCard, 0);
             Grid.SetColumn(PatchDefaultsCard, 0);
@@ -275,18 +469,21 @@ public partial class MainWindow : Window
 
     private void LogOutput_TextChanged(object sender, TextChangedEventArgs e)
     {
-        LogScroller?.ScrollToBottom();
+        ActivityRailLogScroller?.ScrollToBottom();
     }
 
     private void CopySelection_Click(object sender, RoutedEventArgs e)
     {
-        if (!string.IsNullOrEmpty(LogOutput.SelectedText))
-            Clipboard.SetText(LogOutput.SelectedText);
+        string selectedText = ActivityRailLogOutput.SelectedText;
+
+        if (!string.IsNullOrEmpty(selectedText))
+            Clipboard.SetText(selectedText);
     }
 
     private void SelectAll_Click(object sender, RoutedEventArgs e)
     {
-        LogOutput.SelectAll();
+        ActivityRailLogOutput.Focus();
+        ActivityRailLogOutput.SelectAll();
     }
 
     private void ClearLog_Click(object sender, RoutedEventArgs e)
@@ -316,6 +513,42 @@ public partial class MainWindow : Window
         ExecuteRecommendedAction(_vm.NextStepSecondaryActionId);
     }
 
+    private void UpdateThemeToggleButton()
+    {
+        bool dark = ThemeService.CurrentTheme is AppTheme.Dark or AppTheme.HighContrast;
+        ThemeToggleButton.Content = "☀";
+        ThemeToggleButton.ToolTip = dark ? "Switch to light theme" : "Switch to dark theme";
+        System.Windows.Automation.AutomationProperties.SetName(
+            ThemeToggleButton,
+            dark ? "Switch to light theme" : "Switch to dark theme");
+    }
+
+    private void SyncThemeModeSelector()
+    {
+        if (ThemeModeSelector is null)
+            return;
+
+        _syncingThemeModeSelector = true;
+        try
+        {
+            string target = ThemeService.CurrentMode.ToString();
+            foreach (var item in ThemeModeSelector.Items.OfType<ComboBoxItem>())
+            {
+                if (string.Equals(item.Tag?.ToString(), target, StringComparison.OrdinalIgnoreCase))
+                {
+                    ThemeModeSelector.SelectedItem = item;
+                    return;
+                }
+            }
+
+            ThemeModeSelector.SelectedIndex = 0;
+        }
+        finally
+        {
+            _syncingThemeModeSelector = false;
+        }
+    }
+
     private async void WorkspaceTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         try
@@ -325,13 +558,13 @@ public partial class MainWindow : Window
 
             switch (WorkspaceTabs.SelectedIndex)
             {
-                case 1:
+                case 0:
                     RefreshBenchmarkWorkspace();
                     break;
-                case 2:
+                case 1:
                     await RefreshTelemetryWorkspaceAsync();
                     break;
-                case 3:
+                case 2:
                     _vm.RefreshRecoveryAssetsCommand.Execute(null);
                     break;
             }
@@ -348,13 +581,13 @@ public partial class MainWindow : Window
         // benchmark chart panel when it's the visible tab. Saves the file read + chart relayout.
         if ((e.PropertyName == nameof(MainViewModel.BenchLabelText) ||
              e.PropertyName == nameof(MainViewModel.StatusText)) &&
-            WorkspaceTabs.SelectedIndex == 1)
+            WorkspaceTabs.SelectedIndex == 0)
         {
             RefreshBenchmarkWorkspace();
         }
 
         if (e.PropertyName == nameof(MainViewModel.DriveInventorySummaryText) &&
-            WorkspaceTabs.SelectedIndex == 2)
+            WorkspaceTabs.SelectedIndex == 1)
         {
             _ = RefreshTelemetryWorkspaceAsync();
         }
@@ -389,16 +622,16 @@ public partial class MainWindow : Window
                     _vm.RefreshCommand.Execute(null);
                 break;
             case "open_activity":
-                SelectWorkspaceTab(0);
+                FocusActivityRail();
                 break;
             case "open_benchmarks":
-                SelectWorkspaceTab(1);
+                SelectWorkspaceTab(0);
                 break;
             case "open_telemetry":
-                SelectWorkspaceTab(2);
+                SelectWorkspaceTab(1);
                 break;
             case "open_recovery":
-                SelectWorkspaceTab(3);
+                SelectWorkspaceTab(2);
                 break;
         }
     }
@@ -409,13 +642,13 @@ public partial class MainWindow : Window
         {
             switch (index)
             {
-                case 1:
+                case 0:
                     RefreshBenchmarkWorkspace();
                     break;
-                case 2:
+                case 1:
                     _ = RefreshTelemetryWorkspaceAsync();
                     break;
-                case 3:
+                case 2:
                     _vm.RefreshRecoveryAssetsCommand.Execute(null);
                     break;
             }
@@ -424,6 +657,12 @@ public partial class MainWindow : Window
         }
 
         WorkspaceTabs.SelectedIndex = index;
+    }
+
+    private void FocusActivityRail()
+    {
+        ActivityRailLogOutput.Focus();
+        ActivityRailLogScroller.ScrollToBottom();
     }
 
     private void RefreshBenchmarkWorkspace()
@@ -699,10 +938,40 @@ public partial class MainWindow : Window
             if (current is T match)
                 return match;
 
-            current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+            current = GetVisualParent(current);
         }
 
         return null;
+    }
+
+    private static DependencyObject? GetVisualParent(DependencyObject current)
+    {
+        try
+        {
+            return System.Windows.Media.VisualTreeHelper.GetParent(current);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private static bool TryScrollViewer(ScrollViewer scroller, int wheelDelta)
+    {
+        if (wheelDelta == 0 || scroller.ScrollableHeight <= 0)
+            return false;
+
+        bool scrollingUp = wheelDelta > 0;
+        if (scrollingUp && scroller.VerticalOffset <= 0)
+            return false;
+
+        if (!scrollingUp && scroller.VerticalOffset >= scroller.ScrollableHeight)
+            return false;
+
+        double lines = Math.Max(1, Math.Abs(wheelDelta) / 120.0);
+        double offsetDelta = lines * 48 * (scrollingUp ? -1 : 1);
+        scroller.ScrollToVerticalOffset(scroller.VerticalOffset + offsetDelta);
+        return true;
     }
 
     private static DialogIcon ResolveConfirmationIcon(string title)

@@ -162,6 +162,8 @@ public static class MinidumpTriageService
 
     internal static string BuildSummary(MinidumpTriageReport report)
     {
+        if (report.TotalFound == 0)
+            return "No minidumps present. Clean slate.";
         if (report.NewerThanPatch == 0)
             return $"No new crash dumps since patch. {report.TotalFound} older dump(s) on disk.";
         if (report.NVMeRelated == 0)

@@ -55,3 +55,15 @@ function json(obj, status) {
     headers: { "content-type": "application/json" }
   });
 }
+
+/**
+ * Encodes a string to Base64URL format.
+ * Replaces '+' with '-', '/' with '_', and removes padding '='.
+ * @param {string} input The string to encode.
+ * @returns {string} The Base64URL encoded string.
+ */
+function base64urlEncode(input) {
+  const base64 = btoa(input); // Standard Base64 encoding
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); // Base64URL modifications
+}
+

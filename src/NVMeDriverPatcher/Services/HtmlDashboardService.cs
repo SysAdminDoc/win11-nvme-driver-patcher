@@ -23,14 +23,14 @@ public static class HtmlDashboardService
         sb.AppendLine("<!doctype html><html><head><meta charset=\"utf-8\">");
         sb.AppendLine("<title>NVMe Driver Patcher — Diagnostics Snapshot</title>");
         sb.AppendLine("<style>");
-        sb.AppendLine("body{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#e6e8eb;background:#0b1118;margin:0;padding:24px;max-width:980px;margin:auto}");
-        sb.AppendLine("h1{color:#72aeea;margin:0 0 8px;font-size:22px}h2{color:#72aeea;margin-top:32px;font-size:16px;border-bottom:1px solid #2d3d51;padding-bottom:6px}");
-        sb.AppendLine(".meta{color:#8694a8;font-size:12px;margin-bottom:24px}");
-        sb.AppendLine("table{border-collapse:collapse;width:100%;margin-top:6px}td,th{text-align:left;padding:6px 10px;border-bottom:1px solid #202d3c}");
-        sb.AppendLine("th{color:#aab6c8;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}");
-        sb.AppendLine(".ok{color:#6fd3a5}.warn{color:#e3be79}.err{color:#e49c9c}.muted{color:#8694a8}");
-        sb.AppendLine("code{background:#141e2b;padding:2px 6px;border-radius:3px;font-family:Cascadia Code,Consolas,monospace;font-size:12px}");
-        sb.AppendLine(".card{background:#141e2b;border:1px solid #202d3c;border-radius:8px;padding:16px;margin-top:12px}");
+        sb.AppendLine(":root{color-scheme:dark light;--bg:#0d0f13;--surface:#14181e;--inset:#101318;--border:#2a3038;--fg:#f6f9ff;--secondary:#d5deeb;--muted:#aab6c8;--dim:#8694a8;--accent:#7ab8ff;--ok:#7ad7ae;--warn:#e4bd73;--err:#f0a1a1;--shadow:rgba(0,0,0,.18)}");
+        sb.AppendLine("@media (prefers-color-scheme:light){:root{--bg:#f7fafe;--surface:#fff;--inset:#f2f5fa;--border:#d5dce6;--fg:#0b1220;--secondary:#1e2a3b;--muted:#4a5668;--dim:#6b7788;--accent:#2563eb;--ok:#047857;--warn:#b45309;--err:#b91c1c;--shadow:rgba(82,96,112,.12)}}");
+        sb.AppendLine("@media (prefers-contrast:more){:root{--bg:#000;--surface:#050505;--inset:#000;--border:#fff;--fg:#fff;--secondary:#f2f2f2;--muted:#e0e0e0;--dim:#cfcfcf;--accent:#66d9ff;--ok:#6dffb1;--warn:#ffe066;--err:#ff8a8a;--shadow:transparent}}");
+        sb.AppendLine("*{box-sizing:border-box}html{background:var(--bg)}body{font:13px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:var(--secondary);background:var(--bg);margin:0 auto;padding:22px;max-width:1040px}");
+        sb.AppendLine("h1{color:var(--fg);margin:0 0 6px;font-size:22px;line-height:1.18;font-weight:650}h2{color:var(--fg);margin:24px 0 8px;font-size:14px;line-height:1.25;font-weight:650;border-bottom:1px solid var(--border);padding-bottom:7px}");
+        sb.AppendLine(".meta{color:var(--dim);font-size:12px;margin-bottom:18px}.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 14px 34px var(--shadow);padding:14px;margin-top:10px}");
+        sb.AppendLine("table{border-collapse:collapse;width:100%;margin-top:2px}td,th{text-align:left;padding:7px 9px;border-bottom:1px solid var(--border);vertical-align:top}tr:last-child td{border-bottom:0}th{color:var(--muted);font-weight:650;font-size:11px;text-transform:uppercase;letter-spacing:.04em}");
+        sb.AppendLine(".ok{color:var(--ok)}.warn{color:var(--warn)}.err{color:var(--err)}.muted{color:var(--dim)}strong{color:var(--fg)}code{color:var(--fg);background:var(--inset);border:1px solid var(--border);padding:2px 5px;border-radius:4px;font-family:Cascadia Code,Consolas,monospace;font-size:12px}");
         sb.AppendLine("</style></head><body>");
         sb.AppendLine($"<h1>NVMe Driver Patcher — diagnostics snapshot</h1>");
         sb.AppendLine($"<div class=\"meta\">Generated {DateTime.UtcNow:u} · app v{AppConfig.AppVersion} · profile {config.PatchProfile}</div>");
@@ -89,7 +89,32 @@ public static class HtmlDashboardService
     {
         var dir = string.IsNullOrWhiteSpace(config.WorkingDir) ? AppConfig.GetWorkingDir() : config.WorkingDir;
         var path = customPath ?? Path.Combine(dir, $"nvme_dashboard_{DateTime.UtcNow:yyyyMMddHHmmss}.html");
-        File.WriteAllText(path, html, new UTF8Encoding(false));
+
+        // Ensure the output directory exists (custom paths may point at a folder that hasn't
+        // been created yet). Then write atomically via a `.tmp` sibling so a crash or power
+        // loss between bytes 0 and N never leaves a half-rendered dashboard for the user to
+        // open. Same pattern as ConfigService.Save / DiagnosticsService.ExportBundle.
+        var outDir = Path.GetDirectoryName(Path.GetFullPath(path));
+        if (!string.IsNullOrEmpty(outDir))
+            Directory.CreateDirectory(outDir);
+
+        var tempPath = path + ".tmp";
+        try
+        {
+            using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
+            {
+                sw.Write(html);
+                sw.Flush();
+                fs.Flush(flushToDisk: true);
+            }
+            File.Move(tempPath, path, overwrite: true);
+        }
+        catch
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            throw;
+        }
         return path;
     }
 

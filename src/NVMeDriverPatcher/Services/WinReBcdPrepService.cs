@@ -20,6 +20,10 @@ public class WinReProvisionInfo
 // because it requires Dism + an admin-mounted boot.wim and has a much larger blast radius.
 public static class WinReBcdPrepService
 {
+    private static readonly Regex RxWinReEnabled  = new(@"Windows\s+RE\s+status\s*:\s*Enabled",  RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex RxWinReLocation = new(@"Windows\s+RE\s+location\s*:\s*(.+)",   RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxBcdIdentifier = new(@"(?:Boot\s+Configuration\s+Data\s+\(BCD\)\s+identifier|BCD\s+identifier)\s*:\s*(\{[0-9a-fA-F-]+\})", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxOsDevice      = new(@"osdevice\s+ramdisk=\[(?<vol>[^\]]+)\](?<path>\\[^\s,]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     public static WinReProvisionInfo Probe()
     {
         var info = new WinReProvisionInfo();
@@ -28,16 +32,10 @@ public static class WinReBcdPrepService
             var reagentc = RunCapture("reagentc.exe", new[] { "/info" }, 20);
             if (!string.IsNullOrWhiteSpace(reagentc.Stdout))
             {
-                info.WinReEnabled = Regex.IsMatch(reagentc.Stdout,
-                    @"Windows\s+RE\s+status\s*:\s*Enabled",
-                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-                var locMatch = Regex.Match(reagentc.Stdout,
-                    @"Windows\s+RE\s+location\s*:\s*(.+)",
-                    RegexOptions.IgnoreCase);
+                info.WinReEnabled = RxWinReEnabled.IsMatch(reagentc.Stdout);
+                var locMatch = RxWinReLocation.Match(reagentc.Stdout);
                 if (locMatch.Success) info.WinReLocation = locMatch.Groups[1].Value.Trim();
-                var bcdMatch = Regex.Match(reagentc.Stdout,
-                    @"(?:Boot\s+Configuration\s+Data\s+\(BCD\)\s+identifier|BCD\s+identifier)\s*:\s*(\{[0-9a-fA-F-]+\})",
-                    RegexOptions.IgnoreCase);
+                var bcdMatch = RxBcdIdentifier.Match(reagentc.Stdout);
                 if (bcdMatch.Success) info.DeviceGuid = bcdMatch.Groups[1].Value;
             }
             else
@@ -48,9 +46,7 @@ public static class WinReBcdPrepService
             if (!string.IsNullOrEmpty(info.DeviceGuid))
             {
                 var bcd = RunCapture("bcdedit.exe", new[] { "/enum", info.DeviceGuid, "/v" }, 20);
-                var imgMatch = Regex.Match(bcd.Stdout,
-                    @"osdevice\s+ramdisk=\[(?<vol>[^\]]+)\](?<path>\\[^\s,]+)",
-                    RegexOptions.IgnoreCase);
+                var imgMatch = RxOsDevice.Match(bcd.Stdout);
                 if (imgMatch.Success)
                 {
                     info.ImagePath = imgMatch.Groups["vol"].Value + imgMatch.Groups["path"].Value;

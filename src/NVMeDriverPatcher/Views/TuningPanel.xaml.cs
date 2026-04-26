@@ -296,9 +296,9 @@ public partial class TuningPanel : UserControl
 
     private void SetButtonState(System.Windows.Controls.Button button, bool isActive)
     {
-        button.Background = ResolveBrush(isActive ? "AccentBg" : "BgMedium", isActive ? "#FF102845" : "#FF131C29");
-        button.BorderBrush = ResolveBrush(isActive ? "Accent" : "Border", isActive ? "#FF69AEFF" : "#FF213146");
-        button.Foreground = ResolveBrush(isActive ? "Accent" : "TextSecondary", isActive ? "#FF69AEFF" : "#FFD9E4F4");
+        button.Background = ResolveBrush(isActive ? "AccentBg" : "BgMedium");
+        button.BorderBrush = ResolveBrush(isActive ? "Accent" : "Border");
+        button.Foreground = ResolveBrush(isActive ? "Accent" : "TextSecondary");
     }
 
     private void SetStatus(string message, string tone)
@@ -307,35 +307,35 @@ public partial class TuningPanel : UserControl
 
         TuningStatus.Foreground = tone switch
         {
-            "success" => ResolveBrush("Green", "#FF50DD9D"),
-            "warning" => ResolveBrush("Yellow", "#FFFFC86C"),
-            "danger" => ResolveBrush("Red", "#FFFF8585"),
-            "info" => ResolveBrush("Accent", "#FF69AEFF"),
-            _ => ResolveBrush("TextDim", "#FF8393AD")
+            "success" => ResolveBrush("Green"),
+            "warning" => ResolveBrush("Yellow"),
+            "danger" => ResolveBrush("Red"),
+            "info" => ResolveBrush("Accent"),
+            _ => ResolveBrush("TextDim")
         };
 
         TuningStatusCard.Background = tone switch
         {
-            "success" => ResolveBrush("GreenBg", "#FF13392C"),
-            "warning" => ResolveBrush("YellowBg", "#FF3A2A11"),
-            "danger" => ResolveBrush("RedBg", "#FF3A1A1D"),
-            "info" => ResolveBrush("AccentBg", "#FF102845"),
-            _ => ResolveBrush("SurfaceInset", "#FF09111B")
+            "success" => ResolveBrush("GreenBg"),
+            "warning" => ResolveBrush("YellowBg"),
+            "danger" => ResolveBrush("RedBg"),
+            "info" => ResolveBrush("AccentBg"),
+            _ => ResolveBrush("SurfaceInset")
         };
 
         TuningStatusCard.BorderBrush = tone switch
         {
-            "success" => ResolveBrush("Green", "#FF50DD9D"),
-            "warning" => ResolveBrush("Yellow", "#FFFFC86C"),
-            "danger" => ResolveBrush("Red", "#FFFF8585"),
-            "info" => ResolveBrush("Accent", "#FF69AEFF"),
-            _ => ResolveBrush("Border", "#FF213146")
+            "success" => ResolveBrush("Green"),
+            "warning" => ResolveBrush("Yellow"),
+            "danger" => ResolveBrush("Red"),
+            "info" => ResolveBrush("Accent"),
+            _ => ResolveBrush("Border")
         };
     }
 
-    private Brush ResolveBrush(string resourceKey, string fallbackHex)
+    private Brush ResolveBrush(string resourceKey)
     {
-        return BrushResources.Resolve(this, resourceKey, fallbackHex);
+        return BrushResources.Resolve(this, resourceKey);
     }
 
     private bool ConfirmTuningAction(string title, string message)

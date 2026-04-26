@@ -24,7 +24,7 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
+    <ApplicationIcon>..\NVMeDriverPatcher\nvme.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

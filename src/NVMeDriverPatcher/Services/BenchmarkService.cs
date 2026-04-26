@@ -31,6 +31,12 @@ public static class BenchmarkService
     private const long MinExeBytes = 32 * 1024;
     private static readonly SemaphoreSlim _installLock = new(1, 1);
 
+    private static readonly Regex RxDiskSpdTotalLine = new(@"^\s*total:",          RegexOptions.Compiled);
+    private static readonly Regex RxCommaGroupedInt  = new(@"^[+-]?\d{1,3}(,\d{3})+$", RegexOptions.Compiled);
+    private static readonly Regex RxDotGroupedInt    = new(@"^[+-]?\d{1,3}(\.\d{3})+$", RegexOptions.Compiled);
+    // Strips any character that cannot be part of a numeric token (digits, decimal separators, sign).
+    private static readonly Regex RxNumericChars     = new(@"[^\d.,+-]",            RegexOptions.Compiled);
+
     public static async Task<string?> InstallDiskSpdAsync(
         string workingDir,
         Action<string>? log = null,
@@ -75,17 +81,34 @@ public static class BenchmarkService
             cancellationToken.ThrowIfCancellationRequested();
             Directory.CreateDirectory(diskSpdDir);
 
+            // AllowAutoRedirect=false is required by VerifiedDownloader — see the comment on
+            // AutoUpdaterService.CreateSharedClient for why (per-hop allowlist enforcement).
             using var handler = new HttpClientHandler { AllowAutoRedirect = false };
             using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(90) };
             client.DefaultRequestHeaders.UserAgent.ParseAdd($"NVMeDriverPatcher/{Models.AppConfig.AppVersion}");
-            await DownloadTrustedAssetAsync(client, new Uri(DiskSpdArchiveUrl), tempZip, cancellationToken)
-                .ConfigureAwait(false);
 
-            var actualSize = new FileInfo(tempZip).Length;
-            if (actualSize < MinArchiveBytes || actualSize > MaxArchiveBytes)
+            // DiskSpd is a Microsoft-published archive from github.com/microsoft/diskspd that
+            // doesn't ship .sha256 sidecars and isn't Authenticode-signed as a zip — hence
+            // RequireIntegrity=false (the archive's own zip-slip defense + size caps
+            // substitute). If Microsoft later publishes sidecars the check activates
+            // automatically. Size caps come from the service-local MinArchiveBytes /
+            // MaxArchiveBytes constants; VerifiedDownloader rejects oversize before we
+            // even open the archive.
+            var downloadPolicy = new VerifiedDownloader.DownloadPolicy
             {
-                throw new InvalidOperationException(
-                    $"Downloaded DiskSpd archive size {actualSize} bytes is outside the expected range ({MinArchiveBytes}..{MaxArchiveBytes}).");
+                AllowedHosts = AllowedAssetHosts,
+                MinBytes = MinArchiveBytes,
+                MaxBytes = MaxArchiveBytes,
+                MaxRedirects = 6,
+                RequireIntegrity = false,
+                AllowAuthenticodeFallback = false
+            };
+            var download = await VerifiedDownloader
+                .DownloadAsync(client, new Uri(DiskSpdArchiveUrl), tempZip, downloadPolicy, cancellationToken)
+                .ConfigureAwait(false);
+            if (!download.Success)
+            {
+                throw new InvalidOperationException(download.Summary);
             }
 
             Directory.CreateDirectory(stagingDir);
@@ -148,76 +171,12 @@ public static class BenchmarkService
         return null;
     }
 
+    // Exposed for the trust-boundary unit tests. Download logic itself now lives in
+    // VerifiedDownloader; this helper only validates a URI against the DiskSpd asset host
+    // allowlist (used indirectly via the policy passed to VerifiedDownloader).
     internal static bool IsTrustedAssetUri(Uri uri) =>
         uri.Scheme == Uri.UriSchemeHttps &&
         AllowedAssetHosts.Any(h => uri.Host.Equals(h, StringComparison.OrdinalIgnoreCase));
-
-    private static async Task DownloadTrustedAssetAsync(
-        HttpClient client,
-        Uri initialUri,
-        string destination,
-        CancellationToken cancellationToken)
-    {
-        var current = initialUri;
-        for (int redirectCount = 0; redirectCount < 6; redirectCount++)
-        {
-            if (!IsTrustedAssetUri(current))
-                throw new InvalidOperationException($"Refusing untrusted DiskSpd download URL: {current}");
-
-            using var request = new HttpRequestMessage(HttpMethod.Get, current);
-            using var response = await client
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (IsRedirect(response.StatusCode))
-            {
-                var location = response.Headers.Location
-                    ?? throw new InvalidOperationException("DiskSpd download redirect did not include a Location header.");
-                var next = location.IsAbsoluteUri ? location : new Uri(current, location);
-                if (!IsTrustedAssetUri(next))
-                    throw new InvalidOperationException($"Refusing DiskSpd redirect to untrusted host: {next.Host}");
-
-                current = next;
-                continue;
-            }
-
-            response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentLength is { } expectedSize &&
-                (expectedSize < MinArchiveBytes || expectedSize > MaxArchiveBytes))
-            {
-                throw new InvalidOperationException(
-                    $"DiskSpd archive size {expectedSize} bytes is outside the expected range ({MinArchiveBytes}..{MaxArchiveBytes}).");
-            }
-
-            await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            await using var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None);
-            var buffer = new byte[81920];
-            long total = 0;
-            while (true)
-            {
-                var read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-                if (read == 0) break;
-
-                total += read;
-                if (total > MaxArchiveBytes)
-                    throw new InvalidOperationException($"DiskSpd archive exceeded maximum size ({MaxArchiveBytes} bytes).");
-
-                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-            }
-
-            if (total < MinArchiveBytes)
-                throw new InvalidOperationException($"DiskSpd archive was too small ({total} bytes).");
-            return;
-        }
-
-        throw new InvalidOperationException("DiskSpd download followed too many redirects.");
-    }
-
-    private static bool IsRedirect(System.Net.HttpStatusCode statusCode)
-    {
-        var code = (int)statusCode;
-        return code is >= 300 and <= 399;
-    }
 
     public static async Task<BenchmarkResult?> RunBenchmarkAsync(
         string workingDir,
@@ -431,7 +390,7 @@ public static class BenchmarkService
         {
             foreach (var line in rawOutput.Split('\n'))
             {
-                if (!Regex.IsMatch(line, @"^\s*total:")) continue;
+                if (!RxDiskSpdTotalLine.IsMatch(line)) continue;
 
                 var parts = line.Split('|').Select(p => p.Trim()).ToArray();
                 if (parts.Length < 4) continue;
@@ -594,7 +553,7 @@ public static class BenchmarkService
         value = 0;
         if (index < 0 || index >= parts.Length) return false;
 
-        var numeric = Regex.Replace(parts[index], @"[^\d.,+-]", "");
+        var numeric = RxNumericChars.Replace(parts[index], "");
         if (string.IsNullOrWhiteSpace(numeric)) return false;
 
         var normalized = NormalizeNumericToken(numeric, kind);
@@ -631,11 +590,6 @@ public static class BenchmarkService
         return raw;
     }
 
-    private static bool LooksLikeGroupedInteger(string raw, char separator)
-    {
-        var pattern = separator == ','
-            ? @"^[+-]?\d{1,3}(,\d{3})+$"
-            : @"^[+-]?\d{1,3}(\.\d{3})+$";
-        return Regex.IsMatch(raw, pattern);
-    }
+    private static bool LooksLikeGroupedInteger(string raw, char separator) =>
+        separator == ',' ? RxCommaGroupedInt.IsMatch(raw) : RxDotGroupedInt.IsMatch(raw);
 }

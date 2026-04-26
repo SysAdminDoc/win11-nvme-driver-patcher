@@ -56,7 +56,19 @@ public static class SchedulerService
             psi.ArgumentList.Add(taskName);
             using var proc = Process.Start(psi);
             if (proc is null) return false;
-            proc.WaitForExit(10_000);
+
+            // Drain stdout/stderr asynchronously before WaitForExit. schtasks /Query emits a
+            // formatted task summary that easily fills the pipe buffer when the task name
+            // matches a localized Windows entry — reading concurrently avoids the deadlock.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            if (!proc.WaitForExit(10_000))
+            {
+                try { proc.Kill(true); } catch { }
+                return false;
+            }
+            try { stdoutTask.GetAwaiter().GetResult(); } catch { }
+            try { stderrTask.GetAwaiter().GetResult(); } catch { }
             return proc.ExitCode == 0;
         }
         catch { return false; }

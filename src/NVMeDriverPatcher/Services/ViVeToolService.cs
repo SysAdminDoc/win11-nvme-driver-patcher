@@ -74,15 +74,22 @@ public static class ViVeToolService
         public string? ExePath { get; set; }
         public string? Version { get; set; }
         public List<string> AppliedIDs { get; set; } = [];
+        /// <summary>
+        /// Level of content-integrity verification the staged ViVeTool archive passed.
+        /// "sha256" means an upstream .sha256 sidecar was published and matched;
+        /// "weak" means size + host allowlist + API size cross-check only (upstream has no
+        /// hashes). Operators auditing an unattended install can gate on this value.
+        /// </summary>
+        public string IntegritySignal { get; set; } = "weak";
     }
 
-    public static async Task<ViVeToolResult> EnsureInstalledAsync(string workingDir, Action<string>? log = null)
+    public static async Task<ViVeToolResult> EnsureInstalledAsync(string workingDir, Action<string>? log = null, CancellationToken ct = default)
     {
         // Guard against concurrent invocations (e.g. user double-click on the fallback badge).
         // With the 2-minute timeout, even if the current holder is stuck on a slow download,
         // a second caller eventually gets a clean "something else is installing" error instead
         // of racing into the same tools folder.
-        if (!await _installLock.WaitAsync(TimeSpan.FromMinutes(2)).ConfigureAwait(false))
+        if (!await _installLock.WaitAsync(TimeSpan.FromMinutes(2), ct).ConfigureAwait(false))
         {
             return new ViVeToolResult
             {
@@ -92,7 +99,7 @@ public static class ViVeToolService
         }
         try
         {
-            return await EnsureInstalledInnerAsync(workingDir, log).ConfigureAwait(false);
+            return await EnsureInstalledInnerAsync(workingDir, log, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -100,7 +107,7 @@ public static class ViVeToolService
         }
     }
 
-    private static async Task<ViVeToolResult> EnsureInstalledInnerAsync(string workingDir, Action<string>? log)
+    private static async Task<ViVeToolResult> EnsureInstalledInnerAsync(string workingDir, Action<string>? log, CancellationToken ct)
     {
         var result = new ViVeToolResult { ExePath = CachedExePath(workingDir) };
 
@@ -133,7 +140,7 @@ public static class ViVeToolService
         try
         {
             log?.Invoke($"Querying GitHub for latest ViVeTool release ({ViVeToolRepo})...");
-            var json = await client.GetStringAsync(ViVeToolLatestApi).ConfigureAwait(false);
+            var json = await client.GetStringAsync(ViVeToolLatestApi, ct).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             if (root.TryGetProperty("tag_name", out var tagProp))
@@ -194,15 +201,45 @@ public static class ViVeToolService
         try
         {
             log?.Invoke($"Downloading ViVeTool {(tagName ?? "latest")} from {assetUri}");
-            await DownloadTrustedAssetAsync(client, assetUri, tempZip).ConfigureAwait(false);
 
-            // Verify the downloaded file size matches what the API told us, and fits our bounds.
-            var actualSize = new FileInfo(tempZip).Length;
-            if (actualSize < MinAssetBytes || actualSize > MaxAssetBytes)
+            // Delegate to VerifiedDownloader so the redirect-walking, host-allowlist re-check,
+            // size-cap enforcement, `.part` staging, SHA-256 sidecar verification, and atomic
+            // promote all live in one place. Upstream ViVeTool doesn't publish sidecars today,
+            // and we don't sign its binary — RequireIntegrity is false (the archive's own
+            // zip-slip defense + size cap substitute), but if upstream ever adds a .sha256
+            // sidecar it's verified automatically. AllowAuthenticodeFallback is false: the
+            // downloaded zip isn't Authenticode-signed, so falling back to signtool would only
+            // produce noise.
+            var downloadPolicy = new VerifiedDownloader.DownloadPolicy
             {
-                result.Message = $"Downloaded file size {actualSize} bytes is outside expected range ({MinAssetBytes}..{MaxAssetBytes}); refusing extraction.";
+                AllowedHosts = AllowedAssetHosts,
+                MinBytes = MinAssetBytes,
+                MaxBytes = MaxAssetBytes,
+                MaxRedirects = 6,
+                RequireIntegrity = false,
+                AllowAuthenticodeFallback = false
+            };
+            var download = await VerifiedDownloader
+                .DownloadAsync(client, assetUri, tempZip, downloadPolicy, ct)
+                .ConfigureAwait(false);
+            if (!download.Success)
+            {
+                result.Message = download.Summary;
                 return result;
             }
+
+            result.IntegritySignal = download.Signal == VerifiedDownloader.IntegritySignal.Sha256Sidecar
+                ? "sha256"
+                : "weak";
+            log?.Invoke(download.Signal == VerifiedDownloader.IntegritySignal.Sha256Sidecar
+                ? "ViVeTool SHA-256 sidecar verified."
+                : "ViVeTool release has no .sha256 sidecar — relying on size + host allowlist checks.");
+
+            // Cross-check the downloaded size against what GitHub's API advertised. The
+            // size-range check already ran inside VerifiedDownloader, but the API-reported
+            // size is an independent signal: if the CDN served a different payload than the
+            // release record claims, we want to notice before extracting.
+            var actualSize = new FileInfo(tempZip).Length;
             if (expectedSize is { } esz && actualSize != esz)
             {
                 result.Message = $"Downloaded file size {actualSize} doesn't match the API's reported {esz}; refusing extraction.";
@@ -304,77 +341,22 @@ public static class ViVeToolService
         }
     }
 
-    private static async Task DownloadTrustedAssetAsync(HttpClient client, Uri initialUri, string destination)
-    {
-        var current = initialUri;
-        for (int redirectCount = 0; redirectCount < 6; redirectCount++)
-        {
-            if (!IsTrustedAssetUri(current))
-                throw new InvalidOperationException($"Refusing untrusted download URL: {current}");
-
-            using var request = new HttpRequestMessage(HttpMethod.Get, current);
-            using var response = await client
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
-                .ConfigureAwait(false);
-
-            if (IsRedirect(response.StatusCode))
-            {
-                var location = response.Headers.Location
-                    ?? throw new InvalidOperationException("Download redirect did not include a Location header.");
-                var next = location.IsAbsoluteUri ? location : new Uri(current, location);
-                if (!IsTrustedAssetUri(next))
-                    throw new InvalidOperationException($"Refusing redirect to untrusted host: {next.Host}");
-
-                current = next;
-                continue;
-            }
-
-            response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentLength is { } length &&
-                (length < MinAssetBytes || length > MaxAssetBytes))
-            {
-                throw new InvalidOperationException(
-                    $"Download Content-Length {length} bytes is outside expected range ({MinAssetBytes}..{MaxAssetBytes}).");
-            }
-
-            await using var input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-            await using var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None);
-            var buffer = new byte[81920];
-            long total = 0;
-            while (true)
-            {
-                var read = await input.ReadAsync(buffer).ConfigureAwait(false);
-                if (read == 0) break;
-                total += read;
-                if (total > MaxAssetBytes)
-                    throw new InvalidOperationException($"Download exceeded maximum size ({MaxAssetBytes} bytes).");
-                await output.WriteAsync(buffer.AsMemory(0, read)).ConfigureAwait(false);
-            }
-
-            if (total < MinAssetBytes)
-                throw new InvalidOperationException($"Download was too small ({total} bytes).");
-            return;
-        }
-
-        throw new InvalidOperationException("Download followed too many redirects.");
-    }
-
-    private static bool IsRedirect(System.Net.HttpStatusCode statusCode)
-    {
-        var code = (int)statusCode;
-        return code is >= 300 and <= 399;
-    }
+    // The download + redirect + size-cap loop previously lived here; every call site now
+    // delegates to VerifiedDownloader.DownloadAsync. Keeping IsTrustedAssetUri because it's
+    // also used by the JSON-asset-URL validation at EnsureInstalledInnerAsync line above, and
+    // is covered by its own unit tests.
 
     // Runs ViVeTool.exe /enable for each supplied feature ID. Returns on first failure —
     // caller surfaces the concatenated output. We deliberately run one ID at a time so a
     // partial failure is obvious in the log, even if ViVeTool supports batching.
     public static async Task<ViVeToolResult> ApplyFallbackAsync(
         string workingDir,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        CancellationToken ct = default)
     {
         var result = new ViVeToolResult();
 
-        var install = await EnsureInstalledAsync(workingDir, log).ConfigureAwait(false);
+        var install = await EnsureInstalledAsync(workingDir, log, ct).ConfigureAwait(false);
         if (!install.Success)
         {
             result.Message = install.Message;
@@ -382,6 +364,7 @@ public static class ViVeToolService
         }
         result.ExePath = install.ExePath;
         result.Version = install.Version;
+        result.IntegritySignal = install.IntegritySignal;
 
         foreach (var id in FallbackFeatureIDs)
         {
@@ -434,12 +417,22 @@ public static class ViVeToolService
             }
             var stdout = proc.StandardOutput.ReadToEndAsync();
             var stderr = proc.StandardError.ReadToEndAsync();
-            if (!await Task.Run(() => proc.WaitForExit(30000)).ConfigureAwait(false))
+
+            // WaitForExitAsync with a linked timeout CTS is the clean replacement for the
+            // old `await Task.Run(() => proc.WaitForExit(30000))` pattern, which blocked a
+            // threadpool thread just to shim a synchronous wait onto the async path.
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            try
+            {
+                await proc.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
             {
                 try { proc.Kill(true); } catch { }
                 log?.Invoke($"[ERROR] ViVeTool.exe {argsDisplay} timed out after 30s");
                 return false;
             }
+
             var outText = (await stdout.ConfigureAwait(false))?.Trim();
             var errText = (await stderr.ConfigureAwait(false))?.Trim();
             if (!string.IsNullOrWhiteSpace(outText)) log?.Invoke($"  vivetool: {outText}");

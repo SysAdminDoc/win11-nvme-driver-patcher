@@ -17,6 +17,7 @@ public static class ConfigService
             // Persist enums like PatchProfile as "Safe"/"Full" strings — config.json is a file
             // sysadmins open by hand, and numeric enum values would be opaque.
             new LenientPatchProfileJsonConverter(),
+            new LenientThemeModeJsonConverter(),
             new JsonStringEnumConverter()
         }
     };
@@ -45,6 +46,9 @@ public static class ConfigService
             config.RestartDelay = saved.RestartDelay;       // setter clamps 0..3600
             config.IncludeServerKey = saved.IncludeServerKey;
             config.SkipWarnings = saved.SkipWarnings;
+            config.ThemeMode = Enum.IsDefined(typeof(AppThemeMode), saved.ThemeMode)
+                ? saved.ThemeMode
+                : AppThemeMode.System;
             // Unknown or out-of-range enum -> keep the default (Safe). Same defensive
             // stance we take for RestartDelay via the clamp setter.
             config.PatchProfile = Enum.IsDefined(typeof(PatchProfile), saved.PatchProfile)
@@ -127,49 +131,90 @@ public static class ConfigService
         if (string.IsNullOrEmpty(config.ConfigFile))
             return;
 
+        var tempFile = config.ConfigFile + ".tmp";
+        Exception? lastException = null;
+
+        // Retry up to 5 times with a short backoff. The common transient failure is an AV
+        // scanner holding an exclusive handle on the target during File.Move — that usually
+        // clears within a few hundred milliseconds. A persistent IOException is a real
+        // problem worth logging, not silently swallowing.
+        for (int attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                // Make sure the working folder still exists — the user could have deleted it.
+                var dir = Path.GetDirectoryName(config.ConfigFile);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                var toSave = new
+                {
+                    config.AutoSaveLog,
+                    config.EnableToasts,
+                    config.WriteEventLog,
+                    config.RestartDelay,
+                    config.IncludeServerKey,
+                    config.SkipWarnings,
+                    config.ThemeMode,
+                    config.PatchProfile,
+                    config.ConfigVersion,
+                    config.LastRecoveryKitPath,
+                    config.LastDiagnosticsPath,
+                    config.LastSupportBundlePath,
+                    config.LastVerificationScriptPath,
+                    config.PendingVerificationSince,
+                    config.PendingVerificationProfile,
+                    config.LastVerifiedProfile,
+                    config.LastVerificationResult
+                };
+                var json = JsonSerializer.Serialize(toSave, JsonOptions);
+
+                // Atomic write: write+flush to a temp file, then rename. The Flush(true) is
+                // what makes this crash-safe — without it, File.WriteAllText returns before
+                // the data hits the disk and a hard reset can leave a zero-byte config behind.
+                using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (var sw = new StreamWriter(fs, new System.Text.UTF8Encoding(false)))
+                {
+                    sw.Write(json);
+                    sw.Flush();
+                    fs.Flush(flushToDisk: true);
+                }
+                File.Move(tempFile, config.ConfigFile, overwrite: true);
+                return;
+            }
+            catch (IOException ex)
+            {
+                lastException = ex;
+                // Antivirus / file-explorer locks are transient — brief backoff and retry.
+                try { System.Threading.Thread.Sleep(100); } catch { }
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                lastException = ex;
+                try { System.Threading.Thread.Sleep(100); } catch { }
+            }
+            catch (Exception ex)
+            {
+                // Non-IO failures (serialization, invalid config) won't improve with retry.
+                lastException = ex;
+                break;
+            }
+        }
+
+        // Clean up any stale temp file so the workspace doesn't accumulate .tmp files.
+        try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+
+        // Surface the failure to the Application event log so users / support can see that
+        // a save actually failed instead of wondering why their settings disappeared. Guarded
+        // so a misconfigured event source can't cascade into an exception here.
         try
         {
-            // Make sure the working folder still exists — the user could have deleted it.
-            var dir = Path.GetDirectoryName(config.ConfigFile);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var toSave = new
-            {
-                config.AutoSaveLog,
-                config.EnableToasts,
-                config.WriteEventLog,
-                config.RestartDelay,
-                config.IncludeServerKey,
-                config.SkipWarnings,
-                config.PatchProfile,
-                config.ConfigVersion,
-                config.LastRecoveryKitPath,
-                config.LastDiagnosticsPath,
-                config.LastSupportBundlePath,
-                config.LastVerificationScriptPath,
-                config.PendingVerificationSince,
-                config.PendingVerificationProfile,
-                config.LastVerifiedProfile,
-                config.LastVerificationResult,
-                LastRun = DateTime.Now.ToString("o")
-            };
-            var json = JsonSerializer.Serialize(toSave, JsonOptions);
-
-            // Atomic write: write+flush to a temp file, then rename. The Flush(true) is what
-            // makes this crash-safe — without it, File.WriteAllText returns before the data
-            // hits the disk and a hard reset can leave a zero-byte config behind.
-            var tempFile = config.ConfigFile + ".tmp";
-            using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (var sw = new StreamWriter(fs, new System.Text.UTF8Encoding(false)))
-            {
-                sw.Write(json);
-                sw.Flush();
-                fs.Flush(flushToDisk: true);
-            }
-            File.Move(tempFile, config.ConfigFile, overwrite: true);
+            EventLogService.Write(
+                $"Failed to save config.json after 5 attempts: {lastException?.GetType().Name}: {lastException?.Message}",
+                System.Diagnostics.EventLogEntryType.Warning,
+                3010);
         }
-        catch { /* Config save best-effort */ }
+        catch { }
     }
 
     internal sealed class LenientPatchProfileJsonConverter : JsonConverter<PatchProfile>
@@ -210,6 +255,74 @@ public static class ConfigService
             writer.WriteStringValue(Enum.IsDefined(typeof(PatchProfile), value)
                 ? value.ToString()
                 : PatchProfile.Safe.ToString());
+        }
+    }
+
+    internal sealed class LenientThemeModeJsonConverter : JsonConverter<AppThemeMode>
+    {
+        public override AppThemeMode Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.String)
+            {
+                var text = reader.GetString();
+                if (TryParseThemeMode(text, out var parsed))
+                    return parsed;
+
+                if (Enum.TryParse<AppThemeMode>(text, ignoreCase: true, out parsed) &&
+                    Enum.IsDefined(typeof(AppThemeMode), parsed))
+                    return parsed;
+
+                if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numeric) &&
+                    Enum.IsDefined(typeof(AppThemeMode), numeric))
+                    return (AppThemeMode)numeric;
+
+                return AppThemeMode.System;
+            }
+
+            if (reader.TokenType == JsonTokenType.Number &&
+                reader.TryGetInt32(out var value) &&
+                Enum.IsDefined(typeof(AppThemeMode), value))
+                return (AppThemeMode)value;
+
+            try { reader.Skip(); } catch { }
+            return AppThemeMode.System;
+        }
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            AppThemeMode value,
+            JsonSerializerOptions options)
+        {
+            writer.WriteStringValue(Enum.IsDefined(typeof(AppThemeMode), value)
+                ? value.ToString()
+                : AppThemeMode.System.ToString());
+        }
+
+        private static bool TryParseThemeMode(string? text, out AppThemeMode mode)
+        {
+            mode = AppThemeMode.System;
+            if (string.IsNullOrWhiteSpace(text))
+                return false;
+
+            var normalized = string.Concat(text.Where(char.IsLetterOrDigit));
+            if (Enum.TryParse<AppThemeMode>(normalized, ignoreCase: true, out var parsed) &&
+                Enum.IsDefined(typeof(AppThemeMode), parsed))
+            {
+                mode = parsed;
+                return true;
+            }
+
+            if (normalized.Equals("AccessibleContrast", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Equals("Contrast", StringComparison.OrdinalIgnoreCase))
+            {
+                mode = AppThemeMode.HighContrast;
+                return true;
+            }
+
+            return false;
         }
     }
 }

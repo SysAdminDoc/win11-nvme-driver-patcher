@@ -32,7 +32,7 @@ public static class PhysicalDiskTelemetryService
         {
             using var search = new ManagementObjectSearcher(
                 @"root\Microsoft\Windows\Storage",
-                "SELECT FriendlyName, HealthStatus, OperationalStatus, Size, MediaType, BusType, SpindleSpeed, ObjectId FROM MSFT_PhysicalDisk");
+                "SELECT FriendlyName, HealthStatus, OperationalStatus, Size, MediaType, BusType, SpindleSpeed, ObjectId, DeviceId FROM MSFT_PhysicalDisk");
             using var collection = search.Get();
             foreach (var raw in collection)
             {
@@ -49,7 +49,15 @@ public static class PhysicalDiskTelemetryService
                     };
                     if (TryU64(mo["Size"], out var size)) t.Size = (long)size;
                     if (TryInt(mo["SpindleSpeed"], out var rpm)) t.SpindleSpeed = rpm;
-                    PopulateReliabilityCounters(mo["ObjectId"] as string, t);
+
+                    // v4.6: previously this passed ObjectId and the inner WHERE was `LIKE '%'`,
+                    // which matched every disk's reliability counter and broke `break`-at-first
+                    // semantics — every drive ended up reporting the SAME counters as the first
+                    // match in the collection. Scope by DeviceId now so each disk gets its own
+                    // wear/temperature/error counts.
+                    var deviceId = mo["DeviceId"]?.ToString();
+                    var objectId = mo["ObjectId"] as string;
+                    PopulateReliabilityCounters(deviceId, objectId, t);
                     results.Add(t);
                 }
             }
@@ -58,14 +66,22 @@ public static class PhysicalDiskTelemetryService
         return results;
     }
 
-    private static void PopulateReliabilityCounters(string? objectId, PhysicalDiskTelemetry t)
+    private static void PopulateReliabilityCounters(string? deviceId, string? objectId, PhysicalDiskTelemetry t)
     {
-        if (string.IsNullOrEmpty(objectId)) return;
+        // Prefer DeviceId because it's a stable, short token (typically "0", "1", …) that both
+        // MSFT_PhysicalDisk and MSFT_StorageReliabilityCounter share. Fall back to an ASSOCIATORS
+        // OF query when the disk doesn't expose a DeviceId (some virtual / spaces-backed disks
+        // report an empty DeviceId but still have a valid ObjectId).
+        if (string.IsNullOrWhiteSpace(deviceId) && string.IsNullOrWhiteSpace(objectId))
+            return;
+
         try
         {
-            using var search = new ManagementObjectSearcher(
-                @"root\Microsoft\Windows\Storage",
-                $"SELECT ReadErrorsUncorrected, WriteErrorsUncorrected, Temperature, Wear, PowerOnHours FROM MSFT_StorageReliabilityCounter WHERE DeviceId LIKE '%'");
+            string query = !string.IsNullOrWhiteSpace(deviceId)
+                ? $"SELECT ReadErrorsUncorrected, WriteErrorsUncorrected, Temperature, Wear, PowerOnHours FROM MSFT_StorageReliabilityCounter WHERE DeviceId='{EscapeWqlString(deviceId!)}'"
+                : $"ASSOCIATORS OF {{MSFT_PhysicalDisk.ObjectId='{EscapeWqlString(objectId!)}'}} WHERE ResultClass=MSFT_StorageReliabilityCounter";
+
+            using var search = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", query);
             using var collection = search.Get();
             foreach (var raw in collection)
             {
@@ -80,12 +96,25 @@ public static class PhysicalDiskTelemetryService
                         System.Globalization.NumberStyles.Any,
                         System.Globalization.CultureInfo.InvariantCulture, out var wear))
                         t.Wear = wear;
+                    // Associator / DeviceId-scoped queries should return exactly one row. Break
+                    // defensively in case a system has duplicates — we want deterministic output
+                    // rather than last-write-wins across rows.
                     break;
                 }
             }
         }
-        catch { }
+        catch
+        {
+            // Some disks (RAID-backed, virtual) simply don't have reliability counters. Leave
+            // the PhysicalDiskTelemetry's nullable fields as null so the UI renders "—".
+        }
     }
+
+    // WQL string-literal escaping: double the single quote, and escape backslashes so a path
+    // like `\\?\DEVICE` doesn't unintentionally bail out of the literal. The escape list is
+    // deliberately small because WQL has a much smaller syntax surface than SQL.
+    internal static string EscapeWqlString(string value) =>
+        value.Replace("\\", "\\\\").Replace("'", "\\'");
 
     internal static string HealthStatusName(object? raw) => raw is ushort u ? u switch
     {

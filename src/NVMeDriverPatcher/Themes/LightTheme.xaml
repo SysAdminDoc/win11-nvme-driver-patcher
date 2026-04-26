@@ -1,10 +1,10 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!--
-        Light theme companion to DarkTheme.xaml. Keys mirror the dark dictionary so a theme
-        swap is a one-line MergedDictionaries change. The GUI rule is "dark by default" —
-        light is an opt-in preference surfaced in Settings.
-    -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="DarkTheme.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- Light theme companion. Keys mirror DarkTheme.xaml for system-default startup and live toggles. -->
     <SolidColorBrush x:Key="BgDarkest" Color="#FFF4F6FA"/>
     <SolidColorBrush x:Key="BgDark" Color="#FFF9FBFE"/>
     <SolidColorBrush x:Key="BgMedium" Color="#FFFFFFFF"/>
@@ -21,6 +21,7 @@
     <SolidColorBrush x:Key="TextDimmer" Color="#FF8E99AA"/>
     <SolidColorBrush x:Key="Accent" Color="#FF2563EB"/>
     <SolidColorBrush x:Key="AccentHover" Color="#FF1D4ED8"/>
+    <SolidColorBrush x:Key="AccentForeground" Color="#FFFFFFFF"/>
     <SolidColorBrush x:Key="AccentBg" Color="#FFDBEAFE"/>
     <SolidColorBrush x:Key="AccentSoft" Color="#FFE0ECFE"/>
     <SolidColorBrush x:Key="Green" Color="#FF047857"/>
@@ -31,4 +32,15 @@
     <SolidColorBrush x:Key="RedBg" Color="#FFFEE2E2"/>
     <SolidColorBrush x:Key="Focus" Color="#FF2563EB"/>
     <SolidColorBrush x:Key="FocusGlow" Color="#332563EB"/>
+    <SolidColorBrush x:Key="WindowCanvasBrush" Color="#FFF7FAFE"/>
+    <SolidColorBrush x:Key="HeroSurfaceBrush" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="SurfaceCardBrush" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="InsetCardBrush" Color="#FFF2F5FA"/>
+    <SolidColorBrush x:Key="DisabledSurfaceBrush" Color="#FFE9EEF5"/>
+    <SolidColorBrush x:Key="OverlayScrimBrush" Color="#CCF7FAFE"/>
+    <SolidColorBrush x:Key="AccentLineBrush" Color="#FFBFD0E8"/>
+    <DropShadowEffect x:Key="WindowShadow" BlurRadius="24" ShadowDepth="0" Opacity="0.18" Color="#FF526070"/>
+    <DropShadowEffect x:Key="SurfaceShadow" BlurRadius="14" ShadowDepth="0" Opacity="0.08" Color="#FF526070"/>
+    <DropShadowEffect x:Key="ToolTipShadow" BlurRadius="8" ShadowDepth="1" Opacity="0.12" Direction="270" Color="#FF526070"/>
+    <DropShadowEffect x:Key="PopupShadow" BlurRadius="16" ShadowDepth="4" Opacity="0.18" Direction="270" Color="#FF526070"/>
 </ResourceDictionary>
