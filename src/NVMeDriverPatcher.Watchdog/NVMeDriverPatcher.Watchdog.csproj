@@ -14,9 +14,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>NVMeDriverPatcher.Watchdog</AssemblyName>
     <RootNamespace>NVMeDriverPatcher.Watchdog</RootNamespace>
-    <Version>4.6.0</Version>
-    <AssemblyVersion>4.6.0.0</AssemblyVersion>
-    <FileVersion>4.6.0.0</FileVersion>
+    <Version>4.7.0</Version>
+    <AssemblyVersion>4.7.0.0</AssemblyVersion>
+    <FileVersion>4.7.0.0</FileVersion>
     <Company>SysAdminDoc</Company>
     <Product>NVMe Driver Patcher Realtime Watchdog</Product>
     <Description>Windows Service that subscribes to System event log and feeds the watchdog state in real time.</Description>
