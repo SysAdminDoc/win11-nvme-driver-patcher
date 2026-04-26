@@ -16,6 +16,8 @@ public class BypassIoVolumeInfo
 // BypassIO — this lets the user see exactly which volumes lost it. Closes ROADMAP §2.5.
 public static class BypassIoInspectorService
 {
+    private static readonly Regex RxBypassEnabled = new(@"BypassIO\s*:?\s*Enabled", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxStorageStack  = new(@"Storage\s+stack\s*:?\s*(.+)",  RegexOptions.IgnoreCase | RegexOptions.Compiled);
     public static List<BypassIoVolumeInfo> Inspect()
     {
         var results = new List<BypassIoVolumeInfo>();
@@ -66,9 +68,9 @@ public static class BypassIoInspectorService
                 return info;
             }
             var combined = stdout;
-            info.Enabled = Regex.IsMatch(combined, @"BypassIO\s*:?\s*Enabled", RegexOptions.IgnoreCase);
+            info.Enabled = RxBypassEnabled.IsMatch(combined);
             info.Status = info.Enabled ? "Enabled" : "Disabled";
-            var stackMatch = Regex.Match(combined, @"Storage\s+stack\s*:?\s*(.+)", RegexOptions.IgnoreCase);
+            var stackMatch = RxStorageStack.Match(combined);
             if (stackMatch.Success) info.Stack = stackMatch.Groups[1].Value.Trim();
             info.Detail = combined.Length > 600 ? combined[..600] + "…" : combined.Trim();
             return info;

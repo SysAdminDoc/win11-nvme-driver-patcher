@@ -146,6 +146,14 @@ public static class EtwTraceService
         using var proc = Process.Start(psi) ?? throw new InvalidOperationException("wpr.exe did not start.");
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(5, timeoutSeconds)));
+
+        // Drain stdout/stderr BEFORE WaitForExitAsync. wpr -stop and wpr -start both emit
+        // progress text that can fill the ~4 KB pipe buffer on a long capture, at which
+        // point the child blocks on write and WaitForExitAsync hangs until the timeout.
+        // Reading concurrently keeps both pipes draining. Use the linked token so a cancel
+        // also tears down the reads.
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync(cts.Token);
+        var stderrTask = proc.StandardError.ReadToEndAsync(cts.Token);
         try
         {
             await proc.WaitForExitAsync(cts.Token);
@@ -153,12 +161,20 @@ public static class EtwTraceService
         catch
         {
             try { proc.Kill(entireProcessTree: true); } catch { }
+            // Let the reader tasks observe the canceled token so their resources are released
+            // rather than dangling. Swallow their exceptions — we're already unwinding.
+            try { await Task.WhenAll(stdoutTask, stderrTask); } catch { }
             throw;
         }
+
+        string stdout = string.Empty, stderr = string.Empty;
+        try { stdout = await stdoutTask; } catch { }
+        try { stderr = await stderrTask; } catch { }
+
         if (proc.ExitCode != 0)
         {
-            var stderr = await proc.StandardError.ReadToEndAsync(cancellationToken);
-            throw new InvalidOperationException($"wpr {string.Join(' ', args)} exit {proc.ExitCode}: {stderr.Trim()}");
+            var detail = string.IsNullOrWhiteSpace(stderr) ? stdout.Trim() : stderr.Trim();
+            throw new InvalidOperationException($"wpr {string.Join(' ', args)} exit {proc.ExitCode}: {detail}");
         }
     }
 }

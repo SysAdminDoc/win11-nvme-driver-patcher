@@ -107,15 +107,17 @@ public static class FirmwareCompatService
     /// </summary>
     public static FirmwareCompatFinding Lookup(FirmwareCompatDatabase db, string driveModel, string firmware)
     {
+        var normalizedDriveModel = driveModel ?? string.Empty;
+        var normalizedFirmware = firmware ?? string.Empty;
         var finding = new FirmwareCompatFinding
         {
-            DriveModel = driveModel ?? string.Empty,
-            Firmware = firmware ?? string.Empty,
+            DriveModel = normalizedDriveModel,
+            Firmware = normalizedFirmware,
             Level = FirmwareCompatLevel.Unknown,
             Note = string.Empty
         };
 
-        if (db?.Entries is null || db.Entries.Count == 0 || string.IsNullOrWhiteSpace(driveModel))
+        if (db?.Entries is null || db.Entries.Count == 0)
             return finding;
 
         // Prefer exact firmware match over wildcard. "Bad" beats "Caution" beats "Good" when
@@ -124,9 +126,9 @@ public static class FirmwareCompatService
         int bestScore = -1;
         foreach (var entry in db.Entries)
         {
-            if (!MatchesController(entry.Controller, driveModel)) continue;
-            if (!MatchesFirmware(entry.Firmware, firmware)) continue;
-            int score = ScoreEntry(entry, firmware);
+            if (!MatchesController(entry.Controller ?? string.Empty, normalizedDriveModel)) continue;
+            if (!MatchesFirmware(entry.Firmware ?? string.Empty, normalizedFirmware)) continue;
+            int score = ScoreEntry(entry, normalizedFirmware);
             if (score > bestScore)
             {
                 bestScore = score;

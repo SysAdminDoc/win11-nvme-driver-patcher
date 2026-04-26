@@ -120,12 +120,13 @@ public static class CompatTelemetryService
         foreach (var drive in preflight.CachedDrives ?? Enumerable.Empty<SystemDrive>())
         {
             if (!drive.IsNVMe) continue;
-            firmwareMap.TryGetValue(drive.Name, out var firmware);
+            var driveName = drive.Name ?? string.Empty;
+            firmwareMap.TryGetValue(driveName, out var firmware);
             report.Controllers.Add(new CompatController
             {
-                Model = drive.Name ?? string.Empty,
+                Model = driveName,
                 Firmware = firmware ?? string.Empty,
-                Migrated = migratedSet.Contains(drive.Name)
+                Migrated = migratedSet.Contains(driveName)
             });
         }
         return report;
