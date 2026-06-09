@@ -45,3 +45,11 @@ CLAUDE.md
 # Build artifacts (publish to GH releases instead)
 artifacts/v*/
 
+
+# Markdown files local-only (except README)
+*.md
+!README.md
+
+# Markdown files local-only (except README)
+*.md
+!README.md
