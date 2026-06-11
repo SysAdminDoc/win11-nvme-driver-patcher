@@ -27,6 +27,21 @@ public class FirmwareCompatEntry
 
     [JsonPropertyName("note")]
     public string Note { get; set; } = string.Empty;
+
+    // --- Lifecycle metadata (optional; older DB files omit them) ---
+
+    // Where the verdict came from: a thread/advisory URL or "telemetry".
+    [JsonPropertyName("sourceUrl")]
+    public string? SourceUrl { get; set; }
+
+    // "verified" (reproduced/vendor-confirmed) vs "community-reported" (forum threads).
+    [JsonPropertyName("confidence")]
+    public string? Confidence { get; set; }
+
+    // Last date a maintainer re-checked this entry against current reality (yyyy-MM-dd).
+    // External behavior shifts fast — a stale review date is itself a signal.
+    [JsonPropertyName("lastReviewed")]
+    public string? LastReviewed { get; set; }
 }
 
 public class CveAdvisory

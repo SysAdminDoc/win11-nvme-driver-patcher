@@ -1,79 +1,107 @@
 {
   "schemaVersion": 1,
-  "updated": "2026-04-19",
+  "updated": "2026-06-10",
   "note": "Curated from community BSOD threads and vendor forums. 'level' applies to Native NVMe (nvmedisk.sys) operation. Patterns: controller substring (case-insensitive), firmware exact (case-insensitive) or '*' wildcard. Prefix with '=' for exact controller match. Unknown entries are treated as 'proceed with caution' in the UI.",
   "entries": [
     {
       "controller": "Samsung SSD 990 PRO",
       "firmware": "0B2QJXD7",
       "level": "Caution",
-      "note": "Pre-firmware-update build. Update to 4B2QJXD7 via Samsung Magician before enabling Native NVMe."
+      "note": "Pre-firmware-update build. Update to 4B2QJXD7 via Samsung Magician before enabling Native NVMe.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-10",
+      "sourceUrl": "https://eu.community.samsung.com/t5/computers-it/samsung-magician-9-0-0-910-new-windows-11-nvme-driver-cannot-see/td-p/14044173"
     },
     {
       "controller": "Samsung SSD 990 PRO",
       "firmware": "*",
       "level": "Good",
-      "note": "Reported stable on 4B2QJXD7 and later."
+      "note": "Reported stable on 4B2QJXD7 and later.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-10",
+      "sourceUrl": "https://windowsforum.com/threads/native-nvme-on-windows-11-registry-hack-delivers-gains-with-risks.394775/"
     },
     {
       "controller": "Samsung SSD 980 PRO",
       "firmware": "5B2QGXA7",
       "level": "Caution",
-      "note": "Known stutter with older firmware. Update to 5B2QGXA8+ before enabling Native NVMe."
+      "note": "Known stutter with older firmware. Update to 5B2QGXA8+ before enabling Native NVMe.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-10"
     },
     {
       "controller": "Samsung SSD 980 PRO",
       "firmware": "*",
       "level": "Good",
-      "note": "Reported stable on 5B2QGXA8 and later."
+      "note": "Reported stable on 5B2QGXA8 and later.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-10"
     },
     {
       "controller": "WD_BLACK SN850X",
       "firmware": "*",
       "level": "Good",
-      "note": "Stable on latest 620331WD and later firmware."
+      "note": "Stable on latest 620331WD and later firmware.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-10"
     },
     {
       "controller": "WD_BLACK SN770",
       "firmware": "*",
       "level": "Good",
-      "note": "No BSOD reports. SN770 on latest firmware is the most common 'works fine' report."
+      "note": "No BSOD reports. SN770 on latest firmware is the most common 'works fine' report.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-10"
     },
     {
       "controller": "CT1000P3",
       "firmware": "*",
       "level": "Caution",
-      "note": "Crucial P3 — some reports of paging errors under sustained 4K random write on early firmware. Benchmark with the watchdog active."
+      "note": "Crucial P3 — some reports of paging errors under sustained 4K random write on early firmware. Benchmark with the watchdog active.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-10"
     },
     {
       "controller": "SK hynix Platinum P41",
       "firmware": "*",
       "level": "Good",
-      "note": "Phison E18 controller, stable."
+      "note": "Phison E18 controller, stable.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-10"
     },
     {
       "controller": "KINGSTON SKC3000",
       "firmware": "*",
       "level": "Good",
-      "note": "Phison E18, stable."
+      "note": "Phison E18, stable.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-10"
     },
     {
       "controller": "Intel SSDPEKNU",
       "firmware": "*",
       "level": "Bad",
-      "note": "Intel 670p / 665p — known to hang under Native NVMe. Keep on stornvme.sys."
+      "note": "Intel 670p / 665p — known to hang under Native NVMe. Keep on stornvme.sys.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-10",
+      "sourceUrl": "https://www.overclock.net/threads/enable-native-nvme-driver-in-windows-11-24h2-25h2-with-last-update.1818467/"
     },
     {
       "controller": "Sabrent Rocket",
       "firmware": "*",
       "level": "Caution",
-      "note": "Phison controllers — stable on current firmware, update first."
+      "note": "Phison controllers — stable on current firmware, update first.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-10"
     },
     {
       "controller": "Phison",
       "firmware": "EIFM72.1",
       "level": "Bad",
-      "note": "Early Phison E18 firmware — avoid Native NVMe, update drive first."
+      "note": "Early Phison E18 firmware — avoid Native NVMe, update drive first.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-10",
+      "sourceUrl": "https://www.overclock.net/threads/enable-native-nvme-driver-in-windows-11-24h2-25h2-with-last-update.1818467/"
     }
   ],
   "cveAdvisories": [
