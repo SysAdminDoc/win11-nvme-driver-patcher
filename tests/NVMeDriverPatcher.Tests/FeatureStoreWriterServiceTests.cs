@@ -28,13 +28,31 @@ public sealed class FeatureStoreWriterServiceTests
     }
 
     [Fact]
-    public void WriteOverrides_ReturnsNotImplementedStub()
+    public void WriteOverrides_NonAdmin_FailsClosedWithoutThrowing()
     {
-        // The stub is the contract. When the native writer lands, this test flips to verify
-        // the actual encoder. Having the assertion in place prevents a silent behavior change.
+        // The native writer is real now (RtlSetFeatureConfigurations). From a non-elevated
+        // test host the kernel rejects the write — the contract is: no exception, no
+        // success claim, and a message that routes the user somewhere actionable.
+        // (On an elevated host this would mutate feature state, so we only assert the
+        // failure path when the call did fail.)
         var result = FeatureStoreWriterService.WriteOverrides(new[] { 60786016, 48433719 });
+        if (!result.Success)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(result.Summary));
+            Assert.Contains("fallback", result.Summary, StringComparison.OrdinalIgnoreCase);
+        }
+        else
+        {
+            // Elevated environment: the write went through and must report what it applied.
+            Assert.Equal(new[] { 60786016, 48433719 }, result.AppliedIds);
+        }
+    }
+
+    [Fact]
+    public void WriteOverrides_EmptyIdList_Refuses()
+    {
+        var result = FeatureStoreWriterService.WriteOverrides(Array.Empty<int>());
         Assert.False(result.Success);
-        Assert.Contains("not yet implemented", result.Summary);
     }
 
     [Fact]
@@ -45,5 +63,58 @@ public sealed class FeatureStoreWriterServiceTests
         // invalidate everyone's fallback evidence check.
         Assert.Contains(60786016, FeatureStoreWriterService.PostBlockFeatureIds);
         Assert.Contains(48433719, FeatureStoreWriterService.PostBlockFeatureIds);
+    }
+    // --- Rtl native path: pure decode/construction logic + no-throw query probe ---
+
+    [Theory]
+    // CompactState bitfield: Priority:4 | EnabledState:2 | ...
+    [InlineData(0x00u, 0, 0)]   // priority ImageDefault, state Default
+    [InlineData(0x28u, 8, 2)]   // priority User(8), state Enabled(2) — what ViVeTool writes
+    [InlineData(0x18u, 8, 1)]   // priority User(8), state Disabled(1)
+    [InlineData(0x2Fu, 15, 2)]  // priority ImageOverride(15), state Enabled
+    public void CompactState_DecodesPriorityAndEnabledState(uint compact, int expectedPriority, int expectedState)
+    {
+        Assert.Equal(expectedPriority, FeatureStoreWriterService.DecodePriority(compact));
+        Assert.Equal(expectedState, FeatureStoreWriterService.DecodeEnabledState(compact));
+    }
+
+    [Fact]
+    public void EnableUpdates_MatchViVeToolEnableSemantics()
+    {
+        // Priority User(8), state Enabled(2), Operation FeatureState|VariantState(3) —
+        // diverging from what ViVeTool writes would create a mixed-priority store.
+        var updates = FeatureStoreWriterService.DescribeEnableUpdates(new[] { 55369237, 48433719 });
+        Assert.Equal(2, updates.Length);
+        foreach (var u in updates)
+        {
+            Assert.Equal(8u, u.Priority);
+            Assert.Equal(2u, u.EnabledState);
+            Assert.Equal(3u, u.Operation);
+        }
+        Assert.Equal(55369237u, updates[0].FeatureId);
+    }
+
+    [Fact]
+    public void QueryConfiguration_NeverThrows_AndReportsStore()
+    {
+        // Read-only Rtl query needs no admin. A random unconfigured ID must come back as
+        // Found=false (or a valid state on machines where it IS configured) — never throw.
+        var boot = FeatureStoreWriterService.QueryConfiguration(123456789, bootStore: true);
+        var runtime = FeatureStoreWriterService.QueryConfiguration(123456789, bootStore: false);
+        Assert.Equal("Boot", boot.Store);
+        Assert.Equal("Runtime", runtime.Store);
+        Assert.False(boot.IsEnabled && boot.EnabledState != 2); // IsEnabled implies state 2
+    }
+
+    [Fact]
+    public void QueryAllKnownConfigurations_CoversEveryKnownIdInBothStores()
+    {
+        var states = FeatureStoreWriterService.QueryAllKnownConfigurations();
+        Assert.Equal(FeatureStoreWriterService.PostBlockFeatureIds.Length * 2, states.Count);
+        foreach (var id in FeatureStoreWriterService.PostBlockFeatureIds)
+        {
+            Assert.Contains(states, s => s.FeatureId == id && s.Store == "Boot");
+            Assert.Contains(states, s => s.FeatureId == id && s.Store == "Runtime");
+        }
     }
 }
