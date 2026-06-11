@@ -149,7 +149,7 @@ public static class PatchVerificationService
             native.IsActive, native.ActiveDriver, status.Count, fallbackEvidence);
         report.Outcome = outcome;
         report.Summary = summary;
-        report.Detail = detail;
+        report.Detail = AppendBuildRuleDetail(detail, WindowsBuildRulesService.MatchCurrent());
         return report;
     }
 
@@ -201,6 +201,22 @@ public static class PatchVerificationService
             "Microsoft began neutering this override path on recent Insider builds in early 2026. " +
             "You can remove the patch safely, or try the ViVeTool fallback (the app selects the right feature IDs for your Windows build) " +
             "covered on the project's GitHub README.");
+    }
+
+    internal static string AppendBuildRuleDetail(string detail, WindowsBuildRule? rule)
+    {
+        if (rule is null)
+        {
+            return detail + Environment.NewLine + Environment.NewLine +
+                   "Matched enablement rule: none. This Windows build is not in the bundled ruleset; proceed conservatively and include diagnostics if reporting results.";
+        }
+
+        var fallback = string.IsNullOrWhiteSpace(rule.FallbackSet)
+            ? string.Empty
+            : $"; fallback set: {rule.FallbackSet}";
+        return detail + Environment.NewLine + Environment.NewLine +
+               $"Matched enablement rule: {rule.Id} -> {rule.ExpectedPath}{fallback}. " +
+               $"{rule.Summary} Confidence: {rule.Confidence}; reviewed {rule.LastReviewed}. Source: {rule.SourceUrl}";
     }
 
     public static void MarkPending(AppConfig config)

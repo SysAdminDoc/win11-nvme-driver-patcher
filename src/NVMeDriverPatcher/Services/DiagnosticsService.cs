@@ -285,6 +285,13 @@ public static class DiagnosticsService
         }
         catch { sb.AppendLine("  Fallback ID set:    (unavailable)"); }
 
+        try
+        {
+            var rule = WindowsBuildRulesService.MatchCurrent(workingDir);
+            sb.AppendLine($"  Enablement rule:    {(rule is null ? "(no match)" : $"{rule.Id} -> {rule.ExpectedPath} ({rule.Confidence}, reviewed {rule.LastReviewed})")}");
+        }
+        catch { sb.AppendLine("  Enablement rule:    (unavailable)"); }
+
         return sb.ToString();
     }
 

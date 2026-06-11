@@ -202,6 +202,38 @@ public sealed class PatchVerificationServiceTests
         Assert.Contains("No registry override keys", detail);
     }
 
+    [Fact]
+    public void AppendBuildRuleDetail_IncludesMatchedRuleAndFallbackSet()
+    {
+        var rule = new WindowsBuildRule
+        {
+            Id = "24h2-post-block",
+            ExpectedPath = "vivetool-fallback",
+            FallbackSet = "post-block-2026-03",
+            Summary = "Registry route is blocked; fallback is expected.",
+            Confidence = "verified",
+            LastReviewed = "2026-06-10",
+            SourceUrl = "https://example.test/source"
+        };
+
+        var detail = PatchVerificationService.AppendBuildRuleDetail("Base detail.", rule);
+
+        Assert.Contains("24h2-post-block -> vivetool-fallback", detail);
+        Assert.Contains("fallback set: post-block-2026-03", detail);
+        Assert.Contains("Registry route is blocked", detail);
+        Assert.Contains("https://example.test/source", detail);
+    }
+
+    [Fact]
+    public void AppendBuildRuleDetail_NoRuleUsesConservativeUnknownCopy()
+    {
+        var detail = PatchVerificationService.AppendBuildRuleDetail("Base detail.", null);
+
+        Assert.Contains("Matched enablement rule: none", detail);
+        Assert.Contains("proceed conservatively", detail, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fallback is expected", detail, StringComparison.OrdinalIgnoreCase);
+    }
+
     // --- Enablement source classification (RD-004 official-rollout pivot) ---
 
     [Theory]
