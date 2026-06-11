@@ -4,6 +4,15 @@ using Microsoft.Win32.SafeHandles;
 
 namespace NVMeDriverPatcher.Services;
 
+public class NvmePowerStateDescriptor
+{
+    public int Index { get; set; }
+    public double MaxPowerWatts { get; set; }
+    public uint EntryLatencyUs { get; set; }
+    public uint ExitLatencyUs { get; set; }
+    public bool NonOperational { get; set; }
+}
+
 public class NvmeIdentifyResult
 {
     public bool Success { get; set; }
@@ -13,7 +22,19 @@ public class NvmeIdentifyResult
     public string FirmwareRevision { get; set; } = string.Empty;
     public string VendorId { get; set; } = string.Empty;
     public string SubsystemVendorId { get; set; } = string.Empty;
+    public int NumberOfNamespaces { get; set; }
+    public int MaxDataTransferSizePages { get; set; }
+    public int NumberOfPowerStates { get; set; }
+    public bool SupportsFormatNvm { get; set; }
+    public bool SupportsFirmwareDownload { get; set; }
+    public bool SupportsNamespaceMgmt { get; set; }
+    public bool VolatileWriteCache { get; set; }
+    public List<NvmePowerStateDescriptor> PowerStates { get; set; } = new();
     public string Summary { get; set; } = string.Empty;
+
+    public string RedactedSerialNumber => SerialNumber.Length > 4
+        ? new string('*', SerialNumber.Length - 4) + SerialNumber[^4..]
+        : "****";
 }
 
 // Raw NVMe Admin Identify Controller via IOCTL_STORAGE_PROTOCOL_COMMAND. Pulls fields WMI
@@ -138,8 +159,43 @@ public static class NvmeIdentifyService
                 result.SerialNumber = ReadAscii(dataPtr, 4, 20);
                 result.ModelNumber = ReadAscii(dataPtr, 24, 40);
                 result.FirmwareRevision = ReadAscii(dataPtr, 64, 8);
+
+                result.MaxDataTransferSizePages = Marshal.ReadByte(dataPtr, 77);
+                result.NumberOfNamespaces = Marshal.ReadInt32(dataPtr, 516);
+
+                ushort oacs = ReadUInt16(dataPtr, 256);
+                result.SupportsFormatNvm = (oacs & 0x02) != 0;
+                result.SupportsFirmwareDownload = (oacs & 0x04) != 0;
+                result.SupportsNamespaceMgmt = (oacs & 0x08) != 0;
+
+                result.VolatileWriteCache = (Marshal.ReadByte(dataPtr, 525) & 0x01) != 0;
+
+                int npss = Marshal.ReadByte(dataPtr, 263) + 1;
+                result.NumberOfPowerStates = npss;
+                for (int ps = 0; ps < Math.Min(npss, 32); ps++)
+                {
+                    int psOffset = 2048 + (ps * 32);
+                    ushort mp = ReadUInt16(dataPtr, psOffset);
+                    byte flags = Marshal.ReadByte(dataPtr, psOffset + 3);
+                    bool mpsScale = (flags & 0x01) != 0;
+                    double maxPowerW = mp * (mpsScale ? 0.0001 : 0.01);
+                    uint entryLat = ReadUInt32(dataPtr, psOffset + 4);
+                    uint exitLat = ReadUInt32(dataPtr, psOffset + 8);
+                    byte nops = Marshal.ReadByte(dataPtr, psOffset + 25);
+                    bool nonOp = (nops & 0x02) != 0;
+
+                    result.PowerStates.Add(new NvmePowerStateDescriptor
+                    {
+                        Index = ps,
+                        MaxPowerWatts = maxPowerW,
+                        EntryLatencyUs = entryLat,
+                        ExitLatencyUs = exitLat,
+                        NonOperational = nonOp
+                    });
+                }
+
                 result.Success = true;
-                result.Summary = $"{result.ModelNumber.Trim()} / FW {result.FirmwareRevision.Trim()} / VID {result.VendorId}";
+                result.Summary = $"{result.ModelNumber.Trim()} / FW {result.FirmwareRevision.Trim()} / VID {result.VendorId} / {npss} power states";
             }
             finally
             {
@@ -161,7 +217,16 @@ public static class NvmeIdentifyService
 
     private static string ReadHex16(IntPtr baseAddr, int offset)
     {
-        ushort v = (ushort)(Marshal.ReadByte(baseAddr, offset) | (Marshal.ReadByte(baseAddr, offset + 1) << 8));
+        ushort v = ReadUInt16(baseAddr, offset);
         return "0x" + v.ToString("X4");
     }
+
+    private static ushort ReadUInt16(IntPtr baseAddr, int offset) =>
+        (ushort)(Marshal.ReadByte(baseAddr, offset) | (Marshal.ReadByte(baseAddr, offset + 1) << 8));
+
+    private static uint ReadUInt32(IntPtr baseAddr, int offset) =>
+        (uint)(Marshal.ReadByte(baseAddr, offset)
+            | (Marshal.ReadByte(baseAddr, offset + 1) << 8)
+            | (Marshal.ReadByte(baseAddr, offset + 2) << 16)
+            | (Marshal.ReadByte(baseAddr, offset + 3) << 24));
 }
