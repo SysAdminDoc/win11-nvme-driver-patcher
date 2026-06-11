@@ -36,6 +36,7 @@ public static class PatchService
             : config.WorkingDir;
         result.BeforeSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
         try { DataService.SaveSnapshot(result.BeforeSnapshot, "Before patch install", isPrePatch: true); } catch { }
+        try { DataService.SaveBypassIoSnapshot(BypassIoInspectorService.Inspect(), "Before patch install", isPrePatch: true); } catch { }
 
         log?.Invoke("========================================");
         log?.Invoke("STARTING PATCH INSTALLATION");
@@ -420,6 +421,7 @@ public static class PatchService
                         ? "After failed install rollback"
                         : "After patch install attempt";
                 DataService.SaveSnapshot(result.AfterSnapshot, description, isPrePatch: false);
+                try { DataService.SaveBypassIoSnapshot(BypassIoInspectorService.Inspect(), description, isPrePatch: false); } catch { }
             }
         }
         catch { }
@@ -438,6 +440,7 @@ public static class PatchService
             : config.WorkingDir;
         result.BeforeSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
         try { DataService.SaveSnapshot(result.BeforeSnapshot, "Before patch removal", isPrePatch: true); } catch { }
+        try { DataService.SaveBypassIoSnapshot(BypassIoInspectorService.Inspect(), "Before patch removal", isPrePatch: true); } catch { }
 
         log?.Invoke("========================================");
         log?.Invoke("STARTING PATCH REMOVAL");
@@ -593,6 +596,7 @@ public static class PatchService
             {
                 if (result.AfterSnapshot is not null)
                     DataService.SaveSnapshot(result.AfterSnapshot, "After patch removal", isPrePatch: false);
+                    try { DataService.SaveBypassIoSnapshot(BypassIoInspectorService.Inspect(), "After patch removal", isPrePatch: false); } catch { }
             }
             catch { }
         }
