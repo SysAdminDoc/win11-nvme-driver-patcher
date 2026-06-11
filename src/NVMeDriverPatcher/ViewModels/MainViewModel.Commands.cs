@@ -370,6 +370,34 @@ public partial class MainViewModel
         }
     }
 
+    // SafeBoot entry upgrade (RD-002 / KB5079391) — adds the service-name SafeBoot entries
+    // that pre-v4.6.1 patches didn't write. Without them, Safe Mode on 25H2+ can hit
+    // INACCESSIBLE_BOOT_DEVICE. Idempotent; touches nothing but the two SafeBoot keys.
+    [RelayCommand]
+    private void UpgradeSafeBootEntries()
+    {
+        try
+        {
+            Log("Upgrading SafeBoot entries (KB5079391 service-name fix)...");
+            var (success, message) = SafeBootUpgradeService.UpgradeEntries(msg => Log(msg));
+            if (success)
+            {
+                ShowSafeBootUpgradeBadge = false;
+                Log($"[SUCCESS] {message}", "SUCCESS");
+                ToastService.Show("SafeBoot Entries Upgraded", message, ToastType.Success, Config.EnableToasts);
+            }
+            else
+            {
+                Log($"[ERROR] {message}", "ERROR");
+                InfoDialog?.Invoke("SafeBoot Upgrade Failed", message, DialogIcon.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[ERROR] SafeBoot upgrade failed: {ex.Message}", "ERROR");
+        }
+    }
+
     // ViVeTool fallback — downloads ViVeTool from its official GitHub release, caches it in
     // <workingDir>\tools\, then runs it with the two feature IDs the community adopted after
     // Microsoft's Feb/Mar 2026 block on the FeatureManagement\Overrides route.
