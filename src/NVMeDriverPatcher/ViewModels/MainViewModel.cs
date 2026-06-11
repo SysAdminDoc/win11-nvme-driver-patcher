@@ -138,6 +138,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showViVeToolFallbackBadge;
     [ObservableProperty] private bool _showSafeBootUpgradeBadge;
 
+    // How the native driver got enabled (RD-004) — drives the official-rollout pivot.
+    private EnablementSource _enablementSource = EnablementSource.None;
+
     // Set while a benchmark is running, used by the XAML Cancel button to show/hide and
     // to gate CancelBenchmarkCommand. Mirrors _benchmarkInFlight but as a bindable property.
     [ObservableProperty] private bool _benchmarkRunning;
@@ -524,7 +527,11 @@ public partial class MainViewModel : ObservableObject
 
             IsLoading = false;
             ButtonsEnabled = true;
-            ApplyEnabled = PreflightService.AllCriticalPassed(_preflight.Checks) && !_preflight.VeraCryptDetected;
+            // Official enablement makes "apply" pointless (the keys would change nothing
+            // the OS hasn't already done) — keep the button disabled in that state.
+            ApplyEnabled = PreflightService.AllCriticalPassed(_preflight.Checks)
+                && !_preflight.VeraCryptDetected
+                && _enablementSource != EnablementSource.Official;
             });
         }
         catch (Exception ex)
@@ -732,7 +739,27 @@ public partial class MainViewModel : ObservableObject
     {
         var status = RegistryService.GetPatchStatus();
 
-        if (status.Applied)
+        // RD-004: when Microsoft's official rollout enabled the driver (active with no
+        // user-driven evidence), "apply the patch" is an obsolete job — pivot the hero
+        // state to managing/tuning the official enablement instead of offering to enable
+        // something Windows already enabled.
+        bool fallbackEvidence = false;
+        try { fallbackEvidence = FeatureStoreWriterService.HasFallbackEvidence(); } catch { }
+        _enablementSource = PatchVerificationService.ClassifyEnablementSource(
+            _preflight?.NativeNVMeStatus?.IsActive == true, status.Count, fallbackEvidence);
+
+        if (_enablementSource == EnablementSource.Official)
+        {
+            StatusText = "Native NVMe active (official)";
+            StatusColor = "Green";
+            ApplyButtonText = "Apply Patch";
+            RemoveEnabled = false;
+            ShowViVeToolFallbackBadge = false;
+            StatusSummaryText = "Native NVMe is officially enabled on your system by Windows — no patch needed. " +
+                                "Use this tool to verify, tune, benchmark, and (if necessary) roll back the driver.";
+            Log("Native NVMe is enabled by Windows itself (no patch evidence) — apply is unnecessary on this system.", "INFO");
+        }
+        else if (status.Applied)
         {
             StatusText = "Patch applied";
             StatusColor = "Green";
