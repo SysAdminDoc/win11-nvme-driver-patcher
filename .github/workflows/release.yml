@@ -25,10 +25,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          # Resolves the SDK from global.json (exact pin + rollForward policy) so the
+          # release toolchain always matches CI and local builds.
+          global-json-file: global.json
 
       - name: Determine tag
         id: tag
