@@ -162,40 +162,46 @@ All CLI operations require Administrator privileges.
 .\NVMe_Driver_Patcher.ps1 -ExportRecoveryKit
 ```
 
-### Extended CLI (v4.4, C# CLI binary)
+### Extended CLI (C# binary — 42 commands)
+
+Run `NVMeDriverPatcher.Cli help` for the full grouped command reference.
 
 ```powershell
-# Preview every registry change without touching the system
-NVMeDriverPatcher.Cli apply --dry-run
+# Lifecycle
+NVMeDriverPatcher.Cli status                              # Patch state + build rule (exit: 0/1/2)
+NVMeDriverPatcher.Cli apply --safe                         # Apply with Safe Mode profile
+NVMeDriverPatcher.Cli apply --dry-run                      # Preview registry changes only
+NVMeDriverPatcher.Cli remove                               # Undo the patch
 
-# Read the post-patch watchdog verdict (exit: 0=healthy, 1=unstable, 2=warning)
-NVMeDriverPatcher.Cli watchdog
+# Recovery
+NVMeDriverPatcher.Cli recovery-kit                         # Generate WinRE recovery kit
+NVMeDriverPatcher.Cli recovery-proof                       # Check recovery infrastructure readiness
+NVMeDriverPatcher.Cli upgrade-safeboot                     # Add KB5079391 SafeBoot entries
 
-# Correlate Reliability Monitor stability index with the patch timestamp
-NVMeDriverPatcher.Cli reliability
+# Diagnostics
+NVMeDriverPatcher.Cli watchdog                             # Stability verdict (exit: 0/1/2)
+NVMeDriverPatcher.Cli watchdog-service                     # Real-time service state
+NVMeDriverPatcher.Cli reliability                          # Reliability Monitor correlation
+NVMeDriverPatcher.Cli minidump                             # NVMe-stack crash scan
+NVMeDriverPatcher.Cli controllers                          # Per-controller driver audit
+NVMeDriverPatcher.Cli bypassio                             # Per-volume BypassIO + gaming impact
+NVMeDriverPatcher.Cli bypassio --history                   # Pre/post patch BypassIO comparison
+NVMeDriverPatcher.Cli apst                                 # APST state + battery impact estimate
+NVMeDriverPatcher.Cli identify                             # NVMe Identify Controller dump
+NVMeDriverPatcher.Cli bundle                               # Export support bundle (.zip)
+NVMeDriverPatcher.Cli diagnostics                          # Export diagnostics report (.txt)
 
-# Scan C:\Windows\Minidump for NVMe-stack crashes since the patch
-NVMeDriverPatcher.Cli minidump
+# Storage & Performance
+NVMeDriverPatcher.Cli etw                                  # 60s ETW storage trace
+NVMeDriverPatcher.Cli firmware                             # Compat.json entries
+NVMeDriverPatcher.Cli compare-benchmarks --threshold=15    # Before/after benchmark diff
 
-# List bundled controller/firmware compat entries (compat.json)
-NVMeDriverPatcher.Cli firmware
-
-# Show per-drive include/exclude decisions from drive_scope.json
-NVMeDriverPatcher.Cli scope
-
-# Capture a 60s ETW storage trace via wpr.exe
-NVMeDriverPatcher.Cli etw
-
-# Build a WinPE recovery USB tree/ISO from the current Recovery Kit
-NVMeDriverPatcher.Cli winpe --output=E:\
-
-# Build (and optionally submit) the anonymized compat report
-NVMeDriverPatcher.Cli telemetry --endpoint=https://example.com/nvme/compat
-
-# Driver Verifier harness (dev testing; requires reboot)
-NVMeDriverPatcher.Cli verifier-on
-NVMeDriverPatcher.Cli verifier-status
-NVMeDriverPatcher.Cli verifier-off
+# Fleet & Admin
+NVMeDriverPatcher.Cli telemetry --endpoint=<url>           # Submit anonymized compat report
+NVMeDriverPatcher.Cli dashboard                            # Generate HTML dashboard
+NVMeDriverPatcher.Cli winpe --output=E:\                   # WinPE recovery USB
+NVMeDriverPatcher.Cli config-export --export=<path>        # Export config bundle
+NVMeDriverPatcher.Cli config-import --import=<path>        # Import config bundle
 ```
 
 **Exit Codes (Silent Mode):**
