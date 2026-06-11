@@ -15,6 +15,13 @@ public enum VerificationOutcome
     /// is likely one Microsoft has locked against the FeatureManagement override route
     /// (Feb/Mar 2026 Insider change). User needs the ViVeTool fallback.</summary>
     OverrideBlocked,
+    /// <summary>The ViVeTool/FeatureStore fallback was applied (feature flags read as
+    /// enabled), the machine rebooted, and nvmedisk.sys STILL didn't bind. On builds
+    /// 26200.8524+ stornvme no longer exposes the GenNvmeDisk compatible ID, so
+    /// nvmedisk.inf can never match — the flags are honored but the driver loads with
+    /// zero devices (thebookisclosed/ViVe issue #164). Re-suggesting the fallback here
+    /// would be a lie; there is currently no supported enablement path on these builds.</summary>
+    FlagsEnabledNotBound,
     /// <summary>Registry writes are gone entirely — user uninstalled, or a Windows update
     /// wiped them. Treated as "no patch active" without sounding the alarm.</summary>
     Reverted,
@@ -106,33 +113,66 @@ public static class PatchVerificationService
 
         var status = RegistryService.GetPatchStatus();
         var native = DriveService.TestNativeNVMeActive();
+        bool fallbackEvidence;
+        try { fallbackEvidence = FeatureStoreWriterService.HasFallbackEvidence(); }
+        catch { fallbackEvidence = false; }
 
-        if (status.Count == 0)
+        var (outcome, summary, detail) = ClassifyPostRebootState(
+            native.IsActive, native.ActiveDriver, status.Count, fallbackEvidence);
+        report.Outcome = outcome;
+        report.Summary = summary;
+        report.Detail = detail;
+        return report;
+    }
+
+    /// <summary>
+    /// Pure post-reboot classification — separated from the WMI/registry probes so the
+    /// full truth table is unit-testable. Precedence:
+    ///   1. Driver bound → Confirmed (regardless of which route enabled it).
+    ///   2. Not bound + fallback evidence → FlagsEnabledNotBound (the fallback itself
+    ///      failed; suggesting it again would misdiagnose — ViVe issue #164, 26200.8524+).
+    ///   3. Not bound + no evidence + no keys → Reverted.
+    ///   4. Not bound + no evidence + keys present → OverrideBlocked (route to fallback).
+    /// </summary>
+    internal static (VerificationOutcome Outcome, string Summary, string Detail) ClassifyPostRebootState(
+        bool nativeActive, string? activeDriver, int overrideKeyCount, bool fallbackEvidence)
+    {
+        if (nativeActive)
         {
-            // User (or a Windows update) wiped the keys between reboot and now. Silent.
-            report.Outcome = VerificationOutcome.Reverted;
-            report.Summary = "Patch no longer present";
-            report.Detail = "Registry keys are gone — likely uninstalled or reverted by a Windows update.";
-            return report;
+            var detail = overrideKeyCount > 0
+                ? $"nvmedisk.sys is bound ({activeDriver}). Your patch is working as intended."
+                : $"nvmedisk.sys is bound ({activeDriver}). No registry override keys are present — " +
+                  "enablement is via the ViVeTool/FeatureStore fallback or an official Windows rollout.";
+            return (VerificationOutcome.Confirmed, "Native NVMe driver is active", detail);
         }
 
-        if (native.IsActive)
+        if (fallbackEvidence)
         {
-            report.Outcome = VerificationOutcome.Confirmed;
-            report.Summary = "Native NVMe driver is active";
-            report.Detail = $"nvmedisk.sys is bound ({native.ActiveDriver}). Your patch is working as intended.";
-            return report;
+            return (VerificationOutcome.FlagsEnabledNotBound,
+                "Feature flags enabled but the driver cannot bind on this build",
+                "The ViVeTool/FeatureStore fallback flags are enabled and the machine has rebooted, " +
+                "but Windows is still using the legacy stornvme.sys driver. On builds 26200.8524 and " +
+                "later, stornvme no longer exposes the compatible ID that nvmedisk.inf matches, so the " +
+                "native driver cannot bind by any supported means (thebookisclosed/ViVe issue #164). " +
+                "There is currently no working enablement path on this build — you can leave the flags " +
+                "in place (harmless) or remove the patch and wait for Microsoft's official rollout.");
+        }
+
+        if (overrideKeyCount == 0)
+        {
+            // User (or a Windows update) wiped the keys between reboot and now. Silent.
+            return (VerificationOutcome.Reverted,
+                "Patch no longer present",
+                "Registry keys are gone — likely uninstalled or reverted by a Windows update.");
         }
 
         // Keys present + rebooted + driver NOT bound. This is the Feb/Mar 2026 block signature.
-        report.Outcome = VerificationOutcome.OverrideBlocked;
-        report.Summary = "Patch applied but inactive on this build";
-        report.Detail =
+        return (VerificationOutcome.OverrideBlocked,
+            "Patch applied but inactive on this build",
             "The registry keys are set, but Windows is still using the legacy stornvme.sys driver. " +
             "Microsoft began neutering this override path on recent Insider builds in early 2026. " +
             "You can remove the patch safely, or try the ViVeTool fallback (feature IDs 60786016 and 48433719) " +
-            "covered on the project's GitHub README.";
-        return report;
+            "covered on the project's GitHub README.");
     }
 
     public static void MarkPending(AppConfig config)

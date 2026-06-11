@@ -711,14 +711,29 @@ class Program
             Console.WriteLine($"Active Driver: {preflight.NativeNVMeStatus.ActiveDriver}");
             Console.WriteLine($"Device Category: {(preflight.NativeNVMeStatus.IsActive ? "Storage disks (native)" : "Disk drives (legacy)")}");
 
-            // Honest read-out of the override-block state — if keys are written but the
-            // driver never swapped, that's Microsoft's Feb/Mar 2026 block, not a user error.
-            if (status.Count > 0 && !preflight.NativeNVMeStatus.IsActive)
+            // Honest read-out of the blocked states — if keys/flags are written but the
+            // driver never swapped, that's Microsoft's block, not a user error.
+            if (!preflight.NativeNVMeStatus.IsActive)
             {
-                Console.WriteLine();
-                Console.WriteLine("NOTE: The feature flags are set but Windows is still loading the legacy driver.");
-                Console.WriteLine("      On post-block Insider builds (early 2026+) the override is a no-op.");
-                Console.WriteLine("      Community workaround: ViVeTool with feature IDs 60786016 and 48433719.");
+                bool fallbackEvidence = false;
+                try { fallbackEvidence = FeatureStoreWriterService.HasFallbackEvidence(); } catch { }
+                if (fallbackEvidence)
+                {
+                    // The fallback itself is active-but-ineffective: 26200.8524+ removed the
+                    // GenNvmeDisk compatible ID, so nvmedisk.inf can never match (ViVe #164).
+                    Console.WriteLine();
+                    Console.WriteLine("NOTE: The ViVeTool/FeatureStore fallback flags are ENABLED but the driver did not bind.");
+                    Console.WriteLine("      On builds 26200.8524+ stornvme no longer exposes the compatible ID nvmedisk.inf");
+                    Console.WriteLine("      matches — there is currently NO working enablement path on this build.");
+                    Console.WriteLine("      The flags are harmless; remove the patch or wait for Microsoft's official rollout.");
+                }
+                else if (status.Count > 0)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("NOTE: The feature flags are set but Windows is still loading the legacy driver.");
+                    Console.WriteLine("      On post-block Insider builds (early 2026+) the override is a no-op.");
+                    Console.WriteLine("      Community workaround: ViVeTool with feature IDs 60786016 and 48433719.");
+                }
             }
         }
 
