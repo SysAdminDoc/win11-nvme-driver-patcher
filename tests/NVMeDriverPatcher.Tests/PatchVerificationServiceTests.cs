@@ -202,6 +202,20 @@ public sealed class PatchVerificationServiceTests
         Assert.Contains("No registry override keys", detail);
     }
 
+    // --- Enablement source classification (RD-004 official-rollout pivot) ---
+
+    [Theory]
+    [InlineData(false, 0, false, EnablementSource.None)]
+    [InlineData(false, 3, true, EnablementSource.None)]   // not bound => None regardless of evidence
+    [InlineData(true, 3, false, EnablementSource.RegistryPatch)]
+    [InlineData(true, 3, true, EnablementSource.RegistryPatch)] // keys win over fallback evidence
+    [InlineData(true, 0, true, EnablementSource.FallbackFlags)]
+    [InlineData(true, 0, false, EnablementSource.Official)]
+    public void ClassifyEnablementSource_TruthTable(bool active, int keys, bool evidence, EnablementSource expected)
+    {
+        Assert.Equal(expected, PatchVerificationService.ClassifyEnablementSource(active, keys, evidence));
+    }
+
     // --- Known bind-blocked build gate ---
 
     [Theory]
