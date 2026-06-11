@@ -292,6 +292,23 @@ public static class DiagnosticsService
         }
         catch { sb.AppendLine("  Enablement rule:    (unavailable)"); }
 
+        try
+        {
+            sb.AppendLine();
+            sb.AppendLine("NVMe Controller Identify:");
+            bool anyFound = false;
+            for (int n = 0; n < 16; n++)
+            {
+                var id = NvmeIdentifyService.Query(n);
+                if (!id.Success) continue;
+                anyFound = true;
+                sb.AppendLine($"  PhysicalDrive{n}: {id.ModelNumber.Trim()} / FW {id.FirmwareRevision.Trim()} / VID {id.VendorId} / SN {id.RedactedSerialNumber} / {id.NumberOfPowerStates} power states");
+            }
+            if (!anyFound)
+                sb.AppendLine("  (no NVMe controllers responded)");
+        }
+        catch { sb.AppendLine("  NVMe Identify:      (unavailable)"); }
+
         return sb.ToString();
     }
 
