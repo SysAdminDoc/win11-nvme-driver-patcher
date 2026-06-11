@@ -1148,22 +1148,22 @@ public partial class MainViewModel : ObservableObject
             // no-op on the latest Insider builds, and that we'll tell them post-reboot.
             notes.Add("Compatibility — some post-February 2026 Insider builds block the registry override. The app will verify after restart and offer a fallback if Windows stays on stornvme.sys.");
 
-            // Recovery kit freshness. Frame the absence as "we'll make one for you" — not
-            // as a scary warning. Emphasize that rollback is always a click away.
-            var kitPath = ResolveRecoveryKitPath();
-            if (kitPath is null)
+            // Recovery proof gate (AR-2026-009): surface every recovery-infrastructure
+            // check in the confirmation dialog so users see what's ready and what isn't.
+            try
             {
-                notes.Add("Recovery kit — one will be generated after the patch succeeds. Copy it to removable media for the safest rollback path.");
-            }
-            else
-            {
-                try
+                var proof = RecoveryProofGateService.Evaluate(Config);
+                foreach (var item in proof.Items)
                 {
-                    var age = DateTime.Now - Directory.GetLastWriteTime(kitPath);
-                    if (age.TotalDays > 30)
-                        notes.Add($"Recovery kit — the existing kit is {(int)age.TotalDays} days old. A fresh one will be regenerated after the patch.");
+                    if (item.Passed)
+                        notes.Add($"Recovery — {item.Label}: {item.Detail}");
+                    else
+                        warnings.Add($"Recovery — {item.Label}: {item.Detail}");
                 }
-                catch { }
+            }
+            catch
+            {
+                notes.Add("Recovery readiness check could not run — proceed with caution.");
             }
 
             notes.Add("Rollback — the app creates a registry backup, restore point, and recovery kit before applying changes. Removal stays available from the main screen.");

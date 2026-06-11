@@ -41,6 +41,8 @@ public static class CliCommandRegistry
             "Show exactly what apply would change — no registry writes"),
         new("verify", [], CommandGroup.Lifecycle,
             "Generate post-reboot verification script"),
+        new("recovery-proof", [], CommandGroup.Recovery,
+            "Check recovery infrastructure readiness (exit: 0=ready, 1=not ready)"),
 
         // ── Recovery ──
         new("recovery-kit", ["export-recovery-kit"], CommandGroup.Recovery,

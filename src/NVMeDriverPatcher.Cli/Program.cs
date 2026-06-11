@@ -105,6 +105,7 @@ class Program
                 "fallback" or "vivetool-fallback" or "apply-fallback" => FallbackCommand(config),
                 "recovery-kit" or "export-recovery-kit" => RecoveryKitCommand(config),
                 "verify" => VerifyCommand(config),
+                "recovery-proof" => RecoveryProofCommand(config),
                 "dry-run" or "preview" => DryRunCommand(config),
                 "watchdog" => autoRevert ? WatchdogAutoRevertCommand(config) : WatchdogCommand(config),
                 "watchdog-service" or "service-status" => WatchdogServiceStateCommand(),
@@ -815,6 +816,16 @@ class Program
             return 2;
         }
 
+        var proof = RecoveryProofGateService.Evaluate(config);
+        Console.WriteLine($"Recovery readiness: {proof.PassedCount}/{proof.TotalCount}");
+        foreach (var item in proof.Items)
+            Console.WriteLine($"  [{(item.Passed ? "OK" : "!!")}] {item.Label}: {item.Detail}");
+        if (!proof.AllPassed && !force)
+        {
+            Console.Error.WriteLine("Recovery infrastructure is incomplete. Fix the items above or use --force to override.");
+            return 1;
+        }
+
         var result = PatchService.Install(
             config,
             preflight.BitLockerEnabled,
@@ -961,6 +972,17 @@ class Program
             return 0;
         }
         return 1;
+    }
+
+    static int RecoveryProofCommand(AppConfig config)
+    {
+        var proof = RecoveryProofGateService.Evaluate(config);
+        Console.WriteLine($"Recovery readiness: {proof.PassedCount}/{proof.TotalCount}");
+        foreach (var item in proof.Items)
+            Console.WriteLine($"  [{(item.Passed ? "OK" : "!!")}] {item.Label}: {item.Detail}");
+        Console.WriteLine();
+        Console.WriteLine(proof.AllPassed ? "Ready to apply." : "Fix the items above before applying.");
+        return proof.AllPassed ? 0 : 1;
     }
 
     static int Unknown(string cmd)
