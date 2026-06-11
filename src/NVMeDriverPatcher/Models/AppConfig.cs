@@ -43,8 +43,12 @@ public class AppConfig
             if (asmVer is not null) return $"{asmVer.Major}.{asmVer.Minor}.{asmVer.Build}";
         }
         catch { /* fall through to literal */ }
-        return "4.6.0";
+        return FallbackVersionLiteral;
     }
+
+    // Last-resort version literal used only when assembly attribute reflection fails.
+    // Kept in sync with Directory.Build.props VersionPrefix by scripts/Validate-ReleaseVersions.ps1.
+    private const string FallbackVersionLiteral = "4.6.1";
     public const string RegistryPath = @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
     public const string RegistrySubKey = @"SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
     public const string SafeBootMinimalPath = @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}";

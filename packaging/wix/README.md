@@ -22,8 +22,8 @@ dotnet publish src\NVMeDriverPatcher\NVMeDriverPatcher.csproj -c Release -r win-
 dotnet publish src\NVMeDriverPatcher.Cli\NVMeDriverPatcher.Cli.csproj -c Release -r win-x64 --self-contained -o build\publish
 dotnet publish src\NVMeDriverPatcher.Tray\NVMeDriverPatcher.Tray.csproj -c Release -r win-x64 --self-contained -o build\publish
 
-# 2. Copy the icon next to the published exes (wxs references it there)
-Copy-Item icon.ico build\publish\ -Force
+# 2. Copy the app icon next to the published exes (wxs references it there)
+Copy-Item src\NVMeDriverPatcher\nvme.ico build\publish\icon.ico -Force
 
 # 3. Build the MSI
 wix build packaging\wix\NVMeDriverPatcher.wxs `
@@ -31,12 +31,12 @@ wix build packaging\wix\NVMeDriverPatcher.wxs `
   -d ProjectRoot="$(Resolve-Path .)" `
   -ext WixToolset.UI.wixext `
   -ext WixToolset.Util.wixext `
-  -out build\NVMeDriverPatcher-4.5.0.msi
+  -out build\NVMeDriverPatcher-4.6.1.msi
 ```
 
 ## Signing
 
 ```powershell
 # After building, sign with an EV cert (SmartScreen friendly) or a standard OV cert.
-signtool sign /sha1 <cert thumbprint> /tr http://timestamp.sectigo.com /td sha256 /fd sha256 build\NVMeDriverPatcher-4.5.0.msi
+signtool sign /sha1 <cert thumbprint> /tr http://timestamp.sectigo.com /td sha256 /fd sha256 build\NVMeDriverPatcher-4.6.1.msi
 ```
