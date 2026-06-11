@@ -28,6 +28,7 @@ LibreSpot.ps1
 banner.png
 favicon.ico
 theme.png
+icon - Copy.png
 
 # .NET build output
 bin/
@@ -42,13 +43,8 @@ packages/
 *.nupkg
 CLAUDE.md
 
-# Build artifacts (publish to GH releases instead)
-artifacts/v*/
-
-
-# Markdown files local-only (except README)
-*.md
-!README.md
+# Build artifacts and session screenshots (publish to GH releases instead)
+artifacts/
 
 # Markdown files local-only (except README)
 *.md
