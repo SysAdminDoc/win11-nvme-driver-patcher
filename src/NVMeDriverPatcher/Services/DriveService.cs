@@ -688,6 +688,21 @@ public static class DriveService
             if (allServices.Any(s => RxVeeam.IsMatch(s)))
                 found.Add(new() { Name = "Veeam", Severity = "High", Message = "Backup agent cannot detect drives under Storage disks" });
 
+            // KB5083769 (April 2026) expanded the vulnerable-driver blocklist and broke
+            // image-mount (psmounterex.sys) in Macrium/Acronis/Veeam/UrBackup INDEPENDENTLY
+            // of this patch. Users with these products often misattribute that breakage to
+            // the NVMe swap — say so up front to cut support noise.
+            if (found.Any(f => f.Name is "Acronis" or "Macrium Reflect" or "Veeam"))
+                found.Add(new()
+                {
+                    Name = "Backup software note",
+                    Severity = "Info",
+                    Message = "Unrelated to this patch: the April 2026 Windows update (KB5083769 driver " +
+                              "blocklist) broke image-mount in several backup products. If backups fail " +
+                              "after that update, check your backup vendor's advisory before suspecting " +
+                              "the NVMe driver swap."
+                });
+
             // Data Deduplication is an optional Windows feature. Microsoft documents storage
             // stack incompatibilities here, and the legacy PowerShell path already warns on it.
             try
