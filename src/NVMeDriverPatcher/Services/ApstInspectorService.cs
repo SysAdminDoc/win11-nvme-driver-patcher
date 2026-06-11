@@ -12,6 +12,17 @@ public class ApstPowerState
     public bool? NonOperational { get; set; }
 }
 
+public class ApstBatteryEstimate
+{
+    public bool IsLaptop { get; set; }
+    public bool ApstHonored { get; set; }
+    public double? ActivePowerWatts { get; set; }
+    public double? LowestIdlePowerWatts { get; set; }
+    public double? EstimatedIdleSavingsWatts { get; set; }
+    public string Impact { get; set; } = string.Empty;
+    public string Recommendation { get; set; } = string.Empty;
+}
+
 public class ApstInspectionReport
 {
     public bool ApstEnabled { get; set; }
@@ -19,6 +30,7 @@ public class ApstInspectionReport
     public bool NoLowPowerTransitions { get; set; }
     public List<ApstPowerState> States { get; set; } = new();
     public string Summary { get; set; } = string.Empty;
+    public ApstBatteryEstimate? BatteryEstimate { get; set; }
 }
 
 // Inspects Autonomous Power State Transition (APST) settings under stornvme per-drive
@@ -58,12 +70,61 @@ public static class ApstInspectorService
             report.Summary = report.ApstEnabled
                 ? $"APST enabled with idle timeout {report.ApstIdleTimeout?.ToString() ?? "default"}. {report.States.Count} power-state entries."
                 : "APST disabled — drives stay at active power state (higher battery drain on laptops).";
+            report.BatteryEstimate = EstimateBatteryImpact(report);
         }
         catch (Exception ex)
         {
             report.Summary = $"APST inspection failed: {ex.Message}";
         }
         return report;
+    }
+
+    internal static ApstBatteryEstimate EstimateBatteryImpact(ApstInspectionReport report)
+    {
+        var est = new ApstBatteryEstimate();
+        try
+        {
+            est.IsLaptop = DriveService.TestLaptopChassis();
+        }
+        catch { }
+
+        est.ApstHonored = report.ApstEnabled && !report.NoLowPowerTransitions;
+
+        if (report.States.Count > 0)
+        {
+            var activeState = report.States.FirstOrDefault(s => s.PowerStateNumber == 0);
+            est.ActivePowerWatts = activeState?.MaxPowerWatts;
+
+            var lowestIdle = report.States
+                .Where(s => s.NonOperational == true && s.MaxPowerWatts.HasValue)
+                .OrderBy(s => s.MaxPowerWatts!.Value)
+                .FirstOrDefault();
+            est.LowestIdlePowerWatts = lowestIdle?.MaxPowerWatts;
+
+            if (est.ActivePowerWatts.HasValue && est.LowestIdlePowerWatts.HasValue)
+                est.EstimatedIdleSavingsWatts = est.ActivePowerWatts.Value - est.LowestIdlePowerWatts.Value;
+        }
+
+        if (!est.IsLaptop)
+        {
+            est.Impact = "Desktop system — APST has no battery impact.";
+            est.Recommendation = "No action needed.";
+        }
+        else if (est.ApstHonored)
+        {
+            var savingsText = est.EstimatedIdleSavingsWatts.HasValue
+                ? $" (up to ~{est.EstimatedIdleSavingsWatts:F1}W idle savings)"
+                : "";
+            est.Impact = $"APST is active{savingsText}. The native NVMe driver (nvmedisk.sys) will ignore these transitions.";
+            est.Recommendation = "Expect ~10-15% shorter battery life on idle workloads after patching. Consider keeping the OS drive on stornvme.sys if battery life is critical.";
+        }
+        else
+        {
+            est.Impact = "APST is already disabled or blocked — no additional battery regression from patching.";
+            est.Recommendation = "No additional impact from the native NVMe patch.";
+        }
+
+        return est;
     }
 
     /// <summary>

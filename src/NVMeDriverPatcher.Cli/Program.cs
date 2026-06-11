@@ -365,6 +365,18 @@ class Program
         Console.WriteLine(report.Summary);
         foreach (var s in report.States)
             Console.WriteLine($"  PS{s.PowerStateNumber}  idle={s.IdleTimeMicroseconds}us  entry={s.EntryLatencyUs}us  exit={s.ExitLatencyUs}us  nonOp={s.NonOperational}");
+        if (report.BatteryEstimate is { } est)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Battery impact estimate:");
+            Console.WriteLine($"  System type:    {(est.IsLaptop ? "Laptop" : "Desktop")}");
+            Console.WriteLine($"  APST honored:   {(est.ApstHonored ? "Yes" : "No")}");
+            if (est.ActivePowerWatts.HasValue) Console.WriteLine($"  Active power:   {est.ActivePowerWatts:F2}W");
+            if (est.LowestIdlePowerWatts.HasValue) Console.WriteLine($"  Lowest idle:    {est.LowestIdlePowerWatts:F2}W");
+            if (est.EstimatedIdleSavingsWatts.HasValue) Console.WriteLine($"  Idle savings:   ~{est.EstimatedIdleSavingsWatts:F1}W (lost after patching)");
+            Console.WriteLine($"  Impact:         {est.Impact}");
+            Console.WriteLine($"  Recommendation: {est.Recommendation}");
+        }
         return 0;
     }
 
