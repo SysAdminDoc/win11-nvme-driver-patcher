@@ -169,6 +169,8 @@ public static class DiagnosticsService
                 manifest.AppendLine("  registry/*.reg    Up to 5 most-recent registry backups");
                 manifest.AppendLine("  data/*.db*        SQLite DB plus WAL sidecars (if present)");
                 manifest.AppendLine("  data/benchmark_results.json  Benchmark history cache (if present)");
+                manifest.AppendLine();
+                manifest.Append(BuildTrustLedger(workingDir));
                 AddTextEntry(zip, "MANIFEST.txt", manifest.ToString());
             }
 
@@ -195,6 +197,95 @@ public static class DiagnosticsService
             }
             catch { }
         }
+    }
+
+    /// <summary>
+    /// Trust ledger — the auditability section of MANIFEST.txt. Records exactly which
+    /// versions/binaries/feature-state the machine was running when the bundle was made,
+    /// so support triage doesn't have to guess: app version + channel, ViVeTool cache
+    /// identity (path/size/SHA-256/file version), FeatureStore blob hash, per-ID native
+    /// feature-configuration state, the build-selected fallback ID set, and the
+    /// bind-block rule match. Best-effort: every probe degrades to a "(unavailable)" line.
+    /// </summary>
+    internal static string BuildTrustLedger(string workingDir)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Trust ledger:");
+
+        // App identity + channel (MSI installs leave the EventLogSourceRegistered marker).
+        sb.AppendLine($"  App version:        {AppConfig.AppVersion}");
+        try
+        {
+            using var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(
+                Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64);
+            using var key = hklm.OpenSubKey(@"Software\SysAdminDoc\NVMeDriverPatcher");
+            var msi = key?.GetValue("EventLogSourceRegistered") is int i && i == 1;
+            sb.AppendLine($"  Install channel:    {(msi ? "MSI (per-machine)" : "portable")}");
+        }
+        catch { sb.AppendLine("  Install channel:    (unavailable)"); }
+
+        // ViVeTool cache identity.
+        try
+        {
+            var viveExe = ViVeToolService.CachedExePath(workingDir);
+            if (File.Exists(viveExe))
+            {
+                var fi = new FileInfo(viveExe);
+                string hash;
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                using (var fs = File.OpenRead(viveExe))
+                    hash = Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
+                var fileVer = System.Diagnostics.FileVersionInfo.GetVersionInfo(viveExe).FileVersion ?? "?";
+                sb.AppendLine($"  ViVeTool cache:     {viveExe} ({fi.Length} bytes, v{fileVer})");
+                sb.AppendLine($"  ViVeTool SHA-256:   {hash}");
+            }
+            else
+            {
+                sb.AppendLine("  ViVeTool cache:     not downloaded");
+            }
+        }
+        catch { sb.AppendLine("  ViVeTool cache:     (unavailable)"); }
+
+        // FeatureStore blob hash + native per-ID configuration state.
+        try
+        {
+            var blobPath = Path.Combine(Path.GetTempPath(), $"nvmep_fs_{Guid.NewGuid():N}.bin");
+            var exported = FeatureStoreWriterService.ExportBlob(blobPath);
+            if (exported is not null)
+            {
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                using (var fs = File.OpenRead(exported))
+                    sb.AppendLine($"  FeatureStore blob:  sha256 {Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant()}");
+                try { File.Delete(exported); File.Delete(exported + ".hex.txt"); } catch { }
+            }
+            else
+            {
+                sb.AppendLine("  FeatureStore blob:  absent");
+            }
+        }
+        catch { sb.AppendLine("  FeatureStore blob:  (unavailable)"); }
+
+        try
+        {
+            foreach (var state in FeatureStoreWriterService.QueryAllKnownConfigurations().Where(c => c.Found))
+                sb.AppendLine($"  Feature {state.FeatureId} [{state.Store}]: state={state.EnabledState} priority={state.Priority}");
+        }
+        catch { }
+
+        // Fallback set + bind-block rule for this build.
+        try
+        {
+            var set = ViVeToolService.SelectFallbackSet();
+            sb.AppendLine($"  Fallback ID set:    {set.Name} ({string.Join(",", set.Ids)}; {set.Confidence})");
+            var build = DriveService.GetWindowsBuildDetails();
+            if (build is not null)
+                sb.AppendLine($"  Bind-block rule:    build {build.BuildNumber}.{build.UBR} -> " +
+                              (AppConfig.IsKnownBindBlockedBuild(build.BuildNumber, build.UBR)
+                                  ? "MATCHED (nvmedisk may be unable to bind)" : "not matched"));
+        }
+        catch { sb.AppendLine("  Fallback ID set:    (unavailable)"); }
+
+        return sb.ToString();
     }
 
     internal static string? TryCreateShareableConfigText(string configPath)

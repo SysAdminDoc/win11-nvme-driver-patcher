@@ -75,5 +75,16 @@
       "level": "Bad",
       "note": "Early Phison E18 firmware — avoid Native NVMe, update drive first."
     }
+  ],
+  "cveAdvisories": [
+    {
+      "cve": "CVE-2026-34332",
+      "severity": "Critical (CVSS 8.0)",
+      "affectsClient": false,
+      "affectsServer": true,
+      "fixedBy": "KB5087539",
+      "description": "Kernel RCE in Windows Server 2025 NVMe-oF (NVMe over Fabrics). Does NOT affect local nvmedisk.sys on Windows 11 client - listed here so Server 2025 operators of this tool who also use NVMe-oF patch promptly, and so client users don't panic over the headline.",
+      "url": "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-34332"
+    }
   ]
 }

@@ -29,6 +29,30 @@ public class FirmwareCompatEntry
     public string Note { get; set; } = string.Empty;
 }
 
+public class CveAdvisory
+{
+    [JsonPropertyName("cve")]
+    public string Cve { get; set; } = string.Empty;
+
+    [JsonPropertyName("severity")]
+    public string Severity { get; set; } = string.Empty;
+
+    [JsonPropertyName("affectsClient")]
+    public bool AffectsClient { get; set; }
+
+    [JsonPropertyName("affectsServer")]
+    public bool AffectsServer { get; set; }
+
+    [JsonPropertyName("fixedBy")]
+    public string FixedBy { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = string.Empty;
+
+    [JsonPropertyName("url")]
+    public string Url { get; set; } = string.Empty;
+}
+
 public class FirmwareCompatDatabase
 {
     [JsonPropertyName("schemaVersion")]
@@ -39,6 +63,12 @@ public class FirmwareCompatDatabase
 
     [JsonPropertyName("entries")]
     public List<FirmwareCompatEntry> Entries { get; set; } = new();
+
+    // NVMe-stack CVE advisories with explicit client/server applicability — documents the
+    // boundary (e.g. CVE-2026-34332 hits Server 2025 NVMe-oF, not client nvmedisk.sys) so
+    // users neither panic over inapplicable headlines nor miss applicable ones.
+    [JsonPropertyName("cveAdvisories")]
+    public List<CveAdvisory> CveAdvisories { get; set; } = new();
 }
 
 public class FirmwareCompatFinding
