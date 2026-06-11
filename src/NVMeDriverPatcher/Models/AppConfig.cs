@@ -48,7 +48,7 @@ public class AppConfig
 
     // Last-resort version literal used only when assembly attribute reflection fails.
     // Kept in sync with Directory.Build.props VersionPrefix by scripts/Validate-ReleaseVersions.ps1.
-    private const string FallbackVersionLiteral = "4.6.1";
+    private const string FallbackVersionLiteral = "5.0.0";
     public const string RegistryPath = @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
     public const string RegistrySubKey = @"SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides";
     public const string SafeBootMinimalPath = @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}";
