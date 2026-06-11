@@ -22,10 +22,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          # Resolves the SDK from global.json (exact pin + rollForward policy) so CI and
+          # local builds can never silently diverge on SDK major version again.
+          global-json-file: global.json
 
       - name: Validate version consistency
         shell: pwsh
@@ -33,6 +35,16 @@ jobs:
 
       - name: Restore
         run: dotnet restore NVMeDriverPatcher.sln
+
+      - name: Fail on known-vulnerable packages
+        shell: pwsh
+        run: |
+          $out = dotnet list NVMeDriverPatcher.sln package --vulnerable --include-transitive 2>&1 | Out-String
+          Write-Host $out
+          if ($out -match '>\s') {
+            Write-Host "Vulnerable package(s) detected — failing." -ForegroundColor Red
+            exit 1
+          }
 
       - name: Build (Debug)
         run: dotnet build NVMeDriverPatcher.sln -c Debug --no-restore --verbosity normal

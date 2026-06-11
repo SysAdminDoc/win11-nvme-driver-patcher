@@ -3,7 +3,7 @@
     # Publishes thin PS cmdlets around the CLI exe so sysadmins can pipeline patch ops
     # (Get-NvmePatchStatus | Where Applied | ...) without manually parsing CLI output.
     RootModule        = 'NVMeDriverPatcher.psm1'
-    ModuleVersion     = '4.6.1'
+    ModuleVersion     = '5.0.0'
     GUID              = 'A8C5D9F1-7B24-4E83-9D2A-1C6E5F9A2B38'
     Author            = 'SysAdminDoc'
     CompanyName       = 'SysAdminDoc'
