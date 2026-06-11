@@ -40,11 +40,39 @@ public class VerificationReport
     public DateTime? LastBootAt { get; set; }
 }
 
+/// <summary>How the native driver came to be active on this machine.</summary>
+public enum EnablementSource
+{
+    /// <summary>Driver not bound — nothing enabled it (or it can't bind).</summary>
+    None,
+    /// <summary>This tool's registry override keys are present.</summary>
+    RegistryPatch,
+    /// <summary>ViVeTool/FeatureStore fallback flags are the only enablement evidence.</summary>
+    FallbackFlags,
+    /// <summary>Driver bound with NO user-driven evidence — Microsoft's official rollout.
+    /// The "enable" job is obsolete here; the tool's value shifts to verify/tune/
+    /// benchmark/rollback (RD-004).</summary>
+    Official,
+}
+
 // Post-reboot auditor. Runs once on app startup — if a patch was applied and the machine
 // has since rebooted, confirms nvmedisk.sys actually bound. Surfaces a clear, honest
 // status when it didn't (e.g. on the post-block Insider builds where the override is a no-op).
 public static class PatchVerificationService
 {
+    /// <summary>
+    /// Pure classification of what enabled the native driver. "Official" requires the
+    /// driver active with neither registry keys nor fallback evidence — i.e. Windows did
+    /// it on its own.
+    /// </summary>
+    public static EnablementSource ClassifyEnablementSource(bool nativeActive, int overrideKeyCount, bool fallbackEvidence)
+    {
+        if (!nativeActive) return EnablementSource.None;
+        if (overrideKeyCount > 0) return EnablementSource.RegistryPatch;
+        if (fallbackEvidence) return EnablementSource.FallbackFlags;
+        return EnablementSource.Official;
+    }
+
     // If a user applies but never reboots, we don't want to nag them for months. After
     // this many days we clear the pending flag and treat the patch as abandoned.
     private static readonly TimeSpan PendingMaxAge = TimeSpan.FromDays(30);

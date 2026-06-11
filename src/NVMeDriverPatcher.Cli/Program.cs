@@ -773,6 +773,18 @@ class Program
             Console.WriteLine($"Active Driver: {preflight.NativeNVMeStatus.ActiveDriver}");
             Console.WriteLine($"Device Category: {(preflight.NativeNVMeStatus.IsActive ? "Storage disks (native)" : "Disk drives (legacy)")}");
 
+            bool evidence = false;
+            try { evidence = FeatureStoreWriterService.HasFallbackEvidence(); } catch { }
+            var source = PatchVerificationService.ClassifyEnablementSource(
+                preflight.NativeNVMeStatus.IsActive, status.Count, evidence);
+            Console.WriteLine($"Enablement source: {source switch
+            {
+                EnablementSource.Official => "official Windows rollout (no patch evidence — apply is unnecessary)",
+                EnablementSource.RegistryPatch => "this tool's registry patch",
+                EnablementSource.FallbackFlags => "ViVeTool/FeatureStore fallback flags",
+                _ => "none (driver not bound)"
+            }}");
+
             // Honest read-out of the blocked states — if keys/flags are written but the
             // driver never swapped, that's Microsoft's block, not a user error.
             if (!preflight.NativeNVMeStatus.IsActive)
