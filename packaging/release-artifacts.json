@@ -1,0 +1,13 @@
+{
+  "$comment": "Release artifact contract. Every artifact a tagged release must (or may) carry. Paths are repo-root-relative; {version} is replaced with the tag-derived version (no leading v). Validated by scripts/Validate-ReleaseAssets.ps1 before the GitHub release is created — a missing required artifact fails the release before any asset is published.",
+  "artifacts": [
+    { "id": "gui",      "path": "publish/gui/NVMeDriverPatcher.exe",                  "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "portable" },
+    { "id": "cli",      "path": "publish/cli/NVMeDriverPatcher.Cli.exe",              "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "portable" },
+    { "id": "tray",     "path": "publish/tray/NVMeDriverPatcher.Tray.exe",            "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "portable" },
+    { "id": "watchdog", "path": "publish/watchdog/NVMeDriverPatcher.Watchdog.exe",    "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "portable" },
+    { "id": "msi",      "path": "publish/NVMeDriverPatcher-{version}.msi",            "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "msi" },
+    { "id": "legacy-ps1", "path": "NVMe_Driver_Patcher.ps1",                          "required": true,  "sign": false, "checksum": true,  "upload": true,  "channel": "legacy" },
+    { "id": "sha256sums", "path": "publish/SHA256SUMS.txt",                           "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "integrity" },
+    { "id": "winget-manifest", "path": "publish/SysAdminDoc.NVMeDriverPatcher.yaml",  "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "winget" }
+  ]
+}

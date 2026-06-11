@@ -44,6 +44,10 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Validate version consistency (tag must match repo metadata)
+        shell: pwsh
+        run: ./scripts/Validate-ReleaseVersions.ps1 -ReleaseVersion '${{ steps.tag.outputs.version }}'
+
       - name: Restore
         run: dotnet restore NVMeDriverPatcher.sln
 
@@ -59,15 +63,20 @@ jobs:
       - name: Build Tray (non-admin status agent)
         run: dotnet publish src/NVMeDriverPatcher.Tray -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:Version=${{ steps.tag.outputs.version }} -p:AssemblyVersion=${{ steps.tag.outputs.version }}.0 -p:FileVersion=${{ steps.tag.outputs.version }}.0 -o publish/tray
 
+      - name: Build Watchdog (real-time service)
+        run: dotnet publish src/NVMeDriverPatcher.Watchdog -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:Version=${{ steps.tag.outputs.version }} -p:AssemblyVersion=${{ steps.tag.outputs.version }}.0 -p:FileVersion=${{ steps.tag.outputs.version }}.0 -o publish/watchdog
+
       - name: Stage MSI inputs
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path publish/msi-staging | Out-Null
-          Copy-Item publish/gui/NVMeDriverPatcher.exe         publish/msi-staging/ -Force
-          Copy-Item publish/cli/NVMeDriverPatcher.Cli.exe     publish/msi-staging/ -Force
-          Copy-Item publish/tray/NVMeDriverPatcher.Tray.exe   publish/msi-staging/ -Force
-          Copy-Item src/NVMeDriverPatcher/compat.json         publish/msi-staging/ -Force
-          Copy-Item icon.ico                                  publish/msi-staging/ -Force
+          Copy-Item publish/gui/NVMeDriverPatcher.exe              publish/msi-staging/ -Force
+          Copy-Item publish/cli/NVMeDriverPatcher.Cli.exe          publish/msi-staging/ -Force
+          Copy-Item publish/tray/NVMeDriverPatcher.Tray.exe        publish/msi-staging/ -Force
+          Copy-Item publish/watchdog/NVMeDriverPatcher.Watchdog.exe publish/msi-staging/ -Force
+          Copy-Item src/NVMeDriverPatcher/compat.json              publish/msi-staging/ -Force
+          # The tracked icon asset lives in the GUI project; the wxs expects icon.ico in PublishDir.
+          Copy-Item src/NVMeDriverPatcher/nvme.ico                 publish/msi-staging/icon.ico -Force
 
       - name: Install WiX v4
         shell: pwsh
@@ -86,7 +95,8 @@ jobs:
             -ext WixToolset.UI.wixext `
             -ext WixToolset.Util.wixext `
             -out publish/NVMeDriverPatcher-${{ steps.tag.outputs.version }}.msi
-        continue-on-error: true   # WiX is best-effort for now; portable exe remains the primary artifact.
+        # MSI is a REQUIRED artifact (Intune/SCCM detection depends on it) — a WiX failure
+        # fails the release here, not at upload time.
 
       - name: Authenticode sign (if secret present)
         # No-op unless the caller configured the CODE_SIGN_PFX_BASE64 + CODE_SIGN_PFX_PASSWORD
@@ -104,6 +114,7 @@ jobs:
             'publish/gui/NVMeDriverPatcher.exe',
             'publish/cli/NVMeDriverPatcher.Cli.exe',
             'publish/tray/NVMeDriverPatcher.Tray.exe',
+            'publish/watchdog/NVMeDriverPatcher.Watchdog.exe',
             "publish/NVMeDriverPatcher-${{ steps.tag.outputs.version }}.msi"
           )
           foreach ($file in $targets) {
@@ -131,6 +142,7 @@ jobs:
             'publish/gui/NVMeDriverPatcher.exe',
             'publish/cli/NVMeDriverPatcher.Cli.exe',
             'publish/tray/NVMeDriverPatcher.Tray.exe',
+            'publish/watchdog/NVMeDriverPatcher.Watchdog.exe',
             "publish/NVMeDriverPatcher-${{ steps.tag.outputs.version }}.msi",
             'NVMe_Driver_Patcher.ps1'
           )
@@ -161,7 +173,14 @@ jobs:
           $yaml = Get-Content -Raw packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml
           $yaml = $yaml -replace 'REPLACE_ME_WITH_RELEASE_SHA256', '${{ steps.winget.outputs.sha256 }}'
           $yaml = $yaml -replace 'PackageVersion:.*', ('PackageVersion: ' + '${{ steps.tag.outputs.version }}')
+          # Rewrite the tag segment of InstallerUrl too — version/hash replacement alone
+          # previously paired a new hash with a stale download URL.
+          $yaml = $yaml -replace '/releases/download/v[0-9][^/]*/', ('/releases/download/' + '${{ steps.tag.outputs.tag }}' + '/')
           $yaml | Out-File -FilePath 'publish/SysAdminDoc.NVMeDriverPatcher.yaml' -Encoding utf8
+
+      - name: Validate release artifact contract
+        shell: pwsh
+        run: ./scripts/Validate-ReleaseAssets.ps1 -Version '${{ steps.tag.outputs.version }}'
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -174,8 +193,12 @@ jobs:
             ### Downloads
             - **NVMeDriverPatcher.exe** — Compiled GUI application (run as Administrator)
             - **NVMeDriverPatcher.Cli.exe** — Command-line interface
+            - **NVMeDriverPatcher.Tray.exe** — Non-admin status tray agent
+            - **NVMeDriverPatcher.Watchdog.exe** — Optional real-time watchdog service (`NVMeDriverPatcher.Watchdog.exe /install` as admin, or select the feature in the MSI)
+            - **NVMeDriverPatcher-*.msi** — Per-machine installer (GUI + CLI + tray; watchdog service selectable via `ADDLOCAL=WatchdogService`)
+            - **SysAdminDoc.NVMeDriverPatcher.yaml** — winget manifest for this release
             - **NVMe_Driver_Patcher.ps1** — PowerShell script (legacy)
-            - **SHA256SUMS.txt** — Verify downloads with `Get-FileHash <file> -Algorithm SHA256`
+            - **SHA256SUMS.txt** + per-asset `.sha256` sidecars — Verify downloads with `Get-FileHash <file> -Algorithm SHA256`
 
             ### Quick Start (GUI)
             Download `NVMeDriverPatcher.exe` and run. Administrator elevation is automatic.
@@ -196,6 +219,7 @@ jobs:
             publish/gui/NVMeDriverPatcher.exe
             publish/cli/NVMeDriverPatcher.Cli.exe
             publish/tray/NVMeDriverPatcher.Tray.exe
+            publish/watchdog/NVMeDriverPatcher.Watchdog.exe
             publish/NVMeDriverPatcher-${{ steps.tag.outputs.version }}.msi
             publish/SHA256SUMS.txt
             publish/*.sha256
