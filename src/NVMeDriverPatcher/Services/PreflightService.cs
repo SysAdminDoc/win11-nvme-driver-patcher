@@ -61,6 +61,15 @@ public static class PreflightService
                 checks["WindowsVersion"] = new(CheckStatus.Warning, $"Build {build.BuildNumber} ({build.DisplayVersion}) - 24H2+ recommended", true);
             else
                 checks["WindowsVersion"] = new(CheckStatus.Pass, $"Win 11 {build.DisplayVersion} (Build {build.BuildNumber})", true);
+
+            // Known driver-bind block: 26200.8524+ removed stornvme's GenNvmeDisk compatible
+            // ID, so nvmedisk.inf can never match — registry AND ViVeTool routes both enable
+            // flags that have no effect (thebookisclosed/ViVe issue #164). Community-reported,
+            // stable-channel impact unconfirmed → Warning, not a blocker.
+            if (build is not null && AppConfig.IsKnownBindBlockedBuild(build.BuildNumber, build.UBR))
+                checks["NativeBindSupport"] = new(CheckStatus.Warning,
+                    $"Build {build.BuildNumber}.{build.UBR}: nvmedisk may be unable to bind on this build — " +
+                    "the patch (and the ViVeTool fallback) may have no effect");
         }
         catch (Exception ex)
         {

@@ -335,6 +335,21 @@ public partial class MainViewModel : ObservableObject
                     ConfigService.Save(Config);
                     // Dialog itself is deferred — see HandlePendingVerificationDialogAsync below.
                     break;
+                case VerificationOutcome.FlagsEnabledNotBound:
+                    Log("[WARNING] " + pendingVerification.Summary, "WARNING");
+                    Log(pendingVerification.Detail, "WARNING");
+                    EventLogService.Write(pendingVerification.Summary + " — " + pendingVerification.Detail,
+                        System.Diagnostics.EventLogEntryType.Warning, 2102);
+                    ToastService.Show("Driver Cannot Bind on This Build",
+                        "The fallback flags are enabled but nvmedisk cannot bind on this Windows build. See the Activity log.",
+                        ToastType.Warning, Config.EnableToasts);
+                    PatchVerificationService.Clear(Config, pendingVerification);
+                    // Deliberately do NOT light the ViVeTool fallback badge — the fallback is
+                    // exactly what failed; offering it again would misdiagnose (ViVe #164).
+                    ShowViVeToolFallbackBadge = false;
+                    ConfigService.Save(Config);
+                    // Dialog itself is deferred — see HandlePendingVerificationDialogAsync below.
+                    break;
                 case VerificationOutcome.Reverted:
                     Log("Post-reboot verification: previous patch is no longer present.", "INFO");
                     PatchVerificationService.Clear(Config, pendingVerification);
@@ -521,6 +536,29 @@ public partial class MainViewModel : ObservableObject
                 Application.Current?.Dispatcher.BeginInvoke(
                     System.Windows.Threading.DispatcherPriority.Background,
                     new Action(() => _ = HandlePendingVerificationDialogAsync()));
+            }
+            catch { /* Dispatcher gone during shutdown */ }
+        }
+        else if (pendingVerification is { Outcome: VerificationOutcome.FlagsEnabledNotBound })
+        {
+            // Informational only — no fallback CTA. The fallback is what failed (ViVe #164);
+            // the honest message is "no working path on this build", not "try again".
+            try
+            {
+                Application.Current?.Dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Background,
+                    new Action(() => InfoDialog?.Invoke(
+                        "Driver Cannot Bind on This Build",
+                        "The fallback feature flags are enabled and the machine has rebooted, but Windows " +
+                        "is still loading the legacy stornvme.sys driver.\n\n" +
+                        "On Windows builds 26200.8524 and later, stornvme no longer exposes the compatible " +
+                        "ID that nvmedisk.inf matches, so the native driver cannot bind by any supported " +
+                        "means — the flags are honored but the driver loads with zero devices " +
+                        "(thebookisclosed/ViVe issue #164).\n\n" +
+                        "There is currently no working enablement path on this build. The enabled flags are " +
+                        "harmless; you can leave them, or remove the patch and wait for Microsoft's official " +
+                        "client rollout. Your registry backup, restore point, and recovery kit stay in place.",
+                        DialogIcon.Warning)));
             }
             catch { /* Dispatcher gone during shutdown */ }
         }
