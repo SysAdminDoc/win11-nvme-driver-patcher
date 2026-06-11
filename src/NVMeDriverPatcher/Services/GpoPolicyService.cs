@@ -39,7 +39,9 @@ public static class GpoPolicyService
             overlay.IncludeServerKey = ReadBoolDword(key, "IncludeServerKey");
             overlay.SkipWarnings = ReadBoolDword(key, "SkipWarnings");
             overlay.WatchdogAutoRevert = ReadBoolDword(key, "WatchdogAutoRevert");
-            overlay.WatchdogWindowHours = ReadIntDword(key, "WatchdogWindowHours");
+            // Schema bounds (watchdog.schema.json / ADMX): 1–168 hours. Out-of-range or
+            // wrapped values from a malformed GPO must not break watchdog timer math.
+            overlay.WatchdogWindowHours = ReadIntDword(key, "WatchdogWindowHours", min: 1, max: 168);
             overlay.CompatTelemetryEnabled = ReadBoolDword(key, "CompatTelemetryEnabled");
         }
         catch
@@ -90,17 +92,22 @@ public static class GpoPolicyService
         catch { return null; }
     }
 
-    private static int? ReadIntDword(RegistryKey key, string valueName)
+    private static int? ReadIntDword(RegistryKey key, string valueName, int min, int max)
     {
         try
         {
             var raw = key.GetValue(valueName);
-            return raw switch
+            // Range-validate instead of blind-casting: a QWORD > int.MaxValue would wrap
+            // negative through (int)l, and an out-of-range DWORD is a policy authoring
+            // error — both fall back to "no policy value" so defaults apply.
+            long? value = raw switch
             {
                 int i => i,
-                long l => (int)l,
+                long l => l,
                 _ => null
             };
+            if (value is not long v) return null;
+            return v >= min && v <= max ? (int)v : null;
         }
         catch { return null; }
     }

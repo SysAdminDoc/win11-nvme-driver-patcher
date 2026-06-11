@@ -35,6 +35,17 @@ public static class CleanDataService
         var selected = (targets ?? AllTargets).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var dir = string.IsNullOrWhiteSpace(config.WorkingDir) ? AppConfig.GetWorkingDir() : config.WorkingDir;
 
+        // Scope guard: this method recursively deletes tools\ and pattern-matched files
+        // under `dir`. A corrupted config or bad portable flag pointing at a drive root or
+        // a system directory must never turn that into a system-wide sweep.
+        if (!IsSafeCleanRoot(dir, out var reason))
+        {
+            result.Success = false;
+            result.Summary = $"Refusing to clean '{dir}': {reason}";
+            result.Errors.Add(result.Summary);
+            return result;
+        }
+
         if (!Directory.Exists(dir))
         {
             result.Success = true;
@@ -70,6 +81,70 @@ public static class CleanDataService
         result.Success = result.Errors.Count == 0;
         result.Summary = $"Removed {result.FilesRemoved} file(s), freed {result.BytesFreed / 1024.0 / 1024.0:F2} MB from {dir}.";
         return result;
+    }
+
+    /// <summary>
+    /// A clean root is safe when it is a real, absolute, non-root path that is NOT a
+    /// protected system location. Both the default %LocalAppData%\NVMePatcher dir and
+    /// portable-mode exe-adjacent dirs pass; drive roots, Windows, Program Files, and
+    /// user-profile roots refuse.
+    /// </summary>
+    internal static bool IsSafeCleanRoot(string? dir, out string reason)
+    {
+        reason = string.Empty;
+        if (string.IsNullOrWhiteSpace(dir)) { reason = "path is empty"; return false; }
+
+        // "C:" (no slash) resolves via Path.GetFullPath to the drive's CURRENT DIRECTORY —
+        // wherever the process happens to be. That ambiguity is unacceptable for a
+        // recursive delete root; require a real directory path.
+        var trimmed = dir.Trim();
+        if (trimmed.Length == 2 && trimmed[1] == ':' && char.IsLetter(trimmed[0]))
+        {
+            reason = "drive-letter-only path is ambiguous (resolves to the process's current directory)";
+            return false;
+        }
+
+        string full;
+        try { full = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar); }
+        catch (Exception ex) { reason = $"path is invalid ({ex.Message})"; return false; }
+
+        if (!Path.IsPathRooted(full)) { reason = "path is not absolute"; return false; }
+
+        var root = Path.GetPathRoot(full)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.Equals(full, root, StringComparison.OrdinalIgnoreCase))
+        {
+            reason = "path is a drive root";
+            return false;
+        }
+
+        // Protected locations: cleaning must never target these or their direct selves.
+        var protectedDirs = new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        };
+        foreach (var p in protectedDirs)
+        {
+            if (string.IsNullOrEmpty(p)) continue;
+            var prot = p.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (string.Equals(full, prot, StringComparison.OrdinalIgnoreCase))
+            {
+                reason = $"path is a protected system location ({prot})";
+                return false;
+            }
+            // Windows dir specifically: refuse anything beneath it too.
+            if (prot.EndsWith("Windows", StringComparison.OrdinalIgnoreCase) &&
+                full.StartsWith(prot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                reason = $"path is inside the Windows directory ({prot})";
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static void Sweep(IEnumerable<string> files, CleanDataResult result)

@@ -52,6 +52,27 @@ public sealed class RecoveryKitServiceTests : IDisposable
         Assert.Contains("for /L %%N in (1,1,9)", batch, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Export_RemovalArtifacts_CoverServiceNameSafeBootEntries()
+    {
+        // The kit must remove BOTH SafeBoot entry styles: the GUID-class entries and the
+        // KB5079391-era service-name entries (added v4.6.1) — a kit that leaves
+        // SafeBoot\*\nvmedisk behind doesn't fully revert the patch.
+        var kitDir = RecoveryKitService.Export(_tempRoot);
+        Assert.NotNull(kitDir);
+
+        var reg = File.ReadAllText(Path.Combine(kitDir!, "NVMe_Remove_Patch.reg"));
+        Assert.Contains(@"SafeBoot\Minimal\nvmedisk", reg);
+        Assert.Contains(@"SafeBoot\Network\nvmedisk", reg);
+        Assert.Contains("Remove_NVMe_Patch.bat is the canonical removal path", reg);
+
+        var bat = File.ReadAllText(Path.Combine(kitDir!, "Remove_NVMe_Patch.bat"));
+        Assert.Contains(@"SafeBoot\Minimal\nvmedisk", bat);
+        Assert.Contains(@"SafeBoot\Network\nvmedisk", bat);
+        // Offline sweep covers rolled control sets; service-name entries must be in the loop.
+        Assert.Contains(@"ControlSet00%%N\Control\SafeBoot\Minimal\nvmedisk", bat);
+    }
+
     public void Dispose()
     {
         try
