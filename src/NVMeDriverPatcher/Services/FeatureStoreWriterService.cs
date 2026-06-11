@@ -15,9 +15,9 @@ public class FeatureStoreWriteResult
 // protobuf-ish blob under HKLM\...\FeatureManagement\FeatureStore. A full reimplementation
 // is out of scope until we fully reverse-engineer the encoding; this service:
 //
-//   1. Surfaces the known FeatureStore registry path and the two fallback IDs (60786016,
-//      48433719) so the rest of the app can reason about "did ViVeTool run?" without
-//      reading ViVeTool's own on-disk state.
+//   1. Surfaces the known FeatureStore registry path and every known fallback ID
+//      (FallbackFeatureCatalog.AllKnownIds) so the rest of the app can reason about
+//      "did ViVeTool run?" without reading ViVeTool's own on-disk state.
 //   2. Provides a thin HasFallbackEvidence probe that checks whether the FeatureStore
 //      blob contains either ID's little-endian representation — good-enough to render
 //      "post-block fallback active" in the GUI without shelling out to ViVeTool.exe.
@@ -31,7 +31,10 @@ public static class FeatureStoreWriterService
 
     public const string DataValueName = "FeatureStore";
 
-    public static readonly int[] PostBlockFeatureIds = { 60786016, 48433719 };
+    // Union of every known fallback set — evidence written by ANY known set (or by a
+    // user running ViVeTool by hand from a forum guide) must still be recognized.
+    public static readonly int[] PostBlockFeatureIds =
+        Models.FallbackFeatureCatalog.AllKnownIds.ToArray();
 
     public static FeatureStoreWriteResult WriteOverrides(IEnumerable<int> featureIds)
     {

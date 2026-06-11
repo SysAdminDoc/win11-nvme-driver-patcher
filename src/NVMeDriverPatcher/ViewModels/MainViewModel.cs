@@ -632,7 +632,7 @@ public partial class MainViewModel : ObservableObject
                 "The registry changes are in place, but Windows is still loading the legacy stornvme.sys driver.\n\n" +
                 "Microsoft began blocking this override path on recent Insider builds in early 2026. " +
                 "On those builds the FeatureManagement\\Overrides route is a no-op.\n\n" +
-                "A community fallback exists: ViVeTool writes to a different feature store using IDs 60786016 and 48433719. " +
+                $"A community fallback exists: ViVeTool writes to a different feature store using IDs {ViVeToolService.SelectFallbackSet().IdsDisplay}. " +
                 "This works on post-block builds at the cost of an extra dependency.\n\n" +
                 "Choose Apply Fallback to download ViVeTool from its official GitHub repository " +
                 $"({ViVeToolService.ViVeToolProjectUrl}) and apply the fallback now.\n\n" +

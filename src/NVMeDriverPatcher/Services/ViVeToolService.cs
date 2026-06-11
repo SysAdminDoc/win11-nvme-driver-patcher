@@ -12,7 +12,7 @@ namespace NVMeDriverPatcher.Services;
 // its official GitHub releases, cache it in the working dir, then shell out.
 //
 // Source: https://github.com/thebookisclosed/ViVe (permissive, MIT-style license)
-// Relevant feature IDs on post-block builds: 60786016 + 48433719.
+// Feature IDs come from Models/FallbackFeatureCatalog (build-gated; Microsoft rotates them).
 //
 // We explicitly do NOT bundle vivetool.exe in the installer — that would drag a binary
 // we don't sign into our release. Auto-download on demand keeps the dependency honest
@@ -46,9 +46,24 @@ public static class ViVeToolService
     // parallel downloads that race on the tools folder.
     private static readonly SemaphoreSlim _installLock = new(1, 1);
 
-    // The two feature IDs the community moved to after the Feb/Mar 2026 block.
-    // Verified via HotHardware / Tom's Hardware / gamegpu.com reporting.
-    public static IReadOnlyList<string> FallbackFeatureIDs { get; } = ["60786016", "48433719"];
+    /// <summary>
+    /// The fallback ID set to apply on THIS machine, selected by Windows build from the
+    /// FallbackFeatureCatalog (builds >= 26200 use the newer "Native NVMe Stack" set).
+    /// Falls back to the verified March-2026 set when the build can't be read.
+    /// </summary>
+    public static FallbackIdSet SelectFallbackSet()
+    {
+        try
+        {
+            var build = DriveService.GetWindowsBuildDetails();
+            if (build is not null) return FallbackFeatureCatalog.SelectForBuild(build.BuildNumber);
+        }
+        catch { }
+        return FallbackFeatureCatalog.PostBlockMarch2026;
+    }
+
+    public static IReadOnlyList<string> FallbackFeatureIDs =>
+        SelectFallbackSet().Ids.Select(i => i.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
 
     public static string ToolsDir(string workingDir) => Path.Combine(workingDir, "tools");
     public static string CachedExePath(string workingDir) => Path.Combine(ToolsDir(workingDir), "ViVeTool.exe");
@@ -419,7 +434,9 @@ public static class ViVeToolService
         result.Version = install.Version;
         result.IntegritySignal = install.IntegritySignal;
 
-        foreach (var id in FallbackFeatureIDs)
+        var idSet = SelectFallbackSet();
+        log?.Invoke($"Using fallback ID set '{idSet.Name}' ({idSet.AppliesTo}; {idSet.Confidence}): {string.Join(", ", idSet.Ids)}");
+        foreach (var id in idSet.Ids.Select(i => i.ToString(System.Globalization.CultureInfo.InvariantCulture)))
         {
             // Defense in depth — the IDs are static constants today, but validate the digit-only
             // shape so a future editor can't accidentally smuggle an argument injection.
