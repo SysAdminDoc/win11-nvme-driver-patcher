@@ -138,6 +138,11 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showViVeToolFallbackBadge;
     [ObservableProperty] private bool _showSafeBootUpgradeBadge;
 
+    // DirectStorage / BypassIO gaming impact panel (AR-2026-007 + RD-006).
+    [ObservableProperty] private string _directStorageImpactText = "";
+    [ObservableProperty] private string _directStorageImpactSeverity = "Info";
+    [ObservableProperty] private bool _directStoragePanelVisible;
+
     // How the native driver got enabled (RD-004) — drives the official-rollout pivot.
     private EnablementSource _enablementSource = EnablementSource.None;
 
@@ -491,6 +496,7 @@ public partial class MainViewModel : ObservableObject
             UpdateStatusDisplay();
             UpdateAttentionNotes();
             UpdateOverviewSummary();
+            UpdateDirectStoragePanel();
             UpdateOperationalHistory();
 
             // Update badge. PreflightService now runs the update check fire-and-forget so it
@@ -941,6 +947,52 @@ public partial class MainViewModel : ObservableObject
         ApplyButtonTooltipText = "Readiness checks are still running.";
         RemoveButtonTooltipText = RemoveUnavailableText;
         UpdateWorkspaceBadges();
+    }
+
+    private void UpdateDirectStoragePanel()
+    {
+        if (_preflight is null)
+        {
+            DirectStoragePanelVisible = false;
+            return;
+        }
+
+        try
+        {
+            var volumes = BypassIoInspectorService.Inspect();
+            var enabledCount = volumes.Count(v => v.Enabled);
+
+            if (enabledCount == 0)
+            {
+                DirectStorageImpactText = "BypassIO is not active on any volume. DirectStorage games will not be affected by the patch.";
+                DirectStorageImpactSeverity = "Info";
+            }
+            else
+            {
+                var volumeList = string.Join(", ", volumes.Where(v => v.Enabled).Select(v => v.Letter));
+                DirectStorageImpactText = $"BypassIO is active on {enabledCount} volume(s) ({volumeList}). " +
+                    "After patching, nvmedisk.sys will veto BypassIO — DirectStorage games on these volumes will fall back to a slower I/O path. " +
+                    "Consider using per-drive scope to keep gaming drives on stornvme.sys.";
+                DirectStorageImpactSeverity = "Warning";
+            }
+            DirectStoragePanelVisible = true;
+
+            var (pre, post) = DataService.GetBypassIoLatestPair();
+            if (pre.Count > 0 && post.Count > 0)
+            {
+                var preVolumes = pre.Where(r => r.Timestamp == pre[0].Timestamp).ToList();
+                var postVolumes = post.Where(r => r.Timestamp == post[0].Timestamp).ToList();
+                var lost = preVolumes.Where(p => p.Enabled)
+                    .Where(p => postVolumes.Any(q => q.VolumeLetter == p.VolumeLetter && !q.Enabled))
+                    .Select(p => p.VolumeLetter).ToList();
+                if (lost.Count > 0)
+                    DirectStorageImpactText += $" Volumes that lost BypassIO after patching: {string.Join(", ", lost)}.";
+            }
+        }
+        catch
+        {
+            DirectStoragePanelVisible = false;
+        }
     }
 
     private void UpdateAttentionNotes()

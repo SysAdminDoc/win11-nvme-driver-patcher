@@ -1005,8 +1005,9 @@
                                                         Background="{DynamicResource YellowBg}"
                                                         BorderBrush="{DynamicResource Border}"
                                                         BorderThickness="1"
-                                                        CornerRadius="6">
-                                                    <TextBlock Text="Heads-up for gamers: nvmedisk.sys does not honor BypassIO, so DirectStorage titles fall back to the slower path. Skip the patch on your gaming rig, or keep a one-click removal ready."
+                                                        CornerRadius="6"
+                                                        Visibility="{Binding DirectStoragePanelVisible, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="{Binding DirectStorageImpactText}"
                                                                Foreground="{DynamicResource Yellow}"
                                                                FontSize="12"
                                                                TextWrapping="Wrap"/>
