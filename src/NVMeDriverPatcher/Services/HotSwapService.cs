@@ -385,6 +385,35 @@ public static class HotSwapService
 
         try
         {
+            // Batch WMI to stay inside the device-return window on slow-WMI systems.
+            // Prefetch the full partition→logical-disk mapping in ONE query, then filter
+            // locally — avoids per-partition ASSOCIATORS round trips that compound latency.
+            var partToLogical = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            using (var mapSearch = new ManagementObjectSearcher("SELECT * FROM Win32_LogicalDiskToPartition"))
+            using (var mapResults = mapSearch.Get())
+            {
+                foreach (var rawMap in mapResults)
+                {
+                    if (rawMap is not ManagementObject map) continue;
+                    using (map)
+                    {
+                        string? antecedent = map["Antecedent"]?.ToString();
+                        string? dependent = map["Dependent"]?.ToString();
+                        if (string.IsNullOrEmpty(antecedent) || string.IsNullOrEmpty(dependent)) continue;
+                        string partKey = ExtractWmiPropertyValue(antecedent, "DeviceID");
+                        string logicalKey = ExtractWmiPropertyValue(dependent, "DeviceID");
+                        if (string.IsNullOrEmpty(partKey) || string.IsNullOrEmpty(logicalKey)) continue;
+                        if (!partToLogical.TryGetValue(partKey, out var list))
+                        {
+                            list = new List<string>();
+                            partToLogical[partKey] = list;
+                        }
+                        list.Add(logicalKey);
+                    }
+                }
+            }
+
+            // One ASSOCIATORS query to get partitions for this drive.
             using var partSearch = new ManagementObjectSearcher(
                 $"ASSOCIATORS OF {{Win32_DiskDrive.DeviceID='\\\\\\\\.\\\\PHYSICALDRIVE{driveNumber}'}} WHERE AssocClass=Win32_DiskDriveToDiskPartition");
 
@@ -397,34 +426,22 @@ public static class HotSwapService
                     string partId = partition["DeviceID"]?.ToString() ?? "";
                     if (string.IsNullOrEmpty(partId)) continue;
 
-                    string escaped = EscapeWmiSingleQuotes(partId);
-                    using var logicalSearch = new ManagementObjectSearcher(
-                        $"ASSOCIATORS OF {{Win32_DiskPartition.DeviceID='{escaped}'}} WHERE AssocClass=Win32_LogicalDiskToPartition");
-
-                    using var logicalCollection = logicalSearch.Get();
-                    foreach (var rawLogical in logicalCollection)
+                    if (!partToLogical.TryGetValue(partId, out var logicals)) continue;
+                    foreach (string letter in logicals)
                     {
-                        if (rawLogical is not ManagementObject logical) continue;
-                        using (logical)
+                        if (string.IsNullOrEmpty(letter)) continue;
+
+                        var guidPath = TryResolveVolumeGuid(letter);
+                        if (string.IsNullOrEmpty(guidPath))
                         {
-                            string? letter = logical["DeviceID"]?.ToString();
-                            if (string.IsNullOrEmpty(letter)) continue;
-
-                            var guidPath = TryResolveVolumeGuid(letter);
-                            // If a logical drive exists but we cannot resolve its stable GUID,
-                            // abort the swap. Treating it as "no volume" could dismount a user's
-                            // drive letter with no reliable way to put it back afterwards.
-                            if (string.IsNullOrEmpty(guidPath))
+                            return new VolumeCaptureResult
                             {
-                                return new VolumeCaptureResult
-                                {
-                                    Succeeded = false,
-                                    ErrorMessage = $"Could not resolve stable volume GUID for {letter}."
-                                };
-                            }
-
-                            volumes.Add(new MountedVolume(letter, guidPath));
+                                Succeeded = false,
+                                ErrorMessage = $"Could not resolve stable volume GUID for {letter}."
+                            };
                         }
+
+                        volumes.Add(new MountedVolume(letter, guidPath));
                     }
                 }
             }
@@ -438,6 +455,15 @@ public static class HotSwapService
             };
         }
         return new VolumeCaptureResult { Succeeded = true, Volumes = volumes };
+    }
+
+    private static string ExtractWmiPropertyValue(string wmiPath, string propertyName)
+    {
+        int idx = wmiPath.IndexOf($"{propertyName}=\"", StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return string.Empty;
+        int start = idx + propertyName.Length + 2;
+        int end = wmiPath.IndexOf('"', start);
+        return end > start ? wmiPath[start..end] : string.Empty;
     }
 
     /// <summary>
