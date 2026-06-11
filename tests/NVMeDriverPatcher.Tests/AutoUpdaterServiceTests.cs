@@ -114,4 +114,64 @@ public sealed class AutoUpdaterServiceTests
         var result = await AutoUpdaterService.TryFetchSidecarHashAsync(evil, CancellationToken.None);
         Assert.Null(result);
     }
+
+    // --- GUI asset selection (exact-name, fail-closed) ---
+
+    private static readonly (string? Name, string? Url)[] FullReleaseAssets =
+    {
+        ("NVMeDriverPatcher.Cli.exe", "https://example/cli"),
+        ("NVMeDriverPatcher.Tray.exe", "https://example/tray"),
+        ("NVMeDriverPatcher.Watchdog.exe", "https://example/watchdog"),
+        ("NVMeDriverPatcher-4.6.2.msi", "https://example/msi"),
+        ("SHA256SUMS.txt", "https://example/sums"),
+        ("NVMeDriverPatcher.exe", "https://example/gui"),
+        ("NVMe_Driver_Patcher.ps1", "https://example/ps1"),
+    };
+
+    [Fact]
+    public void SelectGuiAsset_PicksExactGuiName_RegardlessOfOrder()
+    {
+        // Exhaustive rotations stand in for "upload order is not stable".
+        for (int shift = 0; shift < FullReleaseAssets.Length; shift++)
+        {
+            var rotated = FullReleaseAssets.Skip(shift).Concat(FullReleaseAssets.Take(shift)).ToArray();
+            var (url, name) = AutoUpdaterService.SelectGuiAsset(rotated);
+            Assert.Equal("NVMeDriverPatcher.exe", name);
+            Assert.Equal("https://example/gui", url);
+        }
+    }
+
+    [Fact]
+    public void SelectGuiAsset_FailsClosed_WhenGuiAssetMissing()
+    {
+        // CLI/tray/watchdog executables must NEVER be staged as a GUI update.
+        var withoutGui = FullReleaseAssets.Where(a => a.Name != "NVMeDriverPatcher.exe").ToArray();
+        var (url, name) = AutoUpdaterService.SelectGuiAsset(withoutGui);
+        Assert.Null(url);
+        Assert.Null(name);
+    }
+
+    [Fact]
+    public void SelectGuiAsset_MatchesCaseInsensitively()
+    {
+        var (url, name) = AutoUpdaterService.SelectGuiAsset(new (string?, string?)[]
+        {
+            ("nvmedriverpatcher.exe", "https://example/gui-lower"),
+        });
+        Assert.Equal("nvmedriverpatcher.exe", name);
+        Assert.Equal("https://example/gui-lower", url);
+    }
+
+    [Fact]
+    public void SelectGuiAsset_IgnoresNullAndEmptyNames()
+    {
+        var (url, name) = AutoUpdaterService.SelectGuiAsset(new (string?, string?)[]
+        {
+            (null, "https://example/null"),
+            ("", "https://example/empty"),
+            ("NVMeDriverPatcher.exe", "https://example/gui"),
+        });
+        Assert.Equal("https://example/gui", url);
+        Assert.Equal("NVMeDriverPatcher.exe", name);
+    }
 }

@@ -149,9 +149,30 @@ public static class AutoUpdaterService
             $"Start-Process -FilePath '{current}'";
     }
 
+    // The only asset name the auto-updater may stage. Releases also upload CLI, tray,
+    // watchdog, and MSI binaries — selecting "any .exe" made the update payload depend on
+    // upload order. Exact match + fail-closed: if the GUI asset is absent, no update.
+    internal const string GuiAssetName = "NVMeDriverPatcher.exe";
+
     /// <summary>
-    /// Convenience: query GitHub for the latest release and pick the first .exe asset. Returns
-    /// null on any failure — caller shows a "update check failed" notice.
+    /// Pure selection: returns the asset whose name is exactly <see cref="GuiAssetName"/>
+    /// (case-insensitive), or (null, null) when the release carries no GUI payload.
+    /// Never falls back to other executables.
+    /// </summary>
+    internal static (string? Url, string? Name) SelectGuiAsset(IEnumerable<(string? Name, string? Url)> assets)
+    {
+        foreach (var (name, url) in assets)
+        {
+            if (string.Equals(name, GuiAssetName, StringComparison.OrdinalIgnoreCase))
+                return (url, name);
+        }
+        return (null, null);
+    }
+
+    /// <summary>
+    /// Convenience: query GitHub for the latest release and pick the exact GUI asset
+    /// (<see cref="GuiAssetName"/>). Returns null on any failure or when the release has
+    /// no GUI payload — caller shows a "update check failed / no update asset" notice.
     /// </summary>
     public static async Task<(string? Url, string? Name, string? Tag)> FetchLatestAssetAsync(
         string apiReleasesUrl, CancellationToken cancellationToken = default)
@@ -191,14 +212,15 @@ public static class AutoUpdaterService
                 using var doc = JsonDocument.Parse(json);
                 var tag = doc.RootElement.TryGetProperty("tag_name", out var tn) ? tn.GetString() : null;
                 if (!doc.RootElement.TryGetProperty("assets", out var assets)) return (null, null, tag);
+                var candidates = new List<(string? Name, string? Url)>();
                 foreach (var asset in assets.EnumerateArray())
                 {
                     var name = asset.TryGetProperty("name", out var n) ? n.GetString() : null;
                     var url = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
-                    if (!string.IsNullOrWhiteSpace(name) && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                        return (url, name, tag);
+                    candidates.Add((name, url));
                 }
-                return (null, null, tag);
+                var (selUrl, selName) = SelectGuiAsset(candidates);
+                return (selUrl, selName, tag);
             }
             return (null, null, null);
         }
