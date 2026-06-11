@@ -785,6 +785,9 @@ class Program
                 _ => "none (driver not bound)"
             }}");
 
+            var rule = WindowsBuildRulesService.MatchCurrent();
+            Console.WriteLine($"Build rule: {WindowsBuildRulesService.Describe(rule)}");
+
             // Honest read-out of the blocked states — if keys/flags are written but the
             // driver never swapped, that's Microsoft's block, not a user error.
             if (!preflight.NativeNVMeStatus.IsActive)

@@ -75,6 +75,9 @@
       <Component Id="CompatJson" Guid="*">
         <File Source="$(var.PublishDir)\compat.json" KeyPath="yes" />
       </Component>
+      <Component Id="BuildRulesJson" Guid="*">
+        <File Source="$(var.PublishDir)\windows_build_rules.json" KeyPath="yes" />
+      </Component>
       <Component Id="IconFile" Guid="*">
         <File Source="$(var.PublishDir)\icon.ico" KeyPath="yes" />
       </Component>

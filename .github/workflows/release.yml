@@ -77,6 +77,7 @@ jobs:
           Copy-Item publish/tray/NVMeDriverPatcher.Tray.exe        publish/msi-staging/ -Force
           Copy-Item publish/watchdog/NVMeDriverPatcher.Watchdog.exe publish/msi-staging/ -Force
           Copy-Item src/NVMeDriverPatcher/compat.json              publish/msi-staging/ -Force
+          Copy-Item src/NVMeDriverPatcher/windows_build_rules.json publish/msi-staging/ -Force
           # The tracked icon asset lives in the GUI project; the wxs expects icon.ico in PublishDir.
           Copy-Item src/NVMeDriverPatcher/nvme.ico                 publish/msi-staging/icon.ico -Force
 
