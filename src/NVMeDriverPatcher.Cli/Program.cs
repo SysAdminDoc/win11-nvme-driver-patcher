@@ -145,6 +145,7 @@ class Program
                 "dashboard" or "html-report" => DashboardCommand(config),
                 "fw-nudge" or "firmware-nudge" => FirmwareNudgeCommand(args.Skip(1).FirstOrDefault(), args.Skip(2).FirstOrDefault()),
                 "safemode-verify" => SafeModeVerifyCommand(config),
+                "upgrade-safeboot" or "safeboot-upgrade" => UpgradeSafeBootCommand(),
                 "accessibility" or "a11y" => AccessibilityCommand(),
                 "maintenance-window" or "window" => MaintenanceWindowCommand(config),
                 _ => Unknown(command)
@@ -202,6 +203,7 @@ class Program
         "dashboard" or "html-report" => true,
         "fw-nudge" or "firmware-nudge" => true,
         "safemode-verify" => true,
+        "upgrade-safeboot" or "safeboot-upgrade" => true,
         "accessibility" or "a11y" => true,
         "maintenance-window" or "window" => true,
         _ => false
@@ -256,6 +258,19 @@ class Program
         Console.WriteLine($"  Vendor: {single.Vendor}");
         Console.WriteLine($"  URL:    {single.UpdateToolUrl}");
         return 0;
+    }
+
+    static int UpgradeSafeBootCommand()
+    {
+        var report = SafeBootUpgradeService.Evaluate();
+        Console.WriteLine("SafeBoot Entry Upgrade (KB5079391)");
+        Console.WriteLine("==================================");
+        Console.WriteLine(report.Summary);
+        if (!report.UpgradeNeeded)
+            return 0;
+        var (success, message) = SafeBootUpgradeService.UpgradeEntries(Console.WriteLine);
+        Console.WriteLine(message);
+        return success ? 0 : 1;
     }
 
     static int SafeModeVerifyCommand(AppConfig config)
@@ -955,6 +970,7 @@ class Program
         Console.WriteLine("  verify              Generate post-reboot verification script");
         Console.WriteLine("  watchdog            Read watchdog verdict (exit: 0=healthy, 1=unstable, 2=warning)");
         Console.WriteLine("  watchdog-service    Report real-time service state (exit: 0=running, 2=stopped, 3=not installed)");
+        Console.WriteLine("  upgrade-safeboot    Add KB5079391 service-name SafeBoot entries missing from pre-v4.6.1 patches");
         Console.WriteLine("  reliability         Pull Win32_ReliabilityStabilityMetrics, correlate with patch timestamp");
         Console.WriteLine("  minidump            Scan C:\\Windows\\Minidump for NVMe-stack-referencing dumps");
         Console.WriteLine("  firmware            List the bundled controller/firmware compat entries");

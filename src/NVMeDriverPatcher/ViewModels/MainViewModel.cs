@@ -136,6 +136,7 @@ public partial class MainViewModel : ObservableObject
     // persistent "Try ViVeTool Fallback" affordance on the Overview card so the user can
     // revisit the choice without reopening the dialog.
     [ObservableProperty] private bool _showViVeToolFallbackBadge;
+    [ObservableProperty] private bool _showSafeBootUpgradeBadge;
 
     // Set while a benchmark is running, used by the XAML Cancel button to show/hide and
     // to gate CancelBenchmarkCommand. Mirrors _benchmarkInFlight but as a bindable property.
@@ -386,6 +387,21 @@ public partial class MainViewModel : ObservableObject
             // sticking on "Loading..." forever.
             Log($"Preflight failed catastrophically: {ex.Message}", "ERROR");
             _preflight = new PreflightResult();
+        }
+
+        // SafeBoot upgrade detection (RD-002 / KB5079391): patches applied before v4.6.1
+        // wrote only the GUID-class SafeBoot entries; 25H2 Safe Mode also needs the
+        // service-name entries. Cheap registry probe, never fatal.
+        try
+        {
+            var safeBoot = SafeBootUpgradeService.Evaluate();
+            ShowSafeBootUpgradeBadge = safeBoot.UpgradeNeeded;
+            if (safeBoot.UpgradeNeeded)
+                Log("[WARNING] " + safeBoot.Summary, "WARNING");
+        }
+        catch (Exception ex)
+        {
+            Log($"SafeBoot upgrade check skipped: {ex.Message}", "DEBUG");
         }
 
         try

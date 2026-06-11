@@ -77,6 +77,18 @@ public static class PreflightService
             checks["WindowsVersion"] = new(CheckStatus.Warning, "Check failed", true);
         }
 
+        // SafeBoot upgrade state (RD-002): patches applied before v4.6.1 wrote only the
+        // GUID-class SafeBoot entries; KB5079391 made 25H2 Safe Mode require the
+        // service-name entries too. Only surfaces when an upgrade is actually needed.
+        try
+        {
+            var safeBoot = SafeBootUpgradeService.Evaluate();
+            if (safeBoot.UpgradeNeeded)
+                checks["SafeBootEntries"] = new(CheckStatus.Warning,
+                    "SafeBoot entries predate KB5079391 — run the SafeBoot upgrade (Safe Mode risk on 25H2+)");
+        }
+        catch { /* probe is best-effort */ }
+
         // 2. NVMe Drives
         log?.Invoke("  [2/11] Scanning drives...");
         try

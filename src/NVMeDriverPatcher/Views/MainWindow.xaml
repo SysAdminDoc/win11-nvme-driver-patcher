@@ -217,6 +217,42 @@
                                                     Command="{Binding ApplyViVeToolFallbackCommand}"/>
                                         </Grid>
                                     </Border>
+
+                                    <Border Margin="0,14,0,0"
+                                            Padding="14,12"
+                                            Background="{DynamicResource YellowBg}"
+                                            BorderBrush="{DynamicResource Border}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Visibility="{Binding ShowSafeBootUpgradeBadge, Converter={StaticResource BoolVis}}"
+                                            AutomationProperties.Name="SafeBoot entries need update notice">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="SafeBoot entries need update"
+                                                           Foreground="{DynamicResource Yellow}"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"/>
+                                                <TextBlock Text="Your patch predates the KB5079391 Safe Mode fix: the service-name SafeBoot entries are missing. Booting to Safe Mode on 25H2+ could fail with INACCESSIBLE_BOOT_DEVICE until they are added."
+                                                           Margin="0,6,0,0"
+                                                           Foreground="{DynamicResource TextSecondary}"
+                                                           FontSize="12"
+                                                           TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1"
+                                                    Content="Upgrade SafeBoot Entries"
+                                                    Margin="14,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    ToolTip="Writes the SafeBoot\Minimal\nvmedisk and SafeBoot\Network\nvmedisk service-name entries. Idempotent — changes nothing else."
+                                                    AutomationProperties.Name="Upgrade SafeBoot entries"
+                                                    IsEnabled="{Binding ButtonsEnabled}"
+                                                    Command="{Binding UpgradeSafeBootEntriesCommand}"/>
+                                        </Grid>
+                                    </Border>
                                 </StackPanel>
 
                                 <Border Grid.Row="2"
