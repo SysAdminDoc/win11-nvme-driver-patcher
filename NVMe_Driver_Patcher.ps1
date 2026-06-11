@@ -1,8 +1,16 @@
-<#
+﻿<#
 .SYNOPSIS
-    NVMe Driver Patcher for Windows 11
+    NVMe Driver Patcher for Windows 11 — LEGACY SCRIPT (DEPRECATED)
 
 .DESCRIPTION
+    DEPRECATED: this script writes only the FeatureManagement\Overrides registry keys,
+    which Microsoft neutered on Windows 11 builds released after March 2026 — on those
+    builds the script reports success while the native driver never binds. It cannot use
+    the ViVeTool fallback, verify driver binding after reboot, auto-revert on instability,
+    or scope per-drive. Use the maintained GUI (NVMeDriverPatcher.exe) or CLI
+    (NVMeDriverPatcher.Cli.exe) from the same GitHub release instead. This script remains
+    published for air-gapped/legacy (pre-March-2026 build) environments only.
+
     Enterprise-grade GUI tool to enable the experimental Server 2025 NVMe driver in Windows 11.
 
     SAFETY FEATURES:
