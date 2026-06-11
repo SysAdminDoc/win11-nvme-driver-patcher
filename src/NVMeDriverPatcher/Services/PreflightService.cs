@@ -70,6 +70,18 @@ public static class PreflightService
                 checks["NativeBindSupport"] = new(CheckStatus.Warning,
                     $"Build {build.BuildNumber}.{build.UBR}: nvmedisk may be unable to bind on this build — " +
                     "the patch (and the ViVeTool fallback) may have no effect");
+
+            // Matched enablement rule (AR-2026-006): one updatable data file explains what
+            // route is expected to work on this exact build instead of generic copy.
+            try
+            {
+                var rule = WindowsBuildRulesService.MatchCurrent();
+                checks["EnablementRule"] = rule is null
+                    ? new(CheckStatus.Info, "No enablement rule matches this build — behavior unknown, proceed conservatively")
+                    : new(rule.ExpectedPath == "none-known" ? CheckStatus.Warning : CheckStatus.Info,
+                        WindowsBuildRulesService.Describe(rule));
+            }
+            catch { /* rules are advisory — never block preflight */ }
         }
         catch (Exception ex)
         {
