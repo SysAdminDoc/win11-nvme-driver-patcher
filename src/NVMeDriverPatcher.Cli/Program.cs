@@ -654,6 +654,19 @@ class Program
         Console.WriteLine($"Firmware compat DB (schema {db.SchemaVersion}, updated {db.Updated}):");
         foreach (var e in db.Entries)
             Console.WriteLine($"  [{e.Level}] {e.Controller} / {e.Firmware} — {e.Note}");
+        if (db.CveAdvisories.Count > 0)
+        {
+            bool isServer = (DriveService.GetWindowsBuildDetails()?.Caption ?? string.Empty)
+                .Contains("Server", StringComparison.OrdinalIgnoreCase);
+            Console.WriteLine();
+            Console.WriteLine("NVMe-stack CVE advisories:");
+            foreach (var a in db.CveAdvisories)
+            {
+                bool applies = isServer ? a.AffectsServer : a.AffectsClient;
+                Console.WriteLine($"  [{(applies ? "APPLIES TO THIS OS" : "not applicable here")}] {a.Cve} ({a.Severity}) — fixed by {a.FixedBy}");
+                Console.WriteLine($"      {a.Description}");
+            }
+        }
         return 0;
     }
 
