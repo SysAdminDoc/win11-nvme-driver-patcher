@@ -653,7 +653,13 @@ class Program
         var db = FirmwareCompatService.LoadDatabase();
         Console.WriteLine($"Firmware compat DB (schema {db.SchemaVersion}, updated {db.Updated}):");
         foreach (var e in db.Entries)
-            Console.WriteLine($"  [{e.Level}] {e.Controller} / {e.Firmware} — {e.Note}");
+        {
+            var meta = string.IsNullOrEmpty(e.Confidence) ? "" :
+                $" ({e.Confidence}{(string.IsNullOrEmpty(e.LastReviewed) ? "" : $", reviewed {e.LastReviewed}")})";
+            Console.WriteLine($"  [{e.Level}] {e.Controller} / {e.Firmware} — {e.Note}{meta}");
+            if (!string.IsNullOrEmpty(e.SourceUrl))
+                Console.WriteLine($"      source: {e.SourceUrl}");
+        }
         if (db.CveAdvisories.Count > 0)
         {
             bool isServer = (DriveService.GetWindowsBuildDetails()?.Caption ?? string.Empty)
