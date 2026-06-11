@@ -196,18 +196,9 @@ public static class EventLogWatchdogService
         report.TotalEvents = counts.Sum(c => c.Count);
         report.BugChecks = counts.FirstOrDefault(c => c.Source == "BugCheck" && c.Id == 1001)?.Count ?? 0;
 
-        if (DateTime.UtcNow > report.WindowEnd)
-        {
-            if (report.TotalEvents >= state.RevertThreshold) report.Verdict = WatchdogVerdict.Unstable;
-            else if (report.TotalEvents >= state.WarnThreshold) report.Verdict = WatchdogVerdict.Warning;
-            else report.Verdict = WatchdogVerdict.Completed;
-        }
-        else
-        {
-            if (report.TotalEvents >= state.RevertThreshold) report.Verdict = WatchdogVerdict.Unstable;
-            else if (report.TotalEvents >= state.WarnThreshold) report.Verdict = WatchdogVerdict.Warning;
-            else report.Verdict = WatchdogVerdict.Healthy;
-        }
+        report.Verdict = DeriveVerdict(
+            report.TotalEvents, state.WarnThreshold, state.RevertThreshold,
+            windowExpired: DateTime.UtcNow > report.WindowEnd);
 
         report.Summary = BuildSummary(report, state);
         report.Detail = BuildDetail(report, state);
@@ -218,6 +209,19 @@ public static class EventLogWatchdogService
         SaveState(config, state);
 
         return report;
+    }
+
+    /// <summary>
+    /// Pure verdict derivation — the watchdog's core decision, extracted so the full
+    /// (window-state × event-count) table is unit-testable. Threshold crossings always
+    /// win; under-threshold reads Healthy while the window is open and Completed
+    /// ("patch deemed stable") once it expires.
+    /// </summary>
+    internal static WatchdogVerdict DeriveVerdict(int totalEvents, int warnThreshold, int revertThreshold, bool windowExpired)
+    {
+        if (totalEvents >= revertThreshold) return WatchdogVerdict.Unstable;
+        if (totalEvents >= warnThreshold) return WatchdogVerdict.Warning;
+        return windowExpired ? WatchdogVerdict.Completed : WatchdogVerdict.Healthy;
     }
 
     internal static string BuildSummary(WatchdogReport report, WatchdogState state) =>
