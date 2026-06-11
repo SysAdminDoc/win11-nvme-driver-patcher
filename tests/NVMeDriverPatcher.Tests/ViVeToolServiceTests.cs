@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.Tests;
@@ -41,6 +42,77 @@ public sealed class ViVeToolServiceTests : IDisposable
         var root = ViVeToolService.FindViVeToolPayloadRoot(_tempRoot);
 
         Assert.Equal(payloadDir, root);
+    }
+
+    // --- Architecture-aware release asset selection (ViVe v0.3.4+ split-arch zips) ---
+
+    private static readonly ViVeToolService.ReleaseAssetCandidate[] SplitArchAssets =
+    {
+        new("ViVeTool-v0.3.4-SnapdragonArm64.zip", "https://example/arm", 60_000),
+        new("ViVeTool-v0.3.4-IntelAmd.zip", "https://example/x64", 60_000),
+        new("Source code (zip)", "https://example/src", 1_000_000),
+    };
+
+    [Fact]
+    public void SelectReleaseAsset_X64_PrefersIntelAmd_AcrossAllOrders()
+    {
+        for (int shift = 0; shift < SplitArchAssets.Length; shift++)
+        {
+            var rotated = SplitArchAssets.Skip(shift).Concat(SplitArchAssets.Take(shift)).ToArray();
+            var sel = ViVeToolService.SelectReleaseAsset(rotated, Architecture.X64);
+            Assert.NotNull(sel);
+            Assert.Equal("ViVeTool-v0.3.4-IntelAmd.zip", sel!.Value.Name);
+        }
+    }
+
+    [Fact]
+    public void SelectReleaseAsset_X64_AcceptsLegacySingleZip()
+    {
+        // Pre-v0.3.4 releases shipped one un-suffixed zip — must remain installable.
+        var legacy = new ViVeToolService.ReleaseAssetCandidate[]
+        {
+            new("ViVeTool-v0.3.3.zip", "https://example/legacy", 50_000),
+        };
+        var sel = ViVeToolService.SelectReleaseAsset(legacy, Architecture.X64);
+        Assert.NotNull(sel);
+        Assert.Equal("ViVeTool-v0.3.3.zip", sel!.Value.Name);
+    }
+
+    [Fact]
+    public void SelectReleaseAsset_X64_NeverSelectsArmAssets_FailsClosed()
+    {
+        var armOnly = new ViVeToolService.ReleaseAssetCandidate[]
+        {
+            new("ViVeTool-v0.3.4-SnapdragonArm64.zip", "https://example/arm", 60_000),
+            new("ViVeTool-v0.3.4-ARM64CLR.zip", "https://example/armclr", 60_000),
+        };
+        Assert.Null(ViVeToolService.SelectReleaseAsset(armOnly, Architecture.X64));
+    }
+
+    [Fact]
+    public void SelectReleaseAsset_Arm64_SelectsArmAsset_AndRejectsIntelOnly()
+    {
+        var sel = ViVeToolService.SelectReleaseAsset(SplitArchAssets, Architecture.Arm64);
+        Assert.NotNull(sel);
+        Assert.Equal("ViVeTool-v0.3.4-SnapdragonArm64.zip", sel!.Value.Name);
+
+        var intelOnly = new ViVeToolService.ReleaseAssetCandidate[]
+        {
+            new("ViVeTool-v0.3.4-IntelAmd.zip", "https://example/x64", 60_000),
+        };
+        Assert.Null(ViVeToolService.SelectReleaseAsset(intelOnly, Architecture.Arm64));
+    }
+
+    [Fact]
+    public void SelectReleaseAsset_IgnoresNonViVeZipsAndSourceArchives()
+    {
+        var noise = new ViVeToolService.ReleaseAssetCandidate[]
+        {
+            new("Source code (zip)", "https://example/src", 1_000_000),
+            new("readme.txt", "https://example/txt", 100),
+            new("OtherTool-v1.0.zip", "https://example/other", 60_000),
+        };
+        Assert.Null(ViVeToolService.SelectReleaseAsset(noise, Architecture.X64));
     }
 
     public void Dispose()
