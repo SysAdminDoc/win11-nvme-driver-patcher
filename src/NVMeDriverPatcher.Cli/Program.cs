@@ -382,12 +382,27 @@ class Program
 
     static int IdentifyCommand()
     {
+        bool found = false;
         for (int n = 0; n < 16; n++)
         {
             var r = NvmeIdentifyService.Query(n);
             if (!r.Success) continue;
-            Console.WriteLine($"PhysicalDrive{n}: {r.Summary}  SN={r.SerialNumber.Trim()}");
+            found = true;
+            Console.WriteLine($"PhysicalDrive{n}:");
+            Console.WriteLine($"  Model:        {r.ModelNumber.Trim()}");
+            Console.WriteLine($"  Serial:       {r.SerialNumber.Trim()}");
+            Console.WriteLine($"  Firmware:     {r.FirmwareRevision.Trim()}");
+            Console.WriteLine($"  Vendor:       {r.VendorId} / Sub: {r.SubsystemVendorId}");
+            Console.WriteLine($"  Namespaces:   {r.NumberOfNamespaces}");
+            Console.WriteLine($"  Features:     FW-download={r.SupportsFirmwareDownload}  Format={r.SupportsFormatNvm}  NS-mgmt={r.SupportsNamespaceMgmt}  VWC={r.VolatileWriteCache}");
+            Console.WriteLine($"  Power states: {r.NumberOfPowerStates}");
+            foreach (var ps in r.PowerStates)
+            {
+                var opLabel = ps.NonOperational ? "non-op" : "op";
+                Console.WriteLine($"    PS{ps.Index}: {ps.MaxPowerWatts:F4}W  entry={ps.EntryLatencyUs}us  exit={ps.ExitLatencyUs}us  [{opLabel}]");
+            }
         }
+        if (!found) Console.WriteLine("No NVMe controllers responded to Identify Controller.");
         return 0;
     }
 
