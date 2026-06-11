@@ -1,0 +1,84 @@
+# Validate-ReleaseVersions.ps1
+# Fails (exit 1) when any version-bearing surface drifts from the canonical version in
+# Directory.Build.props. Run locally or in CI; pass -ReleaseVersion in the release workflow
+# to additionally assert the tag matches the repo state being released.
+[CmdletBinding()]
+param(
+    # Optional tag-derived version ("4.6.2", no leading v). When supplied, it must equal
+    # the canonical VersionPrefix — prevents tagging a commit whose metadata lags the tag.
+    [string]$ReleaseVersion
+)
+
+$ErrorActionPreference = 'Stop'
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
+
+function Get-Canonical {
+    $props = Join-Path $repoRoot 'Directory.Build.props'
+    if (-not (Test-Path $props)) { throw "Directory.Build.props not found at repo root." }
+    $xml = [xml](Get-Content -Raw $props)
+    $v = $xml.Project.PropertyGroup.VersionPrefix | Where-Object { $_ } | Select-Object -First 1
+    if (-not $v) { throw "VersionPrefix not found in Directory.Build.props." }
+    return $v.Trim()
+}
+
+$canonical = Get-Canonical
+$failures = New-Object System.Collections.Generic.List[string]
+
+function Check {
+    param([string]$Surface, [string]$Actual, [string]$Expected)
+    if ($Actual -ne $Expected) {
+        $failures.Add(("{0}: expected '{1}', found '{2}'" -f $Surface, $Expected, $Actual))
+    }
+}
+
+# 1. PowerShell module manifest
+$psd1Path = Join-Path $repoRoot 'packaging/powershell/NVMeDriverPatcher.psd1'
+$psd1 = Get-Content -Raw $psd1Path
+if ($psd1 -match "ModuleVersion\s*=\s*'([^']+)'") {
+    Check "packaging/powershell/NVMeDriverPatcher.psd1 ModuleVersion" $Matches[1] $canonical
+} else { $failures.Add("psd1: ModuleVersion line not found") }
+
+# 2. winget manifest — PackageVersion and the tag segment of InstallerUrl
+$wingetPath = Join-Path $repoRoot 'packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml'
+$winget = Get-Content -Raw $wingetPath
+if ($winget -match "PackageVersion:\s*(\S+)") {
+    Check "winget PackageVersion" $Matches[1] $canonical
+} else { $failures.Add("winget: PackageVersion line not found") }
+if ($winget -match "InstallerUrl:\s*\S*/download/v([0-9][^/]*)/") {
+    Check "winget InstallerUrl tag segment" $Matches[1] $canonical
+} else { $failures.Add("winget: InstallerUrl tag segment not found") }
+
+# 3. WiX MSI package version (4-part)
+$wxsPath = Join-Path $repoRoot 'packaging/wix/NVMeDriverPatcher.wxs'
+$wxs = Get-Content -Raw $wxsPath
+if ($wxs -cmatch 'Version="([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"') {
+    Check "packaging/wix/NVMeDriverPatcher.wxs Version" $Matches[1] "$canonical.0"
+} else { $failures.Add("wxs: Version attribute not found") }
+
+# 4. Intune detection script minimum version — must not lag the release
+$intunePath = Join-Path $repoRoot 'packaging/intune/Detect-NVMeDriverPatcher.ps1'
+$intune = Get-Content -Raw $intunePath
+if ($intune -match "\`$minVersion\s*=\s*\[Version\]'([^']+)'") {
+    Check "packaging/intune/Detect-NVMeDriverPatcher.ps1 minVersion" $Matches[1] $canonical
+} else { $failures.Add("intune: minVersion line not found") }
+
+# 5. AppConfig last-resort fallback literal
+$appConfigPath = Join-Path $repoRoot 'src/NVMeDriverPatcher/Models/AppConfig.cs'
+$appConfig = Get-Content -Raw $appConfigPath
+if ($appConfig -match 'FallbackVersionLiteral\s*=\s*"([^"]+)"') {
+    Check "AppConfig.cs FallbackVersionLiteral" $Matches[1] $canonical
+} else { $failures.Add("AppConfig.cs: FallbackVersionLiteral not found") }
+
+# 6. Optional: tag-derived release version must match repo state
+if ($ReleaseVersion) {
+    Check "release tag version" $ReleaseVersion.TrimStart('v') $canonical
+}
+
+if ($failures.Count -gt 0) {
+    Write-Host "Version drift detected (canonical = $canonical):" -ForegroundColor Red
+    $failures | ForEach-Object { Write-Host "  FAIL $_" -ForegroundColor Red }
+    exit 1
+}
+
+Write-Host "All version surfaces match canonical $canonical." -ForegroundColor Green
+exit 0

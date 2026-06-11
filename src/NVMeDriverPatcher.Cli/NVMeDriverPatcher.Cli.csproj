@@ -7,7 +7,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>NVMeDriverPatcher.Cli</AssemblyName>
     <RootNamespace>NVMeDriverPatcher.Cli</RootNamespace>
-    <Version>4.6.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
