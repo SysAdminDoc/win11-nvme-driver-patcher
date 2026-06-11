@@ -138,7 +138,7 @@ class Program
                 "portable-disable" => PortableDisableCommand(),
                 "update-check" => UpdateCheckCommand().GetAwaiter().GetResult(),
                 "winre" => WinReCommand(),
-                "featurestore" or "feature-store" => FeatureStoreCommand(config),
+                "featurestore" or "feature-store" => FeatureStoreCommand(config, args.Any(a => a is not null && a.Equals("--write-native", StringComparison.OrdinalIgnoreCase))),
                 "kit-freshness" or "recovery-kit-freshness" => RecoveryKitFreshnessCommand(config),
                 "docs" or "help-topic" => DocsCommand(args.Skip(1).FirstOrDefault()),
                 "clean-data" => CleanDataCommand(config),
@@ -500,15 +500,43 @@ class Program
         return info.WinReEnabled ? 0 : 1;
     }
 
-    static int FeatureStoreCommand(AppConfig config)
+    static int FeatureStoreCommand(AppConfig config, bool writeNative)
     {
         bool hasFallback = FeatureStoreWriterService.HasFallbackEvidence();
         Console.WriteLine($"FeatureStore fallback evidence: {(hasFallback ? "PRESENT" : "not detected")}");
+        Console.WriteLine();
+        Console.WriteLine("Per-ID configuration (ntdll RtlQueryFeatureConfiguration):");
+        foreach (var state in FeatureStoreWriterService.QueryAllKnownConfigurations())
+        {
+            var desc = state.Found
+                ? $"state={state.EnabledState switch { 2 => "Enabled", 1 => "Disabled", _ => "Default" }} priority={state.Priority}"
+                : "no configuration";
+            Console.WriteLine($"  {state.FeatureId,10}  [{state.Store,-7}]  {desc}");
+        }
         var exportPath = Path.Combine(config.WorkingDir, "featurestore_snapshot.bin");
         var snapshot = FeatureStoreWriterService.ExportBlob(exportPath);
+        Console.WriteLine();
         Console.WriteLine(snapshot is null
             ? "No FeatureStore blob to export."
             : $"FeatureStore blob exported to: {snapshot}");
+
+        if (writeNative)
+        {
+            // EXPERIMENTAL: native enable via RtlSetFeatureConfigurations — same write
+            // ViVeTool performs, without the external download. Build-gated ID set.
+            var idSet = ViVeToolService.SelectFallbackSet();
+            Console.WriteLine();
+            Console.WriteLine($"EXPERIMENTAL native write: enabling set '{idSet.Name}' ({idSet.IdsDisplay})...");
+            var write = FeatureStoreWriterService.WriteOverrides(idSet.Ids);
+            Console.WriteLine(write.Summary);
+            if (write.Success)
+            {
+                PatchVerificationService.MarkPending(config);
+                ConfigService.Save(config);
+                Console.WriteLine("Post-reboot verification armed. Restart to activate.");
+            }
+            return write.Success ? 0 : 1;
+        }
         return 0;
     }
 
