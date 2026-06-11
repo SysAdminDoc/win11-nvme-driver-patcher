@@ -53,6 +53,50 @@ public static class ViVeToolService
     public static string ToolsDir(string workingDir) => Path.Combine(workingDir, "tools");
     public static string CachedExePath(string workingDir) => Path.Combine(ToolsDir(workingDir), "ViVeTool.exe");
 
+    internal readonly record struct ReleaseAssetCandidate(string Name, string? Url, long? Size);
+
+    /// <summary>
+    /// Architecture-aware release asset selection. ViVe v0.3.4+ ships split per-architecture
+    /// zips (ViVeTool-vX.Y.Z-IntelAmd.zip / ViVeTool-vX.Y.Z-SnapdragonArm64.zip); earlier
+    /// releases shipped a single un-suffixed ViVeTool-vX.Y.Z.zip. Selecting "the first zip"
+    /// made the staged binary depend on upload order — an ARM64 binary on an x64 machine
+    /// breaks the only post-block fallback path. Rules:
+    ///   x64/x86 → prefer "-IntelAmd", accept a legacy un-suffixed zip, never an ARM asset.
+    ///   ARM64   → only an ARM-marked asset.
+    ///   no match → null (fail closed; caller reports it).
+    /// </summary>
+    internal static ReleaseAssetCandidate? SelectReleaseAsset(
+        IReadOnlyList<ReleaseAssetCandidate> assets,
+        System.Runtime.InteropServices.Architecture arch)
+    {
+        static bool IsViVeZip(string n) =>
+            n.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+            n.StartsWith("ViVeTool", StringComparison.OrdinalIgnoreCase);
+        static bool IsArm(string n) =>
+            n.Contains("Arm64", StringComparison.OrdinalIgnoreCase) ||
+            n.Contains("Snapdragon", StringComparison.OrdinalIgnoreCase);
+        static bool IsIntelAmd(string n) => n.Contains("IntelAmd", StringComparison.OrdinalIgnoreCase);
+
+        if (arch is System.Runtime.InteropServices.Architecture.X64
+                 or System.Runtime.InteropServices.Architecture.X86)
+        {
+            foreach (var a in assets)
+                if (IsViVeZip(a.Name) && IsIntelAmd(a.Name)) return a;
+            foreach (var a in assets)
+                if (IsViVeZip(a.Name) && !IsArm(a.Name) && !IsIntelAmd(a.Name)) return a;
+            return null;
+        }
+
+        if (arch == System.Runtime.InteropServices.Architecture.Arm64)
+        {
+            foreach (var a in assets)
+                if (IsViVeZip(a.Name) && IsArm(a.Name)) return a;
+            return null;
+        }
+
+        return null;
+    }
+
     // A 0-byte cache file from a previously-failed extraction would silently fool IsInstalled
     // into reporting success. Require a non-trivial file size before we trust the cached copy.
     public static bool IsInstalled(string workingDir)
@@ -148,22 +192,30 @@ public static class ViVeToolService
 
             if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
             {
+                // Collect every asset, then select by process architecture — ViVe v0.3.4+
+                // publishes split IntelAmd / SnapdragonArm64 zips and the order is not stable.
+                var candidates = new List<ReleaseAssetCandidate>();
                 foreach (var asset in assets.EnumerateArray())
                 {
                     if (!asset.TryGetProperty("name", out var nameProp)) continue;
                     var name = nameProp.GetString() ?? string.Empty;
-                    // The canonical release asset is ViVeTool-vX.Y.Z.zip — anything else is skipped.
-                    if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!name.StartsWith("ViVeTool", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (asset.TryGetProperty("browser_download_url", out var urlProp))
-                    {
-                        assetUrl = urlProp.GetString();
-                        if (asset.TryGetProperty("size", out var sizeProp) && sizeProp.ValueKind == JsonValueKind.Number)
-                        {
-                            if (sizeProp.TryGetInt64(out var sz)) expectedSize = sz;
-                        }
-                        break;
-                    }
+                    string? url = asset.TryGetProperty("browser_download_url", out var urlProp)
+                        ? urlProp.GetString() : null;
+                    long? size = null;
+                    if (asset.TryGetProperty("size", out var sizeProp) &&
+                        sizeProp.ValueKind == JsonValueKind.Number &&
+                        sizeProp.TryGetInt64(out var sz))
+                        size = sz;
+                    candidates.Add(new ReleaseAssetCandidate(name, url, size));
+                }
+
+                var selected = SelectReleaseAsset(
+                    candidates, System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture);
+                if (selected is { } sel)
+                {
+                    log?.Invoke($"Selected release asset: {sel.Name}");
+                    assetUrl = sel.Url;
+                    expectedSize = sel.Size;
                 }
             }
         }
@@ -175,7 +227,8 @@ public static class ViVeToolService
 
         if (string.IsNullOrEmpty(assetUrl))
         {
-            result.Message = "No ViVeTool release asset found on GitHub.";
+            result.Message = "No ViVeTool release asset matching this machine's architecture " +
+                $"({System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}) was found on GitHub.";
             return result;
         }
 
