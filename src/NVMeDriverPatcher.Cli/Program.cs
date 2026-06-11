@@ -107,6 +107,7 @@ class Program
                 "verify" => VerifyCommand(config),
                 "dry-run" or "preview" => DryRunCommand(config),
                 "watchdog" => autoRevert ? WatchdogAutoRevertCommand(config) : WatchdogCommand(config),
+                "watchdog-service" or "service-status" => WatchdogServiceStateCommand(),
                 "reliability" => ReliabilityCommand(config),
                 "minidump" or "triage" => MinidumpCommand(config),
                 "firmware" or "compat" => FirmwareCompatCommand(),
@@ -169,6 +170,7 @@ class Program
         "verify" => true,
         "dry-run" or "preview" => true,
         "watchdog" => true,
+        "watchdog-service" or "service-status" => true,
         "reliability" => true,
         "minidump" or "triage" => true,
         "firmware" or "compat" => true,
@@ -525,12 +527,38 @@ class Program
         return report.PreflightBlockers.Count > 0 ? 1 : 0;
     }
 
+    static int WatchdogServiceStateCommand()
+    {
+        var state = WatchdogServiceStateService.Query();
+        Console.WriteLine("Real-time Watchdog Service");
+        Console.WriteLine("==========================");
+        Console.WriteLine($"Service: {WatchdogServiceStateService.ServiceName}");
+        Console.WriteLine($"State:   {state} — {WatchdogServiceStateService.Describe(state)}");
+        if (state == WatchdogServiceState.NotInstalled)
+        {
+            Console.WriteLine();
+            Console.WriteLine("The service is opt-in. Install (as admin) with:");
+            Console.WriteLine("  NVMeDriverPatcher.Watchdog.exe /install");
+            Console.WriteLine("or select the WatchdogService MSI feature (ADDLOCAL=WatchdogService).");
+        }
+        // Exit codes: 0 running, 2 stopped, 3 not installed, 4 unknown/pending —
+        // lets fleet scripts branch on service health without parsing output.
+        return state switch
+        {
+            WatchdogServiceState.Running => 0,
+            WatchdogServiceState.Stopped => 2,
+            WatchdogServiceState.NotInstalled => 3,
+            _ => 4,
+        };
+    }
+
     static int WatchdogCommand(AppConfig config)
     {
         var report = EventLogWatchdogService.Evaluate(config);
         Console.WriteLine("NVMe Driver Watchdog");
         Console.WriteLine("====================");
         Console.WriteLine($"Verdict: {report.Verdict}");
+        Console.WriteLine($"Realtime service: {WatchdogServiceStateService.Describe(WatchdogServiceStateService.Query())}");
         Console.WriteLine(report.Summary);
         Console.WriteLine();
         Console.WriteLine(report.Detail);
@@ -911,6 +939,7 @@ class Program
         Console.WriteLine("  recovery-kit        Generate WinRE recovery kit");
         Console.WriteLine("  verify              Generate post-reboot verification script");
         Console.WriteLine("  watchdog            Read watchdog verdict (exit: 0=healthy, 1=unstable, 2=warning)");
+        Console.WriteLine("  watchdog-service    Report real-time service state (exit: 0=running, 2=stopped, 3=not installed)");
         Console.WriteLine("  reliability         Pull Win32_ReliabilityStabilityMetrics, correlate with patch timestamp");
         Console.WriteLine("  minidump            Scan C:\\Windows\\Minidump for NVMe-stack-referencing dumps");
         Console.WriteLine("  firmware            List the bundled controller/firmware compat entries");

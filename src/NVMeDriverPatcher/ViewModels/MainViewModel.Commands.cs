@@ -759,8 +759,9 @@ public partial class MainViewModel
         try
         {
             var report = EventLogWatchdogService.Evaluate(Config);
-            WatchdogVerdictText = $"{report.Verdict}: {report.Summary}";
-            Log($"Watchdog: {report.Summary}");
+            var svcState = WatchdogServiceStateService.Describe(WatchdogServiceStateService.Query());
+            WatchdogVerdictText = $"{report.Verdict}: {report.Summary} ({svcState})";
+            Log($"Watchdog: {report.Summary} ({svcState})");
         }
         catch (Exception ex)
         {
