@@ -69,7 +69,24 @@ if ($appConfig -match 'FallbackVersionLiteral\s*=\s*"([^"]+)"') {
     Check "AppConfig.cs FallbackVersionLiteral" $Matches[1] $canonical
 } else { $failures.Add("AppConfig.cs: FallbackVersionLiteral not found") }
 
-# 6. Optional: tag-derived release version must match repo state
+# 6. Chocolatey nuspec
+$nuspecPath = Join-Path $repoRoot 'packaging/chocolatey/nvme-driver-patcher.nuspec'
+if (Test-Path $nuspecPath) {
+    $nuspec = [xml](Get-Content -Raw $nuspecPath)
+    $nuspecVersion = $nuspec.package.metadata.version
+    if ($nuspecVersion) { Check "packaging/chocolatey nuspec version" $nuspecVersion $canonical }
+    else { $failures.Add("chocolatey nuspec: version element not found") }
+}
+
+# 7. Scoop manifest
+$scoopPath = Join-Path $repoRoot 'packaging/scoop/nvme-driver-patcher.json'
+if (Test-Path $scoopPath) {
+    $scoop = Get-Content -Raw $scoopPath | ConvertFrom-Json
+    if ($scoop.version) { Check "packaging/scoop manifest version" $scoop.version $canonical }
+    else { $failures.Add("scoop manifest: version field not found") }
+}
+
+# 8. Optional: tag-derived release version must match repo state
 if ($ReleaseVersion) {
     Check "release tag version" $ReleaseVersion.TrimStart('v') $canonical
 }
