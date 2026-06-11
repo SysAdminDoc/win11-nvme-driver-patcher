@@ -1,27 +1,50 @@
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/68963fd7-fc98-4d91-bd83-b13768fff161" alt="Astra Deck" width="300">
+  <img src="https://github.com/user-attachments/assets/68963fd7-fc98-4d91-bd83-b13768fff161" alt="NVMe Driver Patcher" width="300">
 </p>
 
 # NVMe Driver Patcher for Windows 11
 
 A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driver (nvmedisk.sys) on Windows 11, replacing the legacy SCSI translation layer for improved NVMe performance.
 
-
-![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue?logo=powershell)
+![Version](https://img.shields.io/badge/Version-5.0.0-blue)
+![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows11)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-![NVMe Driver Patcher Screenshot](screenshot.png)
-
 ## Quick Start
 
-**One-line install** (Run as Administrator in PowerShell):
+**GUI (recommended)** — download [`NVMeDriverPatcher.exe`](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMeDriverPatcher.exe) from the latest release and run it. Administrator elevation is automatic; no install or prerequisites needed (self-contained single file).
+
+**CLI (automation/fleets)** — download [`NVMeDriverPatcher.Cli.exe`](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMeDriverPatcher.Cli.exe):
+
+```powershell
+.\NVMeDriverPatcher.Cli.exe status
+.\NVMeDriverPatcher.Cli.exe apply --safe
+```
+
+**MSI (managed deployment)** — `NVMeDriverPatcher-<version>.msi` from the release installs GUI + CLI + tray per-machine; the real-time watchdog service is an opt-in feature (`ADDLOCAL=WatchdogService`).
+
+<details>
+<summary><b>Legacy PowerShell script (deprecated)</b></summary>
 
 ```powershell
 irm https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMe_Driver_Patcher.ps1 -OutFile NVMe_Driver_Patcher.ps1; .\NVMe_Driver_Patcher.ps1
 ```
 
-Or download `NVMe_Driver_Patcher.ps1` from [Releases](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases) and right-click > **Run with PowerShell**.
+> **Deprecated — limited to pre-March-2026 builds.** The script writes only the registry
+> override keys, which Microsoft neutered on newer builds: it reports success while the
+> driver never binds. It has none of the v4.4+ capabilities:
+>
+> | Capability | Legacy script | GUI / CLI |
+> |---|---|---|
+> | Registry override patch + SafeBoot keys | ✅ | ✅ |
+> | ViVeTool fallback for post-block builds | ❌ | ✅ |
+> | Post-reboot bind verification (honest status) | ❌ | ✅ |
+> | Watchdog auto-revert, minidump triage, reliability correlation | ❌ | ✅ |
+> | Per-drive scope, dry-run preview, recovery USB builder | ❌ | ✅ |
+>
+> It remains in releases for air-gapped/legacy environments only.
+</details>
 
 ### Verify the download (recommended)
 
