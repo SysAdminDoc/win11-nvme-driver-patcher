@@ -26,7 +26,7 @@ class Program
                 Console.WriteLine($"NVMe Driver Patcher CLI v{AppConfig.AppVersion}");
                 return 0;
             }
-            if (!IsKnownOperationalCommand(command))
+            if (!CliCommandRegistry.IsKnown(command))
                 return Unknown(command);
             if (!PreflightService.IsRunningAsAdmin())
             {
@@ -159,55 +159,9 @@ class Program
         }
     }
 
-    static bool IsKnownOperationalCommand(string command) => command switch
-    {
-        "status" => true,
-        "apply" or "install" => true,
-        "remove" or "uninstall" => true,
-        "diagnostics" or "export-diagnostics" => true,
-        "bundle" or "export-bundle" or "support-bundle" => true,
-        "fallback" or "vivetool-fallback" or "apply-fallback" => true,
-        "recovery-kit" or "export-recovery-kit" => true,
-        "verify" => true,
-        "dry-run" or "preview" => true,
-        "watchdog" => true,
-        "watchdog-service" or "service-status" => true,
-        "reliability" => true,
-        "minidump" or "triage" => true,
-        "firmware" or "compat" => true,
-        "scope" => true,
-        "etw" => true,
-        "winpe" => true,
-        "telemetry" => true,
-        "verifier-on" or "verifier-off" or "verifier-status" => true,
-        "guardrails" => true,
-        "controllers" or "per-controller" => true,
-        "tail" or "events-tail" => true,
-        "physical-disks" => true,
-        "bypassio" => true,
-        "apst" => true,
-        "identify" => true,
-        "config-export" or "config-import" => true,
-        "tuning-export" or "tuning-import" => true,
-        "compare-benchmarks" => true,
-        "compat-checksum" => true,
-        "verify-backup" => true,
-        "register-tasks" or "unregister-tasks" => true,
-        "portable-enable" or "portable-disable" => true,
-        "update-check" => true,
-        "winre" => true,
-        "featurestore" or "feature-store" => true,
-        "kit-freshness" or "recovery-kit-freshness" => true,
-        "docs" or "help-topic" => true,
-        "clean-data" => true,
-        "dashboard" or "html-report" => true,
-        "fw-nudge" or "firmware-nudge" => true,
-        "safemode-verify" => true,
-        "upgrade-safeboot" or "safeboot-upgrade" => true,
-        "accessibility" or "a11y" => true,
-        "maintenance-window" or "window" => true,
-        _ => false
-    };
+    // Routing validation is derived from CliCommandRegistry — no more hand-maintained parallel list.
+    // The switch expression in Main still dispatches to concrete handler methods (refactoring that
+    // into dynamic dispatch would add complexity without improving safety).
 
     static int DocsCommand(string? topic)
     {
@@ -1016,61 +970,6 @@ class Program
         return 3;
     }
 
-    static void PrintUsage()
-    {
-        Console.WriteLine($"NVMe Driver Patcher CLI v{AppConfig.AppVersion}");
-        Console.WriteLine();
-        Console.WriteLine("Usage: NVMeDriverPatcher.Cli <command> [options]");
-        Console.WriteLine();
-        Console.WriteLine("Commands:");
-        Console.WriteLine("  status              Check patch status (exit: 0=applied, 1=not, 2=partial)");
-        Console.WriteLine("  apply               Apply the NVMe driver patch");
-        Console.WriteLine("  remove              Remove the NVMe driver patch");
-        Console.WriteLine("  dry-run             Show exactly what apply would change — no registry writes");
-        Console.WriteLine("  diagnostics         Export system diagnostics report (.txt)");
-        Console.WriteLine("  bundle              Export shareable support bundle (.zip: report + config + crash + regs + db)");
-        Console.WriteLine("  fallback            Apply ViVeTool fallback (build-specific feature IDs, post-block builds)");
-        Console.WriteLine("  recovery-kit        Generate WinRE recovery kit");
-        Console.WriteLine("  verify              Generate post-reboot verification script");
-        Console.WriteLine("  watchdog            Read watchdog verdict (exit: 0=healthy, 1=unstable, 2=warning)");
-        Console.WriteLine("  watchdog-service    Report real-time service state (exit: 0=running, 2=stopped, 3=not installed)");
-        Console.WriteLine("  upgrade-safeboot    Add KB5079391 service-name SafeBoot entries missing from pre-v4.6.1 patches");
-        Console.WriteLine("  reliability         Pull Win32_ReliabilityStabilityMetrics, correlate with patch timestamp");
-        Console.WriteLine("  minidump            Scan C:\\Windows\\Minidump for NVMe-stack-referencing dumps");
-        Console.WriteLine("  firmware            List the bundled controller/firmware compat entries");
-        Console.WriteLine("  scope               List per-drive include/exclude decisions");
-        Console.WriteLine("  etw                 Capture a 60s ETW storage trace (wpr.exe) to %LocalAppData%\\NVMePatcher\\etl");
-        Console.WriteLine("  winpe               Build a WinPE recovery USB tree/ISO from the current Recovery Kit");
-        Console.WriteLine("                        --output=<dir>   Output directory (default: %LocalAppData%\\NVMePatcher\\winpe)");
-        Console.WriteLine("  telemetry           Build compat report; optional --endpoint=<url> to submit anonymized payload");
-        Console.WriteLine("  verifier-on/off     Enable/disable Driver Verifier stress checks on nvmedisk/stornvme/disk");
-        Console.WriteLine("  verifier-status     Report whether Driver Verifier is active on the NVMe stack");
-        Console.WriteLine("  version             Print the CLI version");
-        Console.WriteLine();
-        Console.WriteLine("Options:");
-        Console.WriteLine("  --force, -f                Skip overridable safety checks (VeraCrypt remains blocked)");
-        Console.WriteLine("  --no-restart               Don't prompt for restart");
-        Console.WriteLine("  --safe                     Safe Mode: write primary flag only (735209102) — recommended default");
-        Console.WriteLine("  --full                     Full Mode: write all three flags (higher peak perf, higher BSOD risk)");
-        Console.WriteLine("  --include-server-key       Force the optional Server 2025 key on for this run");
-        Console.WriteLine("  --no-server-key            Force the optional Server 2025 key off for this run");
-        Console.WriteLine("  --dry-run, --preview       Preview changes without applying them (works with 'apply')");
-        Console.WriteLine("  --output=<dir>             Output directory for winpe/telemetry output files");
-        Console.WriteLine("  --endpoint=<url>           HTTPS endpoint for 'telemetry' submissions");
-        Console.WriteLine();
-        Console.WriteLine("Modes:");
-        Console.WriteLine("  Safe (default)  Primary feature flag + Safe Boot entries. Swaps stornvme.sys");
-        Console.WriteLine("                  for nvmedisk.sys with the lowest reported crash risk.");
-        Console.WriteLine("  Full            Adds UxAccOptimization (1853569164) and Standalone_Future");
-        Console.WriteLine("                  (156965516). Higher peak performance on some drives; community");
-        Console.WriteLine("                  BSOD reports in early 2026 cluster on these two flags.");
-        Console.WriteLine();
-        Console.WriteLine("Exit codes:");
-        Console.WriteLine("  0  success / patch applied (status)");
-        Console.WriteLine("  1  failure / patch not applied (status)");
-        Console.WriteLine("  2  partial state / no NVMe drives");
-        Console.WriteLine("  3  unknown command or no args");
-        Console.WriteLine("  4  Administrator privileges required");
-        Console.WriteLine("  99 unhandled error");
-    }
+    static void PrintUsage() =>
+        Console.Write(CliCommandRegistry.RenderUsage(AppConfig.AppVersion));
 }
