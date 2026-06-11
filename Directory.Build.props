@@ -6,5 +6,9 @@
     <FileVersion Condition="'$(FileVersion)' == ''">$(VersionPrefix).0</FileVersion>
     <InformationalVersion Condition="'$(InformationalVersion)' == ''">$(Version)</InformationalVersion>
     <Company Condition="'$(Company)' == ''">SysAdminDoc</Company>
+    <!-- Self-contained single-file output compresses to roughly half size (v4.6.1 GUI
+         shipped at 183 MB uncompressed). Cost: one-time extraction on first launch.
+         Only takes effect where PublishSingleFile=true; no impact on tests. -->
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 </Project>
