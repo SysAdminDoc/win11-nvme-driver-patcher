@@ -71,4 +71,46 @@ public sealed class CleanDataServiceTests : IDisposable
         var result = CleanDataService.Clean(_config);
         Assert.True(File.Exists(Path.Combine(_dir, "user_notes.md")));
     }
+    // --- Scope guard: recursive deletion must never target system locations ---
+
+    [Theory]
+    [InlineData(@"C:\")]
+    [InlineData(@"C:")]
+    [InlineData(@"D:\")]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void IsSafeCleanRoot_RefusesDriveRootsAndEmpty(string dir)
+    {
+        Assert.False(CleanDataService.IsSafeCleanRoot(dir, out var reason));
+        Assert.False(string.IsNullOrWhiteSpace(reason));
+    }
+
+    [Fact]
+    public void IsSafeCleanRoot_RefusesProtectedSystemLocations()
+    {
+        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        Assert.False(CleanDataService.IsSafeCleanRoot(windows, out _));
+        Assert.False(CleanDataService.IsSafeCleanRoot(Path.Combine(windows, "System32"), out _));
+        Assert.False(CleanDataService.IsSafeCleanRoot(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), out _));
+    }
+
+    [Fact]
+    public void IsSafeCleanRoot_AllowsLocalAppDataAndPortableStyleDirs()
+    {
+        var localAppData = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NVMePatcher");
+        Assert.True(CleanDataService.IsSafeCleanRoot(localAppData, out _));
+        Assert.True(CleanDataService.IsSafeCleanRoot(_dir, out _)); // temp-based test dir
+    }
+
+    [Fact]
+    public void Clean_AgainstDriveRoot_RefusesAndDeletesNothing()
+    {
+        var cfg = new AppConfig { WorkingDir = @"C:\" };
+        var result = CleanDataService.Clean(cfg);
+        Assert.False(result.Success);
+        Assert.Equal(0, result.FilesRemoved);
+        Assert.Contains("Refusing to clean", result.Summary);
+    }
 }

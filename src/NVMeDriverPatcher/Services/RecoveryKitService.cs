@@ -64,7 +64,16 @@ public static class RecoveryKitService
 [-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}]
 [-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}]
 [-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet{controlSetNum}\Control\SafeBoot\Minimal\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}]
-[-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet{controlSetNum}\Control\SafeBoot\Network\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}]";
+[-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet{controlSetNum}\Control\SafeBoot\Network\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}]
+
+[-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\nvmedisk]
+[-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\nvmedisk]
+[-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet{controlSetNum}\Control\SafeBoot\Minimal\nvmedisk]
+[-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet{controlSetNum}\Control\SafeBoot\Network\nvmedisk]
+
+; NOTE: this .reg covers CurrentControlSet plus the control set that was current when the
+; kit was generated ({controlSetNum}). On systems with additional control sets (after failed
+; boots), Remove_NVMe_Patch.bat is the canonical removal path — it sweeps ControlSet001-009.";
 
         try
         {
@@ -131,6 +140,8 @@ for /L %%N in (1,1,9) do (
     reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides"" /v 1176759950 /f 2>nul
     reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"" /f 2>nul
     reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"" /f 2>nul
+    reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Minimal\nvmedisk"" /f 2>nul
+    reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Network\nvmedisk"" /f 2>nul
 )
 
 reg unload HKLM\OFFLINE_SYS >nul 2>&1
@@ -143,6 +154,8 @@ reg delete ""HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides"" /
 reg delete ""HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides"" /v 1176759950 /f 2>nul
 reg delete ""HKLM\SYSTEM\%CS%\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"" /f 2>nul
 reg delete ""HKLM\SYSTEM\%CS%\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"" /f 2>nul
+reg delete ""HKLM\SYSTEM\%CS%\Control\SafeBoot\Minimal\nvmedisk"" /f 2>nul
+reg delete ""HKLM\SYSTEM\%CS%\Control\SafeBoot\Network\nvmedisk"" /f 2>nul
 
 :done
 echo.

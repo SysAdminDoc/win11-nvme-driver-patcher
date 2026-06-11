@@ -248,6 +248,16 @@ public static class BenchmarkService
         }
         catch { }
 
+        // Free-space preflight: DiskSpd creates a 128 MB test file (-c128M). On a nearly
+        // full drive that can starve a subsequent patch operation (registry backup, restore
+        // point, recovery kit) of space — refuse below 256 MB headroom instead.
+        if (!HasEnoughFreeSpace(benchDir, out var freeSpaceError))
+        {
+            log?.Invoke($"[ERROR] {freeSpaceError}");
+            ReportProgress(progress, 0, "");
+            return null;
+        }
+
         var testFile = Path.Combine(benchDir, "diskspd_test.dat");
         BenchmarkResult? result = new() { Label = label, Timestamp = DateTime.Now.ToString("o") };
 
@@ -304,6 +314,35 @@ public static class BenchmarkService
         {
             // Progress callbacks are UI niceties; they must never change benchmark outcomes
             // or mask cleanup failures.
+        }
+    }
+
+    // 128 MB test file + 128 MB headroom so the bench never leaves the volume critically full.
+    internal const long TestFileBytes = 128L * 1024 * 1024;
+    internal const long MinFreeBytesAfterTestFile = 128L * 1024 * 1024;
+
+    internal static bool HasEnoughFreeSpace(string benchDir, out string error)
+    {
+        error = string.Empty;
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(benchDir));
+            if (string.IsNullOrEmpty(root)) { error = $"Cannot resolve volume for '{benchDir}'."; return false; }
+            var free = new System.IO.DriveInfo(root).AvailableFreeSpace;
+            if (free < TestFileBytes + MinFreeBytesAfterTestFile)
+            {
+                error = $"Not enough free space on {root} for the benchmark: {free / 1024 / 1024} MB available, " +
+                        $"{(TestFileBytes + MinFreeBytesAfterTestFile) / 1024 / 1024} MB required (128 MB test file + 128 MB headroom). " +
+                        "Free up space or benchmark a different volume.";
+                return false;
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Can't measure — proceed rather than block (matches the service's best-effort style).
+            error = $"Free-space check skipped: {ex.Message}";
+            return true;
         }
     }
 
