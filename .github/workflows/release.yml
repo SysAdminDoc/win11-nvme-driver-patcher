@@ -184,6 +184,23 @@ jobs:
           $yaml = $yaml -replace '/releases/download/v[0-9][^/]*/', ('/releases/download/' + '${{ steps.tag.outputs.tag }}' + '/')
           $yaml | Out-File -FilePath 'publish/SysAdminDoc.NVMeDriverPatcher.yaml' -Encoding utf8
 
+      - name: Package PowerShell module zip
+        shell: pwsh
+        run: |
+          $moduleDir = 'publish/powershell-module'
+          New-Item -ItemType Directory -Force -Path $moduleDir | Out-Null
+          Copy-Item packaging/powershell/NVMeDriverPatcher.psd1 $moduleDir/ -Force
+          Copy-Item packaging/powershell/NVMeDriverPatcher.psm1 $moduleDir/ -Force
+          Copy-Item publish/cli/NVMeDriverPatcher.Cli.exe       $moduleDir/ -Force
+          Copy-Item LICENSE                                      $moduleDir/ -Force
+          Compress-Archive -Path "$moduleDir/*" `
+            -DestinationPath "publish/NVMeDriverPatcher.PowerShell-${{ steps.tag.outputs.version }}.zip" `
+            -Force
+          $hash = (Get-FileHash -Algorithm SHA256 "publish/NVMeDriverPatcher.PowerShell-${{ steps.tag.outputs.version }}.zip").Hash.ToLower()
+          $name = "NVMeDriverPatcher.PowerShell-${{ steps.tag.outputs.version }}.zip"
+          "$hash  $name" | Out-File -FilePath "publish/$name.sha256" -Encoding ascii -NoNewline
+          "$hash  $name" | Out-File -FilePath 'publish/SHA256SUMS.txt' -Encoding ascii -Append
+
       - name: Validate release artifact contract
         shell: pwsh
         run: ./scripts/Validate-ReleaseAssets.ps1 -Version '${{ steps.tag.outputs.version }}'
@@ -202,6 +219,7 @@ jobs:
             - **NVMeDriverPatcher.Tray.exe** — Non-admin status tray agent
             - **NVMeDriverPatcher.Watchdog.exe** — Optional real-time watchdog service (`NVMeDriverPatcher.Watchdog.exe /install` as admin, or select the feature in the MSI)
             - **NVMeDriverPatcher-*.msi** — Per-machine installer (GUI + CLI + tray; watchdog service selectable via `ADDLOCAL=WatchdogService`)
+            - **NVMeDriverPatcher.PowerShell-*.zip** — PowerShell module with bundled CLI binary
             - **SysAdminDoc.NVMeDriverPatcher.yaml** — winget manifest for this release
             - **NVMe_Driver_Patcher.ps1** — PowerShell script (legacy)
             - **SHA256SUMS.txt** + per-asset `.sha256` sidecars — Verify downloads with `Get-FileHash <file> -Algorithm SHA256`
@@ -230,6 +248,7 @@ jobs:
             publish/SHA256SUMS.txt
             publish/*.sha256
             publish/SysAdminDoc.NVMeDriverPatcher.yaml
+            publish/NVMeDriverPatcher.PowerShell-${{ steps.tag.outputs.version }}.zip
             NVMe_Driver_Patcher.ps1
           draft: false
           prerelease: false
