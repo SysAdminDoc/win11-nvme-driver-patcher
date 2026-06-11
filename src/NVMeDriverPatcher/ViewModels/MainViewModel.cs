@@ -1097,7 +1097,7 @@ public partial class MainViewModel : ObservableObject
             // understand WHAT they're turning on, not just what might break.
             var profileLine = Config.PatchProfile == PatchProfile.Safe
                 ? "Mode: SAFE — writes only the primary feature flag (735209102). Extended flags stay off because they correlate with community BSOD reports."
-                : "Mode: FULL — writes the primary flag plus two extended flags. This can improve peak performance on some drives, but carries higher crash risk.";
+                : "Mode: FULL — writes the primary flag plus two extended flags. This can improve peak performance on some drives, but carries higher crash risk; community reports also describe rare power-loss data corruption under the extended flags (unconfirmed, single-source).";
             notes.Insert(0, profileLine);
 
             // BypassIO / DirectStorage — elevated from an afterthought to a first-class
@@ -1148,7 +1148,8 @@ public partial class MainViewModel : ObservableObject
             header = "Enable Microsoft's native NVMe driver?";
             body =
                 "This stages a switch from stornvme.sys to nvmedisk.sys, the newer Microsoft driver stack used by Windows Server 2025. " +
-                "On modern NVMe drives, the expected upside is stronger random-write performance and lower CPU use under heavy load; sequential reads are usually unchanged.\n\n" +
+                "On modern NVMe drives, the expected upside is stronger random I/O and lower CPU use under heavy load — but the headline gains (up to ~80% IOPS) appear only in deep-queue synthetic benchmarks. " +
+                "Typical desktop use runs at queue depth 1–2, where the difference is single-digit percent; sequential transfers are mostly unchanged.\n\n" +
                 "Nothing changes live until Windows restarts.";
         }
         else
