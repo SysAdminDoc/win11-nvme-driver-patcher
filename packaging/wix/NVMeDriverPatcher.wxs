@@ -38,6 +38,16 @@
       <ComponentGroupRef Id="AdmxFiles" />
     </Feature>
 
+    <!--
+      Opt-in (Level 2 = not installed by default). Select via the feature tree or
+      `msiexec /i NVMeDriverPatcher.msi ADDLOCAL=WatchdogService`. Registers the
+      real-time event-log watchdog as a LocalSystem auto-start service and removes
+      it cleanly on uninstall.
+    -->
+    <Feature Id="WatchdogService" Title="Real-time Watchdog Service" Level="2">
+      <ComponentGroupRef Id="WatchdogFiles" />
+    </Feature>
+
     <UI>
       <ui:WixUI Id="WixUI_InstallDir" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui" />
     </UI>
@@ -73,6 +83,28 @@
     <ComponentGroup Id="TrayFiles" Directory="INSTALLFOLDER">
       <Component Id="TrayExe" Guid="*">
         <File Source="$(var.PublishDir)\NVMeDriverPatcher.Tray.exe" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="WatchdogFiles" Directory="INSTALLFOLDER">
+      <Component Id="WatchdogExe" Guid="*">
+        <File Id="WatchdogExeFile" Source="$(var.PublishDir)\NVMeDriverPatcher.Watchdog.exe" KeyPath="yes" />
+        <!-- Same service name the exe's own /install path creates via sc.exe, so both
+             install routes converge on one service identity. -->
+        <ServiceInstall Id="WatchdogSvcInstall"
+                        Name="NVMeDriverPatcherWatchdog"
+                        DisplayName="NVMe Driver Patcher Watchdog"
+                        Description="Subscribes to the System event log and feeds the NVMe Driver Patcher watchdog state in real time."
+                        Start="auto"
+                        Type="ownProcess"
+                        Account="LocalSystem"
+                        ErrorControl="normal" />
+        <ServiceControl Id="WatchdogSvcControl"
+                        Name="NVMeDriverPatcherWatchdog"
+                        Start="install"
+                        Stop="both"
+                        Remove="uninstall"
+                        Wait="yes" />
       </Component>
     </ComponentGroup>
 
