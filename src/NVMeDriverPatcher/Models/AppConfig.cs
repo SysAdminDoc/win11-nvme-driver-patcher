@@ -65,6 +65,17 @@ public class AppConfig
     public const string SafeBootServiceValue = "Service";
     public const int MinWinBuild = 22000;
     public const int RecommendedBuild = 26100;
+
+    // Builds where stornvme stopped exposing the GenNvmeDisk compatible ID, so nvmedisk.inf
+    // can never match — even the ViVeTool fallback enables the flags but the driver loads
+    // with zero devices (thebookisclosed/ViVe issue #164, observed on Canary/Dev 26200.8524,
+    // June 2026). Community-reported; whether stable 26200.8xxx is affected is unconfirmed,
+    // so this gates a WARNING, never a hard block.
+    public const int BindBlockedBuildNumber = 26200;
+    public const int BindBlockedMinUbr = 8524;
+    public static bool IsKnownBindBlockedBuild(int buildNumber, int ubr) =>
+        buildNumber > BindBlockedBuildNumber ||
+        (buildNumber == BindBlockedBuildNumber && ubr >= BindBlockedMinUbr);
     public const string ServerFeatureID = "1176759950";
 
     // The lone flag needed to swap stornvme.sys -> nvmedisk.sys on supported builds.

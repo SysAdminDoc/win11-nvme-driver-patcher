@@ -157,4 +157,61 @@ public sealed class PatchVerificationServiceTests
         Assert.Equal("Safe", config.LastVerifiedProfile);
         Assert.Equal("Confirmed", config.LastVerificationResult);
     }
+    // --- ClassifyPostRebootState truth table (pure, no WMI/registry) ---
+
+    [Theory]
+    // Driver bound wins regardless of keys/evidence — Confirmed.
+    [InlineData(true, 3, false, VerificationOutcome.Confirmed)]
+    [InlineData(true, 0, false, VerificationOutcome.Confirmed)]
+    [InlineData(true, 3, true, VerificationOutcome.Confirmed)]
+    [InlineData(true, 0, true, VerificationOutcome.Confirmed)]
+    // Not bound + fallback evidence — the fallback itself failed (ViVe #164), with or
+    // without registry keys still present.
+    [InlineData(false, 3, true, VerificationOutcome.FlagsEnabledNotBound)]
+    [InlineData(false, 0, true, VerificationOutcome.FlagsEnabledNotBound)]
+    // Not bound + no evidence: keys gone → Reverted; keys present → OverrideBlocked.
+    [InlineData(false, 0, false, VerificationOutcome.Reverted)]
+    [InlineData(false, 3, false, VerificationOutcome.OverrideBlocked)]
+    public void ClassifyPostRebootState_TruthTable(
+        bool nativeActive, int keyCount, bool fallbackEvidence, VerificationOutcome expected)
+    {
+        var (outcome, summary, detail) = PatchVerificationService.ClassifyPostRebootState(
+            nativeActive, "nvmedisk.sys", keyCount, fallbackEvidence);
+        Assert.Equal(expected, outcome);
+        Assert.False(string.IsNullOrWhiteSpace(summary));
+        Assert.False(string.IsNullOrWhiteSpace(detail));
+    }
+
+    [Fact]
+    public void ClassifyPostRebootState_FlagsEnabledNotBound_DoesNotSuggestFallback()
+    {
+        // Re-suggesting ViVeTool when the fallback is exactly what failed would be a lie.
+        var (_, _, detail) = PatchVerificationService.ClassifyPostRebootState(
+            nativeActive: false, activeDriver: "stornvme.sys", overrideKeyCount: 2, fallbackEvidence: true);
+        Assert.DoesNotContain("try the ViVeTool fallback", detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("no working enablement path", detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ClassifyPostRebootState_ConfirmedWithoutKeys_ExplainsEnablementSource()
+    {
+        // Fallback-only or official enablement must not read as "Reverted".
+        var (outcome, _, detail) = PatchVerificationService.ClassifyPostRebootState(
+            nativeActive: true, activeDriver: "nvmedisk.sys", overrideKeyCount: 0, fallbackEvidence: false);
+        Assert.Equal(VerificationOutcome.Confirmed, outcome);
+        Assert.Contains("No registry override keys", detail);
+    }
+
+    // --- Known bind-blocked build gate ---
+
+    [Theory]
+    [InlineData(26100, 8655, false)]  // stable 24H2-era — not affected
+    [InlineData(26200, 8246, false)]  // 25H2 before the reported UBR — not flagged
+    [InlineData(26200, 8524, true)]   // first reported affected build (ViVe #164)
+    [InlineData(26200, 9000, true)]   // later 25H2 UBRs
+    [InlineData(28020, 1, true)]      // newer Insider trains carry the change forward
+    public void IsKnownBindBlockedBuild_MatchesReportedSignature(int build, int ubr, bool expected)
+    {
+        Assert.Equal(expected, Models.AppConfig.IsKnownBindBlockedBuild(build, ubr));
+    }
 }
