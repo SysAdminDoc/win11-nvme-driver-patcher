@@ -123,7 +123,7 @@ class Program
                 "controllers" or "per-controller" => PerControllerCommand(),
                 "tail" or "events-tail" => EventTailCommand(),
                 "physical-disks" => PhysicalDisksCommand(),
-                "bypassio" => BypassIoCommand(),
+                "bypassio" => BypassIoCommand(args.Any(a => a is not null && MatchesAny(a, "--history"))),
                 "apst" => ApstCommand(),
                 "identify" => IdentifyCommand(),
                 "config-export" => ConfigExportCommand(config, exportPath),
@@ -306,11 +306,56 @@ class Program
         return 0;
     }
 
-    static int BypassIoCommand()
+    static int BypassIoCommand(bool showHistory)
     {
+        Console.WriteLine("Current per-volume BypassIO state:");
         var list = BypassIoInspectorService.Inspect();
         foreach (var v in list)
-            Console.WriteLine($"  {v.Letter}  {v.Status}  stack={v.Stack}");
+        {
+            var icon = v.Enabled ? "[ON]" : "[OFF]";
+            Console.WriteLine($"  {v.Letter}  {icon}  stack={v.Stack}");
+        }
+
+        var enabledCount = list.Count(v => v.Enabled);
+        if (enabledCount == 0)
+            Console.WriteLine("  Gaming impact: none — BypassIO is already off on all volumes.");
+        else
+            Console.WriteLine($"  Gaming impact: {enabledCount} volume(s) have BypassIO enabled. After patching to nvmedisk.sys, DirectStorage games on those volumes will fall back to a slower path.");
+
+        if (showHistory)
+        {
+            Console.WriteLine();
+            Console.WriteLine("BypassIO history (pre/post patch snapshots):");
+            var (pre, post) = DataService.GetBypassIoLatestPair();
+            if (pre.Count == 0 && post.Count == 0)
+            {
+                Console.WriteLine("  No history recorded yet. Apply or remove the patch to capture snapshots.");
+            }
+            else
+            {
+                if (pre.Count > 0)
+                {
+                    Console.WriteLine($"  Pre-patch ({pre[0].Timestamp:u}):");
+                    foreach (var r in pre.Where(r => r.Timestamp == pre[0].Timestamp))
+                        Console.WriteLine($"    {r.VolumeLetter}  {(r.Enabled ? "[ON]" : "[OFF]")}  stack={r.Stack}");
+                }
+                if (post.Count > 0)
+                {
+                    Console.WriteLine($"  Post-patch ({post[0].Timestamp:u}):");
+                    foreach (var r in post.Where(r => r.Timestamp == post[0].Timestamp))
+                        Console.WriteLine($"    {r.VolumeLetter}  {(r.Enabled ? "[ON]" : "[OFF]")}  stack={r.Stack}");
+                }
+
+                var preVolumes = pre.Where(r => r.Timestamp == pre.FirstOrDefault()?.Timestamp).ToList();
+                var postVolumes = post.Where(r => r.Timestamp == post.FirstOrDefault()?.Timestamp).ToList();
+                var lost = preVolumes.Where(p => p.Enabled)
+                    .Where(p => postVolumes.Any(q => q.VolumeLetter == p.VolumeLetter && !q.Enabled))
+                    .Select(p => p.VolumeLetter).ToList();
+                if (lost.Count > 0)
+                    Console.WriteLine($"  Volumes that LOST BypassIO after patching: {string.Join(", ", lost)}");
+            }
+        }
+
         return 0;
     }
 

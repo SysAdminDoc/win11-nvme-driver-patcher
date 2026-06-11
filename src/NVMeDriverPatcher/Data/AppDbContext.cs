@@ -7,6 +7,7 @@ public class AppDbContext : DbContext
     public DbSet<BenchmarkRecord> Benchmarks => Set<BenchmarkRecord>();
     public DbSet<SnapshotRecord> Snapshots => Set<SnapshotRecord>();
     public DbSet<TelemetryRecord> Telemetry => Set<TelemetryRecord>();
+    public DbSet<BypassIoHistoryRecord> BypassIoHistory => Set<BypassIoHistoryRecord>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -45,6 +46,12 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(t => t.Timestamp);
             e.HasIndex(t => new { t.DriveNumber, t.Timestamp });
+        });
+
+        modelBuilder.Entity<BypassIoHistoryRecord>(e =>
+        {
+            e.HasIndex(b => b.Timestamp);
+            e.HasIndex(b => new { b.VolumeLetter, b.Timestamp });
         });
     }
 

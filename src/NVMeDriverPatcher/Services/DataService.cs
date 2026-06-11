@@ -286,4 +286,73 @@ public static class DataService
             return 0;
         }
     }
+
+    public static void SaveBypassIoSnapshot(IEnumerable<BypassIoVolumeInfo> volumes, string description, bool isPrePatch)
+    {
+        if (volumes is null) return;
+        try
+        {
+            using var db = new AppDbContext();
+            var now = DateTime.UtcNow;
+            foreach (var v in volumes)
+            {
+                db.BypassIoHistory.Add(new BypassIoHistoryRecord
+                {
+                    Timestamp = now,
+                    VolumeLetter = v.Letter ?? string.Empty,
+                    Enabled = v.Enabled,
+                    Stack = v.Stack ?? string.Empty,
+                    Description = description ?? string.Empty,
+                    IsPrePatch = isPrePatch
+                });
+            }
+            db.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DataService] SaveBypassIoSnapshot failed: {ex.Message}");
+        }
+    }
+
+    public static List<BypassIoHistoryRecord> GetBypassIoHistory(int limit = 100)
+    {
+        if (limit <= 0) limit = 100;
+        try
+        {
+            using var db = new AppDbContext();
+            return db.BypassIoHistory
+                .OrderByDescending(b => b.Timestamp)
+                .Take(limit)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DataService] GetBypassIoHistory failed: {ex.Message}");
+            return [];
+        }
+    }
+
+    public static (List<BypassIoHistoryRecord> Pre, List<BypassIoHistoryRecord> Post) GetBypassIoLatestPair()
+    {
+        try
+        {
+            using var db = new AppDbContext();
+            var pre = db.BypassIoHistory
+                .Where(b => b.IsPrePatch)
+                .OrderByDescending(b => b.Timestamp)
+                .Take(20)
+                .ToList();
+            var post = db.BypassIoHistory
+                .Where(b => !b.IsPrePatch)
+                .OrderByDescending(b => b.Timestamp)
+                .Take(20)
+                .ToList();
+            return (pre, post);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DataService] GetBypassIoLatestPair failed: {ex.Message}");
+            return ([], []);
+        }
+    }
 }
