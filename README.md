@@ -277,7 +277,7 @@ The native NVMe driver delivers significant gains by eliminating the SCSI transl
 |----------|---------------|
 | Random 4K read/write (high queue depth) | **+20% to +85%** -- biggest wins |
 | Sequential read/write | +10% to +30% |
-| Desktop responsiveness (app launches, boot) | Noticeable improvement |
+| Desktop responsiveness (app launches, boot) | Single-digit % (desktop I/O runs at QD1-2) |
 | Gaming (load times) | Minimal difference |
 | DirectStorage games | **May be worse** (BypassIO not supported) |
 
