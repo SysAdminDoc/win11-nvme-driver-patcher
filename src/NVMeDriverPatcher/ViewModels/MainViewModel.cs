@@ -605,7 +605,7 @@ public partial class MainViewModel : ObservableObject
                 // timeout, but defense-in-depth keeps us from leaking a long-lived observer.
                 var finished = await Task.WhenAny(completed, Task.Delay(TimeSpan.FromSeconds(12)));
                 if (finished is not Task<UpdateInfo?> t || !t.IsCompletedSuccessfully) return;
-                var info = t.Result;
+                var info = await t; // already completed — await is allocation-free and keeps the codebase .Result-clean
                 if (info is null) return;
 
                 var app = System.Windows.Application.Current;
