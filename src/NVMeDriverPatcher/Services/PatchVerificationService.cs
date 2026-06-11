@@ -171,7 +171,7 @@ public static class PatchVerificationService
             "Patch applied but inactive on this build",
             "The registry keys are set, but Windows is still using the legacy stornvme.sys driver. " +
             "Microsoft began neutering this override path on recent Insider builds in early 2026. " +
-            "You can remove the patch safely, or try the ViVeTool fallback (feature IDs 60786016 and 48433719) " +
+            "You can remove the patch safely, or try the ViVeTool fallback (the app selects the right feature IDs for your Windows build) " +
             "covered on the project's GitHub README.");
     }
 

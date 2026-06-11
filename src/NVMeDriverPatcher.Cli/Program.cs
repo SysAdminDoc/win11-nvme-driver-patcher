@@ -747,7 +747,7 @@ class Program
                     Console.WriteLine();
                     Console.WriteLine("NOTE: The feature flags are set but Windows is still loading the legacy driver.");
                     Console.WriteLine("      On post-block Insider builds (early 2026+) the override is a no-op.");
-                    Console.WriteLine("      Community workaround: ViVeTool with feature IDs 60786016 and 48433719.");
+                    Console.WriteLine($"      Community workaround: ViVeTool with feature IDs {ViVeToolService.SelectFallbackSet().IdsDisplay}.");
                 }
             }
         }
@@ -878,7 +878,9 @@ class Program
     static int FallbackCommand(AppConfig config)
     {
         Console.WriteLine("ViVeTool fallback (downloads from https://github.com/thebookisclosed/ViVe)");
-        Console.WriteLine("Writes feature IDs 60786016 and 48433719 to Windows's FeatureStore.");
+        var fbSet = ViVeToolService.SelectFallbackSet();
+        Console.WriteLine($"Writes feature IDs {fbSet.IdsDisplay} to Windows's FeatureStore");
+        Console.WriteLine($"(set '{fbSet.Name}' for {fbSet.AppliesTo}; confidence: {fbSet.Confidence}).");
         Console.WriteLine();
         Action<string> log = msg => Console.WriteLine(msg);
         var result = ViVeToolService.ApplyFallbackAsync(config.WorkingDir, log).GetAwaiter().GetResult();
@@ -965,7 +967,7 @@ class Program
         Console.WriteLine("  dry-run             Show exactly what apply would change — no registry writes");
         Console.WriteLine("  diagnostics         Export system diagnostics report (.txt)");
         Console.WriteLine("  bundle              Export shareable support bundle (.zip: report + config + crash + regs + db)");
-        Console.WriteLine("  fallback            Apply ViVeTool fallback (for post-block Insider builds — IDs 60786016, 48433719)");
+        Console.WriteLine("  fallback            Apply ViVeTool fallback (build-specific feature IDs, post-block builds)");
         Console.WriteLine("  recovery-kit        Generate WinRE recovery kit");
         Console.WriteLine("  verify              Generate post-reboot verification script");
         Console.WriteLine("  watchdog            Read watchdog verdict (exit: 0=healthy, 1=unstable, 2=warning)");

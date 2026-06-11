@@ -56,7 +56,8 @@ AutoRevertService stages an uninstall. Tune via HKLM Policies or the CLI's
 ",
         ["vivetool"] = @"
 Microsoft silently neutered the FeatureManagement override path on early 2026 Insider
-builds. The ViVeTool fallback writes IDs 60786016 + 48433719 to FeatureStore instead.
+builds. The ViVeTool fallback writes build-specific feature IDs to FeatureStore instead
+(below 26200: 60786016 + 48433719; 26200+: 55369237 + 48433719 + 49453572, community-reported).
 Use `NVMeDriverPatcher.Cli fallback` to download ViVeTool, apply, and flag verification
 pending. `featurestore` CLI probes whether the fallback has been applied.
 ",
