@@ -212,7 +212,7 @@
                                                     Margin="14,0,0,0"
                                                     VerticalAlignment="Center"
                                                     Style="{StaticResource SecondaryButton}"
-                                                    ToolTip="Downloads ViVeTool from its official GitHub release, caches it in this app's tools folder, then applies feature IDs 60786016 and 48433719. Requires a restart."
+                                                    ToolTip="Downloads ViVeTool from its official GitHub release, caches it in this app's tools folder, then applies the community fallback feature IDs for your Windows build. Requires a restart."
                                                     IsEnabled="{Binding ButtonsEnabled}"
                                                     Command="{Binding ApplyViVeToolFallbackCommand}"/>
                                         </Grid>
