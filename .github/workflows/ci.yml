@@ -33,6 +33,10 @@ jobs:
         shell: pwsh
         run: ./scripts/Validate-ReleaseVersions.ps1
 
+      - name: Validate root hygiene
+        shell: pwsh
+        run: ./scripts/Validate-RootHygiene.ps1
+
       - name: Restore
         run: dotnet restore NVMeDriverPatcher.sln
 
