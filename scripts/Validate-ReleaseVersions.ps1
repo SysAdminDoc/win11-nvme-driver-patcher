@@ -6,11 +6,16 @@
 param(
     # Optional tag-derived version ("4.6.2", no leading v). When supplied, it must equal
     # the canonical VersionPrefix — prevents tagging a commit whose metadata lags the tag.
-    [string]$ReleaseVersion
+    [string]$ReleaseVersion,
+    [string]$RepoRoot
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+} else {
+    $repoRoot = (Resolve-Path $RepoRoot).Path
+}
 
 function Get-Canonical {
     $props = Join-Path $repoRoot 'Directory.Build.props'
@@ -89,6 +94,38 @@ if (Test-Path $scoopPath) {
 # 8. Optional: tag-derived release version must match repo state
 if ($ReleaseVersion) {
     Check "release tag version" $ReleaseVersion.TrimStart('v') $canonical
+}
+
+# 9. Packaging markdown artifact examples must not lag the canonical package version.
+# Use NVMeDriverPatcher-<version>.msi in docs that should survive routine bumps.
+$canonicalMajor = ([Version]$canonical).Major
+$artifactVersionPattern = 'NVMeDriverPatcher-(?<version><version>|[0-9]+\.[0-9]+\.[0-9]+|[0-9]+\.x\.y)(?=\.(?:exe|intunewin|msi|sha256|zip)\b)'
+$packagingDocsRoot = Join-Path $repoRoot 'packaging'
+if (Test-Path $packagingDocsRoot) {
+    foreach ($doc in Get-ChildItem -LiteralPath $packagingDocsRoot -Filter '*.md' -Recurse -File) {
+        $text = Get-Content -Raw $doc.FullName
+        $relativeDoc = $doc.FullName.Substring($repoRoot.Length)
+        $relativeDoc = $relativeDoc.TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+
+        foreach ($match in [regex]::Matches($text, $artifactVersionPattern)) {
+            $versionToken = $match.Groups['version'].Value
+            if ($versionToken -eq '<version>') {
+                continue
+            }
+
+            if ($versionToken -match '^([0-9]+)\.x\.y$') {
+                $placeholderMajor = [int]$Matches[1]
+                if ($placeholderMajor -ne $canonicalMajor) {
+                    $failures.Add(("{0}: artifact placeholder '{1}' should be '{2}.x.y' or '<version>'" -f $relativeDoc, $versionToken, $canonicalMajor))
+                }
+                continue
+            }
+
+            if ($versionToken -ne $canonical) {
+                $failures.Add(("{0}: artifact example '{1}' should use '{2}' or '<version>'" -f $relativeDoc, $versionToken, $canonical))
+            }
+        }
+    }
 }
 
 if ($failures.Count -gt 0) {
