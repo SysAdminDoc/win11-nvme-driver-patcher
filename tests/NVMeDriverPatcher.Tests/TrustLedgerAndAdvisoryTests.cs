@@ -23,6 +23,10 @@ public sealed class TrustLedgerAndAdvisoryTests : IDisposable
         Assert.Contains("ViVeTool cache:", ledger);
         Assert.Contains("FeatureStore blob:", ledger);
         Assert.Contains("Fallback ID set:", ledger);
+        Assert.Contains("Data files:", ledger);
+        Assert.Contains("windows_build_rules.json", ledger);
+        Assert.Contains("compat.json", ledger);
+        Assert.Contains("sha256", ledger);
     }
 
     [Fact]

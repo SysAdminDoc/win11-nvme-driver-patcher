@@ -294,6 +294,18 @@ public static class DiagnosticsService
 
         try
         {
+            sb.AppendLine("  Data files:");
+            foreach (var f in DataFileProvenanceService.InspectAll(workingDir))
+            {
+                sb.AppendLine($"    {f.FileName}: {f.SourceKind}; schema {f.SchemaVersion}; reviewed {f.NewestLastReviewed}; sha256 {f.Sha256}");
+                if (!string.IsNullOrWhiteSpace(f.ShippedSha256))
+                    sb.AppendLine($"      shipped sha256 {f.ShippedSha256}; customized={(f.IsCustomized ? "yes" : "no")}; stale={(f.IsStale ? "yes" : "no")}");
+            }
+        }
+        catch { sb.AppendLine("  Data files:         (unavailable)"); }
+
+        try
+        {
             sb.AppendLine();
             sb.AppendLine("NVMe Controller Identify:");
             bool anyFound = false;
@@ -493,6 +505,12 @@ public static class DiagnosticsService
         sb.AppendLine($"Display Version: {buildDetails.DisplayVersion}");
         sb.AppendLine($"UBR: {buildDetails.UBR}");
         sb.AppendLine($"Is 24H2+: {buildDetails.Is24H2OrLater}");
+
+        var dataFileProvenance = preflight?.DataFileProvenance is { Count: > 0 } fromPreflight
+            ? fromPreflight
+            : DataFileProvenanceService.InspectAll(workingDir);
+        sb.AppendLine().AppendLine("DATA FILE PROVENANCE").AppendLine("--------------------");
+        sb.AppendLine(DataFileProvenanceService.RenderForDiagnostics(dataFileProvenance, includePath: true));
 
         sb.AppendLine().AppendLine("CHASSIS / POWER").AppendLine("---------------");
         sb.AppendLine($"Is Laptop: {(preflight?.IsLaptop ?? false ? "Yes (APST warning applies)" : "No (Desktop)")}");

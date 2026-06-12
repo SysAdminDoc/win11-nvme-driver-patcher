@@ -678,7 +678,10 @@ class Program
     static int FirmwareCompatCommand()
     {
         var db = FirmwareCompatService.LoadDatabase();
+        var provenance = DataFileProvenanceService.InspectFirmwareCompat();
         Console.WriteLine($"Firmware compat DB (schema {db.SchemaVersion}, updated {db.Updated}):");
+        Console.WriteLine($"  Provenance: {provenance.Summary}");
+        Console.WriteLine($"  Source: {provenance.ActivePath}");
         foreach (var e in db.Entries)
         {
             var meta = string.IsNullOrEmpty(e.Confidence) ? "" :
@@ -814,6 +817,9 @@ class Program
 
             var rule = WindowsBuildRulesService.MatchCurrent();
             Console.WriteLine($"Build rule: {WindowsBuildRulesService.Describe(rule)}");
+            Console.WriteLine("Data files:");
+            foreach (var f in DataFileProvenanceService.InspectAll())
+                Console.WriteLine($"  {f.Summary} source={f.ActivePath}");
 
             // Honest read-out of the blocked states — if keys/flags are written but the
             // driver never swapped, that's Microsoft's block, not a user error.

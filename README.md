@@ -103,7 +103,7 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 - **Post-reboot drive migration verification** -- per-drive confirmation of which drives moved to "Storage disks"
 - **BypassIO/DirectStorage** status check with gaming impact warning
 - **Before/after comparison** -- shows exactly what changed after patch/unpatch
-- **Diagnostics export** -- full system report with SMART health, compat software, migration status, benchmark history
+- **Diagnostics export** -- full system report with SMART health, compat software, migration status, benchmark history, and rules/compat DB provenance (source, schema, SHA-256, review freshness)
 - **GitHub update check** with clickable badge in title bar
 - **Windows Event Log** integration for audit trails
 
