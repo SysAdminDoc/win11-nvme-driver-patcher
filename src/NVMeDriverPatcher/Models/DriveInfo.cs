@@ -78,6 +78,24 @@ public class CodeIntegrityBlockedDriverEvent
     public string Evidence { get; set; } = string.Empty;
 }
 
+public class DataFileProvenance
+{
+    public string Name { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public string ActivePath { get; set; } = string.Empty;
+    public string SourceKind { get; set; } = string.Empty;
+    public bool Exists { get; set; }
+    public bool IsCustomized { get; set; }
+    public string Sha256 { get; set; } = string.Empty;
+    public string ShippedSha256 { get; set; } = string.Empty;
+    public int SchemaVersion { get; set; }
+    public string Updated { get; set; } = string.Empty;
+    public string NewestLastReviewed { get; set; } = string.Empty;
+    public int StaleAfterDays { get; set; }
+    public bool IsStale { get; set; }
+    public string Summary { get; set; } = string.Empty;
+}
+
 public class WindowsBuildDetails
 {
     public int BuildNumber { get; set; }
