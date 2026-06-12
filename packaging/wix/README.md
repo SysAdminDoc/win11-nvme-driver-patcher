@@ -33,12 +33,12 @@ wix build packaging\wix\NVMeDriverPatcher.wxs `
   -d ProjectRoot="$(Resolve-Path .)" `
   -ext WixToolset.UI.wixext `
   -ext WixToolset.Util.wixext `
-  -out build\NVMeDriverPatcher-5.0.0.msi
+  -out build\NVMeDriverPatcher-<version>.msi
 ```
 
 ## Signing
 
 ```powershell
 # After building, sign with an EV cert (SmartScreen friendly) or a standard OV cert.
-signtool sign /sha1 <cert thumbprint> /tr http://timestamp.sectigo.com /td sha256 /fd sha256 build\NVMeDriverPatcher-5.0.0.msi
+signtool sign /sha1 <cert thumbprint> /tr http://timestamp.sectigo.com /td sha256 /fd sha256 build\NVMeDriverPatcher-<version>.msi
 ```
