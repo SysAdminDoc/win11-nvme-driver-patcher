@@ -1006,7 +1006,7 @@
                                                         BorderBrush="{DynamicResource Border}"
                                                         BorderThickness="1"
                                                         CornerRadius="6"
-                                                        Visibility="{Binding DirectStoragePanelVisible, Converter={StaticResource BoolToVis}}">
+                                                        Visibility="{Binding DirectStoragePanelVisible, Converter={StaticResource BoolVis}}">
                                                     <TextBlock Text="{Binding DirectStorageImpactText}"
                                                                Foreground="{DynamicResource Yellow}"
                                                                FontSize="12"
