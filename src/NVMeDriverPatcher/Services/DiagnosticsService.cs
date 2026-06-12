@@ -508,6 +508,20 @@ public static class DiagnosticsService
         }
         else sb.AppendLine("  None detected");
 
+        var blockedBackupDrivers = preflight?.CodeIntegrityBlockedDrivers ?? CodeIntegrityEventService.RecentBackupDriverBlocks();
+        sb.AppendLine().AppendLine("CODEINTEGRITY BLOCKED BACKUP DRIVERS").AppendLine("------------------------------------");
+        if (blockedBackupDrivers.Count > 0)
+        {
+            foreach (var ev in blockedBackupDrivers)
+            {
+                sb.AppendLine($"  [{ev.Mode}] Event {ev.EventId} at {ev.TimestampUtc:u}");
+                sb.AppendLine($"    Driver: {ev.DriverFile} ({ev.DriverDescription})");
+                sb.AppendLine($"    Affected products: {ev.AffectedProducts}");
+                sb.AppendLine($"    Evidence: {ev.Evidence}");
+            }
+        }
+        else sb.AppendLine("  No recent backup-driver CodeIntegrity block events detected");
+
         var migration = preflight?.CachedMigration ?? DriveService.GetStorageDiskMigration();
         sb.AppendLine().AppendLine("DRIVE MIGRATION STATUS").AppendLine("----------------------");
         if (migration.Migrated.Count > 0)

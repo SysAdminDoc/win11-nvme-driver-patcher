@@ -15,6 +15,7 @@ public class PreflightResult
     public NVMeDriverDetails? DriverInfo { get; set; }
     public NativeNVMeStatus? NativeNVMeStatus { get; set; }
     public BypassIOResult? BypassIOStatus { get; set; }
+    public List<CodeIntegrityBlockedDriverEvent> CodeIntegrityBlockedDrivers { get; set; } = [];
     public Dictionary<string, NVMeHealthInfo> CachedHealth { get; set; } = [];
     public StorageMigrationResult? CachedMigration { get; set; }
     public UpdateInfo? UpdateAvailable { get; set; }
@@ -196,6 +197,18 @@ public static class PreflightService
             log?.Invoke($"    [ERROR] Compatibility check failed: {ex.Message}");
             checks["Compatibility"] = new(CheckStatus.Warning, "Check failed");
         }
+
+        try
+        {
+            result.CodeIntegrityBlockedDrivers = CodeIntegrityEventService.RecentBackupDriverBlocks();
+            if (result.CodeIntegrityBlockedDrivers.Count > 0)
+            {
+                checks["BackupDriverBlocklist"] = new(
+                    CheckStatus.Warning,
+                    CodeIntegrityEventService.DescribeForPreflight(result.CodeIntegrityBlockedDrivers));
+            }
+        }
+        catch { /* event-log evidence is advisory */ }
 
         // 7. Third-party Driver
         log?.Invoke("  [7/11] Checking NVMe drivers...");

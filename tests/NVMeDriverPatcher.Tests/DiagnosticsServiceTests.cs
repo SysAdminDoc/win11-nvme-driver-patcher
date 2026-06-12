@@ -91,6 +91,28 @@ public sealed class DiagnosticsServiceTests : IDisposable
         Assert.DoesNotContain(@"\alice\", sanitized, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Export_IncludesCodeIntegrityBlockedBackupDriverEvidence()
+    {
+        var ev = CodeIntegrityEventService.TryCreateBackupDriverEvent(
+            3077,
+            new DateTime(2026, 4, 15, 12, 0, 0, DateTimeKind.Utc),
+            @"CodeIntegrity blocked C:\Users\alice\Downloads\psmounterex.sys");
+        var preflight = new PreflightResult
+        {
+            CodeIntegrityBlockedDrivers = [ev!]
+        };
+
+        var reportPath = DiagnosticsService.Export(_tempRoot, preflight, []);
+
+        Assert.NotNull(reportPath);
+        var report = File.ReadAllText(reportPath!);
+        Assert.Contains("CODEINTEGRITY BLOCKED BACKUP DRIVERS", report, StringComparison.Ordinal);
+        Assert.Contains("psmounterex.sys", report, StringComparison.Ordinal);
+        Assert.Contains("Macrium Reflect", report, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"C:\Users\alice", report, StringComparison.OrdinalIgnoreCase);
+    }
+
     public void Dispose()
     {
         try
