@@ -19,6 +19,13 @@ public class PatchOperationResult
     public bool RollbackFullyReversed { get; set; } = true;
 }
 
+public enum PatchPreRegistryAbortReason
+{
+    None,
+    VeraCryptSystemEncryption,
+    BitLockerSuspensionFailed
+}
+
 public static class PatchService
 {
     public static PatchOperationResult Install(
@@ -402,6 +409,23 @@ public static class PatchService
             // registry operation succeeds, nor mask rollback/finalization work.
         }
     }
+
+    internal static PatchPreRegistryAbortReason ClassifyPreRegistryAbort(
+        bool veraCryptDetected,
+        bool bitLockerEnabled,
+        bool bitLockerSuspended)
+    {
+        if (veraCryptDetected)
+            return PatchPreRegistryAbortReason.VeraCryptSystemEncryption;
+
+        if (bitLockerEnabled && !bitLockerSuspended)
+            return PatchPreRegistryAbortReason.BitLockerSuspensionFailed;
+
+        return PatchPreRegistryAbortReason.None;
+    }
+
+    internal static bool RequiresManualRecoveryWarning(PatchOperationResult result) =>
+        result.WasRolledBack && !result.RollbackFullyReversed;
 
     private static void FinalizeResult(
         PatchOperationResult result,
