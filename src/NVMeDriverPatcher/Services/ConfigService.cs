@@ -56,7 +56,10 @@ public static class ConfigService
                 : PatchProfile.Safe;
             // Future migrations can branch on ConfigVersion; for now just carry it forward
             // unless the saved file predates the field (deserializes to 0).
-            config.ConfigVersion = saved.ConfigVersion == 0 ? 2 : saved.ConfigVersion;
+            config.ConfigVersion = saved.ConfigVersion == 0
+                ? ConfigMigrationService.CurrentSchemaVersion
+                : saved.ConfigVersion;
+            config.LastRun = saved.LastRun;
             // Drop stale recovery/diagnostics paths whose targets no longer exist —
             // otherwise the workspace shows a "ready" status pointing at missing files.
             config.LastRecoveryKitPath = ExistingDir(saved.LastRecoveryKitPath);
@@ -158,6 +161,7 @@ public static class ConfigService
                     config.ThemeMode,
                     config.PatchProfile,
                     config.ConfigVersion,
+                    config.LastRun,
                     config.LastRecoveryKitPath,
                     config.LastDiagnosticsPath,
                     config.LastSupportBundlePath,

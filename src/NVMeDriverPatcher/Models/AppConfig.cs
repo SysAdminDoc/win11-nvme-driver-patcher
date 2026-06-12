@@ -132,7 +132,7 @@ public class AppConfig
     // Default to Safe — primary flag only. Users can opt into Full after reading the tradeoff.
     public PatchProfile PatchProfile { get; set; } = PatchProfile.Safe;
     // Schema version for future migrations. Leave loose — unknown values fall back to Safe.
-    public int ConfigVersion { get; set; } = 2;
+    public int ConfigVersion { get; set; } = Services.ConfigMigrationService.CurrentSchemaVersion;
     public string? LastRun { get; set; }
     public string? LastRecoveryKitPath { get; set; }
     public string? LastDiagnosticsPath { get; set; }

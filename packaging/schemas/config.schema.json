@@ -12,6 +12,7 @@
     "RestartDelay":                    { "type": "integer", "minimum": 0, "maximum": 3600, "default": 30 },
     "IncludeServerKey":                { "type": "boolean", "default": false },
     "SkipWarnings":                    { "type": "boolean", "default": false },
+    "ThemeMode":                       { "type": "string", "enum": ["System", "Light", "Dark", "HighContrast"], "default": "System" },
     "PatchProfile":                    { "type": "string", "enum": ["Safe", "Full"], "default": "Safe" },
     "ConfigVersion":                   { "type": "integer", "minimum": 1, "default": 3 },
     "LastRecoveryKitPath":             { "type": ["string", "null"] },
