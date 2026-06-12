@@ -207,9 +207,10 @@ public static class ThemeService
             _ => "DarkTheme"
         };
 
+        var assemblyName = typeof(ThemeService).Assembly.GetName().Name;
         return new ResourceDictionary
         {
-            Source = new Uri($"pack://application:,,,/Themes/{themeName}.xaml", UriKind.Absolute)
+            Source = new Uri($"pack://application:,,,/{assemblyName};component/Themes/{themeName}.xaml", UriKind.Absolute)
         };
     }
 
