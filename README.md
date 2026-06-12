@@ -88,7 +88,7 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 **Safety & Compatibility**
 - **VeraCrypt hard block** -- detects system encryption and refuses to patch ([breaks boot entirely](https://github.com/veracrypt/VeraCrypt/issues/1640))
 - **Automatic BitLocker suspension** -- suspends BitLocker for one reboot cycle to prevent recovery key prompts
-- **Comprehensive software detection** -- warns about Intel RST (BSOD risk), Intel VMD (boot failures), Hyper-V/WSL2 (40% I/O regression), Storage Spaces (array degradation), Veeam, Acronis, Macrium, Samsung Magician, WD Dashboard, Crucial Storage Executive, Data Deduplication
+- **Comprehensive software detection** -- warns about Intel RST (BSOD risk), Intel VMD (boot failures), Hyper-V/WSL2 (40% I/O regression), Storage Spaces (array degradation), Veeam, Acronis, Macrium, UrBackup, NinjaOne, Paragon, Samsung Magician, WD Dashboard, Crucial Storage Executive, Data Deduplication
 - **Laptop/power warning** -- detects laptops and warns about APST battery regression (~15% impact)
 - **Rollback on partial failure** -- undoes all applied registry keys if patch doesn't complete fully
 - **Registry backup** export + system restore point creation before any changes
@@ -304,6 +304,7 @@ The tool automatically detects and warns about all of these. VeraCrypt is a hard
 | **Acronis True Image** | Drives invisible to backup/restore | High | Yes (warns) |
 | **Veeam Backup** | Cannot detect drives | High | Yes (warns) |
 | **Macrium Reflect** | May need update for compatibility | Medium | Yes (warns) |
+| **UrBackup / NinjaOne / Paragon** | Backup image-mount driver may be blocked by Windows CodeIntegrity after KB5083769 | Medium | Yes (service + event-log evidence) |
 | **Samsung Magician** | Cannot detect drives (SCSI pass-through) | Low | Yes (warns) |
 | **WD Dashboard** | Cannot detect drives (SCSI pass-through) | Low | Yes (warns) |
 | **Crucial Storage Executive** | Cannot detect drives (SCSI pass-through) | Low | Yes (warns) |
