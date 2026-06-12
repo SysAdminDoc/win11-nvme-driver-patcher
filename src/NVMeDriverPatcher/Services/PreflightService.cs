@@ -336,4 +336,30 @@ public static class PreflightService
             return false;
         }
     }
+
+    internal static PreflightCheck ClassifyCompatibility(IReadOnlyCollection<IncompatibleSoftwareInfo> incompatibleSoftware)
+    {
+        var criticalSw = incompatibleSoftware.Where(s => s.Severity == "Critical").ToList();
+        var warnSw = incompatibleSoftware.Where(s => s.Severity != "Critical").ToList();
+
+        if (criticalSw.Count > 0)
+        {
+            var names = criticalSw.Select(s => s.Name).ToList();
+            string msg = names.Count <= 3
+                ? string.Join(", ", names)
+                : $"{string.Join(", ", names.Take(3))} +{names.Count - 3} more";
+            return new(CheckStatus.Fail, $"BLOCKS PATCH: {msg}", critical: true);
+        }
+
+        if (warnSw.Count > 0)
+        {
+            var names = warnSw.Select(s => s.Name).ToList();
+            string msg = names.Count <= 3
+                ? string.Join(", ", names)
+                : $"{string.Join(", ", names.Take(3))} +{names.Count - 3} more";
+            return new(CheckStatus.Warning, msg);
+        }
+
+        return new(CheckStatus.Pass, "No conflicts");
+    }
 }

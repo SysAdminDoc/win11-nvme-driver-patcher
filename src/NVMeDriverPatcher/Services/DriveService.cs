@@ -775,4 +775,44 @@ public static class DriveService
         catch { }
         return found;
     }
+
+    internal static List<IncompatibleSoftwareInfo> DetectServiceIncompatibilities(IEnumerable<string> serviceNames)
+    {
+        var allServices = serviceNames.Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+        var found = new List<IncompatibleSoftwareInfo>();
+
+        if (allServices.Any(s => RxAcronis.IsMatch(s)))
+            found.Add(new() { Name = "Acronis", Severity = "High", Message = "Backup cannot see drives under Storage disks category" });
+        if (allServices.Any(s => RxMacrium.IsMatch(s)))
+            found.Add(new() { Name = "Macrium Reflect", Severity = "Medium", Message = "May need update for Storage disks compatibility" });
+        if (allServices.Any(s => RxVirtualBox.IsMatch(s)))
+            found.Add(new() { Name = "VirtualBox", Severity = "Low", Message = "Storage filter drivers may conflict" });
+        if (allServices.Any(s => RxIntelRst.IsMatch(s)))
+            found.Add(new() { Name = "Intel RST", Severity = "Critical", Message = "Conflicts with nvmedisk.sys -- BSOD on boot reported. Remove Intel RST before patching." });
+        if (allServices.Any(s => RxIntelVmd.IsMatch(s)))
+            found.Add(new() { Name = "Intel VMD", Severity = "Critical", Message = "Boot failures reported on Intel VMD systems. Do not patch while VMD is active." });
+        if (allServices.Any(s => RxHyperV.IsMatch(s)))
+            found.Add(new() { Name = "Hyper-V/WSL2", Severity = "Medium", Message = "WSL2 disk I/O ~40% slower with native NVMe (no paravirt)" });
+        if (allServices.Any(s => RxVeeam.IsMatch(s)))
+            found.Add(new() { Name = "Veeam", Severity = "High", Message = "Backup agent cannot detect drives under Storage disks" });
+        if (allServices.Any(s => RxUrBackup.IsMatch(s)))
+            found.Add(new() { Name = "UrBackup", Severity = "Medium", Message = "Check backup image-mount support after KB5083769 driver blocklist changes" });
+        if (allServices.Any(s => RxNinjaOne.IsMatch(s)))
+            found.Add(new() { Name = "NinjaOne", Severity = "Medium", Message = "Check backup/image-mount support after KB5083769 driver blocklist changes" });
+        if (allServices.Any(s => RxParagon.IsMatch(s)))
+            found.Add(new() { Name = "Paragon", Severity = "Medium", Message = "Backup image-mount driver may be blocked by Windows vulnerable-driver rules" });
+
+        if (found.Any(f => f.Name is "Acronis" or "Macrium Reflect" or "Veeam" or "UrBackup" or "NinjaOne" or "Paragon"))
+            found.Add(new()
+            {
+                Name = "Backup software note",
+                Severity = "Info",
+                Message = "Unrelated to this patch: the April 2026 Windows update (KB5083769 driver " +
+                          "blocklist) broke image-mount in several backup products. If backups fail " +
+                          "after that update, check your backup vendor's advisory before suspecting " +
+                          "the NVMe driver swap."
+            });
+
+        return found;
+    }
 }
