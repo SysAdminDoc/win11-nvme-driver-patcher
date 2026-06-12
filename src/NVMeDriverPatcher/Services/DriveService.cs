@@ -48,6 +48,9 @@ public static class DriveService
     private static readonly Regex RxIntelVmd   = new(@"^vmd$|vmd_bus",                  RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex RxHyperV     = new(@"^vmms$|^LxssManager$",           RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex RxVeeam      = new(@"VeeamAgent|VeeamEndpoint",       RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxUrBackup   = new(@"UrBackup|UrBackupClientBackend", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxNinjaOne   = new(@"NinjaOne|NinjaRMM|NinjaRMMAgent|NinjaAgent", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxParagon    = new(@"Paragon|UimFIO|Uim_IM|psmounter", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Pre-compiled patterns for fsutil bypassio output parsing.
     private static readonly Regex RxStorageType   = new(@"Storage Type:\s*(.+)",   RegexOptions.Compiled);
@@ -688,11 +691,20 @@ public static class DriveService
             if (allServices.Any(s => RxVeeam.IsMatch(s)))
                 found.Add(new() { Name = "Veeam", Severity = "High", Message = "Backup agent cannot detect drives under Storage disks" });
 
+            if (allServices.Any(s => RxUrBackup.IsMatch(s)))
+                found.Add(new() { Name = "UrBackup", Severity = "Medium", Message = "Check backup image-mount support after KB5083769 driver blocklist changes" });
+
+            if (allServices.Any(s => RxNinjaOne.IsMatch(s)))
+                found.Add(new() { Name = "NinjaOne", Severity = "Medium", Message = "Check backup/image-mount support after KB5083769 driver blocklist changes" });
+
+            if (allServices.Any(s => RxParagon.IsMatch(s)))
+                found.Add(new() { Name = "Paragon", Severity = "Medium", Message = "Backup image-mount driver may be blocked by Windows vulnerable-driver rules" });
+
             // KB5083769 (April 2026) expanded the vulnerable-driver blocklist and broke
             // image-mount (psmounterex.sys) in Macrium/Acronis/Veeam/UrBackup INDEPENDENTLY
             // of this patch. Users with these products often misattribute that breakage to
             // the NVMe swap — say so up front to cut support noise.
-            if (found.Any(f => f.Name is "Acronis" or "Macrium Reflect" or "Veeam"))
+            if (found.Any(f => f.Name is "Acronis" or "Macrium Reflect" or "Veeam" or "UrBackup" or "NinjaOne" or "Paragon"))
                 found.Add(new()
                 {
                     Name = "Backup software note",

@@ -67,6 +67,17 @@ public class IncompatibleSoftwareInfo
     public string Message { get; set; } = string.Empty;
 }
 
+public class CodeIntegrityBlockedDriverEvent
+{
+    public DateTime TimestampUtc { get; set; }
+    public int EventId { get; set; }
+    public string Mode { get; set; } = string.Empty;
+    public string DriverFile { get; set; } = string.Empty;
+    public string DriverDescription { get; set; } = string.Empty;
+    public string AffectedProducts { get; set; } = string.Empty;
+    public string Evidence { get; set; } = string.Empty;
+}
+
 public class WindowsBuildDetails
 {
     public int BuildNumber { get; set; }
