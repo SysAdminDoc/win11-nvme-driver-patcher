@@ -16,6 +16,7 @@ public class PreflightResult
     public NativeNVMeStatus? NativeNVMeStatus { get; set; }
     public BypassIOResult? BypassIOStatus { get; set; }
     public List<CodeIntegrityBlockedDriverEvent> CodeIntegrityBlockedDrivers { get; set; } = [];
+    public List<DataFileProvenance> DataFileProvenance { get; set; } = [];
     public Dictionary<string, NVMeHealthInfo> CachedHealth { get; set; } = [];
     public StorageMigrationResult? CachedMigration { get; set; }
     public UpdateInfo? UpdateAvailable { get; set; }
@@ -76,11 +77,17 @@ public static class PreflightService
             // route is expected to work on this exact build instead of generic copy.
             try
             {
+                result.DataFileProvenance = DataFileProvenanceService.InspectAll();
                 var rule = WindowsBuildRulesService.MatchCurrent();
                 checks["EnablementRule"] = rule is null
                     ? new(CheckStatus.Info, "No enablement rule matches this build — behavior unknown, proceed conservatively")
                     : new(rule.ExpectedPath == "none-known" ? CheckStatus.Warning : CheckStatus.Info,
                         WindowsBuildRulesService.Describe(rule));
+                checks["DataFileProvenance"] = new(
+                    result.DataFileProvenance.Any(f => f.IsStale || !f.Exists)
+                        ? CheckStatus.Warning
+                        : CheckStatus.Info,
+                    DataFileProvenanceService.DescribeForPreflight(result.DataFileProvenance));
             }
             catch { /* rules are advisory — never block preflight */ }
         }
