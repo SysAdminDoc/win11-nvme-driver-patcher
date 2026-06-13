@@ -801,3 +801,94 @@ verification, rollback, safety data, and fleet trust.
   Touches: GUI smoke tests, chart view models, dependency-update checklist, CI if an STA/WPF smoke can run reliably.
   Acceptance: A small automated smoke renders the diagnostics/benchmark chart path without exceptions and with non-empty series before native graphics package updates are applied; update notes document any skipped package and reason.
   Complexity: S
+
+## Research-Driven Additions (2026-06-12, code audit pass)
+
+Net-new items from the 2026-06-12 deep source audit, P/Invoke review, and external
+security/dependency research. Deduplicated against all earlier sections — no item below
+duplicates an existing ROADMAP entry.
+
+### P0
+
+- [ ] P0 — Fix GPO policy application gap: watchdog and telemetry ADMX values never applied
+  Why: `GpoPolicyService.Read()` reads `WatchdogAutoRevert`, `WatchdogWindowHours`, and `CompatTelemetryEnabled` from `HKLM\...\Policies\SysAdminDoc\NVMeDriverPatcher`, but `ApplyTo()` only applies `PatchProfile`, `IncludeServerKey`, and `SkipWarnings`. The 3 remaining values are parsed, stored in the `PolicyOverlay`, reported by `AnyApplied`, but never written to the config or watchdog state. Fleet admins setting these ADMX policies get no effect — the ADMX template and docs both claim they work.
+  Evidence: `src/NVMeDriverPatcher/Services/GpoPolicyService.cs` lines 58-63 (only 3 of 6 values applied); `packaging/admx/NVMeDriverPatcher.admx` declares all 6; watchdog values live in `EventLogWatchdogService.WatchdogState` (separate `watchdog.json`), not in `AppConfig`.
+  Touches: `GpoPolicyService.ApplyTo`, `EventLogWatchdogService`, `ConfigService` or `WatchdogState` (depending on design decision — see RESEARCH.md Open Question 2), tests.
+  Acceptance: Set `WatchdogAutoRevert=1` and `WatchdogWindowHours=24` via GPO registry key; verify the watchdog state file reflects these after `GpoPolicyService.ApplyTo` runs; `CompatTelemetryEnabled=0` via GPO disables telemetry submission regardless of local config; test covers all 6 policy values including unset/null.
+  Complexity: M
+
+- [ ] P0 — Fix PatchService Uninstall finally block missing braces
+  Why: In `PatchService.Uninstall`, the finally block (approximately line 619-625) has `SaveBypassIoSnapshot` indented as if inside `if (result.AfterSnapshot is not null)`, but C# does not use indentation scoping — the call always executes. The equivalent code in `Install` (`FinalizeResult`, lines 438-451) correctly wraps the same call in its own try/catch. This is a safety-data consistency bug: on uninstall failure paths where `AfterSnapshot` is null, bypass I/O data is saved against a null snapshot context.
+  Evidence: `src/NVMeDriverPatcher/Services/PatchService.cs` Uninstall finally block vs Install FinalizeResult.
+  Touches: `PatchService.cs` Uninstall method only.
+  Acceptance: Add braces around the if-body in the Uninstall finally block so `SaveBypassIoSnapshot` only executes when `AfterSnapshot` is not null; verify Install and Uninstall follow the same pattern; add a test fixture that confirms Uninstall with a null AfterSnapshot does not attempt bypass I/O snapshot save.
+  Complexity: S
+
+### P1
+
+- [ ] P1 — Fix PatchService Rollback RegistryKey handle leak
+  Why: In `PatchService.Rollback` (line 653), when `overrides` is null, the fallback path opens a new `RegistryKey` via `hklm.OpenSubKey(...)` on every loop iteration. If the loop body throws before reaching the Dispose call at line 669, the handle leaks. The outer catch at line 704 does not dispose the fallback handle. Under normal operation this is a few leaked handles during a rare failure path, but it violates the project's own defensive-coding standard.
+  Evidence: `src/NVMeDriverPatcher/Services/PatchService.cs` Rollback method, lines 641-710.
+  Touches: `PatchService.Rollback` — wrap the fallback `hklm.OpenSubKey` in a `using` declaration or move it outside the loop.
+  Acceptance: Rollback path with `overrides=null` does not leak `RegistryKey` handles even when an exception occurs inside the loop body; test fixture (if possible without real registry) or code review confirms the fix.
+  Complexity: S
+
+- [ ] P1 — Add filesystem cache flush before HotSwap volume dismount
+  Why: `HotSwapService.SwapAsync` dismounts volumes via `mountvol /P` then re-enumerates the device node, but there is no explicit `FlushFileBuffers` call between the last write and the dismount. On non-boot NVMe drives with recent writes, unflushed data in the filesystem cache could be lost. The hot-swap feature is already documented as "HIGH RISK" but the flush gap makes it riskier than necessary.
+  Evidence: `src/NVMeDriverPatcher/Services/HotSwapService.cs` — step 3 (dismount) proceeds directly to step 4 (re-enumerate) with only a `Thread.Sleep` delay.
+  Touches: `HotSwapService.SwapAsync` — add `NativeMethods.FlushFileBuffers` (or `fsutil volume dismount` which flushes before dismount) for each captured volume before the `mountvol /P` call.
+  Acceptance: A benchmark or test showing that filesystem data written to the target drive within seconds of the hot-swap survives the dismount; the flush call is logged for audit.
+  Complexity: S
+
+- [ ] P1 — Update SkiaSharp native dependencies for libpng CVE coverage
+  Why: SkiaSharp bundles libpng, and libpng <1.6.51 has multiple CVEs (CVE-2025-64505, -64506, -64720, -65018). The project uses SkiaSharp transitively through LiveChartsCore for chart rendering. While exploitation requires processing attacker-controlled PNG data (unlikely in this tool), a storage safety tool should not ship known-vulnerable native binaries.
+  Evidence: SkiaSharp issue #3426; `dotnet list package --outdated --include-transitive` shows SkiaSharp/OpenTK/HarfBuzz updates available.
+  Touches: Update LiveChartsCore and/or pin SkiaSharp to a version with libpng >=1.6.51; run the charting smoke test (P3 item) before and after.
+  Acceptance: `dotnet list package --vulnerable --include-transitive` stays clean; chart rendering still works after the update; update is documented in the dependency-update checklist.
+  Complexity: S (but depends on the P3 charting smoke item for safe verification)
+
+### P2
+
+- [ ] P2 — Fix CPU sanitizer to strip stepping info as documented
+  Why: `CompatTelemetryService.SanitizeCpu` has an XML comment claiming it "strips stepping and microcode details to reduce entropy" but the implementation only truncates to 80 characters. `PROCESSOR_IDENTIFIER` typically contains "Stepping N" which passes through unmodified, increasing fingerprint entropy beyond what the privacy documentation promises.
+  Evidence: `src/NVMeDriverPatcher/Services/CompatTelemetryService.cs` lines 217-224; `PROCESSOR_IDENTIFIER` format is `Intel64 Family 6 Model 154 Stepping 3, GenuineIntel`.
+  Touches: `CompatTelemetryService.SanitizeCpu` — add regex to strip stepping/revision/microcode info; update tests.
+  Acceptance: `SanitizeCpu("Intel64 Family 6 Model 154 Stepping 3, GenuineIntel")` returns `"Intel64 Family 6 Model 154, GenuineIntel"` (stepping removed); existing telemetry rows are unaffected (server-side only).
+  Complexity: S
+
+- [ ] P2 — Add pending-reboot detection to preflight
+  Why: Applying registry changes while Windows has a pending reboot (from Windows Update, a previous patch attempt, or a driver install) can interact unpredictably. The `Component Based Servicing\RebootPending` and `WindowsUpdate\Auto Update\RebootRequired` registry keys are the standard detection points.
+  Evidence: `src/NVMeDriverPatcher/Services/PreflightService.cs` — no pending-reboot check exists; KB5055621 (April 2026) independently triggers reboots that compound with the NVMe driver swap.
+  Touches: `PreflightService.RunAll` — add a new preflight check reading `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending` and `...\WindowsUpdate\Auto Update\RebootRequired`; surface as a warning (not a blocker) with "Restart Windows first, then retry."
+  Acceptance: On a system with a pending Windows Update reboot, preflight surfaces a named warning; clean systems show no new warning; test fixture covers both keys present and absent.
+  Complexity: S
+
+- [ ] P2 — Restrict telemetry receiver CORS to known origins
+  Why: The Cloudflare Worker sets `access-control-allow-origin: *`, allowing any website to submit fake telemetry data via cross-origin POST. The KV-based rate limiter has a TOCTOU race that does not prevent burst poisoning.
+  Evidence: `packaging/telemetry-receiver/cloudflare-worker.js` lines 121-124; Cloudflare Rate Limiting binding docs.
+  Touches: Worker CORS headers — replace `*` with a configurable allowlist (e.g., the project's GitHub Pages domain or `null` for non-browser clients); document that CLI submissions use direct HTTPS POST without CORS.
+  Acceptance: Browser-based cross-origin POST from an unauthorized origin receives a CORS rejection; CLI submissions still work; Worker README documents the allowlist configuration.
+  Complexity: S
+
+- [ ] P2 — Expand test coverage for 20+ untested services
+  Why: 20+ services have no dedicated test file. Most of these interact with external state (WMI, registry, filesystem, process spawning) and need test doubles, but several have pure logic that can be unit-tested directly: `AutoRevertService` (maintenance window decision), `GpoPolicyService` (overlay merge), `SchedulerService` (argument construction), `SystemGuardrailsService` (finding aggregation), `CompatTelemetryService` (report construction and CPU sanitizer).
+  Evidence: Cross-reference of `src/NVMeDriverPatcher/Services/*.cs` against `tests/NVMeDriverPatcher.Tests/*Tests.cs` — 65 services, 55 test files, but many test files cover models/views/scripts rather than the untested services.
+  Touches: `tests/NVMeDriverPatcher.Tests/` — add test files for the pure-logic surfaces of untested services. Priority order: AutoRevert, GpoPolicyService, SchedulerService, SystemGuardrails, CompatTelemetry, PerControllerAudit, PortableMode.
+  Acceptance: Every service with extractable pure logic has at least one dedicated test fixture covering its decision logic; services whose only behavior is external I/O (EtwTrace, WinPE, Toast, EventLogRegistration) are documented as integration-test-only with the reason.
+  Complexity: L
+
+- [ ] P2 — Add Modern Standby + APST conflict warning for laptop users
+  Why: StorNVMe does not support APST on Modern Standby systems (per Microsoft Learn). The project already warns about APST battery impact on laptops, but does not specifically flag the Modern Standby + nvmedisk.sys combination, which can cause NVMe drives to "vanish" on wake from sleep when controller firmware is too optimistic about wake-up timing.
+  Evidence: Microsoft Learn NVMe power management docs; HowToGeek APST article; `src/NVMeDriverPatcher/Services/ApstInspectorService.cs`.
+  Touches: `ApstInspectorService`, `PreflightService` (add Modern Standby detection via `HKLM\SYSTEM\...\Control\Power\CsEnabled`), GUI/CLI warning copy.
+  Acceptance: On a Modern Standby laptop, preflight surfaces a distinct warning about APST/sleep-wake risks with specific mitigation steps (disable Fast Startup, set PCIe link state to Off); desktops and non-Modern-Standby laptops see no change.
+  Complexity: M
+
+### P3
+
+- [ ] P3 — Add disk space check for working directory in preflight
+  Why: While the patch itself is small registry writes, the recovery kit, benchmark files, diagnostics exports, support bundles, and log files all write to the working directory. A full disk causes silent failures in backup creation, config saving, or bundle export.
+  Evidence: `src/NVMeDriverPatcher/Services/PreflightService.cs` — no disk space check exists; `AppConfig.GetWorkingDir()` returns `%LocalAppData%\NVMePatcher` by default.
+  Touches: `PreflightService.RunAll` — add a check for minimum available space (e.g., 100 MB) on the working directory drive; surface as a warning.
+  Acceptance: On a system with <100 MB free on the working directory drive, preflight warns; healthy systems show no change.
+  Complexity: S
