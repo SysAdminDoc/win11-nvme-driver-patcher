@@ -73,6 +73,24 @@ public static class PatchVerificationService
         return EnablementSource.Official;
     }
 
+    /// <summary>
+    /// True when nvmedisk.sys is bound but NONE of this tool's breadcrumbs exist (no registry
+    /// override keys, no known FeatureStore fallback IDs). The driver was activated outside the
+    /// tool: either Microsoft's official rollout OR a "driver method" force-load via Device
+    /// Manager / PnPUtil (Overclock.net thread 1818467). The two are indistinguishable from
+    /// registry/FeatureStore state — the distinction matters for REVERT: a forced install must be
+    /// rolled back in Device Manager, not by registry cleanup. Callers surface an informational
+    /// note rather than reporting "not applied / nothing active".
+    /// </summary>
+    public static bool IsUntrackedDriverActivation(bool nativeActive, int overrideKeyCount, bool fallbackEvidence) =>
+        ClassifyEnablementSource(nativeActive, overrideKeyCount, fallbackEvidence) == EnablementSource.Official;
+
+    public const string UntrackedDriverActivationNote =
+        "nvmedisk.sys is active but this tool did not enable it (no override keys or known fallback flags). " +
+        "This is either Microsoft's official rollout or a forced 'driver method' install via Device Manager/PnPUtil. " +
+        "To revert a forced install, use Device Manager - roll back/replace the disk driver with stornvme; " +
+        "registry cleanup alone will not undo it.";
+
     // If a user applies but never reboots, we don't want to nag them for months. After
     // this many days we clear the pending flag and treat the patch as abandoned.
     private static readonly TimeSpan PendingMaxAge = TimeSpan.FromDays(30);

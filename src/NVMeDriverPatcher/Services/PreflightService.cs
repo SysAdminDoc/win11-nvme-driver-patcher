@@ -304,6 +304,24 @@ public static class PreflightService
             checks["DriverStatus"] = new(CheckStatus.Warning, "Check failed");
         }
 
+        // Driver-method detection: nvmedisk.sys bound with none of this tool's breadcrumbs
+        // (no override keys, no known fallback flags) is an "untracked" activation — official
+        // rollout OR a forced Device Manager / PnPUtil install. Inform so the user isn't told
+        // "not applied" and knows a forced install reverts via Device Manager, not registry.
+        try
+        {
+            if (result.NativeNVMeStatus is not null && result.NativeNVMeStatus.IsActive)
+            {
+                int keyCount = RegistryService.GetPatchStatus().Count;
+                bool fallbackEvidence;
+                try { fallbackEvidence = FeatureStoreWriterService.HasFallbackEvidence(); }
+                catch { fallbackEvidence = false; }
+                if (PatchVerificationService.IsUntrackedDriverActivation(true, keyCount, fallbackEvidence))
+                    checks["DriverActivation"] = new(CheckStatus.Info, PatchVerificationService.UntrackedDriverActivationNote);
+            }
+        }
+        catch { /* informational only */ }
+
         // 10. BypassIO
         log?.Invoke("  [10/11] Checking BypassIO / DirectStorage...");
         try
