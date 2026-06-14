@@ -21,6 +21,7 @@ Available topics:
   gpo              Group Policy / ADMX deployment for fleets.
   portable         Portable-mode deployment.
   telemetry        The opt-in compat telemetry payload.
+  featureflags     The native Feature flags page on Windows 11 26300+.
   uninstall        Removing the app cleanly.
 ",
         ["overview"] = @"
@@ -86,6 +87,15 @@ anonId (per-install GUID), appVersion, osBuild, CPU vendor/family, controllers
 (model, firmware, migrated), profile, verification outcome, watchdog counts,
 reliability delta, benchmark delta. Server-side reference receiver lives in
 packaging/telemetry-receiver/ (Cloudflare Worker).
+",
+        ["featureflags"] = @"
+Starting with Insider build 26300.8155, Windows 11 has a built-in 'Feature flags' page
+under Settings > Windows Update > Windows Insider Program. If you are on build 26300 or
+newer, check there FIRST: Microsoft may expose native NVMe as an official, supported toggle.
+An official toggle is always preferable to this tool's overrides — on these builds the
+registry and ViVeTool routes do not bind the driver anyway (the GenNvmeDisk compatible ID
+was removed). If a native NVMe flag appears on that page, use it and treat this tool as a
+verify/monitor/rollback helper rather than the enabler.
 ",
         ["uninstall"] = @"
 1. Remove the patch:   `NVMeDriverPatcher.Cli remove`  (restart required)

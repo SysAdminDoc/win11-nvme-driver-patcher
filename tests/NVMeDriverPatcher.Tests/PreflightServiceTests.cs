@@ -54,4 +54,16 @@ public sealed class PreflightServiceTests
         Assert.Contains("20 MB", check.Message);
         Assert.False(check.Critical);
     }
+
+    // --- Native Feature flags page (26300+) ---
+
+    [Theory]
+    [InlineData(26100, false)]
+    [InlineData(26299, false)]
+    [InlineData(26300, true)]
+    [InlineData(28020, true)]
+    public void HasNativeFeatureFlagsPage_GatesOn26300(int build, bool expected)
+    {
+        Assert.Equal(expected, AppConfig.HasNativeFeatureFlagsPage(build));
+    }
 }

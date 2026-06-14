@@ -25,7 +25,9 @@ public sealed class WindowsBuildRulesServiceTests
     // (build, ubr, isServer) → expected rule id from the bundled file.
     [InlineData(26100, 8655, true, "server-2025")]
     [InlineData(26200, 8655, false, "26200-bind-blocked")]
-    [InlineData(28020, 1, false, "post-26200-trains-bind-blocked")] // newer trains inherit the block at any UBR
+    [InlineData(26250, 1, false, "post-26200-trains-bind-blocked")]    // 26201-26299 band still routes to the block
+    [InlineData(26300, 8155, false, "26300-feature-flags-page")]       // native Feature flags page boundary
+    [InlineData(28020, 1, false, "26300-feature-flags-page")]          // newer trains (>=26300) have the page too
     [InlineData(26200, 8246, false, "25h2-vivetool-new-ids")]
     [InlineData(26100, 8246, false, "24h2-post-block")]
     [InlineData(26100, 2000, false, "24h2-pre-block")]
