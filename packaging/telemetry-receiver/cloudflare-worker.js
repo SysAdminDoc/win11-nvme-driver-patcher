@@ -76,34 +76,64 @@ async function handleSummary(env) {
   const list = await env.COMPAT.list({ limit: 1000 });
   const entries = list.keys.filter(k => !k.name.startsWith("ratelimit:"));
 
-  const controllers = {};
-  const verdicts = { Confirmed: 0, AwaitingRestart: 0, OverrideBlocked: 0, FlagsEnabledNotBound: 0, Other: 0 };
-  let total = 0;
-
+  const reports = [];
   for (const key of entries.slice(0, 200)) {
     try {
       const raw = await env.COMPAT.get(key.name, { type: "json" });
-      if (!raw?.payload) continue;
-      total++;
-      const p = raw.payload;
-      const ctrlKey = `${p.controller ?? "unknown"}/${p.firmware ?? "unknown"}`;
-      controllers[ctrlKey] = (controllers[ctrlKey] || 0) + 1;
-      const v = p.verificationResult ?? "Other";
-      if (v in verdicts) verdicts[v]++;
-      else verdicts.Other++;
+      if (raw?.payload) reports.push(raw.payload);
     } catch { /* skip corrupt entries */ }
   }
 
-  return json({
+  return json({ ...summarizeReports(reports), generatedAt: new Date().toISOString() }, 200);
+}
+
+// Pure aggregation over the stored client payloads. Reads the EXACT field shape the app
+// emits (CompatTelemetryService.CompatReport): `controllers[]` of {model, firmware, migrated}
+// plus a top-level `verification` outcome string. Exported so a contract test can feed it a
+// real serialized payload and fail if either side renames a field again.
+//
+// `VERDICT_BUCKETS` mirrors VerificationOutcome (+ the client's "Unknown" null-fallback).
+// Anything unrecognized lands in `Other` so an added enum value never silently vanishes.
+const VERDICT_BUCKETS = [
+  "Confirmed", "AwaitingRestart", "OverrideBlocked", "FlagsEnabledNotBound",
+  "Reverted", "StalePending", "None", "Unknown", "Other"
+];
+
+export function summarizeReports(reports) {
+  const controllers = {};
+  const verdicts = Object.fromEntries(VERDICT_BUCKETS.map(k => [k, 0]));
+  let total = 0;
+
+  for (const p of reports) {
+    if (!p || typeof p !== "object") continue;
+    total++;
+
+    const list = Array.isArray(p.controllers) ? p.controllers : [];
+    if (list.length === 0) {
+      controllers["unknown/unknown"] = (controllers["unknown/unknown"] || 0) + 1;
+    } else {
+      for (const c of list) {
+        const model = String(c?.model ?? "").trim() || "unknown";
+        const firmware = String(c?.firmware ?? "").trim() || "unknown";
+        const ctrlKey = `${model}/${firmware}`;
+        controllers[ctrlKey] = (controllers[ctrlKey] || 0) + 1;
+      }
+    }
+
+    const v = String(p.verification ?? "Unknown");
+    if (Object.prototype.hasOwnProperty.call(verdicts, v)) verdicts[v]++;
+    else verdicts.Other++;
+  }
+
+  return {
     totalSubmissions: total,
     controllersReported: Object.keys(controllers).length,
     topControllers: Object.entries(controllers)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 20)
       .map(([key, count]) => ({ controller: key, count })),
-    verdicts,
-    generatedAt: new Date().toISOString()
-  }, 200);
+    verdicts
+  };
 }
 
 async function sha256Hex(input) {
