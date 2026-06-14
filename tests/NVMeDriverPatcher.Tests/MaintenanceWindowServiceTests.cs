@@ -37,6 +37,27 @@ public sealed class MaintenanceWindowServiceTests
     }
 
     [Fact]
+    public void OvernightWindow_DayBoundary_BelongsToOpeningDay()
+    {
+        // 22:00 → 06:00, Mon–Fri. The morning tail belongs to the night it opened.
+        var w = new MaintenanceWindow
+        {
+            Enabled = true, StartHour = 22, EndHour = 6,
+            ActiveDays = new()
+            {
+                DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday,
+                DayOfWeek.Thursday, DayOfWeek.Friday
+            }
+        };
+        // 2026-04-24 Fri, 04-25 Sat, 04-26 Sun, 04-27 Mon.
+        Assert.True(MaintenanceWindowService.IsInWindow(w, new DateTime(2026, 4, 24, 23, 0, 0)));  // Fri 23:00 — open
+        Assert.True(MaintenanceWindowService.IsInWindow(w, new DateTime(2026, 4, 25, 2, 0, 0)));   // Sat 02:00 — tail of Fri window, open
+        Assert.False(MaintenanceWindowService.IsInWindow(w, new DateTime(2026, 4, 25, 23, 0, 0))); // Sat 23:00 — Sat not active, closed
+        Assert.False(MaintenanceWindowService.IsInWindow(w, new DateTime(2026, 4, 27, 2, 0, 0)));   // Mon 02:00 — Sun night never opened, closed
+        Assert.False(MaintenanceWindowService.IsInWindow(w, new DateTime(2026, 4, 24, 12, 0, 0)));  // Fri noon — daytime gap, closed
+    }
+
+    [Fact]
     public void InactiveDay_NeverInWindow()
     {
         var w = new MaintenanceWindow

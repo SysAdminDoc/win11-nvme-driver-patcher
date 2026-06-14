@@ -63,10 +63,17 @@ public static class AutoRevertService
                 ConfigService.Save(config);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!IsFatal(ex))
         {
             outcome.Summary = $"Auto-revert aborted: {ex.GetType().Name}: {ex.Message}";
         }
         return outcome;
     }
+
+    // Fatal, unrecoverable exceptions must NOT be swallowed on this safety-critical revert path:
+    // silently continuing past an OutOfMemoryException or memory-corruption fault would let the
+    // app run on with a possibly half-reverted patch state. Let them propagate so the failure is
+    // loud and forces manual recovery instead of hiding behind a benign-looking summary string.
+    internal static bool IsFatal(Exception ex) =>
+        ex is OutOfMemoryException or AccessViolationException;
 }
