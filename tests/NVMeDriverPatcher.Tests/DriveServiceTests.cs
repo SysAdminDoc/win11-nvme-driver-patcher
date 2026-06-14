@@ -44,4 +44,26 @@ public sealed class DriveServiceTests
     {
         Assert.Equal(expected, DriveService.NormalizeDriveRoot(raw));
     }
+
+    [Fact]
+    public void IsLaptopChassis_DetectsLaptop_RegardlessOfWmiArrayBoxing()
+    {
+        // WMI returns ChassisTypes boxed differently across SKUs/VMs/OEM images. Laptop(9) must
+        // be detected no matter the element type — the old `is ushort[]` cast missed int[]/uint[].
+        Assert.True(DriveService.IsLaptopChassis(new ushort[] { 9 }));
+        Assert.True(DriveService.IsLaptopChassis(new int[] { 9 }));
+        Assert.True(DriveService.IsLaptopChassis(new uint[] { 9 }));
+        Assert.True(DriveService.IsLaptopChassis(new object[] { (ushort)10 }));   // Notebook
+        Assert.True(DriveService.IsLaptopChassis(new int[] { 3, 31 }));           // Convertible among desktop codes
+    }
+
+    [Fact]
+    public void IsLaptopChassis_FalseForDesktopNullOrEmpty()
+    {
+        Assert.False(DriveService.IsLaptopChassis(new int[] { 3 }));   // Desktop
+        Assert.False(DriveService.IsLaptopChassis(new ushort[] { 7 })); // Tower
+        Assert.False(DriveService.IsLaptopChassis(Array.Empty<int>()));
+        Assert.False(DriveService.IsLaptopChassis(null));
+        Assert.False(DriveService.IsLaptopChassis("not an array"));
+    }
 }

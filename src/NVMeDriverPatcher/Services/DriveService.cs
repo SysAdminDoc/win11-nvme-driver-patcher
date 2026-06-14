@@ -39,6 +39,19 @@ public static class DriveService
         catch { return null; }
     }
 
+    // Pre-compiled third-party NVMe driver patterns. Compiling once avoids re-interpreting these
+    // seven patterns for every signed PnP driver row (potentially hundreds) on each preflight run.
+    private static readonly (Regex Pattern, string Name)[] ThirdPartyDriverPatterns =
+    [
+        (new(@"Samsung",                  RegexOptions.IgnoreCase | RegexOptions.Compiled), "Samsung NVMe"),
+        (new(@"WD.*NVMe|Western Digital", RegexOptions.IgnoreCase | RegexOptions.Compiled), "Western Digital NVMe"),
+        (new(@"Intel.*RST|Rapid Storage", RegexOptions.IgnoreCase | RegexOptions.Compiled), "Intel RST"),
+        (new(@"AMD.*NVMe|AMD RAID",        RegexOptions.IgnoreCase | RegexOptions.Compiled), "AMD NVMe/RAID"),
+        (new(@"Crucial",                  RegexOptions.IgnoreCase | RegexOptions.Compiled), "Crucial NVMe"),
+        (new(@"SK.?hynix",                RegexOptions.IgnoreCase | RegexOptions.Compiled), "SK Hynix NVMe"),
+        (new(@"Phison",                   RegexOptions.IgnoreCase | RegexOptions.Compiled), "Phison NVMe"),
+    ];
+
     // Pre-compiled patterns for incompatible-software detection. Compiling once avoids
     // re-interpreting the same pattern string for every service name on each preflight run.
     private static readonly Regex RxAcronis    = new(@"acronis|AcronisAgent",          RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -143,17 +156,6 @@ public static class DriveService
         {
             using var search = new ManagementObjectSearcher("SELECT * FROM Win32_PnPSignedDriver");
 
-            var thirdPartyPatterns = new (string Pattern, string Name)[]
-            {
-                ("Samsung", "Samsung NVMe"),
-                ("WD.*NVMe|Western Digital", "Western Digital NVMe"),
-                ("Intel.*RST|Rapid Storage", "Intel RST"),
-                ("AMD.*NVMe|AMD RAID", "AMD NVMe/RAID"),
-                ("Crucial", "Crucial NVMe"),
-                ("SK.?hynix", "SK Hynix NVMe"),
-                ("Phison", "Phison NVMe")
-            };
-
             // Stream drivers once: capture stornvme + scan for known 3rd-party in the same pass.
             string inboxVersion = "";
             using (var collection = search.Get())
@@ -179,10 +181,9 @@ public static class DriveService
                                 || devName.Contains("NVMe", StringComparison.OrdinalIgnoreCase);
                             if (!isNvmeCandidate) continue;
 
-                            foreach (var (pattern, name) in thirdPartyPatterns)
+                            foreach (var (pattern, name) in ThirdPartyDriverPatterns)
                             {
-                                if (Regex.IsMatch(devName, pattern, RegexOptions.IgnoreCase) ||
-                                    Regex.IsMatch(manufacturer, pattern, RegexOptions.IgnoreCase))
+                                if (pattern.IsMatch(devName) || pattern.IsMatch(manufacturer))
                                 {
                                     info.HasThirdParty = true;
                                     info.ThirdPartyName = name;
@@ -625,21 +626,32 @@ public static class DriveService
         return false;
     }
 
+    // SMBIOS chassis types that indicate a laptop/portable: Portable(8), Laptop(9), Notebook(10),
+    // Sub-Notebook(14), Convertible(31), Detachable(32).
+    private static readonly int[] LaptopChassisTypes = [8, 9, 10, 14, 31, 32];
+
+    // WMI boxes ChassisTypes differently across SKUs/VMs/OEM images (ushort[], int[], uint[],
+    // object[]). Match on Array and Convert each element — the same robustness ExtractStatusCodes
+    // already uses — rather than a single `is ushort[]` cast that silently misses other boxings.
+    internal static bool IsLaptopChassis(object? chassisTypes)
+    {
+        if (chassisTypes is not Array array) return false;
+        foreach (var raw in array)
+        {
+            var ct = AsInt(raw);
+            if (ct is not null && LaptopChassisTypes.Contains(ct.Value)) return true;
+        }
+        return false;
+    }
+
     public static bool TestLaptopChassis()
     {
         try
         {
             using var search = new ManagementObjectSearcher("SELECT ChassisTypes FROM Win32_SystemEnclosure");
-            int[] laptopTypes = [8, 9, 10, 14, 31, 32];
             foreach (var chassis in Enumerate(search))
             {
-                if (chassis["ChassisTypes"] is ushort[] types)
-                {
-                    foreach (var ct in types)
-                    {
-                        if (laptopTypes.Contains(ct)) return true;
-                    }
-                }
+                if (IsLaptopChassis(chassis["ChassisTypes"])) return true;
             }
 
             using var battSearch = new ManagementObjectSearcher("SELECT Name FROM Win32_Battery");
