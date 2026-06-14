@@ -20,27 +20,56 @@ public class WinReProvisionInfo
 // because it requires Dism + an admin-mounted boot.wim and has a much larger blast radius.
 public static class WinReBcdPrepService
 {
-    private static readonly Regex RxWinReEnabled  = new(@"Windows\s+RE\s+status\s*:\s*Enabled",  RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-    private static readonly Regex RxWinReLocation = new(@"Windows\s+RE\s+location\s*:\s*(.+)",   RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex RxBcdIdentifier = new(@"(?:Boot\s+Configuration\s+Data\s+\(BCD\)\s+identifier|BCD\s+identifier)\s*:\s*(\{[0-9a-fA-F-]+\})", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex RxOsDevice      = new(@"osdevice\s+ramdisk=\[(?<vol>[^\]]+)\](?<path>\\[^\s,]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    // `reagentc /info` output is LOCALIZED — the "Windows RE status: Enabled" label and value
+    // differ per UI language, so matching English literals reports "disabled" on every non-English
+    // Windows even when WinRE is fully provisioned. The locale-INDEPENDENT signal is the BCD
+    // identifier GUID: a real (non-zero) GUID means WinRE has a boot entry (enabled); an all-zeros
+    // GUID (or none) means disabled. Both are structural, not translated.
+    private static readonly Regex RxGuid = new(@"\{?([0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12})\}?", RegexOptions.Compiled);
+    // WinRE location is a device path (not localized): `\\?\GLOBALROOT\...` or a drive path ending
+    // in `\Recovery\WindowsRE`. The LABEL preceding it is localized; the path itself is not.
+    private static readonly Regex RxWinrePath = new(@"\\\\\?\\GLOBALROOT\S+|[A-Za-z]:\\\S*?\\Recovery\\WindowsRE", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxOsDevice  = new(@"osdevice\s+ramdisk=\[(?<vol>[^\]]+)\](?<path>\\[^\s,]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Locale-independent parse of <c>reagentc /info</c> stdout. Enabled-state is derived from the
+    /// presence of a non-zero BCD identifier GUID, not the translated status label. Pure + testable.
+    /// </summary>
+    internal static (bool Enabled, string? Location, string? Guid) ParseReagentcInfo(string? stdout)
+    {
+        if (string.IsNullOrWhiteSpace(stdout)) return (false, null, null);
+
+        string? guid = null;
+        foreach (Match m in RxGuid.Matches(stdout))
+        {
+            var g = m.Groups[1].Value;
+            if (!IsZeroGuid(g)) { guid = "{" + g + "}"; break; }
+        }
+
+        var pathMatch = RxWinrePath.Match(stdout);
+        string? location = pathMatch.Success ? pathMatch.Value.Trim() : null;
+
+        return (guid is not null, location, guid);
+    }
+
+    private static bool IsZeroGuid(string guid) => guid.All(c => c is '0' or '-');
+
     public static WinReProvisionInfo Probe()
     {
         var info = new WinReProvisionInfo();
         try
         {
             var reagentc = RunCapture("reagentc.exe", new[] { "/info" }, 20);
-            if (!string.IsNullOrWhiteSpace(reagentc.Stdout))
+            if (string.IsNullOrWhiteSpace(reagentc.Stdout))
             {
-                info.WinReEnabled = RxWinReEnabled.IsMatch(reagentc.Stdout);
-                var locMatch = RxWinReLocation.Match(reagentc.Stdout);
-                if (locMatch.Success) info.WinReLocation = locMatch.Groups[1].Value.Trim();
-                var bcdMatch = RxBcdIdentifier.Match(reagentc.Stdout);
-                if (bcdMatch.Success) info.DeviceGuid = bcdMatch.Groups[1].Value;
+                info.NeedsReagentcInstall = true;
             }
             else
             {
-                info.NeedsReagentcInstall = true;
+                var (enabled, location, guid) = ParseReagentcInfo(reagentc.Stdout);
+                info.WinReEnabled = enabled;
+                info.WinReLocation = location;
+                info.DeviceGuid = guid;
             }
 
             if (!string.IsNullOrEmpty(info.DeviceGuid))
