@@ -196,6 +196,22 @@ HOW TO USE FROM WinRE (system won't boot):
 4. Run: Remove_NVMe_Patch.bat
 5. Type 'exit' and restart
 
+WHAT THIS KIT CAN AND CANNOT UNDO:
+- This kit undoes the REGISTRY OVERRIDE route: the FeatureManagement override
+  values and the SafeBoot keys. Those live in the offline SYSTEM hive, so the
+  .reg/.bat remove them whether you are in Windows OR in WinRE. On builds where
+  the registry route is all that was used, this is a complete recovery.
+- It CANNOT undo the native FeatureStore / ViVeTool FALLBACK route. Those feature
+  flags live in the live feature-configuration store and can only be cleared by a
+  running Windows kernel - there is no offline (WinRE) equivalent. If you used the
+  'Try ViVeTool Fallback' button or 'featurestore --write-native', undo it from
+  INSIDE Windows with either:
+    * the app's Remove Patch button, or
+    * NVMeDriverPatcher.Cli featurestore --reset-native
+  (The app's Remove Patch already does this automatically.) If the machine will
+  not boot, first remove the registry/SafeBoot patch with this kit so Windows
+  boots on the legacy stack, THEN run the fallback reset from inside Windows.
+
 FILES:
 - NVMe_Remove_Patch.reg    - Registry file
 - Remove_NVMe_Patch.bat    - Smart batch script (auto-detects Windows vs WinRE)
