@@ -755,6 +755,11 @@ class Program
             Console.WriteLine("(No --endpoint=<url> supplied — payload kept local. Review, then resubmit with --endpoint= to share.)");
             return 0;
         }
+        if (!config.CompatTelemetryEnabled)
+        {
+            Console.WriteLine("[BLOCKED] Compatibility telemetry submission is disabled by Group Policy.");
+            return 1;
+        }
         var submission = await CompatTelemetryService.SubmitAsync(endpoint, report);
         Console.WriteLine(submission.Summary);
         return submission.Success ? 0 : 1;
