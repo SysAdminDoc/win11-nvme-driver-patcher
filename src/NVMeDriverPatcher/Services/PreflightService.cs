@@ -1,3 +1,4 @@
+using System.IO;
 using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
@@ -251,6 +252,29 @@ public static class PreflightService
             checks["SystemProtection"] = new(CheckStatus.Warning, "Unable to verify");
         }
 
+        // Pending reboot: applying registry changes while Windows already has a reboot queued
+        // (Windows Update, a prior patch attempt, a driver install) can interact unpredictably —
+        // KB5055621 (April 2026) independently triggers reboots that compound with the swap.
+        // Warning, not a blocker. Only surfaces when actually pending.
+        try
+        {
+            bool cbs = RegistryKeyExists(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending");
+            bool wu = RegistryKeyExists(@"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired");
+            var pending = ClassifyPendingReboot(cbs, wu);
+            if (pending is not null) checks["PendingReboot"] = pending;
+        }
+        catch { /* advisory */ }
+
+        // Working-directory free space: the patch writes are tiny, but recovery kits, benchmark
+        // files, diagnostics exports, support bundles, and logs all land in the working dir — a
+        // full disk makes those fail silently. Warning, only when actually low.
+        try
+        {
+            var space = ClassifyWorkingDirSpace(GetWorkingDirFreeBytes(), MinWorkingDirFreeBytes);
+            if (space is not null) checks["WorkingDirSpace"] = space;
+        }
+        catch { /* advisory */ }
+
         // 9. Driver Status
         log?.Invoke("  [9/11] Checking native NVMe driver...");
         try
@@ -335,6 +359,48 @@ public static class PreflightService
         {
             return false;
         }
+    }
+
+    // Minimum free space we want on the working-dir drive before backups/bundles/logs risk failing.
+    internal const long MinWorkingDirFreeBytes = 100L * 1024 * 1024; // 100 MB
+
+    private static bool RegistryKeyExists(string subKey)
+    {
+        using var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(
+            Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64);
+        using var key = hklm.OpenSubKey(subKey);
+        return key is not null;
+    }
+
+    private static long? GetWorkingDirFreeBytes()
+    {
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(AppConfig.GetWorkingDir()));
+            if (string.IsNullOrEmpty(root)) return null;
+            return new DriveInfo(root).AvailableFreeSpace;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>Pure: Warning when either standard pending-reboot signal is set, else null (no check).</summary>
+    internal static PreflightCheck? ClassifyPendingReboot(bool cbsRebootPending, bool windowsUpdateRebootRequired)
+    {
+        if (!cbsRebootPending && !windowsUpdateRebootRequired) return null;
+        var sources = new List<string>();
+        if (cbsRebootPending) sources.Add("servicing");
+        if (windowsUpdateRebootRequired) sources.Add("Windows Update");
+        return new(CheckStatus.Warning,
+            $"Reboot pending ({string.Join(" + ", sources)}) — restart Windows first, then retry the patch");
+    }
+
+    /// <summary>Pure: Warning when free space is known and below the floor, else null (unknown or healthy).</summary>
+    internal static PreflightCheck? ClassifyWorkingDirSpace(long? availableBytes, long minBytes)
+    {
+        if (availableBytes is null || availableBytes.Value >= minBytes) return null;
+        long mb = availableBytes.Value / (1024 * 1024);
+        return new(CheckStatus.Warning,
+            $"Low disk space on working-dir drive (~{mb} MB free) — recovery kit, bundles, and logs may fail to write");
     }
 
     internal static PreflightCheck ClassifyCompatibility(IReadOnlyCollection<IncompatibleSoftwareInfo> incompatibleSoftware)
