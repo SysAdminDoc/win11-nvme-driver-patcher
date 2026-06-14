@@ -182,6 +182,7 @@ public static class PatchService
                         {
                             log?.Invoke("  [FAIL] SafeBoot Minimal Support (write verify failed)");
                         }
+                        try { safeMin.Flush(); } catch { }
                     }
                     else
                     {
@@ -222,6 +223,7 @@ public static class PatchService
                         {
                             log?.Invoke("  [FAIL] SafeBoot Network Support (write verify failed)");
                         }
+                        try { safeNet.Flush(); } catch { }
                     }
                     else
                     {
@@ -252,6 +254,7 @@ public static class PatchService
                 if (svcMin is not null)
                 {
                     svcMin.SetValue("", AppConfig.SafeBootServiceValue);
+                    try { svcMin.Flush(); } catch { }
                     log?.Invoke("  [OK] SafeBoot Minimal (service name) -- 25H2 compat");
                 }
             }
@@ -263,6 +266,7 @@ public static class PatchService
                 if (svcNet is not null)
                 {
                     svcNet.SetValue("", AppConfig.SafeBootServiceValue);
+                    try { svcNet.Flush(); } catch { }
                     log?.Invoke("  [OK] SafeBoot Network (service name) -- 25H2 compat");
                 }
             }
@@ -619,8 +623,10 @@ public static class PatchService
             try
             {
                 if (result.AfterSnapshot is not null)
+                {
                     DataService.SaveSnapshot(result.AfterSnapshot, "After patch removal", isPrePatch: false);
                     try { DataService.SaveBypassIoSnapshot(BypassIoInspectorService.Inspect(), "After patch removal", isPrePatch: false); } catch { }
+                }
             }
             catch { }
         }
@@ -650,23 +656,29 @@ public static class PatchService
             {
                 if (type == "Feature")
                 {
-                    var key = overrides ?? hklm.OpenSubKey(AppConfig.RegistrySubKey, writable: true);
-                    key?.DeleteValue(id, throwOnMissingValue: false);
-                    string friendlyName = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn : "Feature Flag";
-                    // Verify the value is really gone — a silent no-op would leave a leak.
-                    if (key is not null)
+                    RegistryKey? fallbackKey = null;
+                    try
                     {
-                        if (key.GetValue(id) is not null)
+                        var key = overrides ?? (fallbackKey = hklm.OpenSubKey(AppConfig.RegistrySubKey, writable: true));
+                        key?.DeleteValue(id, throwOnMissingValue: false);
+                        string friendlyName = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn : "Feature Flag";
+                        if (key is not null)
                         {
-                            log?.Invoke($"  [ROLLBACK FAIL] {id} - {friendlyName} still present after DeleteValue");
-                            allReversed = false;
-                        }
-                        else
-                        {
-                            log?.Invoke($"  [ROLLBACK] {id} - {friendlyName}");
+                            if (key.GetValue(id) is not null)
+                            {
+                                log?.Invoke($"  [ROLLBACK FAIL] {id} - {friendlyName} still present after DeleteValue");
+                                allReversed = false;
+                            }
+                            else
+                            {
+                                log?.Invoke($"  [ROLLBACK] {id} - {friendlyName}");
+                            }
                         }
                     }
-                    if (key is not null && !ReferenceEquals(key, overrides)) key.Dispose();
+                    finally
+                    {
+                        fallbackKey?.Dispose();
+                    }
                 }
                 else if (type == "SafeBoot")
                 {

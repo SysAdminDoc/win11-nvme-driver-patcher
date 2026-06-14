@@ -32,6 +32,10 @@ internal static partial class NativeMethods
         uint dwFlagsAndAttributes,
         IntPtr hTemplateFile);
 
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool FlushFileBuffers(SafeFileHandle hFile);
+
     /// <summary>
     /// Sends a control code directly to a device driver, causing the corresponding device to perform the corresponding operation.
     /// Used for IOCTL_STORAGE_QUERY_PROPERTY to retrieve NVMe SMART/Health data.

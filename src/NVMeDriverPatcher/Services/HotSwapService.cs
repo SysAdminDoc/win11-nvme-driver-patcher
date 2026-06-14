@@ -157,10 +157,29 @@ public static class HotSwapService
                 }
 
                 // ================================================================
-                // Step 3: Dismount volumes
+                // Step 3: Flush + Dismount volumes
                 // ================================================================
                 if (volumesCaptured.Count > 0)
                 {
+                    foreach (var vol in volumesCaptured)
+                    {
+                        try
+                        {
+                            using var handle = NativeMethods.CreateFile(
+                                $@"\\.\{char.ToUpperInvariant(vol.Letter[0])}:",
+                                NativeMethods.GENERIC_WRITE,
+                                NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE,
+                                IntPtr.Zero, NativeMethods.OPEN_EXISTING,
+                                NativeMethods.FILE_ATTRIBUTE_NORMAL, IntPtr.Zero);
+                            if (handle is not null && !handle.IsInvalid)
+                            {
+                                NativeMethods.FlushFileBuffers(handle);
+                                log?.Invoke($"  [OK] Flushed filesystem cache for {vol.Letter}");
+                            }
+                        }
+                        catch { log?.Invoke($"  [WARN] Could not flush {vol.Letter} — proceeding anyway"); }
+                    }
+
                     log?.Invoke("Step 2/4: Dismounting volumes...");
                     bool allDismounted = true;
                     foreach (var vol in volumesCaptured)
