@@ -248,6 +248,16 @@ public sealed class PatchVerificationServiceTests
         Assert.Equal(expected, PatchVerificationService.ClassifyEnablementSource(active, keys, evidence));
     }
 
+    [Theory]
+    [InlineData(true, 0, false, true)]    // bound, no keys, no fallback => untracked (driver-method/official)
+    [InlineData(false, 0, false, false)]  // not bound
+    [InlineData(true, 3, false, false)]   // our registry patch
+    [InlineData(true, 0, true, false)]    // fallback flags
+    public void IsUntrackedDriverActivation_OnlyWhenBoundWithoutBreadcrumbs(bool active, int keys, bool evidence, bool expected)
+    {
+        Assert.Equal(expected, PatchVerificationService.IsUntrackedDriverActivation(active, keys, evidence));
+    }
+
     // --- Known bind-blocked build gate ---
 
     [Theory]

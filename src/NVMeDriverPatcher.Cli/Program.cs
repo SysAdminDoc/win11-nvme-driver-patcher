@@ -836,11 +836,13 @@ class Program
                 preflight.NativeNVMeStatus.IsActive, status.Count, evidence);
             Console.WriteLine($"Enablement source: {source switch
             {
-                EnablementSource.Official => "official Windows rollout (no patch evidence — apply is unnecessary)",
+                EnablementSource.Official => "untracked — official Windows rollout OR a forced 'driver method' install (no patch evidence)",
                 EnablementSource.RegistryPatch => "this tool's registry patch",
                 EnablementSource.FallbackFlags => "ViVeTool/FeatureStore fallback flags",
                 _ => "none (driver not bound)"
             }}");
+            if (source == EnablementSource.Official)
+                Console.WriteLine($"  Note: {PatchVerificationService.UntrackedDriverActivationNote}");
 
             var rule = WindowsBuildRulesService.MatchCurrent();
             Console.WriteLine($"Build rule: {WindowsBuildRulesService.Describe(rule)}");

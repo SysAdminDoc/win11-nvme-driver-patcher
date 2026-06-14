@@ -47,6 +47,10 @@ Flip via `apply --safe` / `apply --full` or the GUI's Install Mode radio.
 2. Offline reg edit from WinRE. See the README's 'System won't boot' section for the
    full reg load / reg delete / reg unload sequence.
 3. Auto-disable. Windows disables the native driver after 2-3 consecutive failed boots.
+4. Driver method (force-loaded). If nvmedisk.sys was forced via Device Manager or PnPUtil
+   (no registry keys / fallback flags — `status` shows enablement source 'untracked'), the
+   .reg/.bat will NOT revert it. Revert in Device Manager: Disk drives > your NVMe > Update
+   driver > Browse > Let me pick > select the Standard NVM Express Controller / stornvme.
 ",
         ["watchdog"] = @"
 The post-patch watchdog counts storage-stack distress signals (Storport 129, disk 51/153,
