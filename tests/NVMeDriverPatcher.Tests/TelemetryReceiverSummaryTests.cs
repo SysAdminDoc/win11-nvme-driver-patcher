@@ -65,6 +65,40 @@ public sealed class TelemetryReceiverSummaryTests
         }
     }
 
+    [Theory]
+    // Allowlisted origin echoes back; everything else (unauthorized site, no-Origin CLI,
+    // empty allowlist) resolves to no CORS grant so the browser blocks the cross-origin POST.
+    [InlineData("https://sysadmindoc.github.io", "https://sysadmindoc.github.io", "https://sysadmindoc.github.io")]
+    [InlineData("https://evil.example", "https://sysadmindoc.github.io", "")]
+    [InlineData("", "https://sysadmindoc.github.io", "")]
+    [InlineData("https://sysadmindoc.github.io", "", "")]
+    public void ResolveAllowedOrigin_OnlyEchoesAllowlistedOrigins(string requestOrigin, string allowList, string expected)
+    {
+        var harness =
+            "import { pathToFileURL } from 'node:url';\n" +
+            "const m = await import(pathToFileURL(process.argv[2]).href);\n" +
+            "const reqOrigin = process.argv[3] || null;\n" +
+            "const request = { headers: { get: (k) => (k === 'Origin' ? reqOrigin : null) } };\n" +
+            "const env = { ALLOWED_ORIGINS: process.argv[4] };\n" +
+            "const r = m.resolveAllowedOrigin(request, env);\n" +
+            "process.stdout.write(r == null ? '' : String(r));\n";
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"NVMeDriverPatcher.Cors.Tests.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var harnessPath = Path.Combine(tempDir, "cors.mjs");
+            File.WriteAllText(harnessPath, harness);
+            var result = RunNode(harnessPath, WorkerPath(), requestOrigin, allowList);
+            Assert.True(result.ExitCode == 0, $"node exited {result.ExitCode}. stderr: {result.StdErr}");
+            Assert.Equal(expected, result.StdOut);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
     private static CompatReport MakeReport(string verification, params (string model, string firmware)[] controllers)
     {
         var report = new CompatReport

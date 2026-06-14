@@ -21,6 +21,25 @@ wrangler secret put SALT   # paste a long random string
 wrangler deploy
 ```
 
+## CORS allowlist (browser submissions)
+
+By default the worker grants **no** browser origin — it returns an `Access-Control-Allow-Origin`
+header only to origins you explicitly allowlist, so a random website cannot drive a cross-origin
+`POST` of fake telemetry (the app sends `Content-Type: application/json`, which always triggers a
+CORS preflight; an unauthorized origin's preflight gets no grant and the browser blocks the POST).
+
+To allow a web dashboard, set a comma-separated `ALLOWED_ORIGINS` var with exact origins:
+
+```bash
+wrangler deploy --var ALLOWED_ORIGINS:"https://sysadmindoc.github.io"
+# or add to wrangler.toml [vars]:  ALLOWED_ORIGINS = "https://sysadmindoc.github.io"
+```
+
+**CLI submissions are unaffected** — `NVMeDriverPatcher.Cli telemetry` is not a browser and sends
+no `Origin` header, so CORS (which is browser-enforced) never applies to it. The client also refuses
+to submit over plaintext HTTP to a remote endpoint; use an `https://` endpoint (loopback `http://`
+is allowed only for local development).
+
 Your endpoints:
 
 | Method | Path | Purpose |

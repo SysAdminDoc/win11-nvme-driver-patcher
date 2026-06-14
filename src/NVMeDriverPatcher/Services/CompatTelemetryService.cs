@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
@@ -154,10 +155,9 @@ public static class CompatTelemetryService
         CancellationToken cancellationToken = default)
     {
         var result = new CompatSubmissionResult();
-        if (string.IsNullOrWhiteSpace(endpoint) || !Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
-            || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        if (!TryValidateEndpoint(endpoint, out var uri, out var error))
         {
-            result.Summary = "Endpoint is empty or not a valid http(s) URL.";
+            result.Summary = error;
             return result;
         }
 
@@ -191,6 +191,45 @@ public static class CompatTelemetryService
         return result;
     }
 
+    /// <summary>
+    /// Validates a telemetry endpoint. The report carries stable OS/CPU/controller/firmware/
+    /// verification/watchdog/benchmark data, so remote submission must be HTTPS — plaintext HTTP
+    /// is rejected. Loopback HTTP (localhost/127.0.0.1/::1) is allowed only for local development.
+    /// Pure + testable; returns false with a user-facing <paramref name="error"/> on rejection.
+    /// </summary>
+    internal static bool TryValidateEndpoint(string? endpoint, out Uri? uri, out string error)
+    {
+        uri = null;
+        if (string.IsNullOrWhiteSpace(endpoint) || !Uri.TryCreate(endpoint, UriKind.Absolute, out var parsed))
+        {
+            error = "Endpoint is empty or not a valid absolute URL.";
+            return false;
+        }
+
+        if (parsed.Scheme == Uri.UriSchemeHttps)
+        {
+            uri = parsed;
+            error = string.Empty;
+            return true;
+        }
+
+        if (parsed.Scheme == Uri.UriSchemeHttp)
+        {
+            if (parsed.IsLoopback)
+            {
+                uri = parsed;
+                error = string.Empty;
+                return true;
+            }
+            error = "Refusing to submit telemetry over plaintext HTTP to a remote endpoint. " +
+                    "Use an https:// endpoint (loopback http:// is allowed only for local development).";
+            return false;
+        }
+
+        error = "Endpoint must be an http(s) URL.";
+        return false;
+    }
+
     private static string GetOrCreateAnonId(AppConfig config)
     {
         // Stable per-install anonymous ID so repeat submissions from the same machine can be
@@ -214,11 +253,17 @@ public static class CompatTelemetryService
         }
     }
 
+    // "Intel64 Family 6 Model 154 Stepping 3, GenuineIntel" -> drop the " Stepping N" run.
+    // Stepping/revision distinguishes otherwise-identical CPUs, so removing it lowers the
+    // fingerprint entropy the privacy docs promise. IgnoreCase covers OEM casing variance.
+    private static readonly Regex SteppingRegex =
+        new(@"\s+(Stepping|Revision)\s+\w+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     internal static string SanitizeCpu(string cpu)
     {
-        // Keep vendor/family only — strip stepping and microcode details to reduce entropy.
+        // Keep vendor/family/model only — strip stepping/revision details to reduce entropy.
         if (string.IsNullOrWhiteSpace(cpu)) return "unknown";
-        var trimmed = cpu.Trim();
+        var trimmed = SteppingRegex.Replace(cpu.Trim(), string.Empty);
         if (trimmed.Length > 80) trimmed = trimmed[..80];
         return trimmed;
     }
