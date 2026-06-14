@@ -40,40 +40,9 @@ public static class RecoveryKitService
         }
         catch { }
 
-        // .reg file
-        var regContent = $@"Windows Registry Editor Version 5.00
-
-; NVMe Driver Patcher - RECOVERY KIT
-; Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}
-;
-; FROM WINDOWS: Double-click this file and confirm.
-; FROM WinRE:   Run Remove_NVMe_Patch.bat so the offline SYSTEM hive is loaded.
-
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides]
-""735209102""=-
-""1853569164""=-
-""156965516""=-
-""1176759950""=-
-
-[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet{controlSetNum}\Policies\Microsoft\FeatureManagement\Overrides]
-""735209102""=-
-""1853569164""=-
-""156965516""=-
-""1176759950""=-
-
-[-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}]
-[-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}]
-[-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet{controlSetNum}\Control\SafeBoot\Minimal\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}]
-[-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet{controlSetNum}\Control\SafeBoot\Network\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}]
-
-[-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\nvmedisk]
-[-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\nvmedisk]
-[-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet{controlSetNum}\Control\SafeBoot\Minimal\nvmedisk]
-[-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet{controlSetNum}\Control\SafeBoot\Network\nvmedisk]
-
-; NOTE: this .reg covers CurrentControlSet plus the control set that was current when the
-; kit was generated ({controlSetNum}). On systems with additional control sets (after failed
-; boots), Remove_NVMe_Patch.bat is the canonical removal path — it sweeps ControlSet001-009.";
+        // .reg file — IDs/keys sourced from AppConfig so a future ID change can't leave the
+        // recovery kit deleting stale values (which would defeat the recovery purpose).
+        var regContent = BuildRegContent(controlSetNum, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
 
         try
         {
@@ -87,83 +56,9 @@ public static class RecoveryKitService
             return null;
         }
 
-        // .bat file
-        var batContent = @"@echo off
-echo ============================================
-echo  NVMe Driver Patcher - Recovery Kit
-echo  Removes all native NVMe registry patches
-echo ============================================
-echo.
-
-rem Detect WinRE/WinPE. HKLM\SYSTEM\CurrentControlSet exists in both full Windows
-rem and the recovery environment, so it is not a reliable discriminator.
-reg query ""HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinPE"" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Detected: Running in Windows
-    set ""CS=CurrentControlSet""
-    goto :do_remove
-)
-
-echo Detected: Running in WinRE / Recovery Environment
-echo Searching for Windows installation...
-echo.
-
-set ""WINFOUND=""
-for %%D in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
-    if exist ""%%D:\Windows\System32\config\SYSTEM"" (
-        if /I not ""%%D:""==""%SystemDrive%"" (
-            echo Found Windows on %%D:
-            set ""WINFOUND=%%D""
-            goto :found_win
-        )
-    )
-)
-
-echo ERROR: Could not find Windows installation.
-pause
-exit /b 1
-
-:found_win
-echo Loading offline registry hive...
-reg load HKLM\OFFLINE_SYS ""%WINFOUND%:\Windows\System32\config\SYSTEM"" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo ERROR: Failed to load registry hive.
-    pause
-    exit /b 1
-)
-
-rem Sweep ControlSet001..ControlSet009 -- covers boxes where the index has rolled past 003.
-for /L %%N in (1,1,9) do (
-    reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides"" /v 735209102 /f 2>nul
-    reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides"" /v 1853569164 /f 2>nul
-    reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides"" /v 156965516 /f 2>nul
-    reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides"" /v 1176759950 /f 2>nul
-    reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"" /f 2>nul
-    reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"" /f 2>nul
-    reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Minimal\nvmedisk"" /f 2>nul
-    reg delete ""HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Network\nvmedisk"" /f 2>nul
-)
-
-reg unload HKLM\OFFLINE_SYS >nul 2>&1
-goto :done
-
-:do_remove
-reg delete ""HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides"" /v 735209102 /f 2>nul
-reg delete ""HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides"" /v 1853569164 /f 2>nul
-reg delete ""HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides"" /v 156965516 /f 2>nul
-reg delete ""HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides"" /v 1176759950 /f 2>nul
-reg delete ""HKLM\SYSTEM\%CS%\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"" /f 2>nul
-reg delete ""HKLM\SYSTEM\%CS%\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}"" /f 2>nul
-reg delete ""HKLM\SYSTEM\%CS%\Control\SafeBoot\Minimal\nvmedisk"" /f 2>nul
-reg delete ""HKLM\SYSTEM\%CS%\Control\SafeBoot\Network\nvmedisk"" /f 2>nul
-
-:done
-echo.
-echo ============================================
-echo  Patch removed. Reboot to restore defaults.
-echo ============================================
-echo.
-pause";
+        // .bat file — same AppConfig-sourced IDs/keys as the .reg, for both the offline (WinRE
+        // ControlSet sweep) and in-Windows removal paths.
+        var batContent = BuildBatContent();
 
         try
         {
@@ -267,6 +162,140 @@ FILES:
 
         log?.Invoke($"Recovery kit saved to: {kitDir}");
         return kitDir;
+    }
+
+    // Feature IDs the recovery kit removes = the patch's flag set + the optional Server key,
+    // matching PatchService.Uninstall. Sourced from AppConfig so an ID change can't strand the
+    // kit deleting the wrong values.
+    private static IReadOnlyList<string> RecoveryFeatureIds() =>
+        AppConfig.FeatureIDs.Append(AppConfig.ServerFeatureID).ToList();
+
+    // The path under SYSTEM\<controlset>\ where the FeatureManagement overrides live, derived
+    // from AppConfig.RegistrySubKey (the SSOT) rather than hardcoded.
+    private static string OverridesRelativePath()
+    {
+        const string prefix = @"SYSTEM\CurrentControlSet\";
+        return AppConfig.RegistrySubKey.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? AppConfig.RegistrySubKey[prefix.Length..]
+            : @"Policies\Microsoft\FeatureManagement\Overrides";
+    }
+
+    internal static string BuildRegContent(string controlSetNum, string timestamp)
+    {
+        var ids = RecoveryFeatureIds();
+        string overridesRel = OverridesRelativePath();
+        string[] controlSets = ["CurrentControlSet", $"ControlSet{controlSetNum}"];
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("Windows Registry Editor Version 5.00\r\n\r\n");
+        sb.Append("; NVMe Driver Patcher - RECOVERY KIT\r\n");
+        sb.Append($"; Generated: {timestamp}\r\n;\r\n");
+        sb.Append("; FROM WINDOWS: Double-click this file and confirm.\r\n");
+        sb.Append("; FROM WinRE:   Run Remove_NVMe_Patch.bat so the offline SYSTEM hive is loaded.\r\n\r\n");
+
+        foreach (var cs in controlSets)
+        {
+            sb.Append($@"[HKEY_LOCAL_MACHINE\SYSTEM\{cs}\{overridesRel}]").Append("\r\n");
+            foreach (var id in ids) sb.Append($"\"{id}\"=-\r\n");
+            sb.Append("\r\n");
+        }
+
+        foreach (var leaf in new[] { AppConfig.SafeBootGuid, AppConfig.SafeBootServiceName })
+        {
+            foreach (var cs in controlSets)
+                foreach (var store in new[] { "Minimal", "Network" })
+                    sb.Append($@"[-HKEY_LOCAL_MACHINE\SYSTEM\{cs}\Control\SafeBoot\{store}\{leaf}]").Append("\r\n");
+            sb.Append("\r\n");
+        }
+
+        sb.Append("; NOTE: this .reg covers CurrentControlSet plus the control set that was current when the\r\n");
+        sb.Append($"; kit was generated ({controlSetNum}). On systems with additional control sets (after failed\r\n");
+        sb.Append("; boots), Remove_NVMe_Patch.bat is the canonical removal path — it sweeps ControlSet001-009.");
+        return sb.ToString();
+    }
+
+    // reg-delete lines for one registry base (offline-hive control set, or the live %CS%).
+    private static string BatDeletes(string regBase, string indent)
+    {
+        string overridesRel = OverridesRelativePath();
+        var sb = new System.Text.StringBuilder();
+        foreach (var id in RecoveryFeatureIds())
+            sb.Append($"{indent}reg delete \"{regBase}\\{overridesRel}\" /v {id} /f 2>nul\r\n");
+        foreach (var leaf in new[] { AppConfig.SafeBootGuid, AppConfig.SafeBootServiceName })
+            foreach (var store in new[] { "Minimal", "Network" })
+                sb.Append($"{indent}reg delete \"{regBase}\\Control\\SafeBoot\\{store}\\{leaf}\" /f 2>nul\r\n");
+        return sb.ToString();
+    }
+
+    internal static string BuildBatContent()
+    {
+        string winreDeletes = BatDeletes(@"HKLM\OFFLINE_SYS\ControlSet00%%N", "    ");
+        string windowsDeletes = BatDeletes(@"HKLM\SYSTEM\%CS%", "");
+
+        var bat = @"@echo off
+echo ============================================
+echo  NVMe Driver Patcher - Recovery Kit
+echo  Removes all native NVMe registry patches
+echo ============================================
+echo.
+
+rem Detect WinRE/WinPE. HKLM\SYSTEM\CurrentControlSet exists in both full Windows
+rem and the recovery environment, so it is not a reliable discriminator.
+reg query ""HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinPE"" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Detected: Running in Windows
+    set ""CS=CurrentControlSet""
+    goto :do_remove
+)
+
+echo Detected: Running in WinRE / Recovery Environment
+echo Searching for Windows installation...
+echo.
+
+set ""WINFOUND=""
+for %%D in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
+    if exist ""%%D:\Windows\System32\config\SYSTEM"" (
+        if /I not ""%%D:""==""%SystemDrive%"" (
+            echo Found Windows on %%D:
+            set ""WINFOUND=%%D""
+            goto :found_win
+        )
+    )
+)
+
+echo ERROR: Could not find Windows installation.
+pause
+exit /b 1
+
+:found_win
+echo Loading offline registry hive...
+reg load HKLM\OFFLINE_SYS ""%WINFOUND%:\Windows\System32\config\SYSTEM"" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to load registry hive.
+    pause
+    exit /b 1
+)
+
+rem Sweep ControlSet001..ControlSet009 -- covers boxes where the index has rolled past 003.
+for /L %%N in (1,1,9) do (
+" + winreDeletes + @")
+
+reg unload HKLM\OFFLINE_SYS >nul 2>&1
+goto :done
+
+:do_remove
+" + windowsDeletes + @"
+:done
+echo.
+echo ============================================
+echo  Patch removed. Reboot to restore defaults.
+echo ============================================
+echo.
+pause";
+
+        // Normalize to uniform CRLF — the verbatim boilerplate and the \r\n-built delete blocks
+        // would otherwise risk mixed endings depending on how this source file is checked out.
+        return bat.Replace("\r\n", "\n").Replace("\n", "\r\n");
     }
 
     public static string? GenerateVerificationScript(string workingDir, bool includeServerKey)
