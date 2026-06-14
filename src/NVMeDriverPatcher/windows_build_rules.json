@@ -17,6 +17,19 @@
       "lastReviewed": "2026-06-10"
     },
     {
+      "id": "26300-feature-flags-page",
+      "server": false,
+      "minBuild": 26300,
+      "maxBuild": 99999,
+      "minUbr": 0,
+      "maxUbr": 999999,
+      "expectedPath": "none-known",
+      "summary": "Build 26300+ ships a native 'Feature flags' page (Settings > Windows Update > Windows Insider Program). Check there first — Microsoft may expose native NVMe as an official toggle, which is preferable to these overrides. The GenNvmeDisk compatible ID is still removed on these trains, so the registry and ViVeTool routes do not bind the driver; treat this tool as verify/monitor/rollback until an official toggle appears.",
+      "sourceUrl": "https://www.elevenforum.com/t/windows-11-25h2-nvmedisk-sys-driver-support.46678/",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-14"
+    },
+    {
       "id": "post-26200-trains-bind-blocked",
       "server": false,
       "minBuild": 26201,

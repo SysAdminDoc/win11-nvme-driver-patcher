@@ -76,6 +76,13 @@ public class AppConfig
     public static bool IsKnownBindBlockedBuild(int buildNumber, int ubr) =>
         buildNumber > BindBlockedBuildNumber ||
         (buildNumber == BindBlockedBuildNumber && ubr >= BindBlockedMinUbr);
+
+    // Insider build 26300.8155 added a built-in "Feature flags" page under Settings > Windows
+    // Update > Windows Insider Program, where Microsoft may eventually expose native NVMe as an
+    // official toggle. On 26300+ the tool's role shifts from enabler to verify/monitor/rollback.
+    public const int FeatureFlagsPageMinBuild = 26300;
+    public static bool HasNativeFeatureFlagsPage(int buildNumber) =>
+        buildNumber >= FeatureFlagsPageMinBuild;
     public const string ServerFeatureID = "1176759950";
 
     // The lone flag needed to swap stornvme.sys -> nvmedisk.sys on supported builds.

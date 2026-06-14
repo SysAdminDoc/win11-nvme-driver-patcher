@@ -74,6 +74,14 @@ public static class PreflightService
                     $"Build {build.BuildNumber}.{build.UBR}: nvmedisk may be unable to bind on this build — " +
                     "the patch (and the ViVeTool fallback) may have no effect");
 
+            // 26300+ ships a native "Feature flags" page (Settings > Windows Update > Windows
+            // Insider Program). Microsoft may expose an official NVMe toggle there — always
+            // preferable to our overrides. Informational, never blocks.
+            if (build is not null && AppConfig.HasNativeFeatureFlagsPage(build.BuildNumber))
+                checks["FeatureFlagsPage"] = new(CheckStatus.Info,
+                    "Windows 11 26300+ has a native 'Feature flags' page (Settings > Windows Update > " +
+                    "Windows Insider Program) — check there for an official NVMe toggle before using overrides");
+
             // Matched enablement rule (AR-2026-006): one updatable data file explains what
             // route is expected to work on this exact build instead of generic copy.
             try
