@@ -14,6 +14,7 @@ public sealed class DocsServiceTests
     [InlineData("gpo")]
     [InlineData("portable")]
     [InlineData("telemetry")]
+    [InlineData("featureflags")]
     [InlineData("uninstall")]
     public void EveryDocumentedTopic_HasContent(string topic)
     {
