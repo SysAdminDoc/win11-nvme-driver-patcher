@@ -65,19 +65,28 @@ public static class MaintenanceWindowService
     public static bool IsInWindow(MaintenanceWindow window, DateTime? now = null)
     {
         if (!window.Enabled) return true;
-
-        var local = now ?? DateTime.Now;
-        if (!window.ActiveDays.Contains(local.DayOfWeek)) return false;
-
-        int hour = local.Hour;
         if (window.StartHour == window.EndHour) return false;
 
-        // Normal case: start < end (same-day window).
-        if (window.StartHour < window.EndHour)
-            return hour >= window.StartHour && hour < window.EndHour;
+        var local = now ?? DateTime.Now;
+        int hour = local.Hour;
 
-        // Overnight case: start > end (e.g. 22 → 06 wraps midnight).
-        return hour >= window.StartHour || hour < window.EndHour;
+        // Same-day window (start < end): must be an active day, within [start, end).
+        if (window.StartHour < window.EndHour)
+        {
+            return window.ActiveDays.Contains(local.DayOfWeek)
+                && hour >= window.StartHour && hour < window.EndHour;
+        }
+
+        // Overnight window (start > end, e.g. 22:00 → 06:00) belongs to the calendar day it
+        // OPENED, not the instant being tested. Evaluating active-day membership against the
+        // current day mis-gates the tail: Saturday 02:00 (the tail of the Friday-night window)
+        // would be wrongly rejected, and Monday 02:00 (no window opened Sunday night) wrongly
+        // accepted. Split on which side of midnight we're on:
+        if (hour >= window.StartHour)                                    // evening part — opened today
+            return window.ActiveDays.Contains(local.DayOfWeek);
+        if (hour < window.EndHour)                                       // morning tail — opened yesterday
+            return window.ActiveDays.Contains(local.AddDays(-1).DayOfWeek);
+        return false;                                                    // daytime gap between windows
     }
 
     public static string Summarize(MaintenanceWindow window)
