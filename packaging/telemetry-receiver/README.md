@@ -35,6 +35,37 @@ IP-based rate limiting is built in: each IP gets 10 submissions per 60-second wi
 Rate-limit state is stored as ephemeral KV keys (`ratelimit:<hash>`) that auto-expire.
 IPs are hashed before storage — no raw addresses are persisted.
 
+## Submission payload shape
+
+`POST /nvme/compat` receives exactly what `CompatTelemetryService.CompatReport` serializes.
+The summary endpoint reads `controllers[]` and `verification` from this shape — if you fork the
+worker, keep those field names in sync with the client (a contract test pins them):
+
+```json
+{
+  "schemaVersion": 1,
+  "submittedAt": "2026-06-14T12:00:00.0000000Z",
+  "anonId": "5f9c1e2a-3b4d-4c5e-8f90-1a2b3c4d5e6f",
+  "appVersion": "5.0.0",
+  "osBuild": "26100.4651",
+  "cpu": "Intel64 Family 6 Model 154, GenuineIntel",
+  "controllers": [
+    { "model": "Samsung SSD 990 Pro 2TB", "firmware": "4B2QJXD7", "migrated": true }
+  ],
+  "profile": "Safe",
+  "verification": "Confirmed",
+  "watchdog": "Healthy",
+  "watchdogEvents": 0,
+  "reliabilityDelta": 0.5,
+  "benchmarkDeltaPercent": 42.0
+}
+```
+
+Controllers are counted **per drive** (`model/firmware`), so a two-NVMe machine contributes two
+controller rows but one `totalSubmissions`. `verification` is bucketed per submission against the
+`VerificationOutcome` set (`Confirmed`, `AwaitingRestart`, `OverrideBlocked`, `FlagsEnabledNotBound`,
+`Reverted`, `StalePending`, `None`) plus `Unknown`; anything else falls into `Other`.
+
 ## Aggregation
 
 `GET /nvme/compat/summary` returns a JSON summary:
@@ -51,6 +82,10 @@ IPs are hashed before storage — no raw addresses are persisted.
     "AwaitingRestart": 12,
     "OverrideBlocked": 25,
     "FlagsEnabledNotBound": 5,
+    "Reverted": 0,
+    "StalePending": 0,
+    "None": 0,
+    "Unknown": 0,
     "Other": 2
   },
   "generatedAt": "2026-06-11T12:00:00.000Z"

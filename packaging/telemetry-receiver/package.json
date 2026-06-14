@@ -1,0 +1,8 @@
+{
+  "name": "nvme-driver-patcher-compat-receiver",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reference Cloudflare Worker for the NVMe Driver Patcher opt-in compat-telemetry endpoint.",
+  "main": "cloudflare-worker.js"
+}
