@@ -115,11 +115,14 @@ public static class WinPERecoveryBuilderService
                 timeoutSeconds: 120,
                 cancellationToken: cancellationToken);
 
-            // Copy the Recovery Kit into the media's root so it appears in both WinPE and Windows.
+            // boot.wim is always produced by copype — set it unconditionally so kit-less builds
+            // still report the wim path (previously this was only set inside the Recovery-Kit copy).
+            result.WimPath = Path.Combine(treeDir, "media", "sources", "boot.wim");
+
+            // Copy the Recovery Kit onto the media so it's reachable as a data folder from WinPE.
             if (!string.IsNullOrWhiteSpace(options.RecoveryKitDir) && Directory.Exists(options.RecoveryKitDir))
             {
-                var mediaRoot = Path.Combine(treeDir, "media");
-                var kitOut = Path.Combine(mediaRoot, "NVMe_Recovery_Kit");
+                var kitOut = Path.Combine(treeDir, "media", "NVMe_Recovery_Kit");
                 try
                 {
                     CopyDir(options.RecoveryKitDir, kitOut);
@@ -129,32 +132,13 @@ public static class WinPERecoveryBuilderService
                 {
                     result.Warnings.Add($"Recovery Kit copy failed: {ex.Message}");
                 }
-                result.WimPath = Path.Combine(treeDir, "media", "sources", "boot.wim");
             }
 
-            // Add a startnet.cmd that auto-announces the Recovery Kit on boot.
-            try
-            {
-                var startnet = Path.Combine(treeDir, "media", "sources", "startnet.cmd");
-                var content = new StringBuilder();
-                content.AppendLine("@echo off");
-                content.AppendLine("wpeinit");
-                content.AppendLine();
-                content.AppendLine("echo ====================================================");
-                content.AppendLine("echo  NVMe Driver Patcher - WinPE Recovery");
-                content.AppendLine("echo ====================================================");
-                content.AppendLine("echo.");
-                content.AppendLine("echo To remove the patch, run:");
-                content.AppendLine("echo   X:");
-                content.AppendLine("echo   cd \\NVMe_Recovery_Kit");
-                content.AppendLine("echo   Remove_NVMe_Patch.bat");
-                content.AppendLine("echo.");
-                File.WriteAllText(startnet, content.ToString(), Encoding.ASCII);
-            }
-            catch (Exception ex)
-            {
-                result.Warnings.Add($"startnet.cmd write failed: {ex.Message}");
-            }
+            // Inject startnet.cmd INTO boot.wim's \Windows\System32 so it actually runs at WinPE
+            // boot. The old code wrote it to <tree>\media\sources\startnet.cmd, which WinPE never
+            // reads — it only ever runs the copy inside the image, so the recovery announcement
+            // silently never appeared on the exact can't-boot path the stick exists for.
+            await InjectStartnetIntoBootWimAsync(treeDir, result, log, cancellationToken);
 
             if (options.ProduceIso)
             {
@@ -193,6 +177,97 @@ public static class WinPERecoveryBuilderService
             result.Summary = $"WinPE build failed: {ex.GetType().Name}: {ex.Message}";
         }
         return result;
+    }
+
+    // Path of startnet.cmd INSIDE the mounted boot.wim — \Windows\System32\startnet.cmd is the
+    // ONLY location WinPE executes at boot (NOT the media's \sources folder).
+    internal static string StartnetTargetPath(string mountDir) =>
+        Path.Combine(mountDir, "Windows", "System32", "startnet.cmd");
+
+    internal static string BuildStartnetContent()
+    {
+        var content = new StringBuilder();
+        content.AppendLine("@echo off");
+        content.AppendLine("wpeinit");
+        content.AppendLine();
+        content.AppendLine("echo ====================================================");
+        content.AppendLine("echo  NVMe Driver Patcher - WinPE Recovery");
+        content.AppendLine("echo ====================================================");
+        content.AppendLine("echo.");
+        content.AppendLine("echo The Recovery Kit is on this boot media (folder NVMe_Recovery_Kit).");
+        content.AppendLine("echo To remove the patch, find the media drive (try D:, E:, F:) and run:");
+        content.AppendLine("echo   <drive>:");
+        content.AppendLine("echo   cd \\NVMe_Recovery_Kit");
+        content.AppendLine("echo   Remove_NVMe_Patch.bat");
+        content.AppendLine("echo.");
+        return content.ToString();
+    }
+
+    // Writes startnet.cmd into a mounted image tree (pure filesystem — the testable seam).
+    internal static void WriteStartnetToMount(string mountDir)
+    {
+        var target = StartnetTargetPath(mountDir);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.WriteAllText(target, BuildStartnetContent(), Encoding.ASCII);
+    }
+
+    // Dism /Mount-Image boot.wim -> write startnet.cmd into \Windows\System32 -> /Unmount /Commit.
+    // Injection failure degrades to a warning (the user still gets a bootable stick) rather than
+    // aborting the whole build.
+    private static async Task InjectStartnetIntoBootWimAsync(
+        string treeDir, WinPEBuildResult result, Action<string>? log, CancellationToken ct)
+    {
+        var bootWim = Path.Combine(treeDir, "media", "sources", "boot.wim");
+        var mountDir = Path.Combine(treeDir, "mount");
+        if (!File.Exists(bootWim))
+        {
+            result.Warnings.Add($"boot.wim missing at {bootWim}; startnet.cmd recovery announcement NOT injected.");
+            return;
+        }
+
+        bool mounted = false;
+        try
+        {
+            Directory.CreateDirectory(mountDir);
+            log?.Invoke("[INFO] Mounting boot.wim to inject startnet.cmd...");
+            await RunProcessAsync("dism.exe",
+                new[] { "/Mount-Image", $"/ImageFile:{bootWim}", "/Index:1", $"/MountDir:{mountDir}" },
+                timeoutSeconds: 300, cancellationToken: ct);
+            mounted = true;
+
+            WriteStartnetToMount(mountDir);
+            log?.Invoke(@"[INFO] startnet.cmd injected into boot.wim\Windows\System32.");
+        }
+        catch (Exception ex)
+        {
+            result.Warnings.Add($"Could not inject startnet.cmd into boot.wim ({ex.Message}); " +
+                "the stick will boot to a bare WinPE prompt without recovery instructions.");
+        }
+        finally
+        {
+            if (mounted)
+            {
+                try
+                {
+                    await RunProcessAsync("dism.exe",
+                        new[] { "/Unmount-Image", $"/MountDir:{mountDir}", "/Commit" },
+                        timeoutSeconds: 300, cancellationToken: ct);
+                }
+                catch (Exception ex)
+                {
+                    result.Warnings.Add($"Unmount/commit of boot.wim failed ({ex.Message}); " +
+                        "run 'Dism /Cleanup-Mountpoints'. The startnet.cmd injection may not have persisted.");
+                    try
+                    {
+                        await RunProcessAsync("dism.exe",
+                            new[] { "/Unmount-Image", $"/MountDir:{mountDir}", "/Discard" },
+                            timeoutSeconds: 120, cancellationToken: CancellationToken.None);
+                    }
+                    catch { }
+                }
+            }
+            try { if (Directory.Exists(mountDir)) Directory.Delete(mountDir, recursive: true); } catch { }
+        }
     }
 
     internal static void CopyDir(string source, string destination)
