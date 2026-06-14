@@ -60,6 +60,19 @@ public static class GpoPolicyService
         if (overlay.PatchProfile is PatchProfile profile) config.PatchProfile = profile;
         if (overlay.IncludeServerKey is bool inc) config.IncludeServerKey = inc;
         if (overlay.SkipWarnings is bool skip) config.SkipWarnings = skip;
+        if (overlay.CompatTelemetryEnabled is bool telem) config.CompatTelemetryEnabled = telem;
+
+        if (overlay.WatchdogAutoRevert is not null || overlay.WatchdogWindowHours is not null)
+        {
+            try
+            {
+                var state = EventLogWatchdogService.LoadState(config);
+                if (overlay.WatchdogAutoRevert is bool autoRevert) state.AutoRevertEnabled = autoRevert;
+                if (overlay.WatchdogWindowHours is int hours) state.WindowHours = hours;
+                EventLogWatchdogService.SaveState(config, state);
+            }
+            catch { }
+        }
     }
 
     private static PatchProfile? ReadProfile(RegistryKey key, string valueName)

@@ -128,6 +128,7 @@ public class AppConfig
     }
     public bool IncludeServerKey { get; set; }
     public bool SkipWarnings { get; set; }
+    public bool CompatTelemetryEnabled { get; set; } = true;
     public AppThemeMode ThemeMode { get; set; } = AppThemeMode.System;
     // Default to Safe — primary flag only. Users can opt into Full after reading the tradeoff.
     public PatchProfile PatchProfile { get; set; } = PatchProfile.Safe;
