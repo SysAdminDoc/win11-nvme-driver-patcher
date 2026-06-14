@@ -73,6 +73,41 @@ public sealed class RecoveryKitServiceTests : IDisposable
         Assert.Contains(@"ControlSet00%%N\Control\SafeBoot\Minimal\nvmedisk", bat);
     }
 
+    [Fact]
+    public void BuildRegContent_DerivesIdsAndKeysFromAppConfig()
+    {
+        var reg = RecoveryKitService.BuildRegContent("003", "2026-06-14 12:00:00");
+
+        // Every patch feature ID + the optional Server key, sourced from AppConfig — so a future
+        // ID change flows through instead of leaving the kit deleting stale values.
+        foreach (var id in AppConfig.FeatureIDs)
+            Assert.Contains($"\"{id}\"=-", reg, StringComparison.Ordinal);
+        Assert.Contains($"\"{AppConfig.ServerFeatureID}\"=-", reg, StringComparison.Ordinal);
+
+        Assert.Contains(AppConfig.SafeBootGuid, reg, StringComparison.Ordinal);
+        Assert.Contains($@"SafeBoot\Minimal\{AppConfig.SafeBootServiceName}", reg, StringComparison.Ordinal);
+
+        // Value-deletes appear once per control set (CurrentControlSet + ControlSet003).
+        int expected = (AppConfig.FeatureIDs.Count + 1) * 2;
+        int actual = reg.Split("\"=-").Length - 1;
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void BuildBatContent_DerivesIdsFromAppConfig_AndIsUniformCrlf()
+    {
+        var bat = RecoveryKitService.BuildBatContent();
+
+        foreach (var id in AppConfig.FeatureIDs)
+            Assert.Contains($"/v {id} /f", bat, StringComparison.Ordinal);
+        Assert.Contains($"/v {AppConfig.ServerFeatureID} /f", bat, StringComparison.Ordinal);
+        Assert.Contains($@"SafeBoot\Network\{AppConfig.SafeBootServiceName}", bat, StringComparison.Ordinal);
+        Assert.Contains(AppConfig.SafeBootGuid, bat, StringComparison.Ordinal);
+
+        // No stray LF once CRLF pairs are removed — guards against mixed line endings.
+        Assert.DoesNotContain("\n", bat.Replace("\r\n", string.Empty));
+    }
+
     public void Dispose()
     {
         try
