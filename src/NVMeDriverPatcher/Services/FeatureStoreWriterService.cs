@@ -236,9 +236,138 @@ public static class FeatureStoreWriterService
         };
     }
 
+    /// <summary>
+    /// Undo of <see cref="WriteOverrides"/> / the ViVeTool fallback: clears the User-priority
+    /// override for the given IDs in BOTH stores (ViVeTool <c>/reset</c> semantics — Operation
+    /// ResetState). Returns each ID to its default (not-enabled) state. Requires admin and a
+    /// running Windows kernel; there is no offline (WinRE) equivalent because the Rtl API needs
+    /// the live feature-configuration runtime.
+    /// </summary>
+    public static FeatureStoreWriteResult ResetOverrides(IEnumerable<int> featureIds)
+    {
+        var ids = featureIds.Distinct().ToArray();
+        if (ids.Length == 0)
+            return new FeatureStoreWriteResult { Success = false, Summary = "No feature IDs supplied." };
+
+        var updates = BuildResetUpdates(ids);
+        try
+        {
+            foreach (var type in new[] { ConfigurationType.Runtime, ConfigurationType.Boot })
+            {
+                ulong changeStamp = 0;
+                int status = RtlSetFeatureConfigurations(ref changeStamp, type, updates, (uint)updates.Length);
+                if (status != StatusSuccess)
+                {
+                    return new FeatureStoreWriteResult
+                    {
+                        Success = false,
+                        Summary = $"RtlSetFeatureConfigurations({type}) reset failed with NTSTATUS 0x{status:X8}. " +
+                                  "Run elevated; if this persists, reset the IDs with ViVeTool /reset.",
+                    };
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            return new FeatureStoreWriteResult
+            {
+                Success = false,
+                Summary = $"Native feature-configuration reset unavailable: {ex.Message}. Reset with ViVeTool /reset instead.",
+            };
+        }
+
+        var statuses = ids.Select(id => new FeatureStoreIdStatus(
+            id,
+            RuntimeEnabled: QueryConfiguration(id, bootStore: false).IsEnabled,
+            BootEnabled: QueryConfiguration(id, bootStore: true).IsEnabled)).ToList();
+
+        return ClassifyResetVerification(statuses);
+    }
+
+    /// <summary>
+    /// Resets exactly the known fallback IDs that are currently enabled (in either store). The
+    /// rollback/uninstall entry point: a registry-only install has nothing here, so it reports a
+    /// clean no-op; a fallback install gets its FeatureStore overrides cleared and verified.
+    /// </summary>
+    public static FeatureStoreWriteResult ResetAppliedFallback()
+    {
+        int[] enabled;
+        try
+        {
+            enabled = PostBlockFeatureIds.Where(id =>
+                QueryConfiguration(id, bootStore: false).IsEnabled ||
+                QueryConfiguration(id, bootStore: true).IsEnabled).ToArray();
+        }
+        catch (Exception ex)
+        {
+            return new FeatureStoreWriteResult
+            {
+                Success = false,
+                Summary = $"Could not query FeatureStore fallback state: {ex.Message}.",
+            };
+        }
+
+        if (enabled.Length == 0)
+            return new FeatureStoreWriteResult { Success = true, Summary = "No FeatureStore fallback IDs are enabled — nothing to undo." };
+
+        return ResetOverrides(enabled);
+    }
+
+    /// <summary>
+    /// Pure verification classifier for a reset: success requires every requested ID enabled in
+    /// NEITHER store; otherwise a named partial-failure result names the store(s) still enabled.
+    /// </summary>
+    internal static FeatureStoreWriteResult ClassifyResetVerification(IReadOnlyList<FeatureStoreIdStatus> statuses)
+    {
+        if (statuses.Count == 0)
+            return new FeatureStoreWriteResult { Success = false, Summary = "No feature IDs supplied." };
+
+        var cleared = statuses.Where(s => !s.RuntimeEnabled && !s.BootEnabled).Select(s => s.FeatureId).ToArray();
+        var stillEnabled = statuses.Where(s => s.RuntimeEnabled || s.BootEnabled).ToArray();
+
+        if (stillEnabled.Length == 0)
+        {
+            return new FeatureStoreWriteResult
+            {
+                Success = true,
+                Summary = $"Reset feature ID(s) {string.Join(", ", cleared)} to default in the Runtime + Boot stores. Restart to take effect.",
+                AppliedIds = cleared,
+                IdStatuses = statuses,
+            };
+        }
+
+        var detail = string.Join("; ", stillEnabled.Select(s =>
+            $"{s.FeatureId} (Runtime: {(s.RuntimeEnabled ? "still enabled" : "cleared")}, Boot: {(s.BootEnabled ? "still enabled" : "cleared")})"));
+        return new FeatureStoreWriteResult
+        {
+            Success = false,
+            Summary = "Reset call returned success but verification shows ID(s) still enabled: " +
+                      detail + ". Reset with ViVeTool /reset and report this.",
+            AppliedIds = cleared,
+            IdStatuses = statuses,
+        };
+    }
+
     // Internal for tests: the exact update payload an enable writes.
     internal static (uint FeatureId, uint Priority, uint EnabledState, uint Operation)[] DescribeEnableUpdates(int[] ids)
         => BuildEnableUpdates(ids).Select(u => (u.FeatureId, u.Priority, u.EnabledState, u.Operation)).ToArray();
+
+    // Internal for tests: the exact update payload a reset writes (ViVeTool /reset semantics).
+    internal static (uint FeatureId, uint Priority, uint EnabledState, uint Operation)[] DescribeResetUpdates(int[] ids)
+        => BuildResetUpdates(ids).Select(u => (u.FeatureId, u.Priority, u.EnabledState, u.Operation)).ToArray();
+
+    private static RTL_FEATURE_CONFIGURATION_UPDATE[] BuildResetUpdates(int[] ids) =>
+        ids.Select(id => new RTL_FEATURE_CONFIGURATION_UPDATE
+        {
+            FeatureId = unchecked((uint)id),
+            Priority = 8,        // User — clears the override our enable (and ViVeTool /enable) wrote
+            EnabledState = 0,    // Default
+            EnabledStateOptions = 0,
+            Variant = 0,
+            VariantPayloadKind = 0,
+            VariantPayload = 0,
+            Operation = 4,       // ResetState — removes the configuration (ViVeTool /reset)
+        }).ToArray();
 
     private static RTL_FEATURE_CONFIGURATION_UPDATE[] BuildEnableUpdates(int[] ids) =>
         ids.Select(id => new RTL_FEATURE_CONFIGURATION_UPDATE
