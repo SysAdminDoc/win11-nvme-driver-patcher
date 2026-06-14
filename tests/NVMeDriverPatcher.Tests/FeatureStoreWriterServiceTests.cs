@@ -117,4 +117,76 @@ public sealed class FeatureStoreWriterServiceTests
             Assert.Contains(states, s => s.FeatureId == id && s.Store == "Runtime");
         }
     }
+
+    // --- Both-store verification classifier (Runtime + Boot must BOTH be enabled) ---
+
+    [Fact]
+    public void ClassifyVerification_BothStoresEnabled_ReportsSuccess()
+    {
+        var statuses = new[]
+        {
+            new FeatureStoreIdStatus(60786016, RuntimeEnabled: true, BootEnabled: true),
+            new FeatureStoreIdStatus(48433719, RuntimeEnabled: true, BootEnabled: true),
+        };
+        var result = FeatureStoreWriterService.ClassifyVerification(statuses);
+        Assert.True(result.Success);
+        Assert.Equal(new[] { 60786016, 48433719 }, result.AppliedIds);
+        Assert.Equal(statuses, result.IdStatuses);
+    }
+
+    [Fact]
+    public void ClassifyVerification_RuntimeOnly_FailsAndNamesBootGap()
+    {
+        // The dangerous case the prior Runtime-only check missed: Runtime enabled, Boot not.
+        var statuses = new[]
+        {
+            new FeatureStoreIdStatus(60786016, RuntimeEnabled: true, BootEnabled: false),
+        };
+        var result = FeatureStoreWriterService.ClassifyVerification(statuses);
+        Assert.False(result.Success);
+        Assert.Empty(result.AppliedIds);
+        Assert.Contains("Boot: NOT enabled", result.Summary);
+        Assert.Contains("after reboot", result.Summary);
+    }
+
+    [Fact]
+    public void ClassifyVerification_BootOnly_FailsAndNamesRuntimeGap()
+    {
+        var statuses = new[]
+        {
+            new FeatureStoreIdStatus(60786016, RuntimeEnabled: false, BootEnabled: true),
+        };
+        var result = FeatureStoreWriterService.ClassifyVerification(statuses);
+        Assert.False(result.Success);
+        Assert.Empty(result.AppliedIds);
+        Assert.Contains("Runtime: NOT enabled", result.Summary);
+    }
+
+    [Fact]
+    public void ClassifyVerification_NeitherStore_Fails()
+    {
+        var statuses = new[]
+        {
+            new FeatureStoreIdStatus(60786016, RuntimeEnabled: false, BootEnabled: false),
+        };
+        var result = FeatureStoreWriterService.ClassifyVerification(statuses);
+        Assert.False(result.Success);
+        Assert.Empty(result.AppliedIds);
+        Assert.Contains("Runtime: NOT enabled", result.Summary);
+        Assert.Contains("Boot: NOT enabled", result.Summary);
+    }
+
+    [Fact]
+    public void ClassifyVerification_PartialAcrossIds_ReportsOnlyFullyEnabledAsApplied()
+    {
+        var statuses = new[]
+        {
+            new FeatureStoreIdStatus(60786016, RuntimeEnabled: true, BootEnabled: true),
+            new FeatureStoreIdStatus(48433719, RuntimeEnabled: true, BootEnabled: false),
+        };
+        var result = FeatureStoreWriterService.ClassifyVerification(statuses);
+        Assert.False(result.Success);
+        Assert.Equal(new[] { 60786016 }, result.AppliedIds);
+        Assert.Contains("48433719", result.Summary);
+    }
 }

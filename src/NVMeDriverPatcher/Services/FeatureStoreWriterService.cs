@@ -10,6 +10,18 @@ public class FeatureStoreWriteResult
     public bool Success { get; set; }
     public string Summary { get; set; } = string.Empty;
     public int[] AppliedIds { get; set; } = Array.Empty<int>();
+
+    /// <summary>Per-ID Runtime/Boot verification, so callers can render exactly which store
+    /// a partial write landed in. Empty until a write is verified.</summary>
+    public IReadOnlyList<FeatureStoreIdStatus> IdStatuses { get; set; } = Array.Empty<FeatureStoreIdStatus>();
+}
+
+/// <summary>Post-write verification of one feature ID across both configuration stores.
+/// A native enable writes Runtime AND Boot; a Boot-only gap is invisible until reboot, so
+/// success demands both.</summary>
+public sealed record FeatureStoreIdStatus(int FeatureId, bool RuntimeEnabled, bool BootEnabled)
+{
+    public bool FullyEnabled => RuntimeEnabled && BootEnabled;
 }
 
 /// <summary>Decoded state of one feature ID in one configuration store.</summary>
@@ -177,24 +189,50 @@ public static class FeatureStoreWriterService
             };
         }
 
-        // Verify what the store now reports before claiming success.
-        var notEnabled = ids.Where(id => !QueryConfiguration(id, bootStore: false).IsEnabled).ToArray();
-        if (notEnabled.Length > 0)
+        // Verify what BOTH stores now report before claiming success. The write targets
+        // Runtime AND Boot; checking only Runtime hides a Boot-store failure until reboot —
+        // exactly the kind of silent partial-apply this gate exists to catch.
+        var statuses = ids.Select(id => new FeatureStoreIdStatus(
+            id,
+            RuntimeEnabled: QueryConfiguration(id, bootStore: false).IsEnabled,
+            BootEnabled: QueryConfiguration(id, bootStore: true).IsEnabled)).ToList();
+
+        return ClassifyVerification(statuses);
+    }
+
+    /// <summary>
+    /// Pure verification classifier (the testable seam). Success requires every requested ID
+    /// enabled in BOTH the Runtime and Boot stores; otherwise a named partial-failure result
+    /// spells out which store each ID is missing from.
+    /// </summary>
+    internal static FeatureStoreWriteResult ClassifyVerification(IReadOnlyList<FeatureStoreIdStatus> statuses)
+    {
+        if (statuses.Count == 0)
+            return new FeatureStoreWriteResult { Success = false, Summary = "No feature IDs supplied." };
+
+        var fullyEnabled = statuses.Where(s => s.FullyEnabled).Select(s => s.FeatureId).ToArray();
+        var failures = statuses.Where(s => !s.FullyEnabled).ToArray();
+
+        if (failures.Length == 0)
         {
             return new FeatureStoreWriteResult
             {
-                Success = false,
-                Summary = "Write call succeeded but verification shows ID(s) not enabled: " +
-                          string.Join(", ", notEnabled) + ". Use the ViVeTool fallback and report this.",
-                AppliedIds = ids.Except(notEnabled).ToArray(),
+                Success = true,
+                Summary = $"Enabled feature ID(s) {string.Join(", ", fullyEnabled)} via native Rtl API (Runtime + Boot stores, priority User). Restart to take effect.",
+                AppliedIds = fullyEnabled,
+                IdStatuses = statuses,
             };
         }
 
+        var detail = string.Join("; ", failures.Select(s =>
+            $"{s.FeatureId} (Runtime: {(s.RuntimeEnabled ? "enabled" : "NOT enabled")}, Boot: {(s.BootEnabled ? "enabled" : "NOT enabled")})"));
         return new FeatureStoreWriteResult
         {
-            Success = true,
-            Summary = $"Enabled feature ID(s) {string.Join(", ", ids)} via native Rtl API (Runtime + Boot stores, priority User). Restart to take effect.",
-            AppliedIds = ids,
+            Success = false,
+            Summary = "Write call returned success but verification shows ID(s) not enabled in BOTH stores: " +
+                      detail + ". A Boot-store gap would surface only after reboot — use the ViVeTool fallback and report this.",
+            AppliedIds = fullyEnabled,
+            IdStatuses = statuses,
         };
     }
 

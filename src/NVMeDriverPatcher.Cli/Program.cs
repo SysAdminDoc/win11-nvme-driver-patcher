@@ -556,6 +556,10 @@ class Program
             Console.WriteLine($"EXPERIMENTAL native write: enabling set '{idSet.Name}' ({idSet.IdsDisplay})...");
             var write = FeatureStoreWriterService.WriteOverrides(idSet.Ids);
             Console.WriteLine(write.Summary);
+            foreach (var s in write.IdStatuses)
+            {
+                Console.WriteLine($"  {s.FeatureId,10}  Runtime: {(s.RuntimeEnabled ? "enabled" : "NOT enabled"),-11}  Boot: {(s.BootEnabled ? "enabled" : "NOT enabled")}");
+            }
             if (write.Success)
             {
                 PatchVerificationService.MarkPending(config);
