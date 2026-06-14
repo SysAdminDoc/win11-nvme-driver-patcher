@@ -15,11 +15,12 @@ const RATE_LIMIT_WINDOW_SECONDS = 60;
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const corsOrigin = resolveAllowedOrigin(request, env);
 
-    if (request.method === "OPTIONS") return corsResponse(204);
+    if (request.method === "OPTIONS") return corsResponse(204, corsOrigin);
 
     if (url.pathname === "/nvme/compat/summary" && request.method === "GET") {
-      return handleSummary(env);
+      return handleSummary(env, corsOrigin);
     }
 
     if (url.pathname !== "/nvme/compat") return new Response("Not found", { status: 404 });
@@ -27,23 +28,23 @@ export default {
 
     const clientIp = request.headers.get("cf-connecting-ip") || "unknown";
     const limited = await checkRateLimit(env, clientIp);
-    if (limited) return json({ error: "Rate limited. Try again later." }, 429);
+    if (limited) return json({ error: "Rate limited. Try again later." }, 429, corsOrigin);
 
     let body;
     try {
       body = await request.json();
     } catch {
-      return json({ error: "Body must be JSON" }, 400);
+      return json({ error: "Body must be JSON" }, 400, corsOrigin);
     }
 
     const schemaVersion = Number(body?.schemaVersion ?? 0);
-    if (schemaVersion < 1) return json({ error: "Unsupported schemaVersion" }, 400);
+    if (schemaVersion < 1) return json({ error: "Unsupported schemaVersion" }, 400, corsOrigin);
 
     const anonId = String(body?.anonId ?? "");
-    if (!/^[0-9a-f-]{32,36}$/i.test(anonId)) return json({ error: "anonId malformed" }, 400);
+    if (!/^[0-9a-f-]{32,36}$/i.test(anonId)) return json({ error: "anonId malformed" }, 400, corsOrigin);
 
     const raw = JSON.stringify(body);
-    if (raw.length > 16_384) return json({ error: "Payload too large" }, 413);
+    if (raw.length > 16_384) return json({ error: "Payload too large" }, 413, corsOrigin);
 
     const keyHash = await sha256Hex(anonId + (env.SALT ?? ""));
     const ts = new Date().toISOString();
@@ -54,9 +55,25 @@ export default {
 
     await incrementRateLimit(env, clientIp);
 
-    return json({ accepted: true, ts }, 200);
+    return json({ accepted: true, ts }, 200, corsOrigin);
   }
 };
+
+// Browser CORS allowlist. `env.ALLOWED_ORIGINS` is a comma-separated list of exact origins
+// (e.g. "https://sysadmindoc.github.io"). Only a request whose Origin header matches gets an
+// Access-Control-Allow-Origin echo — so an unauthorized site's preflight (the app POSTs JSON,
+// which always triggers a preflight) fails and the browser blocks the cross-origin submission.
+// CLI / non-browser clients send no Origin and are unaffected (CORS is browser-enforced).
+// Default is empty: no browser origin is allowed until you set ALLOWED_ORIGINS for a dashboard.
+export function resolveAllowedOrigin(request, env) {
+  const origin = request.headers.get("Origin");
+  if (!origin) return null;
+  const allow = (env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+  return allow.includes(origin) ? origin : null;
+}
 
 async function checkRateLimit(env, ip) {
   const key = `ratelimit:${await sha256Hex(ip)}`;
@@ -72,7 +89,7 @@ async function incrementRateLimit(env, ip) {
   await env.COMPAT.put(key, String(count), { expirationTtl: RATE_LIMIT_WINDOW_SECONDS });
 }
 
-async function handleSummary(env) {
+async function handleSummary(env, corsOrigin) {
   const list = await env.COMPAT.list({ limit: 1000 });
   const entries = list.keys.filter(k => !k.name.startsWith("ratelimit:"));
 
@@ -84,7 +101,7 @@ async function handleSummary(env) {
     } catch { /* skip corrupt entries */ }
   }
 
-  return json({ ...summarizeReports(reports), generatedAt: new Date().toISOString() }, 200);
+  return json({ ...summarizeReports(reports), generatedAt: new Date().toISOString() }, 200, corsOrigin);
 }
 
 // Pure aggregation over the stored client payloads. Reads the EXACT field shape the app
@@ -142,25 +159,26 @@ async function sha256Hex(input) {
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-function json(obj, status) {
+// CORS headers scoped to a single allowed origin. The Access-Control-Allow-Origin header is
+// emitted ONLY when corsOrigin is non-null (an allowlisted browser origin); omitting it is what
+// makes an unauthorized origin's request fail in the browser. `Vary: Origin` keeps caches honest.
+function corsHeaders(corsOrigin) {
+  const headers = {
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-headers": "content-type",
+    "vary": "Origin"
+  };
+  if (corsOrigin) headers["access-control-allow-origin"] = corsOrigin;
+  return headers;
+}
+
+function json(obj, status, corsOrigin) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: {
-      "content-type": "application/json",
-      "access-control-allow-origin": "*",
-      "access-control-allow-methods": "GET, POST, OPTIONS",
-      "access-control-allow-headers": "content-type"
-    }
+    headers: { "content-type": "application/json", ...corsHeaders(corsOrigin) }
   });
 }
 
-function corsResponse(status) {
-  return new Response(null, {
-    status,
-    headers: {
-      "access-control-allow-origin": "*",
-      "access-control-allow-methods": "GET, POST, OPTIONS",
-      "access-control-allow-headers": "content-type"
-    }
-  });
+function corsResponse(status, corsOrigin) {
+  return new Response(null, { status, headers: corsHeaders(corsOrigin) });
 }
