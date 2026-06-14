@@ -137,7 +137,7 @@ public static class CliCommandRegistry
 
         // ── Advanced / Experimental ──
         new("featurestore", ["feature-store"], CommandGroup.Advanced,
-            "Probe or write native FeatureStore overrides (--write-native for experimental write)",
+            "Probe, write (--write-native), or undo (--reset-native) native FeatureStore fallback overrides",
             RiskLevel.Experimental),
         new("verifier-on", [], CommandGroup.Advanced,
             "Enable Driver Verifier stress checks on nvmedisk/stornvme/disk (reboot required)",

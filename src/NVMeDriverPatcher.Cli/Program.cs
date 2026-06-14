@@ -139,7 +139,10 @@ class Program
                 "portable-disable" => PortableDisableCommand(),
                 "update-check" => UpdateCheckCommand().GetAwaiter().GetResult(),
                 "winre" => WinReCommand(),
-                "featurestore" or "feature-store" => FeatureStoreCommand(config, args.Any(a => a is not null && a.Equals("--write-native", StringComparison.OrdinalIgnoreCase))),
+                "featurestore" or "feature-store" => FeatureStoreCommand(
+                    config,
+                    args.Any(a => a is not null && a.Equals("--write-native", StringComparison.OrdinalIgnoreCase)),
+                    args.Any(a => a is not null && a.Equals("--reset-native", StringComparison.OrdinalIgnoreCase))),
                 "kit-freshness" or "recovery-kit-freshness" => RecoveryKitFreshnessCommand(config),
                 "docs" or "help-topic" => DocsCommand(args.Skip(1).FirstOrDefault()),
                 "clean-data" => CleanDataCommand(config),
@@ -527,7 +530,7 @@ class Program
         return info.WinReEnabled ? 0 : 1;
     }
 
-    static int FeatureStoreCommand(AppConfig config, bool writeNative)
+    static int FeatureStoreCommand(AppConfig config, bool writeNative, bool resetNative)
     {
         bool hasFallback = FeatureStoreWriterService.HasFallbackEvidence();
         Console.WriteLine($"FeatureStore fallback evidence: {(hasFallback ? "PRESENT" : "not detected")}");
@@ -568,6 +571,21 @@ class Program
             }
             return write.Success ? 0 : 1;
         }
+
+        if (resetNative)
+        {
+            // Explicit undo of the native/ViVeTool fallback enablement (ViVeTool /reset).
+            Console.WriteLine();
+            Console.WriteLine("Resetting native FeatureStore fallback overrides to default...");
+            var reset = FeatureStoreWriterService.ResetAppliedFallback();
+            Console.WriteLine(reset.Summary);
+            foreach (var s in reset.IdStatuses)
+            {
+                Console.WriteLine($"  {s.FeatureId,10}  Runtime: {(s.RuntimeEnabled ? "still enabled" : "cleared"),-13}  Boot: {(s.BootEnabled ? "still enabled" : "cleared")}");
+            }
+            return reset.Success ? 0 : 1;
+        }
+
         return 0;
     }
 

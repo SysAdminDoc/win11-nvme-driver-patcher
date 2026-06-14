@@ -17,6 +17,10 @@ public class PatchOperationResult
     // the user and point them at the pre-patch backup / System Restore. Meaningful only when
     // WasRolledBack is true.
     public bool RollbackFullyReversed { get; set; } = true;
+
+    // Status of the native FeatureStore / ViVeTool fallback undo attempted during Uninstall.
+    // Null when no removal ran; otherwise a human-readable summary surfaced in the activity rail.
+    public string? FeatureStoreResetSummary { get; set; }
 }
 
 public enum PatchPreRegistryAbortReason
@@ -598,10 +602,30 @@ public static class PatchService
             }
             catch { }
 
+            // Undo the native FeatureStore / ViVeTool fallback enablement too. The registry
+            // override deletions above do NOT touch the FeatureStore configuration the fallback
+            // path writes, so a fallback user would otherwise "remove" the patch yet keep
+            // nvmedisk bound after reboot. Best-effort: a registry-only install has no fallback
+            // IDs enabled and this reports a clean no-op; never fails the uninstall.
+            ReportProgress(progress, 80, "Undoing FeatureStore fallback...");
+            try
+            {
+                var fsReset = FeatureStoreWriterService.ResetAppliedFallback();
+                result.FeatureStoreResetSummary = fsReset.Summary;
+                log?.Invoke($"  [FeatureStore] {fsReset.Summary}");
+                if (fsReset.Success && fsReset.AppliedIds.Length > 0)
+                    result.NeedsRestart = true;
+            }
+            catch (Exception ex)
+            {
+                result.FeatureStoreResetSummary = $"FeatureStore fallback reset skipped: {ex.Message}";
+                log?.Invoke($"  [FeatureStore] reset skipped: {ex.Message}");
+            }
+
             ReportProgress(progress, 90, "Validating...");
             result.AppliedCount = removedCount;
             result.Success = true;
-            result.NeedsRestart = removedCount > 0;
+            result.NeedsRestart = removedCount > 0 || result.NeedsRestart;
 
             log?.Invoke("========================================");
             log?.Invoke($"[SUCCESS] Patch Status: REMOVED - Removed {removedCount} components");

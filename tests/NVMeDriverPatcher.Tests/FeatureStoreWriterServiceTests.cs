@@ -189,4 +189,69 @@ public sealed class FeatureStoreWriterServiceTests
         Assert.Equal(new[] { 60786016 }, result.AppliedIds);
         Assert.Contains("48433719", result.Summary);
     }
+
+    // --- Fallback reset/undo (rollback coverage) ---
+
+    [Fact]
+    public void ResetUpdates_MatchViVeToolResetSemantics()
+    {
+        // ViVeTool /reset: priority User(8), Operation ResetState(4), state Default(0).
+        var updates = FeatureStoreWriterService.DescribeResetUpdates(new[] { 60786016, 48433719 });
+        Assert.Equal(2, updates.Length);
+        foreach (var u in updates)
+        {
+            Assert.Equal(8u, u.Priority);
+            Assert.Equal(0u, u.EnabledState);
+            Assert.Equal(4u, u.Operation);
+        }
+    }
+
+    [Fact]
+    public void ResetOverrides_EmptyIdList_Refuses()
+    {
+        var result = FeatureStoreWriterService.ResetOverrides(Array.Empty<int>());
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public void ClassifyResetVerification_BothStoresCleared_ReportsSuccess()
+    {
+        var statuses = new[]
+        {
+            new FeatureStoreIdStatus(60786016, RuntimeEnabled: false, BootEnabled: false),
+            new FeatureStoreIdStatus(48433719, RuntimeEnabled: false, BootEnabled: false),
+        };
+        var result = FeatureStoreWriterService.ClassifyResetVerification(statuses);
+        Assert.True(result.Success);
+        Assert.Equal(new[] { 60786016, 48433719 }, result.AppliedIds);
+    }
+
+    [Fact]
+    public void ClassifyResetVerification_StillEnabled_FailsAndNamesStore()
+    {
+        var statuses = new[]
+        {
+            new FeatureStoreIdStatus(60786016, RuntimeEnabled: true, BootEnabled: false),
+        };
+        var result = FeatureStoreWriterService.ClassifyResetVerification(statuses);
+        Assert.False(result.Success);
+        Assert.Empty(result.AppliedIds);
+        Assert.Contains("still enabled", result.Summary);
+    }
+
+    [Fact]
+    public void ResetAppliedFallback_NoEvidenceOnHost_ReportsNothingToUndo()
+    {
+        // The "no applied IDs" case. CI/dev hosts have no NVMe fallback flags enabled, so this
+        // reports a clean no-op. Environment-aware, mirroring WriteOverrides_NonAdmin: if a host
+        // unexpectedly HAS them enabled the call still must not throw and must produce a summary.
+        var result = FeatureStoreWriterService.ResetAppliedFallback();
+        Assert.False(string.IsNullOrWhiteSpace(result.Summary));
+        if (!FeatureStoreWriterService.HasFallbackEvidence())
+        {
+            Assert.True(result.Success);
+            Assert.Contains("nothing to undo", result.Summary, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(result.AppliedIds);
+        }
+    }
 }
