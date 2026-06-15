@@ -51,8 +51,25 @@ Your endpoints:
 ## Rate Limiting
 
 IP-based rate limiting is built in: each IP gets 10 submissions per 60-second window.
-Rate-limit state is stored as ephemeral KV keys (`ratelimit:<hash>`) that auto-expire.
-IPs are hashed before storage — no raw addresses are persisted.
+IPs are hashed before any storage — no raw addresses are persisted.
+
+Two backends, selected automatically:
+
+- **Preferred — Cloudflare Workers Rate Limiting binding.** Bind it as `RATE_LIMITER` (see the
+  commented `[[unsafe.bindings]]` block in `wrangler.toml`). The worker calls `RATE_LIMITER.limit()`,
+  which checks and consumes a token atomically, so there is no check-then-write race.
+- **Fallback — best-effort KV counter.** When no `RATE_LIMITER` binding is present, the worker uses
+  ephemeral KV keys (`ratelimit:<hash>`) that auto-expire after the window. This is approximate:
+  concurrent bursts from one IP can slip through between the read and the write. Acceptable for an
+  opt-in receiver; switch to the binding for a hard guarantee. The decision (`rateLimitVerdict`) is
+  unit-tested for the limit boundary and window reset.
+
+## Summary pagination
+
+`GET /nvme/compat/summary` paginates the full KV keyspace by following list cursors, so a dataset
+larger than one 1000-key list page is no longer silently dropped. It reads up to
+`MAX_SUMMARY_RECORDS` (5000) stored records and reports `scannedKeys`, `summarizedRecords`, and a
+`truncated` flag so any cap is explicit rather than silent. The cursor-follow is unit-tested.
 
 ## Submission payload shape
 

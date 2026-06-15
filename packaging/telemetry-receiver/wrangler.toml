@@ -14,3 +14,12 @@ account_id = "<account-id>"
 kv_namespaces = [
   { binding = "COMPAT", id = "<KV-namespace-id>" }
 ]
+
+# Optional but recommended: Cloudflare's Workers Rate Limiting binding. When present as
+# `RATE_LIMITER`, the worker uses it (atomic, no check-then-write race) instead of the
+# best-effort KV counter fallback. `simple` period must be 10 or 60 seconds.
+# [[unsafe.bindings]]
+# name = "RATE_LIMITER"
+# type = "ratelimit"
+# namespace_id = "1001"
+# simple = { limit = 10, period = 60 }
