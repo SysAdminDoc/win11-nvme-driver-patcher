@@ -85,6 +85,29 @@ foreach ($a in $contract.artifacts) {
             }
         }
     }
+
+    if ($a.id -eq 'scoop-manifest') {
+        # The Scoop manifest must carry this release's version, the tagged download URL, and the
+        # real GUI exe hash — not the REPLACE_ME placeholder or a stale version.
+        $guiPath = Join-Path $repoRoot 'publish/gui/NVMeDriverPatcher.exe'
+        try { $scoop = Get-Content -Raw $full | ConvertFrom-Json } catch { $scoop = $null }
+        if ($null -eq $scoop) {
+            $failures.Add("scoop manifest is not valid JSON")
+        } else {
+            if ($scoop.version -ne $Version) { $failures.Add("scoop manifest version is '$($scoop.version)', expected $Version") }
+            $arch = $scoop.architecture.'64bit'
+            if ($arch.url -notmatch "/releases/download/v$([regex]::Escape($Version))/NVMeDriverPatcher\.exe") {
+                $failures.Add("scoop manifest 64bit url does not point at tag v$Version")
+            }
+            if ($arch.hash -match 'REPLACE_ME') { $failures.Add("scoop manifest still has the REPLACE_ME hash placeholder") }
+            if (Test-Path $guiPath) {
+                $guiHashLower = (Get-FileHash -Algorithm SHA256 -Path $guiPath).Hash.ToLower()
+                if ($arch.hash -ne $guiHashLower) {
+                    $failures.Add("scoop manifest 64bit hash does not match publish/gui/NVMeDriverPatcher.exe")
+                }
+            }
+        }
+    }
 }
 
 if ($failures.Count -gt 0) {

@@ -9,6 +9,8 @@
     { "id": "legacy-ps1", "path": "NVMe_Driver_Patcher.ps1",                          "required": true,  "sign": false, "checksum": true,  "upload": true,  "channel": "legacy" },
     { "id": "powershell-module", "path": "publish/NVMeDriverPatcher.PowerShell-{version}.zip", "required": true, "sign": false, "checksum": true, "upload": true, "channel": "powershell" },
     { "id": "sha256sums", "path": "publish/SHA256SUMS.txt",                           "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "integrity" },
-    { "id": "winget-manifest", "path": "publish/SysAdminDoc.NVMeDriverPatcher.yaml",  "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "winget" }
+    { "id": "winget-manifest", "path": "publish/SysAdminDoc.NVMeDriverPatcher.yaml",  "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "winget" },
+    { "id": "chocolatey-nupkg", "path": "publish/nvme-driver-patcher.{version}.nupkg", "required": true, "sign": false, "checksum": false, "upload": true, "channel": "chocolatey" },
+    { "id": "scoop-manifest", "path": "publish/nvme-driver-patcher.json",              "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "scoop" }
   ]
 }
