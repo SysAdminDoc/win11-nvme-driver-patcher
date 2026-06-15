@@ -96,4 +96,44 @@ public sealed class RecoveryProofGateServiceTests
         Assert.Equal("SafeBoot entries", item.Label);
         Assert.False(string.IsNullOrWhiteSpace(item.Detail));
     }
+
+    // --- Restore-point capability: protection state, not RPSessionInterval, decides ---
+
+    [Fact]
+    public void ClassifyRestoreCapability_GloballyDisabled_Fails()
+    {
+        // Even with the system drive "protected", a global DisableSR=1 wins.
+        var (passed, detail) = RecoveryProofGateService.ClassifyRestoreCapability(
+            globallyDisabled: true, systemDriveProtected: true);
+        Assert.False(passed);
+        Assert.Contains("disabled", detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ClassifyRestoreCapability_SystemDriveUnprotected_Fails()
+    {
+        // The RPSessionInterval-non-zero-but-protection-off case the old proxy got wrong.
+        var (passed, detail) = RecoveryProofGateService.ClassifyRestoreCapability(
+            globallyDisabled: false, systemDriveProtected: false);
+        Assert.False(passed);
+        Assert.Contains("no-op", detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ClassifyRestoreCapability_ProtectedAndEnabled_Passes()
+    {
+        var (passed, detail) = RecoveryProofGateService.ClassifyRestoreCapability(
+            globallyDisabled: false, systemDriveProtected: true);
+        Assert.True(passed);
+        Assert.Contains("restore point", detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(@"\\?\Volume{1a2b3c4d-0000-0000-0000-000000000000}\", "Volume{1a2b3c4d-0000-0000-0000-000000000000}")]
+    [InlineData(@"\\?\GLOBALROOT\Device\HarddiskVolume3", null)]
+    [InlineData(null, null)]
+    public void ExtractVolumeGuid_PullsGuidToken(string? deviceId, string? expected)
+    {
+        Assert.Equal(expected, RecoveryProofGateService.ExtractVolumeGuid(deviceId));
+    }
 }

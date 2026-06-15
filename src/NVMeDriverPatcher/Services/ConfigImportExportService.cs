@@ -12,6 +12,11 @@ public static class ConfigImportExportService
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
+    // Highest bundle schema this build understands. A future bundle (higher number) is rejected
+    // rather than silently partially-applied. RestartDelay bound matches the AppConfig clamp.
+    internal const int CurrentSchemaVersion = 1;
+    internal const int MaxRestartDelaySeconds = 3600;
+
     public class Bundle
     {
         public int SchemaVersion { get; set; } = 1;
@@ -44,6 +49,13 @@ public static class ConfigImportExportService
         {
             if (!File.Exists(inputPath)) return (false, "Bundle not found.");
             var json = File.ReadAllText(inputPath);
+
+            // Validate the wire format BEFORE binding/mutating: an unknown schema, an
+            // out-of-range RestartDelay (flows into `shutdown /r /t`), or an undefined
+            // PatchProfile must fail cleanly without touching the live config.
+            var (ok, error) = ValidateBundleJson(json);
+            if (!ok) return (false, error);
+
             var bundle = JsonSerializer.Deserialize<Bundle>(json);
             if (bundle is null) return (false, "Bundle could not be parsed.");
             if (bundle.Config is not null)
@@ -67,6 +79,57 @@ public static class ConfigImportExportService
         catch (Exception ex)
         {
             return (false, $"Import failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Pure wire-format validation. Validates against the raw JSON (not the bound objects) so a
+    /// negative RestartDelay is observable before the AppConfig setter clamps it. Rejects unknown
+    /// schema versions, out-of-range RestartDelay, and undefined PatchProfile values.
+    /// </summary>
+    internal static (bool Ok, string Error) ValidateBundleJson(string json)
+    {
+        JsonDocument doc;
+        try { doc = JsonDocument.Parse(json); }
+        catch (JsonException ex) { return (false, $"Bundle is not valid JSON: {ex.Message}"); }
+
+        using (doc)
+        {
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return (false, "Bundle root is not a JSON object.");
+
+            int schema = 1; // default matches Bundle.SchemaVersion when the field is absent
+            if (root.TryGetProperty("SchemaVersion", out var sv) && sv.ValueKind == JsonValueKind.Number)
+                schema = sv.GetInt32();
+            if (schema < 1 || schema > CurrentSchemaVersion)
+                return (false, $"Unsupported bundle SchemaVersion {schema} (this build supports up to {CurrentSchemaVersion}).");
+
+            if (root.TryGetProperty("Config", out var cfg) && cfg.ValueKind == JsonValueKind.Object)
+            {
+                if (cfg.TryGetProperty("RestartDelay", out var rd) && rd.ValueKind == JsonValueKind.Number)
+                {
+                    if (!rd.TryGetInt32(out var delay) || delay < 0 || delay > MaxRestartDelaySeconds)
+                        return (false, $"Bundle RestartDelay is out of range (0-{MaxRestartDelaySeconds}s).");
+                }
+
+                if (cfg.TryGetProperty("PatchProfile", out var pp))
+                {
+                    if (pp.ValueKind == JsonValueKind.String)
+                    {
+                        if (!Enum.TryParse<PatchProfile>(pp.GetString(), ignoreCase: true, out var parsed)
+                            || !Enum.IsDefined(typeof(PatchProfile), parsed))
+                            return (false, $"Bundle PatchProfile '{pp.GetString()}' is not a recognized value.");
+                    }
+                    else if (pp.ValueKind == JsonValueKind.Number)
+                    {
+                        if (!pp.TryGetInt32(out var pv) || !Enum.IsDefined(typeof(PatchProfile), pv))
+                            return (false, $"Bundle PatchProfile '{(pp.TryGetInt32(out var n) ? n.ToString() : "?")}' is not a recognized value.");
+                    }
+                }
+            }
+
+            return (true, string.Empty);
         }
     }
 }

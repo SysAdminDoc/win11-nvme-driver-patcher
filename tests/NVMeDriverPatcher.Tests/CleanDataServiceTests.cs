@@ -113,4 +113,28 @@ public sealed class CleanDataServiceTests : IDisposable
         Assert.Equal(0, result.FilesRemoved);
         Assert.Contains("Refusing to clean", result.Summary);
     }
+
+    [Fact]
+    public void IsSafeCleanRoot_RefusesSubtreesOfProgramFilesAndUserProfile()
+    {
+        // Defense-in-depth: a portable install dropped directly under a protected root must be
+        // refused, not just the exact protected dir.
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        Assert.False(CleanDataService.IsSafeCleanRoot(Path.Combine(programFiles, "NVMePatcher"), out var r1));
+        Assert.Contains("protected", r1, StringComparison.OrdinalIgnoreCase);
+
+        // A path directly under the user profile (NOT under the LocalAppData app zone) is refused.
+        Assert.False(CleanDataService.IsSafeCleanRoot(Path.Combine(userProfile, "NVMePatcherStuff"), out _));
+    }
+
+    [Fact]
+    public void IsSafeCleanRoot_AllowsAppManagedRootsUnderProtectedParents()
+    {
+        // The default app dir lives under LocalAppData (itself under the user profile) and must pass.
+        var localAppData = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NVMePatcher");
+        Assert.True(CleanDataService.IsSafeCleanRoot(localAppData, out _));
+    }
 }

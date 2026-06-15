@@ -137,26 +137,104 @@ public static class RecoveryProofGateService
     {
         try
         {
-            bool srEnabled = false;
+            // RPSessionInterval (scheduled-checkpoint cadence) is a weak proxy: it can be present
+            // and non-zero while System Protection on the system drive is OFF, so CreateRestorePoint
+            // would silently no-op. The authoritative signals are (1) the global DisableSR flag and
+            // (2) whether the system drive actually has shadow-copy storage configured.
+            bool globallyDisabled = false;
             try
             {
                 using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
                     @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore");
-                if (key is not null)
-                {
-                    var val = key.GetValue("RPSessionInterval");
-                    srEnabled = val is not (int and 0);
-                }
+                if (key?.GetValue("DisableSR") is int disable)
+                    globallyDisabled = disable == 1;
             }
             catch { }
 
-            return srEnabled
-                ? new() { Label = "System Restore", Passed = true, Detail = "System Restore is enabled — a restore point will be created" }
-                : new() { Label = "System Restore", Passed = false, Detail = "System Restore is disabled — no automatic rollback point will be created" };
+            bool systemDriveProtected = SystemDriveHasShadowStorage();
+
+            var (passed, detail) = ClassifyRestoreCapability(globallyDisabled, systemDriveProtected);
+            return new() { Label = "System Restore", Passed = passed, Detail = detail };
         }
         catch (Exception ex)
         {
             return new() { Label = "System Restore", Passed = false, Detail = $"Check failed: {ex.Message}" };
         }
+    }
+
+    /// <summary>
+    /// Pure verdict for restore-point capability. System Protection must be active for the system
+    /// drive (shadow storage configured) for a restore point to actually be created. A non-zero
+    /// RPSessionInterval is deliberately NOT trusted here — it governs cadence, not enablement.
+    /// </summary>
+    internal static (bool Passed, string Detail) ClassifyRestoreCapability(bool globallyDisabled, bool systemDriveProtected)
+    {
+        if (globallyDisabled)
+            return (false, "System Restore is disabled (DisableSR=1) — no automatic rollback point will be created");
+        if (!systemDriveProtected)
+            return (false, "System Protection is off for the system drive — CreateRestorePoint would silently no-op, so no rollback point will be created");
+        return (true, "System Protection is enabled for the system drive — a restore point will be created");
+    }
+
+    // Best-effort: does the system drive have shadow-copy storage configured (MaxSpace > 0)?
+    // That is the on-disk evidence that System Protection is actually turned on for that volume.
+    private static bool SystemDriveHasShadowStorage()
+    {
+        try
+        {
+            var systemDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? "C:";
+
+            // Resolve the system volume's GUID device path so we can match it against the
+            // Win32_ShadowStorage.Volume reference (which embeds the same Volume{guid}).
+            string? sysVolumeGuid = null;
+            using (var volSearch = new System.Management.ManagementObjectSearcher(
+                $"SELECT DeviceID FROM Win32_Volume WHERE DriveLetter='{systemDrive}'"))
+            using (var vols = volSearch.Get())
+            {
+                foreach (var raw in vols)
+                {
+                    if (raw is not System.Management.ManagementObject v) continue;
+                    using (v)
+                    {
+                        var deviceId = v["DeviceID"] as string;
+                        sysVolumeGuid = ExtractVolumeGuid(deviceId);
+                    }
+                    break;
+                }
+            }
+            if (string.IsNullOrEmpty(sysVolumeGuid)) return false;
+
+            using var ss = new System.Management.ManagementObjectSearcher("SELECT Volume, MaxSpace FROM Win32_ShadowStorage");
+            using var col = ss.Get();
+            foreach (var raw in col)
+            {
+                if (raw is not System.Management.ManagementObject m) continue;
+                using (m)
+                {
+                    var volRef = m["Volume"] as string;
+                    ulong max = 0;
+                    try { max = Convert.ToUInt64(m["MaxSpace"] ?? 0UL); } catch { }
+                    if (!string.IsNullOrEmpty(volRef)
+                        && volRef.IndexOf(sysVolumeGuid, StringComparison.OrdinalIgnoreCase) >= 0
+                        && max > 0)
+                        return true;
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    // Pulls the "Volume{guid}" token out of a volume device path so two differently-escaped
+    // representations of the same volume still compare equal.
+    internal static string? ExtractVolumeGuid(string? deviceId)
+    {
+        if (string.IsNullOrEmpty(deviceId)) return null;
+        const string marker = "Volume{";
+        var start = deviceId.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (start < 0) return null;
+        var end = deviceId.IndexOf('}', start);
+        if (end < 0) return null;
+        return deviceId.Substring(start, end - start + 1);
     }
 }

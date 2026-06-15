@@ -93,15 +93,23 @@ public static class SafeBootUpgradeService
             log?.Invoke("  [OK] SafeBoot Network (service name) written");
 
             // Verify both landed before claiming success.
-            var after = Evaluate();
-            if (after.GuidEntriesPresent && !after.ServiceEntriesComplete)
-                return (false, "Writes completed but verification still reports missing service-name entries.");
-
-            return (true, "SafeBoot service-name entries are in place. Safe Mode on 25H2+ will resolve the storage driver correctly.");
+            return VerifyUpgrade(Evaluate());
         }
         catch (Exception ex)
         {
             return (false, $"SafeBoot upgrade failed: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Pure verify gate. Success REQUIRES the service-name pair to be present after the write —
+    /// asserting <see cref="SafeBootUpgradeReport.ServiceEntriesComplete"/> directly. The old gate
+    /// keyed off <c>GuidEntriesPresent &amp;&amp; !ServiceEntriesComplete</c>, so a silent write
+    /// no-op (CreateSubKey returns null) on a machine with no GUID entries skipped the failure
+    /// branch and falsely reported success.
+    /// </summary>
+    internal static (bool Success, string Message) VerifyUpgrade(SafeBootUpgradeReport after) =>
+        after.ServiceEntriesComplete
+            ? (true, "SafeBoot service-name entries are in place. Safe Mode on 25H2+ will resolve the storage driver correctly.")
+            : (false, "Writes completed but verification reports the service-name entries are not in place.");
 }
