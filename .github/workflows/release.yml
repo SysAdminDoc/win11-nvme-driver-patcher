@@ -212,6 +212,15 @@ jobs:
           "$hash  $name" | Out-File -FilePath "publish/$name.sha256" -Encoding ascii -NoNewline
           "$hash  $name" | Out-File -FilePath 'publish/SHA256SUMS.txt' -Encoding ascii -Append
 
+      - name: Update + pack Chocolatey and Scoop manifests
+        shell: pwsh
+        run: |
+          # Rewrite the tagged URL + real GUI exe SHA-256 + version into both manifests, then pack
+          # the Chocolatey .nupkg. The Scoop manifest is uploaded as-is (rewritten in place).
+          ./scripts/Update-PackageManifests.ps1 -Version '${{ steps.tag.outputs.version }}' -ExePath 'publish/gui/NVMeDriverPatcher.exe'
+          choco pack packaging/chocolatey/nvme-driver-patcher.nuspec --outputdirectory publish
+          Copy-Item packaging/scoop/nvme-driver-patcher.json 'publish/nvme-driver-patcher.json' -Force
+
       - name: Validate release artifact contract
         shell: pwsh
         # -ExpectSigned when signing secrets are configured, so a silently-skipped signing step
@@ -263,6 +272,8 @@ jobs:
             publish/*.sha256
             publish/SysAdminDoc.NVMeDriverPatcher.yaml
             publish/NVMeDriverPatcher.PowerShell-${{ steps.tag.outputs.version }}.zip
+            publish/nvme-driver-patcher.${{ steps.tag.outputs.version }}.nupkg
+            publish/nvme-driver-patcher.json
             NVMe_Driver_Patcher.ps1
           draft: false
           prerelease: false
