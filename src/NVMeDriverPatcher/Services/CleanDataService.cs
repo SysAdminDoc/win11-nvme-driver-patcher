@@ -117,7 +117,21 @@ public static class CleanDataService
             return false;
         }
 
-        // Protected locations: cleaning must never target these or their direct selves.
+        // App-managed roots are always cleanable even though they sit under a protected root:
+        // the default %LocalAppData%\NVMePatcher (and the TEMP scratch area) live under the user
+        // profile, and a portable install's Data\ dir lives beside the exe (possibly under
+        // Program Files). Anything strictly under one of these passes before the subtree guard.
+        foreach (var safe in SafeAppRoots())
+        {
+            if (string.IsNullOrEmpty(safe)) continue;
+            var s = safe.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (full.StartsWith(s + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        // Protected locations: cleaning must never target these OR any subtree beneath them.
+        // (Previously only the Windows directory refused subtrees, so a portable install dropped
+        // directly under Program Files or the user profile passed the guard.)
         var protectedDirs = new[]
         {
             Environment.GetFolderPath(Environment.SpecialFolder.Windows),
@@ -135,16 +149,30 @@ public static class CleanDataService
                 reason = $"path is a protected system location ({prot})";
                 return false;
             }
-            // Windows dir specifically: refuse anything beneath it too.
-            if (prot.EndsWith("Windows", StringComparison.OrdinalIgnoreCase) &&
-                full.StartsWith(prot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            // Refuse anything beneath a protected root too (defense-in-depth).
+            if (full.StartsWith(prot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             {
-                reason = $"path is inside the Windows directory ({prot})";
+                reason = $"path is inside a protected system location ({prot})";
                 return false;
             }
         }
 
         return true;
+    }
+
+    // App-managed roots under which cleaning is always permitted (the per-user LocalAppData tree,
+    // which also contains TEMP, and the portable exe directory). Computed without side effects.
+    private static IEnumerable<string> SafeAppRoots()
+    {
+        string? localApp = null;
+        try { localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData); }
+        catch { }
+        if (!string.IsNullOrEmpty(localApp)) yield return localApp;
+
+        string? exeDir = null;
+        try { exeDir = AppContext.BaseDirectory; }
+        catch { }
+        if (!string.IsNullOrEmpty(exeDir)) yield return exeDir;
     }
 
     private static void Sweep(IEnumerable<string> files, CleanDataResult result)
