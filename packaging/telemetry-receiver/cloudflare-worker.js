@@ -11,6 +11,10 @@
 
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
+// Upper bound on how many stored records one /summary call will READ. KV reads are billed and the
+// summary is advisory, so we bound the work and report `truncated` instead of silently dropping
+// records. Listing itself is fully paginated (see paginateKeys) so the count is always honest.
+const MAX_SUMMARY_RECORDS = 5000;
 
 export default {
   async fetch(request, env) {
@@ -76,32 +80,74 @@ export function resolveAllowedOrigin(request, env) {
 }
 
 async function checkRateLimit(env, ip) {
+  // Preferred: Cloudflare's Workers Rate Limiting binding — atomic, no check-then-write race.
+  // Bind it as `RATE_LIMITER` in wrangler.toml (see README). limit() both checks AND consumes a
+  // token, so the matching incrementRateLimit becomes a no-op on this path.
+  if (env.RATE_LIMITER && typeof env.RATE_LIMITER.limit === "function") {
+    const { success } = await env.RATE_LIMITER.limit({ key: await sha256Hex(ip) });
+    return !success;
+  }
+  // Fallback: best-effort KV counter (documented as approximate — concurrent bursts from one IP
+  // can slip through between the read and the write). The window resets via the KV entry's TTL.
   const key = `ratelimit:${await sha256Hex(ip)}`;
   const val = await env.COMPAT.get(key);
-  if (val === null) return false;
-  return Number(val) >= RATE_LIMIT_MAX;
+  return rateLimitVerdict(val, RATE_LIMIT_MAX).limited;
 }
 
 async function incrementRateLimit(env, ip) {
+  // The binding path already incremented atomically inside limit(); nothing to persist here.
+  if (env.RATE_LIMITER && typeof env.RATE_LIMITER.limit === "function") return;
   const key = `ratelimit:${await sha256Hex(ip)}`;
   const val = await env.COMPAT.get(key);
-  const count = val === null ? 1 : Number(val) + 1;
-  await env.COMPAT.put(key, String(count), { expirationTtl: RATE_LIMIT_WINDOW_SECONDS });
+  const { nextValue } = rateLimitVerdict(val, RATE_LIMIT_MAX);
+  await env.COMPAT.put(key, String(nextValue), { expirationTtl: RATE_LIMIT_WINDOW_SECONDS });
+}
+
+// Pure rate-limit decision. `raw` is the stored counter string, or null/undefined on a fresh
+// window (the previous entry's TTL expired). Exported so a test can pin the limit boundary and
+// the window-reset behavior without a live KV.
+export function rateLimitVerdict(raw, max) {
+  const count = raw === null || raw === undefined ? 0 : Number(raw);
+  return { limited: count >= max, nextValue: count + 1 };
+}
+
+// Enumerate ALL KV keys by following list cursors, so a growing dataset is never silently
+// truncated at the first 1000-key page (the previous bug). Skips keys with `excludePrefix`.
+// Exported for tests. The page ceiling is a runaway guard, not an expected limit.
+export async function paginateKeys(kv, excludePrefix) {
+  const names = [];
+  let cursor;
+  for (let page = 0; page < 100000; page++) {
+    const res = await kv.list(cursor ? { cursor } : {});
+    for (const k of res.keys) {
+      if (!excludePrefix || !k.name.startsWith(excludePrefix)) names.push(k.name);
+    }
+    if (res.list_complete || !res.cursor) break;
+    cursor = res.cursor;
+  }
+  return names;
 }
 
 async function handleSummary(env, corsOrigin) {
-  const list = await env.COMPAT.list({ limit: 1000 });
-  const entries = list.keys.filter(k => !k.name.startsWith("ratelimit:"));
+  const keys = await paginateKeys(env.COMPAT, "ratelimit:");
+  const scannedKeys = keys.length;
+  const cap = Math.min(scannedKeys, MAX_SUMMARY_RECORDS);
 
   const reports = [];
-  for (const key of entries.slice(0, 200)) {
+  for (let i = 0; i < cap; i++) {
     try {
-      const raw = await env.COMPAT.get(key.name, { type: "json" });
+      const raw = await env.COMPAT.get(keys[i], { type: "json" });
       if (raw?.payload) reports.push(raw.payload);
     } catch { /* skip corrupt entries */ }
   }
 
-  return json({ ...summarizeReports(reports), generatedAt: new Date().toISOString() }, 200, corsOrigin);
+  return json({
+    ...summarizeReports(reports),
+    scannedKeys,
+    summarizedRecords: reports.length,
+    truncated: scannedKeys > MAX_SUMMARY_RECORDS,
+    generatedAt: new Date().toISOString()
+  }, 200, corsOrigin);
 }
 
 // Pure aggregation over the stored client payloads. Reads the EXACT field shape the app

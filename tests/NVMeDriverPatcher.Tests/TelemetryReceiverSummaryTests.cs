@@ -99,6 +99,75 @@ public sealed class TelemetryReceiverSummaryTests
         }
     }
 
+    [Fact]
+    public void PaginateKeys_FollowsCursorsAndExcludesRateLimitKeys()
+    {
+        // A mock KV that returns three list pages (forcing cursor follow) — the old single
+        // list({limit:1000}) call would have stopped after page one and dropped page two/three.
+        var harness =
+            "import { pathToFileURL } from 'node:url';\n" +
+            "const m = await import(pathToFileURL(process.argv[2]).href);\n" +
+            "const pages = [\n" +
+            "  { keys: [{name:'2026-01-01/a'},{name:'ratelimit:zzz'}], list_complete:false, cursor:'c1' },\n" +
+            "  { keys: [{name:'2026-01-02/b'},{name:'2026-01-02/c'}], list_complete:false, cursor:'c2' },\n" +
+            "  { keys: [{name:'2026-01-03/d'}], list_complete:true }\n" +
+            "];\n" +
+            "let i = 0;\n" +
+            "const kv = { list: async () => pages[i++] };\n" +
+            "const names = await m.paginateKeys(kv, 'ratelimit:');\n" +
+            "process.stdout.write(JSON.stringify(names));\n";
+
+        var output = RunHarness(harness);
+        using var doc = JsonDocument.Parse(output);
+        var names = doc.RootElement.EnumerateArray().Select(e => e.GetString()).ToArray();
+
+        Assert.Equal(new[] { "2026-01-01/a", "2026-01-02/b", "2026-01-02/c", "2026-01-03/d" }, names);
+        Assert.DoesNotContain("ratelimit:zzz", names);
+    }
+
+    [Fact]
+    public void RateLimitVerdict_LimitBoundaryAndReset()
+    {
+        var harness =
+            "import { pathToFileURL } from 'node:url';\n" +
+            "const m = await import(pathToFileURL(process.argv[2]).href);\n" +
+            "const out = {\n" +
+            "  fresh: m.rateLimitVerdict(null, 10),\n" +     // window reset → not limited, next=1
+            "  underLimit: m.rateLimitVerdict('9', 10),\n" + // 9 < 10 → allowed, next=10
+            "  atLimit: m.rateLimitVerdict('10', 10),\n" +   // 10 >= 10 → limited
+            "};\n" +
+            "process.stdout.write(JSON.stringify(out));\n";
+
+        var output = RunHarness(harness);
+        using var doc = JsonDocument.Parse(output);
+        var root = doc.RootElement;
+
+        Assert.False(root.GetProperty("fresh").GetProperty("limited").GetBoolean());
+        Assert.Equal(1, root.GetProperty("fresh").GetProperty("nextValue").GetInt32());
+        Assert.False(root.GetProperty("underLimit").GetProperty("limited").GetBoolean());
+        Assert.Equal(10, root.GetProperty("underLimit").GetProperty("nextValue").GetInt32());
+        Assert.True(root.GetProperty("atLimit").GetProperty("limited").GetBoolean());
+    }
+
+    // Runs an inline node ESM harness whose only extra arg is the worker path, returns stdout.
+    private static string RunHarness(string harness)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"NVMeDriverPatcher.Worker.Tests.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var harnessPath = Path.Combine(tempDir, "harness.mjs");
+            File.WriteAllText(harnessPath, harness);
+            var result = RunNode(harnessPath, WorkerPath());
+            Assert.True(result.ExitCode == 0, $"node exited {result.ExitCode}. stderr: {result.StdErr}");
+            return result.StdOut;
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
     private static CompatReport MakeReport(string verification, params (string model, string firmware)[] controllers)
     {
         var report = new CompatReport
