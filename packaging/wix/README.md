@@ -22,11 +22,17 @@ Produces a per-machine MSI installer for NVMe Driver Patcher with four features:
 
 ## Prereqs
 
+WiX is pinned in the repo tool manifest (`.config/dotnet-tools.json`, currently 5.0.2 — WiX 7.x
+requires Open Source Maintenance Fee acceptance). Restore it and add the matching extensions:
+
 ```powershell
-dotnet tool install --global wix
-wix extension add WixToolset.UI.wixext
-wix extension add WixToolset.Util.wixext
+dotnet tool restore
+dotnet wix extension add WixToolset.UI.wixext/5.0.2
+dotnet wix extension add WixToolset.Util.wixext/5.0.2
 ```
+
+Then invoke the build below with `dotnet wix build ...`. Dependabot's nuget ecosystem watches the
+tool manifest, so WiX updates arrive as PRs.
 
 ## Build
 
