@@ -52,6 +52,28 @@ public static class CliJson
         }).ToList(),
     };
 
+    public static RecoveryProofJson BuildRecoveryProof(RecoveryProofReport report) => new()
+    {
+        AllPassed = report.AllPassed,
+        PassedCount = report.PassedCount,
+        TotalCount = report.TotalCount,
+        Items = report.Items.Select(i => new RecoveryProofItemJson
+        {
+            Label = i.Label,
+            Passed = i.Passed,
+            Detail = i.Detail,
+        }).ToList(),
+    };
+
+    public static BypassIoJson BuildBypassIo(BypassIOResult result) => new()
+    {
+        Supported = result.Supported,
+        StorageType = result.StorageType,
+        DriverCompat = result.DriverCompat,
+        BlockedBy = result.BlockedBy,
+        Warning = result.Warning,
+    };
+
     public static ControllersJson BuildControllers(PerControllerAuditReport report) => new()
     {
         NativeCount = report.NativeCount,
@@ -114,6 +136,30 @@ public sealed class ControllersJson
     public int NativeCount { get; set; }
     public int LegacyCount { get; set; }
     public List<ControllerJson> Controllers { get; set; } = new();
+}
+
+public sealed class RecoveryProofJson
+{
+    public bool AllPassed { get; set; }
+    public int PassedCount { get; set; }
+    public int TotalCount { get; set; }
+    public List<RecoveryProofItemJson> Items { get; set; } = new();
+}
+
+public sealed class RecoveryProofItemJson
+{
+    public string Label { get; set; } = string.Empty;
+    public bool Passed { get; set; }
+    public string Detail { get; set; } = string.Empty;
+}
+
+public sealed class BypassIoJson
+{
+    public bool Supported { get; set; }
+    public string StorageType { get; set; } = string.Empty;
+    public string DriverCompat { get; set; } = string.Empty;
+    public string BlockedBy { get; set; } = string.Empty;
+    public string Warning { get; set; } = string.Empty;
 }
 
 public sealed class ControllerJson

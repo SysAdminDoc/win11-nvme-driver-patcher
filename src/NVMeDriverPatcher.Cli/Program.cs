@@ -114,7 +114,7 @@ class Program
                 "fallback" or "vivetool-fallback" or "apply-fallback" => FallbackCommand(config),
                 "recovery-kit" or "export-recovery-kit" => RecoveryKitCommand(config),
                 "verify" => VerifyCommand(config),
-                "recovery-proof" => RecoveryProofCommand(config),
+                "recovery-proof" => RecoveryProofCommand(config, json),
                 "dry-run" or "preview" => DryRunCommand(config),
                 "watchdog" => autoRevert ? WatchdogAutoRevertCommand(config) : WatchdogCommand(config, json),
                 "watchdog-service" or "service-status" => WatchdogServiceStateCommand(),
@@ -132,7 +132,7 @@ class Program
                 "controllers" or "per-controller" => PerControllerCommand(json),
                 "tail" or "events-tail" => EventTailCommand(),
                 "physical-disks" => PhysicalDisksCommand(),
-                "bypassio" => BypassIoCommand(args.Any(a => a is not null && MatchesAny(a, "--history"))),
+                "bypassio" => BypassIoCommand(args.Any(a => a is not null && MatchesAny(a, "--history")), json),
                 "apst" => ApstCommand(),
                 "identify" => IdentifyCommand(),
                 "config-export" => ConfigExportCommand(config, exportPath),
@@ -335,8 +335,13 @@ class Program
         return 0;
     }
 
-    static int BypassIoCommand(bool showHistory)
+    static int BypassIoCommand(bool showHistory, bool json = false)
     {
+        if (json)
+        {
+            Console.WriteLine(CliJson.Serialize("bypassio", CliJson.BuildBypassIo(DriveService.GetBypassIOStatus())));
+            return 0;
+        }
         Console.WriteLine("Current per-volume BypassIO state:");
         var list = BypassIoInspectorService.Inspect();
         foreach (var v in list)
@@ -1209,9 +1214,14 @@ class Program
         return 1;
     }
 
-    static int RecoveryProofCommand(AppConfig config)
+    static int RecoveryProofCommand(AppConfig config, bool json = false)
     {
         var proof = RecoveryProofGateService.Evaluate(config);
+        if (json)
+        {
+            Console.WriteLine(CliJson.Serialize("recovery-proof", CliJson.BuildRecoveryProof(proof)));
+            return proof.AllPassed ? 0 : 1;
+        }
         Console.WriteLine($"Recovery readiness: {proof.PassedCount}/{proof.TotalCount}");
         foreach (var item in proof.Items)
             Console.WriteLine($"  [{(item.Passed ? "OK" : "!!")}] {item.Label}: {item.Detail}");
