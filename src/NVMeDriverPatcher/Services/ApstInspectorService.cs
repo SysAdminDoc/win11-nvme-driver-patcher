@@ -128,6 +128,38 @@ public static class ApstInspectorService
     }
 
     /// <summary>
+    /// Modern Standby (Connected Standby / S0 low-power idle) detection via
+    /// HKLM\SYSTEM\CurrentControlSet\Control\Power\CsEnabled. On these systems StorNVMe does not
+    /// support APST, and the native stack's wake timing can be too optimistic for some controllers.
+    /// </summary>
+    public static bool IsModernStandbyEnabled()
+    {
+        try
+        {
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var key = hklm.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Power");
+            return key?.GetValue("CsEnabled") is int cs && cs != 0;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Pure: a distinct Modern-Standby sleep-wake risk warning for laptops, else null. StorNVMe
+    /// has no APST on Modern Standby (Microsoft Learn), and nvmedisk.sys can let NVMe drives
+    /// "vanish" on wake when controller firmware is too optimistic about wake-up timing. Separate
+    /// from the general APST battery warning — this is a data-availability risk, not just battery.
+    /// </summary>
+    internal static string? ModernStandbyApstWarning(bool isLaptop, bool modernStandby)
+    {
+        if (!isLaptop || !modernStandby) return null;
+        return "Modern Standby laptop: StorNVMe does not support APST on Modern Standby (S0 low-power) " +
+               "systems, and nvmedisk.sys can let NVMe drives vanish on wake from sleep when controller " +
+               "firmware is too optimistic about wake-up timing. Mitigations before patching: disable Fast " +
+               "Startup (powercfg /h off, or Control Panel > Power Options), and set PCIe Link State Power " +
+               "Management to Off in the active power plan.";
+    }
+
+    /// <summary>
     /// Writes a conservative APST idle timeout override to the stornvme parameters key.
     /// Timeout is clamped to 250µs–60s. Does not touch NoLowPowerTransitions (too dangerous
     /// to flip without a per-drive test).
