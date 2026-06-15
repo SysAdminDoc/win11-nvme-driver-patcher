@@ -289,7 +289,16 @@ class Program
         Console.WriteLine("====================");
         Console.WriteLine(report.Summary);
         foreach (var c in report.Controllers)
+        {
             Console.WriteLine($"  {(c.IsNative ? "[NATIVE] " : "[LEGACY] ")}{c.FriendlyName}  driver={c.BoundDriver}  id={c.InstanceId}");
+            Console.WriteLine($"      inf={c.InfName}  provider={c.DriverProvider}  class={c.DeviceClass}");
+        }
+        if (report.NativeCount > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("PnP driver-method evidence (official rollout vs forced install):");
+            Console.WriteLine(report.RenderForcedDriverEvidence());
+        }
         return 0;
     }
 

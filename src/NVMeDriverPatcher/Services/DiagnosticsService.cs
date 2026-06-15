@@ -560,6 +560,39 @@ public static class DiagnosticsService
         sb.AppendLine($"Components: {status.Count}/{status.Total}");
         sb.AppendLine($"Applied Keys: {string.Join(", ", status.Keys)}");
 
+        // PER-CONTROLLER PnP EVIDENCE (RD P1) — captures INF / provider / class / hardware /
+        // compatible IDs for each NVMe controller. When nvmedisk.sys is bound with no patch
+        // breadcrumbs this is the evidence that distinguishes Microsoft's official rollout from a
+        // forced 'driver method' install (which reverts via Device Manager, not registry cleanup).
+        sb.AppendLine().AppendLine("PER-CONTROLLER PnP EVIDENCE").AppendLine("---------------------------");
+        try
+        {
+            var controllerAudit = PerControllerAuditService.Audit();
+            sb.AppendLine(controllerAudit.Summary);
+
+            bool fallbackEvidence;
+            try { fallbackEvidence = FeatureStoreWriterService.HasFallbackEvidence(); }
+            catch { fallbackEvidence = false; }
+
+            if (PatchVerificationService.IsUntrackedDriverActivation(
+                    nativeStatus.IsActive, status.Count, fallbackEvidence))
+            {
+                sb.AppendLine();
+                sb.AppendLine(PatchVerificationService.UntrackedDriverActivationNote);
+                sb.AppendLine();
+                sb.AppendLine(controllerAudit.RenderForcedDriverEvidence());
+            }
+            else
+            {
+                foreach (var c in controllerAudit.Controllers)
+                {
+                    sb.AppendLine($"  {(c.IsNative ? "[NATIVE]" : "[LEGACY]")} {c.FriendlyName} (id={c.InstanceId})");
+                    sb.AppendLine($"    driver={c.BoundDriver}  inf={c.InfName}  provider={c.DriverProvider}  class={c.DeviceClass}");
+                }
+            }
+        }
+        catch (Exception ex) { sb.AppendLine($"  Per-controller audit failed: {ex.Message}"); }
+
         // Benchmark history
         var benchHistory = BenchmarkService.GetHistory(workingDir);
         sb.AppendLine().AppendLine("BENCHMARK HISTORY").AppendLine("-----------------");
