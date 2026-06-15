@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/packaging/schemas/windows_build_rules.schema.json",
+  "title": "NVMe Driver Patcher Windows Build Rules",
+  "description": "Schema for windows_build_rules.json. Per-build expected enablement behavior for the native NVMe driver. First matching rule wins.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "rules"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "updated": { "type": "string" },
+    "note": { "type": "string" },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "expectedPath", "summary"],
+        "properties": {
+          "id": { "type": "string" },
+          "server": { "type": "boolean" },
+          "minBuild": { "type": "integer", "minimum": 0 },
+          "maxBuild": { "type": "integer", "minimum": 0 },
+          "minUbr": { "type": "integer", "minimum": 0 },
+          "maxUbr": { "type": "integer", "minimum": 0 },
+          "expectedPath": {
+            "type": "string",
+            "enum": ["registry-override", "vivetool-fallback", "none-known", "official-optin"]
+          },
+          "fallbackSet": { "type": "string" },
+          "summary": { "type": "string" },
+          "sourceUrl": { "type": "string" },
+          "confidence": { "type": "string" },
+          "lastReviewed": { "type": "string" }
+        }
+      }
+    }
+  }
+}
