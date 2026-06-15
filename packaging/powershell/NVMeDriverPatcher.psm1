@@ -44,16 +44,37 @@ function Invoke-Cli {
     }
 }
 
+# Runs a CLI subcommand with --json and parses the versioned envelope. Falls back to a $null
+# Data object (and surfaces the raw text) if the CLI returned non-JSON for any reason.
+function Invoke-CliJson {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Command,
+        [string[]] $Arguments = @()
+    )
+    $r = Invoke-Cli -Command $Command -Arguments (@('--json') + $Arguments)
+    $data = $null
+    try { $data = $r.Raw | ConvertFrom-Json } catch { }
+    [PSCustomObject]@{ ExitCode = $r.ExitCode; Envelope = $data; Raw = $r.Raw }
+}
+
 function Get-NvmePatchStatus {
     [CmdletBinding()]
     param()
-    $r = Invoke-Cli -Command 'status'
+    $j = Invoke-CliJson -Command 'status'
+    $d = $j.Envelope.data
     [PSCustomObject]@{
-        Applied    = ($r.Raw -match 'Status:\s*APPLIED')
-        Partial    = ($r.Raw -match 'Status:\s*PARTIAL')
-        NotApplied = ($r.Raw -match 'Status:\s*NOT APPLIED')
-        ExitCode   = $r.ExitCode
-        Raw        = $r.Raw
+        Applied           = [bool]$d.applied
+        Partial           = [bool]$d.partial
+        NotApplied        = (-not ($d.applied -or $d.partial))
+        ComponentsApplied = $d.componentsApplied
+        ComponentsTotal   = $d.componentsTotal
+        AppliedKeys       = $d.appliedKeys
+        NativeActive      = [bool]$d.nativeActive
+        ActiveDriver      = $d.activeDriver
+        EnablementSource  = $d.enablementSource
+        BuildRuleId       = $d.buildRuleId
+        ExitCode          = $j.ExitCode
     }
 }
 
@@ -83,30 +104,37 @@ function Invoke-NvmePatchRemove {
 
 function Get-NvmeWatchdogReport {
     [CmdletBinding()] param()
-    $r = Invoke-Cli -Command 'watchdog'
-    $verdict = if ($r.Raw -match 'Verdict:\s*(\w+)') { $Matches[1] } else { 'Unknown' }
+    $j = Invoke-CliJson -Command 'watchdog'
+    $d = $j.Envelope.data
     [PSCustomObject]@{
-        Verdict  = $verdict
-        ExitCode = $r.ExitCode
-        Raw      = $r.Raw
+        Verdict     = if ($d) { $d.verdict } else { 'Unknown' }
+        TotalEvents = $d.totalEvents
+        BugChecks   = $d.bugChecks
+        Summary     = $d.summary
+        EventCounts = $d.eventCounts
+        ExitCode    = $j.ExitCode
     }
 }
 
 function Get-NvmeControllerAudit {
     [CmdletBinding()] param()
-    $r = Invoke-Cli -Command 'controllers'
-    $controllers = foreach ($line in $r.Output) {
-        if ($line -match '^\s*\[(NATIVE|LEGACY)\]\s+(.+?)\s+driver=(\S+)\s+id=(.+)$') {
-            [PSCustomObject]@{
-                IsNative   = ($Matches[1] -eq 'NATIVE')
-                Name       = $Matches[2].Trim()
-                Driver     = $Matches[3]
-                InstanceId = $Matches[4].Trim()
-            }
+    $j = Invoke-CliJson -Command 'controllers'
+    $d = $j.Envelope.data
+    $controllers = foreach ($c in $d.controllers) {
+        [PSCustomObject]@{
+            IsNative       = [bool]$c.isNative
+            Name           = $c.friendlyName
+            Driver         = $c.boundDriver
+            InstanceId     = $c.instanceId
+            InfName        = $c.infName
+            DriverProvider = $c.driverProvider
+            DeviceClass    = $c.deviceClass
         }
     }
     [PSCustomObject]@{
-        ExitCode    = $r.ExitCode
+        ExitCode    = $j.ExitCode
+        NativeCount = $d.nativeCount
+        LegacyCount = $d.legacyCount
         Controllers = $controllers
     }
 }

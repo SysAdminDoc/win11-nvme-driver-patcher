@@ -240,6 +240,7 @@ public static class CliCommandRegistry
         sb.AppendLine("  --no-server-key            Force the optional Server 2025 key off for this run");
         sb.AppendLine("  --dry-run, --preview       Preview changes without applying them (works with 'apply')");
         sb.AppendLine("  --unattended               No prompts, auto-reboot, non-zero exit on any blocker");
+        sb.AppendLine("  --json                     Emit machine-readable JSON (status, watchdog, controllers)");
 
         sb.AppendLine();
         sb.AppendLine("Exit codes:");
