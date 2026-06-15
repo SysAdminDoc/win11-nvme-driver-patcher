@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/packaging/schemas/telemetry_payload.schema.json",
+  "title": "NVMe Driver Patcher Compatibility Telemetry Payload",
+  "description": "Schema for the opt-in compat telemetry report POSTed to a user-configured endpoint (CompatReport). Contract shared between the client and the Cloudflare Worker receiver. Contains no serials, machine names, drive letters, or user names.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "anonId", "controllers"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "submittedAt": { "type": "string" },
+    "anonId": { "type": "string" },
+    "appVersion": { "type": "string" },
+    "osBuild": { "type": "string" },
+    "cpu": { "type": "string" },
+    "controllers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["model", "firmware", "migrated"],
+        "properties": {
+          "model": { "type": "string" },
+          "firmware": { "type": "string" },
+          "migrated": { "type": "boolean" }
+        }
+      }
+    },
+    "profile": { "type": "string" },
+    "verification": { "type": "string" },
+    "watchdog": { "type": "string" },
+    "watchdogEvents": { "type": "integer", "minimum": 0 },
+    "reliabilityDelta": { "type": ["number", "null"] },
+    "benchmarkDeltaPercent": { "type": ["number", "null"] }
+  }
+}
