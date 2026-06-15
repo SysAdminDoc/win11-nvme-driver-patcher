@@ -325,7 +325,7 @@
                             BorderThickness="1"
                             CornerRadius="6">
                         <TextBlock Text="Queue count 0 means automatic queue allocation, and timeout values of 0 disable that power-saving path. Benchmark after each reboot so the change earns its keep."
-                                   Foreground="{DynamicResource TextPrimary}"
+                                   Foreground="{DynamicResource Yellow}"
                                    FontSize="12"
                                    TextWrapping="Wrap"/>
                     </Border>
