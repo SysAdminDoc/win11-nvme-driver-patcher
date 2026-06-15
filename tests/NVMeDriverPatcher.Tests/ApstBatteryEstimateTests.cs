@@ -66,4 +66,23 @@ public sealed class ApstBatteryEstimateTests
         var report = ApstInspectorService.Inspect();
         Assert.NotNull(report.BatteryEstimate);
     }
+
+    [Theory]
+    [InlineData(false, false)] // desktop, no modern standby
+    [InlineData(false, true)]  // desktop, modern standby (desktops aren't subject to this)
+    [InlineData(true, false)]  // laptop, classic S3 sleep
+    public void ModernStandbyApstWarning_OnlySurfacesForModernStandbyLaptops_Null(bool isLaptop, bool modernStandby)
+    {
+        Assert.Null(ApstInspectorService.ModernStandbyApstWarning(isLaptop, modernStandby));
+    }
+
+    [Fact]
+    public void ModernStandbyApstWarning_ModernStandbyLaptop_WarnsWithMitigations()
+    {
+        var warn = ApstInspectorService.ModernStandbyApstWarning(isLaptop: true, modernStandby: true);
+        Assert.NotNull(warn);
+        Assert.Contains("Modern Standby", warn, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Fast Startup", warn, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("PCIe", warn, StringComparison.OrdinalIgnoreCase);
+    }
 }
