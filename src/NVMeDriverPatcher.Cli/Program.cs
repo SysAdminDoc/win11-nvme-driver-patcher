@@ -100,6 +100,8 @@ class Program
                 "status" => StatusCommand(),
                 "apply" or "install" => dryRun ? DryRunCommand(config) : ApplyCommand(config, force, noRestart, unattended),
                 "remove" or "uninstall" => RemoveCommand(config, noRestart),
+                "disable-for-update" or "disable-for-firmware" => DisableForUpdateCommand(config, noRestart),
+                "re-enable-after-update" or "reenable-after-update" => ReEnableAfterUpdateCommand(config, force, noRestart, unattended),
                 "diagnostics" or "export-diagnostics" => DiagnosticsCommand(config),
                 "bundle" or "export-bundle" or "support-bundle" => SupportBundleCommand(config),
                 "fallback" or "vivetool-fallback" or "apply-fallback" => FallbackCommand(config),
@@ -1000,6 +1002,55 @@ class Program
         if (result.Success && result.NeedsRestart && !noRestart)
             Console.WriteLine("Restart required to complete removal.");
         return result.Success ? 0 : 1;
+    }
+
+    static int DisableForUpdateCommand(AppConfig config, bool noRestart)
+    {
+        // Remember the active profile BEFORE removing, so re-enable restores it exactly even if
+        // the user later edits config. The marker also records that a re-enable is expected.
+        FirmwareUpdateWorkflowService.WriteMarker(config, config.PatchProfile, DateTime.UtcNow.ToString("o"));
+        Console.WriteLine("Temporarily disabling Native NVMe for a firmware update...");
+
+        var rc = RemoveCommand(config, noRestart);
+        if (rc != 0)
+        {
+            Console.Error.WriteLine("Removal did not complete cleanly — leaving the pending marker so you can retry.");
+            return rc;
+        }
+
+        // Map detected NVMe drives to their vendor firmware-update guides.
+        var preflight = PreflightService.RunAll();
+        var nudges = new List<FirmwareUpdateNudge>();
+        foreach (var d in preflight.CachedDrives.Where(d => d.IsNVMe))
+        {
+            var name = d.Name ?? string.Empty;
+            var fw = preflight.DriverInfo?.FirmwareVersions.TryGetValue(name, out var f) == true ? f : string.Empty;
+            nudges.Add(FirmwareUpdateNudgeService.Lookup(name, fw));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(FirmwareUpdateWorkflowService.BuildDisableInstructions(nudges));
+        try { EventLogService.Write("Native NVMe disabled for firmware update"); } catch { }
+        return 0;
+    }
+
+    static int ReEnableAfterUpdateCommand(AppConfig config, bool force, bool noRestart, bool unattended)
+    {
+        var marker = FirmwareUpdateWorkflowService.ReadMarker(config);
+        var (profile, hadMarker) = FirmwareUpdateWorkflowService.ResolveReEnableProfile(marker, config);
+        if (!hadMarker)
+            Console.WriteLine("No firmware-update marker found — re-applying the current configured profile.");
+
+        config.PatchProfile = profile;
+        Console.WriteLine($"Re-enabling Native NVMe ({profile} profile) after the firmware update...");
+
+        var rc = ApplyCommand(config, force, noRestart, unattended);
+        if (rc == 0)
+        {
+            FirmwareUpdateWorkflowService.ClearMarker(config);
+            try { EventLogService.Write("Native NVMe re-enabled after firmware update"); } catch { }
+        }
+        return rc;
     }
 
     static int DiagnosticsCommand(AppConfig config)
