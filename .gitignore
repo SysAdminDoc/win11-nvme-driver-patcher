@@ -46,6 +46,7 @@ CLAUDE.md
 # Build artifacts and session screenshots (publish to GH releases instead)
 artifacts/
 
-# Markdown files local-only (except README)
+# Markdown files local-only (except README and CHANGELOG)
 *.md
 !README.md
+!CHANGELOG.md
