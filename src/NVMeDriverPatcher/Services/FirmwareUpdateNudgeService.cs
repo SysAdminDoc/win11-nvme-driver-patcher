@@ -6,6 +6,9 @@ public class FirmwareUpdateNudge
     public string CurrentFirmware { get; set; } = string.Empty;
     public string Vendor { get; set; } = string.Empty;
     public string UpdateToolUrl { get; set; } = string.Empty;
+    /// <summary>Where the vendor documents the firmware-update procedure. The tool landing page
+    /// hosts each vendor's how-to, so it doubles as the guide link for the disable-for-update flow.</summary>
+    public string HowToUpdateUrl { get; set; } = string.Empty;
     public string Summary { get; set; } = string.Empty;
 }
 
@@ -53,6 +56,7 @@ public static class FirmwareUpdateNudgeService
             {
                 nudge.Vendor = vendor;
                 nudge.UpdateToolUrl = url;
+                nudge.HowToUpdateUrl = url;
                 nudge.Summary = $"{vendor} firmware check: {url}";
                 return nudge;
             }
