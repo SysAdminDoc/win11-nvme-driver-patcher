@@ -21,6 +21,12 @@ concurrency:
 jobs:
   release:
     runs-on: windows-latest
+    # Job-level env so the signing step's `if:` can read it. A step's OWN `env:` block is NOT
+    # available to that step's `if:` conditional, so the previous step-scoped CODE_SIGN_PFX_BASE64
+    # always evaluated empty and the signing step was silently skipped even when secrets were set.
+    env:
+      CODE_SIGN_PFX_BASE64: ${{ secrets.CODE_SIGN_PFX_BASE64 }}
+      CODE_SIGN_PFX_PASSWORD: ${{ secrets.CODE_SIGN_PFX_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -104,14 +110,19 @@ jobs:
         # MSI is a REQUIRED artifact (Intune/SCCM detection depends on it) — a WiX failure
         # fails the release here, not at upload time.
 
+      - name: Note unsigned release mode
+        # Make an unsigned release explicit in the log rather than silently shipping unsigned.
+        if: ${{ env.CODE_SIGN_PFX_BASE64 == '' }}
+        shell: pwsh
+        run: |
+          Write-Host "::warning title=Unsigned release::CODE_SIGN_PFX_BASE64 secret is not configured — building in UNSIGNED mode. SmartScreen reputation and the auto-updater's Authenticode fallback will be unavailable for this release."
+
       - name: Authenticode sign (if secret present)
         # No-op unless the caller configured the CODE_SIGN_PFX_BASE64 + CODE_SIGN_PFX_PASSWORD
         # secrets. This keeps the release path unblocked when the project is unsigned — a
-        # signed build simply becomes available the moment secrets are configured.
+        # signed build simply becomes available the moment secrets are configured. The env vars
+        # are inherited from the job-level env block (required for the `if:` above to evaluate).
         if: ${{ env.CODE_SIGN_PFX_BASE64 != '' }}
-        env:
-          CODE_SIGN_PFX_BASE64: ${{ secrets.CODE_SIGN_PFX_BASE64 }}
-          CODE_SIGN_PFX_PASSWORD: ${{ secrets.CODE_SIGN_PFX_PASSWORD }}
         shell: pwsh
         run: |
           $pfxPath = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
@@ -203,7 +214,10 @@ jobs:
 
       - name: Validate release artifact contract
         shell: pwsh
-        run: ./scripts/Validate-ReleaseAssets.ps1 -Version '${{ steps.tag.outputs.version }}'
+        # -ExpectSigned when signing secrets are configured, so a silently-skipped signing step
+        # fails the release instead of shipping unsigned binaries. CODE_SIGN_PFX_BASE64 is in the
+        # job-level env, so $env: reads it here.
+        run: ./scripts/Validate-ReleaseAssets.ps1 -Version '${{ steps.tag.outputs.version }}' -ExpectSigned:([bool]$env:CODE_SIGN_PFX_BASE64)
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

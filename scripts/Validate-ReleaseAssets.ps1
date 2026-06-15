@@ -9,11 +9,13 @@
 #     with the actual GUI exe and release version
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [string]$Version   # tag-derived, no leading v (e.g. 4.6.2)
+    [Parameter(Mandatory)] [string]$Version,   # tag-derived, no leading v (e.g. 4.6.2)
+    [string]$RepoRoot,                          # override repo root (tests); defaults to ../ of this script
+    [switch]$ExpectSigned                       # when set, every sign:true artifact must carry a Valid Authenticode signature
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
+$repoRoot = if ($RepoRoot) { Resolve-Path $RepoRoot } else { Resolve-Path (Join-Path $PSScriptRoot '..') }
 $Version = $Version.TrimStart('v')
 
 $contract = Get-Content -Raw (Join-Path $repoRoot 'packaging/release-artifacts.json') | ConvertFrom-Json
@@ -53,6 +55,17 @@ foreach ($a in $contract.artifacts) {
             $failures.Add("SHA256SUMS.txt missing entry for $leaf")
         } elseif ($sums[$leaf] -ne $actualHash) {
             $failures.Add("SHA256SUMS.txt stale hash for $leaf")
+        }
+    }
+
+    # Authenticode gate: when the release was built with signing secrets (-ExpectSigned), every
+    # artifact the contract marks sign:true must actually carry a Valid signature. This catches a
+    # silently-skipped signing step (the env/if gate bug) instead of shipping unsigned binaries
+    # that weaken SmartScreen and break the auto-updater's signature fallback.
+    if ($a.sign -and $ExpectSigned) {
+        $sig = Get-AuthenticodeSignature -FilePath $full
+        if ($sig.Status -ne 'Valid') {
+            $failures.Add("expected Authenticode signature missing/invalid (status=$($sig.Status)): $leaf (id=$($a.id))")
         }
     }
 
