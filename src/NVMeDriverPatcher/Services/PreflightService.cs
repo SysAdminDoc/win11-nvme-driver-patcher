@@ -173,6 +173,15 @@ public static class PreflightService
             checks["LaptopPower"] = result.IsLaptop
                 ? new(CheckStatus.Warning, "Laptop -- APST broken, ~15% battery impact")
                 : new(CheckStatus.Pass, "Desktop");
+
+            // Modern Standby laptops carry a distinct sleep-wake DATA risk (drives vanishing on
+            // wake), separate from the battery-life warning above. Desktops and non-Modern-Standby
+            // laptops see nothing new.
+            if (result.IsLaptop)
+            {
+                var msWarn = ApstInspectorService.ModernStandbyApstWarning(true, ApstInspectorService.IsModernStandbyEnabled());
+                if (msWarn is not null) checks["ModernStandbyApst"] = new(CheckStatus.Warning, msWarn);
+            }
         }
         catch (Exception ex)
         {
