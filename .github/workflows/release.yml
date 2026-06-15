@@ -87,21 +87,22 @@ jobs:
           # The tracked icon asset lives in the GUI project; the wxs expects icon.ico in PublishDir.
           Copy-Item src/NVMeDriverPatcher/nvme.ico                 publish/msi-staging/icon.ico -Force
 
-      - name: Install WiX (pinned)
+      - name: Restore WiX (pinned via tool manifest)
         shell: pwsh
         run: |
-          # Pinned: WiX 7.x requires Open Source Maintenance Fee EULA acceptance
-          # (error WIX7015) — unpinned install broke the v5.0.0 release run. 5.0.2
-          # compiles our v4-schema authoring without the OSMF gate.
-          dotnet tool install --global wix --version 5.0.2 2>$null
-          wix --version
-          wix extension add WixToolset.UI.wixext/5.0.2
-          wix extension add WixToolset.Util.wixext/5.0.2
+          # WiX is pinned in .config/dotnet-tools.json (5.0.2) so Dependabot's nuget ecosystem can
+          # surface updates — WiX 7.x requires Open Source Maintenance Fee EULA acceptance
+          # (error WIX7015), which the v4-schema authoring here does not accept. `tool restore`
+          # installs the manifest-pinned version; invoke it as `dotnet wix`.
+          dotnet tool restore
+          dotnet wix --version
+          dotnet wix extension add WixToolset.UI.wixext/5.0.2
+          dotnet wix extension add WixToolset.Util.wixext/5.0.2
 
       - name: Build MSI
         shell: pwsh
         run: |
-          wix build packaging/wix/NVMeDriverPatcher.wxs `
+          dotnet wix build packaging/wix/NVMeDriverPatcher.wxs `
             -d PublishDir="${{ github.workspace }}/publish/msi-staging" `
             -d ProjectRoot="${{ github.workspace }}" `
             -ext WixToolset.UI.wixext `
