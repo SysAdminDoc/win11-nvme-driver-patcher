@@ -42,6 +42,44 @@ public sealed class PackagingVersionScriptTests
         Assert.Contains("5.0.0", result.StdOut);
     }
 
+    [Fact]
+    public void ValidateReleaseVersions_RejectsStaleReadmeVersionBadge()
+    {
+        using var repo = VersionFixture.Create("5.0.0", "Use `NVMeDriverPatcher-<version>.msi`.");
+        File.WriteAllText(Path.Combine(repo.Path, "README.md"),
+            "![Version](https://img.shields.io/badge/Version-4.6.0-blue)");
+
+        var result = RunScript(repo.Path);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("README.md", result.StdOut);
+    }
+
+    [Fact]
+    public void ValidateReleaseVersions_AcceptsMatchingNarrativeVersions()
+    {
+        using var repo = VersionFixture.Create("5.0.0", "Use `NVMeDriverPatcher-<version>.msi`.");
+        File.WriteAllText(Path.Combine(repo.Path, "README.md"),
+            "![Version](https://img.shields.io/badge/Version-5.0.0-blue)");
+        File.WriteAllText(Path.Combine(repo.Path, "ROADMAP.md"), "Current ship: **v5.0.0**.");
+
+        var result = RunScript(repo.Path);
+
+        Assert.Equal(0, result.ExitCode);
+    }
+
+    [Fact]
+    public void ValidateReleaseVersions_RejectsStaleRoadmapCurrentShip()
+    {
+        using var repo = VersionFixture.Create("5.0.0", "Use `NVMeDriverPatcher-<version>.msi`.");
+        File.WriteAllText(Path.Combine(repo.Path, "ROADMAP.md"), "Current ship: **v4.6.0**.");
+
+        var result = RunScript(repo.Path);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("ROADMAP.md", result.StdOut);
+    }
+
     private static ScriptResult RunScript(string repoRoot)
     {
         using var process = new Process();

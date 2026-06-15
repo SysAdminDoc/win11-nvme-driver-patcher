@@ -104,8 +104,13 @@ $packagingDocsRoot = Join-Path $repoRoot 'packaging'
 if (Test-Path $packagingDocsRoot) {
     foreach ($doc in Get-ChildItem -LiteralPath $packagingDocsRoot -Filter '*.md' -Recurse -File) {
         $text = Get-Content -Raw $doc.FullName
-        $relativeDoc = $doc.FullName.Substring($repoRoot.Length)
-        $relativeDoc = $relativeDoc.TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+        # Defensive relative path: Resolve-Path can return a provider-qualified root on UNC shares,
+        # making it longer than $doc.FullName and crashing a naive Substring. Fall back to the leaf.
+        $relativeDoc = if ($doc.FullName.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $doc.FullName.Substring($repoRoot.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+        } else {
+            $doc.Name
+        }
 
         foreach ($match in [regex]::Matches($text, $artifactVersionPattern)) {
             $versionToken = $match.Groups['version'].Value
@@ -127,6 +132,24 @@ if (Test-Path $packagingDocsRoot) {
         }
     }
 }
+
+# 10. Narrative docs must not lag the canonical version. Each is guarded by Test-Path so the
+# check is a no-op when the file is absent (e.g. minimal fixtures, or gitignored CLAUDE.md in CI).
+function Check-Narrative {
+    param([string]$RelPath, [string]$Pattern, [string]$Surface)
+    $full = Join-Path $repoRoot $RelPath
+    if (-not (Test-Path $full)) { return }
+    $text = Get-Content -Raw $full
+    if ($text -match $Pattern) {
+        Check $Surface $Matches[1] $canonical
+    }
+}
+# README version badge: ![Version](.../Version-5.0.0-blue)
+Check-Narrative 'README.md' 'Version-([0-9]+\.[0-9]+\.[0-9]+)-' 'README.md version badge'
+# ROADMAP intro: "Current ship: **v5.0.0**"
+Check-Narrative 'ROADMAP.md' 'Current ship:\s*\*\*v?([0-9]+\.[0-9]+\.[0-9]+)\*\*' 'ROADMAP.md current-ship version'
+# CLAUDE.md status line: "Version: v5.0.0" (gitignored locally; validated only when present)
+Check-Narrative 'CLAUDE.md' 'Version:\s*v?([0-9]+\.[0-9]+\.[0-9]+)' 'CLAUDE.md status version'
 
 if ($failures.Count -gt 0) {
     Write-Host "Version drift detected (canonical = $canonical):" -ForegroundColor Red
