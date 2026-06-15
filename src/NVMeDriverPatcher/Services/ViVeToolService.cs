@@ -449,8 +449,10 @@ public static class ViVeToolService
             var stepOk = await RunViVeToolAsync(install.ExePath!, new[] { "/enable", $"/id:{id}" }, log).ConfigureAwait(false);
             if (!stepOk)
             {
-                result.Message = $"ViVeTool rejected feature ID {id}. See the activity log for details.";
-                result.AppliedIDs.Clear();
+                result.Message = $"ViVeTool rejected feature ID {id}. " +
+                    (result.AppliedIDs.Count > 0
+                        ? $"IDs already applied before failure: {string.Join(", ", result.AppliedIDs)}. These remain enabled and may need manual reset."
+                        : "See the activity log for details.");
                 return result;
             }
             result.AppliedIDs.Add(id);

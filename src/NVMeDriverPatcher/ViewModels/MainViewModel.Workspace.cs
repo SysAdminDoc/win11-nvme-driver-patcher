@@ -167,9 +167,10 @@ public partial class MainViewModel
             _ => "Generate rollback and verification assets so the system can be reversed or confirmed without guesswork."
         };
 
-        UpdateChangePlan();
-        UpdateWorkflowGuide();
-        UpdateRecommendedActions();
+        var sharedStatus = RegistryService.GetPatchStatus();
+        UpdateChangePlan(sharedStatus);
+        UpdateWorkflowGuide(sharedStatus);
+        UpdateRecommendedActions(sharedStatus);
         UpdateWorkspaceBadges();
     }
 

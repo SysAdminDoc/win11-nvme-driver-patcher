@@ -280,6 +280,8 @@ public static class VerifiedDownloader
         {
             if (!IsAllowedHost(current.Host, policy.AllowedHosts))
                 throw new InvalidOperationException($"Refusing redirect to untrusted host '{current.Host}'.");
+            if (current.Scheme != Uri.UriSchemeHttps)
+                throw new InvalidOperationException($"Refusing HTTP downgrade to '{current}'. Only HTTPS is allowed.");
 
             using var request = new HttpRequestMessage(HttpMethod.Get, current);
             using var response = await client
