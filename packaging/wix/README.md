@@ -4,7 +4,20 @@ Produces a per-machine MSI installer for NVMe Driver Patcher with four features:
 
 - **Main** — GUI exe, CLI exe, shipped `compat.json`, icon, Start Menu shortcut
 - **TrayAgent** — non-admin status tray (drops `NVMeDriverPatcher.Tray.exe`)
-- **AdmxTemplates** — ADMX + ADML into the install dir (manual copy to `C:\Windows\PolicyDefinitions` is still required — see ADMX docs)
+- **AdmxTemplates** — ADMX + ADML into the install dir. To activate the policies, install them into the local policy store with the CLI (no manual copy needed):
+
+  ```powershell
+  # Install local machine templates (ADMX -> PolicyDefinitions, ADML -> PolicyDefinitions\<lang>)
+  NVMeDriverPatcher.Cli policy-install
+
+  # Domain admins: target the Central Store instead
+  NVMeDriverPatcher.Cli policy-install --central-store="\\contoso.com\SYSVOL\contoso.com\Policies\PolicyDefinitions"
+
+  # Remove them again (rollback)
+  NVMeDriverPatcher.Cli policy-uninstall
+  ```
+
+  `policy-install` copies the bundled `admx\` templates beside the exe; pass `--source=<dir>` to point at a different template set. Both commands need an elevated shell. Central Store deployment makes the templates available to every Group Policy editor in the domain; local install only affects the current machine.
 - **WatchdogService** — opt-in (Level 2, NOT installed by default): drops `NVMeDriverPatcher.Watchdog.exe` and registers/starts the `NVMeDriverPatcherWatchdog` LocalSystem service; removed cleanly on uninstall. Select via the installer feature tree or `msiexec /i NVMeDriverPatcher.msi ADDLOCAL=WatchdogService`
 
 ## Prereqs
