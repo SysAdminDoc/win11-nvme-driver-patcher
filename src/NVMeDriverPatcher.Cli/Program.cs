@@ -150,6 +150,7 @@ class Program
                 "portable-disable" => PortableDisableCommand(),
                 "update-check" => UpdateCheckCommand().GetAwaiter().GetResult(),
                 "winre" => WinReCommand(),
+                "winre-inject" or "inject-winre" => WinReInjectCommand(),
                 "featurestore" or "feature-store" => FeatureStoreCommand(
                     config,
                     args.Any(a => a is not null && a.Equals("--write-native", StringComparison.OrdinalIgnoreCase)),
@@ -1081,6 +1082,21 @@ class Program
             try { EventLogService.Write("Native NVMe re-enabled after firmware update"); } catch { }
         }
         return rc;
+    }
+
+    static int WinReInjectCommand()
+    {
+        // Preview-only: probe WinRE for the image path, locate stornvme.inf, and print the exact
+        // DISM plan + blast-radius warnings. This command never mounts or mutates the image.
+        var info = WinReBcdPrepService.Probe();
+        var inf = WinReDriverInjectionService.DefaultStornvmeInf();
+        var imageMissing = string.IsNullOrWhiteSpace(info.ImagePath);
+        var driverMissing = !System.IO.File.Exists(inf);
+        var mountDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "NVMePatcher_WinReMount");
+        var plan = WinReDriverInjectionService.BuildPlan(
+            info.ImagePath ?? "(WinRE image path unknown)", mountDir, inf, imageMissing, driverMissing);
+        Console.WriteLine(WinReDriverInjectionService.RenderPlan(plan));
+        return plan.IsExecutable ? 0 : 1;
     }
 
     static int PolicyInstallCommand(string? source, string? policyDefs)
