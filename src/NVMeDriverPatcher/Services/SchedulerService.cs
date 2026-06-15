@@ -11,34 +11,43 @@ public static class SchedulerService
     public const string BootTaskName = @"SysAdminDoc\NVMePatcher\BootVerify";
     public const string WatchdogTaskName = @"SysAdminDoc\NVMePatcher\WatchdogSweep";
 
-    public static bool RegisterBootVerify(string cliPath, Action<string>? log = null)
-    {
-        // At login as SYSTEM, run `NVMeDriverPatcher.Cli watchdog --auto-revert` so the auto-
-        // revert consumer runs even if the user never launches the GUI. /RL HIGHEST is required
-        // because the CLI self-elevates via its manifest.
-        return RunSchtasks(new[]
-        {
-            "/Create", "/F", "/RU", "SYSTEM", "/RL", "HIGHEST",
-            "/TN", BootTaskName,
-            "/TR", $"\"{cliPath}\" watchdog --auto-revert",
-            "/SC", "ONSTART"
-        }, log);
-    }
+    public static bool RegisterBootVerify(string cliPath, Action<string>? log = null) =>
+        RunSchtasks(BuildBootVerifyArgs(cliPath), log);
 
-    public static bool RegisterWatchdogSweep(string cliPath, int intervalMinutes, Action<string>? log = null)
+    public static bool RegisterWatchdogSweep(string cliPath, int intervalMinutes, Action<string>? log = null) =>
+        RunSchtasks(BuildWatchdogSweepArgs(cliPath, intervalMinutes), log);
+
+    public static bool Unregister(string taskName, Action<string>? log = null) =>
+        RunSchtasks(BuildUnregisterArgs(taskName), log);
+
+    // Pure schtasks.exe argument builders — extracted so the command shape (task name, action,
+    // schedule, interval clamping) is unit-testable without spawning schtasks.
+
+    // At login as SYSTEM, run `NVMeDriverPatcher.Cli watchdog --auto-revert` so the auto-revert
+    // consumer runs even if the user never launches the GUI. /RL HIGHEST is required because the
+    // CLI self-elevates via its manifest.
+    internal static string[] BuildBootVerifyArgs(string cliPath) => new[]
+    {
+        "/Create", "/F", "/RU", "SYSTEM", "/RL", "HIGHEST",
+        "/TN", BootTaskName,
+        "/TR", $"\"{cliPath}\" watchdog --auto-revert",
+        "/SC", "ONSTART"
+    };
+
+    internal static string[] BuildWatchdogSweepArgs(string cliPath, int intervalMinutes)
     {
         intervalMinutes = Math.Clamp(intervalMinutes, 5, 1440);
-        return RunSchtasks(new[]
+        return new[]
         {
             "/Create", "/F", "/RU", "SYSTEM", "/RL", "HIGHEST",
             "/TN", WatchdogTaskName,
             "/TR", $"\"{cliPath}\" watchdog",
             "/SC", "MINUTE", "/MO", intervalMinutes.ToString()
-        }, log);
+        };
     }
 
-    public static bool Unregister(string taskName, Action<string>? log = null) =>
-        RunSchtasks(new[] { "/Delete", "/F", "/TN", taskName }, log);
+    internal static string[] BuildUnregisterArgs(string taskName) =>
+        new[] { "/Delete", "/F", "/TN", taskName };
 
     public static bool IsRegistered(string taskName)
     {
