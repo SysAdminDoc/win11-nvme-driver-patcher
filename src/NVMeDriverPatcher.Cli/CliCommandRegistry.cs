@@ -58,6 +58,8 @@ public static class CliCommandRegistry
             "Add KB5079391 service-name SafeBoot entries missing from pre-v4.6.1 patches"),
         new("fallback", ["vivetool-fallback", "apply-fallback"], CommandGroup.Recovery,
             "Apply ViVeTool fallback (build-specific feature IDs, post-block builds)"),
+        new("winre-inject", ["inject-winre"], CommandGroup.Recovery,
+            "Preview the DISM plan to inject the legacy stornvme driver into the WinRE image (preview only)"),
 
         // ── Diagnostics ──
         new("diagnostics", ["export-diagnostics"], CommandGroup.Diagnostics,

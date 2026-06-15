@@ -15,9 +15,11 @@ public class WinReProvisionInfo
 
 // Probes the Windows Recovery Environment (reagentc /info) and the BCD entry for WinRE
 // (bcdedit /enum "{current}" /v) so the tool can tell the user whether their box can
-// actually fall back to WinRE if the patch wedges startup. Closes part of ROADMAP §3.3 —
-// the full "inject stornvme.sys into WinRE" flow is deliberately left as a future effort
-// because it requires Dism + an admin-mounted boot.wim and has a much larger blast radius.
+// actually fall back to WinRE if the patch wedges startup. Closes part of ROADMAP §3.3.
+// The stornvme-into-WinRE injection is now PLANNED/PREVIEWED by WinReDriverInjectionService
+// (the `winre-inject` CLI command prints the exact DISM operations + blast-radius warnings);
+// the actual image mount/commit is left to a deliberate operator step because it mutates the
+// recovery boot image and must be validated by a real WinRE boot afterward.
 public static class WinReBcdPrepService
 {
     // `reagentc /info` output is LOCALIZED — the "Windows RE status: Enabled" label and value
