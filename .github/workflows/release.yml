@@ -220,7 +220,7 @@ jobs:
         run: ./scripts/Validate-ReleaseAssets.ps1 -Version '${{ steps.tag.outputs.version }}' -ExpectSigned:([bool]$env:CODE_SIGN_PFX_BASE64)
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: "NVMe Driver Patcher ${{ steps.tag.outputs.tag }}"
