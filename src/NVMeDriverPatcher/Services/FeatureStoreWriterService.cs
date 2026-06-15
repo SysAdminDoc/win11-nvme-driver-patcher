@@ -165,19 +165,41 @@ public static class FeatureStoreWriterService
         var updates = BuildEnableUpdates(ids);
         try
         {
-            foreach (var type in new[] { ConfigurationType.Runtime, ConfigurationType.Boot })
+            // Write Runtime first, then Boot. If Boot fails, roll back Runtime to
+            // avoid a split state where features are enabled at runtime but missing
+            // from the Boot store — invisible until reboot.
+            ulong runtimeStamp = 0;
+            int runtimeStatus = RtlSetFeatureConfigurations(ref runtimeStamp, ConfigurationType.Runtime, updates, (uint)updates.Length);
+            if (runtimeStatus != StatusSuccess)
             {
-                ulong changeStamp = 0;
-                int status = RtlSetFeatureConfigurations(ref changeStamp, type, updates, (uint)updates.Length);
-                if (status != StatusSuccess)
+                return new FeatureStoreWriteResult
                 {
-                    return new FeatureStoreWriteResult
-                    {
-                        Success = false,
-                        Summary = $"RtlSetFeatureConfigurations({type}) failed with NTSTATUS 0x{status:X8}. " +
-                                  "Run elevated; if this persists, use the ViVeTool fallback instead.",
-                    };
+                    Success = false,
+                    Summary = $"RtlSetFeatureConfigurations(Runtime) failed with NTSTATUS 0x{runtimeStatus:X8}. " +
+                              "Run elevated; if this persists, use the ViVeTool fallback instead.",
+                };
+            }
+
+            ulong bootStamp = 0;
+            int bootStatus = RtlSetFeatureConfigurations(ref bootStamp, ConfigurationType.Boot, updates, (uint)updates.Length);
+            if (bootStatus != StatusSuccess)
+            {
+                // Roll back the Runtime write so we don't leave a split state.
+                try
+                {
+                    var resets = BuildResetUpdates(ids);
+                    ulong rollbackStamp = 0;
+                    RtlSetFeatureConfigurations(ref rollbackStamp, ConfigurationType.Runtime, resets, (uint)resets.Length);
                 }
+                catch { /* best effort */ }
+
+                return new FeatureStoreWriteResult
+                {
+                    Success = false,
+                    Summary = $"RtlSetFeatureConfigurations(Boot) failed with NTSTATUS 0x{bootStatus:X8}. " +
+                              "Runtime store was rolled back to avoid split state. " +
+                              "Run elevated; if this persists, use the ViVeTool fallback instead.",
+                };
             }
         }
         catch (Exception ex)

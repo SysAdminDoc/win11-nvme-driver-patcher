@@ -186,6 +186,18 @@ public static class CleanDataService
         {
             foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
                 TryDelete(file, result);
+
+            // Remove empty directories bottom-up so parent dirs are deleted after children.
+            foreach (var dir in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories)
+                         .OrderByDescending(d => d.Length))
+            {
+                try
+                {
+                    if (!Directory.EnumerateFileSystemEntries(dir).Any())
+                        Directory.Delete(dir);
+                }
+                catch { }
+            }
         }
         catch (Exception ex) { result.Errors.Add($"Tree sweep {root}: {ex.Message}"); }
     }

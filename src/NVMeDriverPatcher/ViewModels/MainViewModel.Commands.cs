@@ -543,7 +543,9 @@ public partial class MainViewModel
             if (!Directory.Exists(Config.WorkingDir))
                 Directory.CreateDirectory(Config.WorkingDir);
             var path = Path.Combine(Config.WorkingDir, $"NVMe_Patcher_Log_{DateTime.Now:yyyyMMdd_HHmmss}_manual.txt");
-            File.WriteAllLines(path, snapshot);
+            var tmp = path + ".tmp";
+            File.WriteAllLines(tmp, snapshot);
+            File.Move(tmp, path, overwrite: true);
             Log($"Log exported: {path}", "SUCCESS");
             InfoDialog?.Invoke("Log Exported", $"Log saved to:\n{path}", DialogIcon.Information);
         }
