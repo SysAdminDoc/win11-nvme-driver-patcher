@@ -128,23 +128,27 @@ jobs:
         run: |
           $pfxPath = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
           [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CODE_SIGN_PFX_BASE64))
-          $targets = @(
-            'publish/gui/NVMeDriverPatcher.exe',
-            'publish/cli/NVMeDriverPatcher.Cli.exe',
-            'publish/tray/NVMeDriverPatcher.Tray.exe',
-            'publish/watchdog/NVMeDriverPatcher.Watchdog.exe',
-            "publish/NVMeDriverPatcher-${{ steps.tag.outputs.version }}.msi"
-          )
-          foreach ($file in $targets) {
-            if (Test-Path $file) {
-              & signtool.exe sign `
-                /f $pfxPath /p $env:CODE_SIGN_PFX_PASSWORD `
-                /tr http://timestamp.sectigo.com /td sha256 /fd sha256 `
-                $file
-              if ($LASTEXITCODE -ne 0) { throw "signtool failed on $file" }
+          try {
+            $targets = @(
+              'publish/gui/NVMeDriverPatcher.exe',
+              'publish/cli/NVMeDriverPatcher.Cli.exe',
+              'publish/tray/NVMeDriverPatcher.Tray.exe',
+              'publish/watchdog/NVMeDriverPatcher.Watchdog.exe',
+              "publish/NVMeDriverPatcher-${{ steps.tag.outputs.version }}.msi"
+            )
+            foreach ($file in $targets) {
+              if (Test-Path $file) {
+                & signtool.exe sign `
+                  /f $pfxPath /p $env:CODE_SIGN_PFX_PASSWORD `
+                  /tr http://timestamp.sectigo.com /td sha256 /fd sha256 `
+                  /d "NVMe Driver Patcher" `
+                  $file
+                if ($LASTEXITCODE -ne 0) { throw "signtool failed on $file" }
+              }
             }
+          } finally {
+            Remove-Item $pfxPath -Force -ErrorAction SilentlyContinue
           }
-          Remove-Item $pfxPath -Force
 
       - name: Generate SHA256 checksums
         shell: pwsh
