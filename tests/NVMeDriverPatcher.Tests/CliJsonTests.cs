@@ -67,6 +67,40 @@ public sealed class CliJsonTests
     }
 
     [Fact]
+    public void RecoveryProof_FieldNamesAreStable()
+    {
+        var report = new RecoveryProofReport();
+        report.Items.Add(new RecoveryProofItem { Label = "System Restore", Passed = false, Detail = "off" });
+        report.Items.Add(new RecoveryProofItem { Label = "Recovery kit", Passed = true, Detail = "fresh" });
+        var data = Parse("recovery-proof", CliJson.BuildRecoveryProof(report)).GetProperty("data");
+
+        Assert.False(data.GetProperty("allPassed").GetBoolean());
+        Assert.Equal(1, data.GetProperty("passedCount").GetInt32());
+        Assert.Equal(2, data.GetProperty("totalCount").GetInt32());
+        var item = data.GetProperty("items")[0];
+        Assert.Equal("System Restore", item.GetProperty("label").GetString());
+        Assert.False(item.GetProperty("passed").GetBoolean());
+        Assert.Equal("off", item.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public void BypassIo_FieldNamesAreStable()
+    {
+        var result = new BypassIOResult
+        {
+            Supported = false, StorageType = "NVMe", DriverCompat = "nvmedisk.sys",
+            BlockedBy = "native stack", Warning = "DirectStorage slower",
+        };
+        var data = Parse("bypassio", CliJson.BuildBypassIo(result)).GetProperty("data");
+
+        Assert.False(data.GetProperty("supported").GetBoolean());
+        Assert.Equal("NVMe", data.GetProperty("storageType").GetString());
+        Assert.Equal("nvmedisk.sys", data.GetProperty("driverCompat").GetString());
+        Assert.Equal("native stack", data.GetProperty("blockedBy").GetString());
+        Assert.Equal("DirectStorage slower", data.GetProperty("warning").GetString());
+    }
+
+    [Fact]
     public void Controllers_FieldNamesAreStable()
     {
         var report = new PerControllerAuditReport();
