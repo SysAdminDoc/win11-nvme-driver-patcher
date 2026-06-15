@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/packaging/schemas/compat.schema.json",
+  "title": "NVMe Driver Patcher Firmware/Controller Compatibility Data",
+  "description": "Schema for compat.json. Maps {controller, firmware} to a Native NVMe compatibility level.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "entries"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "updated": { "type": "string" },
+    "note": { "type": "string" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["controller", "firmware", "level"],
+        "properties": {
+          "controller": { "type": "string" },
+          "firmware": { "type": "string" },
+          "level": { "type": "string", "enum": ["Good", "Caution", "Bad"] },
+          "note": { "type": "string" },
+          "confidence": { "type": "string" },
+          "lastReviewed": { "type": "string" },
+          "sourceUrl": { "type": "string" }
+        }
+      }
+    },
+    "cveAdvisories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cve", "severity", "description"],
+        "properties": {
+          "cve": { "type": "string" },
+          "severity": { "type": "string" },
+          "affectsClient": { "type": "boolean" },
+          "affectsServer": { "type": "boolean" },
+          "fixedBy": { "type": "string" },
+          "description": { "type": "string" },
+          "url": { "type": "string" }
+        }
+      }
+    }
+  }
+}
