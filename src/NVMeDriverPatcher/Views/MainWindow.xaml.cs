@@ -516,7 +516,7 @@ public partial class MainWindow : Window
     private void UpdateThemeToggleButton()
     {
         bool dark = ThemeService.CurrentTheme is AppTheme.Dark or AppTheme.HighContrast;
-        ThemeToggleButton.Content = "☀";
+        ThemeToggleButton.Content = dark ? "☀" : "🌙";
         ThemeToggleButton.ToolTip = dark ? "Switch to light theme" : "Switch to dark theme";
         System.Windows.Automation.AutomationProperties.SetName(
             ThemeToggleButton,
