@@ -450,7 +450,12 @@ function Import-Configuration {
             if ($null -ne $savedConfig.AutoSaveLog) { $script:Config.AutoSaveLog = $savedConfig.AutoSaveLog }
             if ($null -ne $savedConfig.EnableToasts) { $script:Config.EnableToasts = $savedConfig.EnableToasts }
             if ($null -ne $savedConfig.WriteEventLog) { $script:Config.WriteEventLog = $savedConfig.WriteEventLog }
-            if ($null -ne $savedConfig.RestartDelay) { $script:Config.RestartDelay = $savedConfig.RestartDelay }
+            if ($null -ne $savedConfig.RestartDelay) {
+                $parsedDelay = 0
+                if ([int]::TryParse($savedConfig.RestartDelay, [ref]$parsedDelay) -and $parsedDelay -ge 5 -and $parsedDelay -le 300) {
+                    $script:Config.RestartDelay = $parsedDelay
+                }
+            }
             if ($null -ne $savedConfig.IncludeServerKey) { $script:Config.IncludeServerKey = $savedConfig.IncludeServerKey }
             if ($null -ne $savedConfig.SkipWarnings) { $script:Config.SkipWarnings = $savedConfig.SkipWarnings }
         }
@@ -532,7 +537,7 @@ function Test-UpdateAvailable {
     try {
         $apiUrl = "https://api.github.com/repos/SysAdminDoc/win11-nvme-driver-patcher/releases/latest"
         $response = Invoke-RestMethod -Uri $apiUrl -Method Get -TimeoutSec 5 -ErrorAction Stop
-        $latestTag = $response.tag_name -replace '^v', ''
+        $latestTag = ($response.tag_name -replace '^v', '') -replace '-.*$', ''
         $currentVersion = [version]$script:Config.AppVersion
         $latestVersion = [version]$latestTag
         if ($latestVersion -gt $currentVersion) {
@@ -822,7 +827,7 @@ function Get-NVMeHealthData {
                 $reliability = $pd | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue
                 if ($reliability) {
                     if ($null -ne $reliability.Temperature) { $info.Temperature = "$($reliability.Temperature)C" }
-                    if ($null -ne $reliability.Wear) { $info.Wear = "$([Math]::Max(0, 100 - $reliability.Wear))%" }
+                    if ($null -ne $reliability.Wear) { $info.Wear = "$([Math]::Min(100, [Math]::Max(0, 100 - $reliability.Wear)))%" }
                     if ($null -ne $reliability.MediaErrors) { $info.MediaErrors = $reliability.MediaErrors }
                     if ($null -ne $reliability.PowerOnHours) { $info.PowerOnHours = "$($reliability.PowerOnHours)h" }
                     if ($null -ne $reliability.ReadErrorsTotal) { $info.ReadErrors = $reliability.ReadErrorsTotal }
@@ -2870,7 +2875,7 @@ function Install-NVMePatch {
         # SafeBoot Minimal
         try {
             if (-not (Test-Path -LiteralPath $script:Config.SafeBootMinimal)) {
-                New-Item -Path $script:Config.SafeBootMinimal -Force | Out-Null
+                New-Item -LiteralPath $script:Config.SafeBootMinimal -Force | Out-Null
             }
             Set-ItemProperty -LiteralPath $script:Config.SafeBootMinimal -Name "(Default)" -Value $script:Config.SafeBootValue -Force
             $val = Get-ItemProperty -LiteralPath $script:Config.SafeBootMinimal -Name "(Default)" -ErrorAction SilentlyContinue
@@ -2890,7 +2895,7 @@ function Install-NVMePatch {
         # SafeBoot Network
         try {
             if (-not (Test-Path -LiteralPath $script:Config.SafeBootNetwork)) {
-                New-Item -Path $script:Config.SafeBootNetwork -Force | Out-Null
+                New-Item -LiteralPath $script:Config.SafeBootNetwork -Force | Out-Null
             }
             Set-ItemProperty -LiteralPath $script:Config.SafeBootNetwork -Name "(Default)" -Value $script:Config.SafeBootValue -Force
             $val = Get-ItemProperty -LiteralPath $script:Config.SafeBootNetwork -Name "(Default)" -ErrorAction SilentlyContinue
@@ -3458,8 +3463,8 @@ if ($Silent) {
     $exitCode = 0
 
     if ($Apply) {
-        if ($script:VeraCryptDetected -and -not $Force) {
-            Write-Error "BLOCKED: VeraCrypt system encryption detected. nvmedisk.sys breaks VeraCrypt boot. Use -Force to override (NOT recommended)."
+        if ($script:VeraCryptDetected) {
+            Write-Error "BLOCKED: VeraCrypt system encryption detected. nvmedisk.sys breaks VeraCrypt boot. This block cannot be overridden."
             $exitCode = 1
         }
         elseif (-not (Test-PreflightPassed) -and -not $Force) {
