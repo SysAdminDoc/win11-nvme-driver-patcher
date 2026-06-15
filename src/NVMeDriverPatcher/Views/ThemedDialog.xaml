@@ -84,7 +84,8 @@
                                           MaxHeight="430"
                                           VerticalScrollBarVisibility="Auto"
                                           IsToolBarVisible="False"
-                                          Focusable="False"
+                                          Focusable="True"
+                                          KeyboardNavigation.TabIndex="0"
                                           AutomationProperties.LiveSetting="Assertive">
                     <FlowDocument x:Name="DlgMessageDocument"
                                   PagePadding="0"
