@@ -225,8 +225,17 @@ public static class BenchmarkService
                             continue;
                         }
 
+                        // WMI's MSFT_Partition.DriveLetter is typed as Char16 which
+                        // .NET WMI boxes as ushort, not char. Handle both.
                         var letter = part["DriveLetter"];
-                        if (letter is char ch && char.IsLetter(ch))
+                        char ch = letter switch
+                        {
+                            char c => c,
+                            ushort u => (char)u,
+                            int iv when iv > 0 => (char)iv,
+                            _ => default
+                        };
+                        if (ch != default && char.IsLetter(ch))
                         {
                             var nvmeRoot = $"{ch}:\\";
                             var nvmeTempDir = Path.Combine(nvmeRoot, "NVMePatcher_Bench");

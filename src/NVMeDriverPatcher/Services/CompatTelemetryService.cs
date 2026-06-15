@@ -115,19 +115,25 @@ public static class CompatTelemetryService
         // Merge firmware versions from the driver details into the per-controller payload.
         // SystemDrive carries only the friendly name; firmware and migration come from
         // other preflight outputs (NVMeDriverDetails.FirmwareVersions + CachedMigration).
+        // FirmwareVersions is keyed by disk number (string), not drive name.
         var firmwareMap = preflight.DriverInfo?.FirmwareVersions ?? new Dictionary<string, string>();
+        // CachedMigration.Migrated contains PnP device names from Win32_PnPEntity, not
+        // the friendly model names from MSFT_Disk. Match on PNPDeviceID instead.
         var migratedSet = preflight.CachedMigration?.Migrated?.ToHashSet(StringComparer.OrdinalIgnoreCase)
                          ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var drive in preflight.CachedDrives ?? Enumerable.Empty<SystemDrive>())
         {
             if (!drive.IsNVMe) continue;
             var driveName = drive.Name ?? string.Empty;
-            firmwareMap.TryGetValue(driveName, out var firmware);
+            var diskKey = drive.Number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            firmwareMap.TryGetValue(diskKey, out var firmware);
+            bool migrated = migratedSet.Contains(driveName) ||
+                            (!string.IsNullOrEmpty(drive.PNPDeviceID) && migratedSet.Contains(drive.PNPDeviceID));
             report.Controllers.Add(new CompatController
             {
                 Model = driveName,
                 Firmware = firmware ?? string.Empty,
-                Migrated = migratedSet.Contains(driveName)
+                Migrated = migrated
             });
         }
         return report;

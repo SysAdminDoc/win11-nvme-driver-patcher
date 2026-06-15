@@ -136,5 +136,6 @@ public static class HtmlDashboardService
             .Replace("&", "&amp;")
             .Replace("<", "&lt;")
             .Replace(">", "&gt;")
-            .Replace("\"", "&quot;");
+            .Replace("\"", "&quot;")
+            .Replace("'", "&#39;");
 }

@@ -144,16 +144,16 @@ public static class PatchService
                 try
                 {
                     overrides.SetValue(id, 1, RegistryValueKind.DWord);
+                    appliedKeys.Add(("Feature", id));
                     var verify = overrides.GetValue(id);
                     if (verify is int v && v == 1)
                     {
                         log?.Invoke($"  [OK] {id} - {friendlyName}");
                         successCount++;
-                        appliedKeys.Add(("Feature", id));
                     }
                     else
                     {
-                        log?.Invoke($"  [FAIL] {id} - {friendlyName}");
+                        log?.Invoke($"  [FAIL] {id} - {friendlyName} (write verify failed)");
                     }
                 }
                 catch (Exception ex)
@@ -673,7 +673,8 @@ public static class PatchService
         catch { /* Continue — per-key open below will surface the issue if needed */ }
 
         bool allReversed = true;
-
+        try
+        {
         foreach (var (type, id) in appliedKeys)
         {
             try
@@ -761,7 +762,11 @@ public static class PatchService
         catch { }
 
         try { overrides?.Flush(); } catch { }
-        try { overrides?.Dispose(); } catch { }
+        }
+        finally
+        {
+            try { overrides?.Dispose(); } catch { }
+        }
         return allReversed;
     }
 
