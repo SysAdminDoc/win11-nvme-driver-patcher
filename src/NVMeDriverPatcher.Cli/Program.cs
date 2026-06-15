@@ -90,6 +90,12 @@ class Program
             string? importPath = args.Select(a => (a ?? string.Empty))
                                  .FirstOrDefault(a => a.StartsWith("--import=", StringComparison.OrdinalIgnoreCase))?
                                  .Substring("--import=".Length);
+            string? sourceArg = args.Select(a => (a ?? string.Empty))
+                                 .FirstOrDefault(a => a.StartsWith("--source=", StringComparison.OrdinalIgnoreCase))?
+                                 .Substring("--source=".Length);
+            string? centralStoreArg = args.Select(a => (a ?? string.Empty))
+                                 .FirstOrDefault(a => a.StartsWith("--central-store=", StringComparison.OrdinalIgnoreCase))?
+                                 .Substring("--central-store=".Length);
             int thresholdArg = 15;
             var threshStr = args.Select(a => (a ?? string.Empty))
                                  .FirstOrDefault(a => a.StartsWith("--threshold=", StringComparison.OrdinalIgnoreCase));
@@ -137,6 +143,8 @@ class Program
                 "verify-backup" => VerifyBackupCommand(config, importPath),
                 "register-tasks" => RegisterTasksCommand(),
                 "unregister-tasks" => UnregisterTasksCommand(),
+                "policy-install" => PolicyInstallCommand(sourceArg, centralStoreArg),
+                "policy-uninstall" => PolicyUninstallCommand(sourceArg, centralStoreArg),
                 "portable-enable" => PortableEnableCommand(),
                 "portable-disable" => PortableDisableCommand(),
                 "update-check" => UpdateCheckCommand().GetAwaiter().GetResult(),
@@ -1051,6 +1059,28 @@ class Program
             try { EventLogService.Write("Native NVMe re-enabled after firmware update"); } catch { }
         }
         return rc;
+    }
+
+    static int PolicyInstallCommand(string? source, string? policyDefs)
+    {
+        var src = string.IsNullOrWhiteSpace(source) ? PolicyTemplateInstallService.DefaultSourceDir() : source;
+        var dst = string.IsNullOrWhiteSpace(policyDefs) ? PolicyTemplateInstallService.DefaultPolicyDefinitionsDir() : policyDefs;
+        Console.WriteLine($"Installing ADMX/ADML policy templates from {src}");
+        Console.WriteLine($"  into {dst}");
+        var (ok, summary) = PolicyTemplateInstallService.Install(src, dst, Console.WriteLine);
+        Console.WriteLine(summary);
+        if (ok) Console.WriteLine("Refresh policy with 'gpupdate /force' or reopen the Group Policy editor to see the templates.");
+        return ok ? 0 : 1;
+    }
+
+    static int PolicyUninstallCommand(string? source, string? policyDefs)
+    {
+        var src = string.IsNullOrWhiteSpace(source) ? PolicyTemplateInstallService.DefaultSourceDir() : source;
+        var dst = string.IsNullOrWhiteSpace(policyDefs) ? PolicyTemplateInstallService.DefaultPolicyDefinitionsDir() : policyDefs;
+        Console.WriteLine($"Removing ADMX/ADML policy templates from {dst}...");
+        var (ok, summary) = PolicyTemplateInstallService.Uninstall(src, dst, Console.WriteLine);
+        Console.WriteLine(summary);
+        return ok ? 0 : 1;
     }
 
     static int DiagnosticsCommand(AppConfig config)

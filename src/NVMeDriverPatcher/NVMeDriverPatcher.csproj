@@ -29,6 +29,14 @@
     <None Include="windows_build_rules.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- Ship the ADMX/ADML templates beside the exe so `policy-install` works for the portable
+         build (the MSI also lays them down). Link preserves the admx\ + admx\en-US\ layout. -->
+    <None Include="..\..\packaging\admx\NVMeDriverPatcher.admx" Link="admx\NVMeDriverPatcher.admx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\packaging\admx\en-US\NVMeDriverPatcher.adml" Link="admx\en-US\NVMeDriverPatcher.adml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
