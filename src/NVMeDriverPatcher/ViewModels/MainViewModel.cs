@@ -245,7 +245,9 @@ public partial class MainViewModel : ObservableObject
         if (message is null) message = string.Empty;
         if (level is null) level = "INFO";
 
-        var timestamp = DateTime.Now.ToString("HH:mm:ss");
+        // Include the date — a time-only stamp makes exported logs from sessions that span
+        // midnight appear to go backwards in time.
+        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
         var entry = $"[{timestamp}] [{level}] {message}";
 
         lock (_logHistoryLock)
@@ -605,20 +607,20 @@ public partial class MainViewModel : ObservableObject
     }
 
     // Called when preflight kicked off the update check but it hadn't replied by the time
-    // the first render happened. We wait up to 12 seconds on a background continuation — if
-    // a result arrives, marshal back to the UI thread and raise the badge; otherwise stay
-    // quiet (user is still free to click "Check for updates" from the menu).
+    // the first render happened. When the check completes, marshal back to the UI thread and
+    // raise the badge; otherwise stay quiet (user is still free to click "Check for updates"
+    // from the menu). The underlying HttpClient already enforces its own request timeout.
     private void ObserveLateUpdateCheck(Task<UpdateInfo?> updateTask)
     {
         _ = updateTask.ContinueWith(async completed =>
         {
             try
             {
-                // Task.Delay-based soft cap: the underlying HttpClient already has its own
-                // timeout, but defense-in-depth keeps us from leaking a long-lived observer.
-                var finished = await Task.WhenAny(completed, Task.Delay(TimeSpan.FromSeconds(12)));
-                if (finished is not Task<UpdateInfo?> t || !t.IsCompletedSuccessfully) return;
-                var info = await t; // already completed — await is allocation-free and keeps the codebase .Result-clean
+                // We're inside `completed`'s own continuation, so it has already finished —
+                // a Task.WhenAny(completed, Task.Delay(...)) here would always return `completed`
+                // immediately, making the delay dead code. Just consume the result.
+                if (!completed.IsCompletedSuccessfully) return;
+                var info = await completed; // already completed — keeps the codebase .Result-clean
                 if (info is null) return;
 
                 var app = System.Windows.Application.Current;
@@ -1341,7 +1343,18 @@ public partial class MainViewModel : ObservableObject
                     if (!string.IsNullOrEmpty(Config.WorkingDir) && !Directory.Exists(Config.WorkingDir))
                         Directory.CreateDirectory(Config.WorkingDir);
                     var path = Path.Combine(Config.WorkingDir, $"NVMe_Patcher_Log_{DateTime.Now:yyyyMMdd_HHmmss}_autosave.txt");
-                    File.WriteAllLines(path, snapshot);
+                    // Atomic write — OnClosing runs during process/system shutdown, where a
+                    // plain File.WriteAllLines can be killed mid-write and leave a truncated log.
+                    // Temp + flush-to-disk + rename matches every other write in the codebase.
+                    var tempPath = path + ".tmp";
+                    using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                    using (var sw = new StreamWriter(fs, new System.Text.UTF8Encoding(false)))
+                    {
+                        foreach (var line in snapshot) sw.WriteLine(line);
+                        sw.Flush();
+                        fs.Flush(flushToDisk: true);
+                    }
+                    File.Move(tempPath, path, overwrite: true);
                 }
                 catch { }
             }
