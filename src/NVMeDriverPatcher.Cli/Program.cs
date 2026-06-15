@@ -75,6 +75,7 @@ class Program
             if (safeMode) config.PatchProfile = PatchProfile.Safe;
             else if (fullMode) config.PatchProfile = PatchProfile.Full;
 
+            bool json = args.Any(a => a is not null && MatchesAny(a, "--json"));
             bool dryRun = args.Any(a => a is not null && MatchesAny(a, "--dry-run", "--preview"));
             bool unattended = args.Any(a => a is not null && MatchesAny(a, "--unattended"));
             bool autoRevert = args.Any(a => a is not null && MatchesAny(a, "--auto-revert"));
@@ -103,7 +104,7 @@ class Program
 
             return command switch
             {
-                "status" => StatusCommand(),
+                "status" => StatusCommand(json),
                 "apply" or "install" => dryRun ? DryRunCommand(config) : ApplyCommand(config, force, noRestart, unattended),
                 "remove" or "uninstall" => RemoveCommand(config, noRestart),
                 "disable-for-update" or "disable-for-firmware" => DisableForUpdateCommand(config, noRestart),
@@ -115,7 +116,7 @@ class Program
                 "verify" => VerifyCommand(config),
                 "recovery-proof" => RecoveryProofCommand(config),
                 "dry-run" or "preview" => DryRunCommand(config),
-                "watchdog" => autoRevert ? WatchdogAutoRevertCommand(config) : WatchdogCommand(config),
+                "watchdog" => autoRevert ? WatchdogAutoRevertCommand(config) : WatchdogCommand(config, json),
                 "watchdog-service" or "service-status" => WatchdogServiceStateCommand(),
                 "reliability" => ReliabilityCommand(config),
                 "minidump" or "triage" => MinidumpCommand(config),
@@ -128,7 +129,7 @@ class Program
                 "verifier-off" => VerifierOffCommand(),
                 "verifier-status" => VerifierStatusCommand(),
                 "guardrails" => GuardrailsCommand(),
-                "controllers" or "per-controller" => PerControllerCommand(),
+                "controllers" or "per-controller" => PerControllerCommand(json),
                 "tail" or "events-tail" => EventTailCommand(),
                 "physical-disks" => PhysicalDisksCommand(),
                 "bypassio" => BypassIoCommand(args.Any(a => a is not null && MatchesAny(a, "--history"))),
@@ -292,9 +293,14 @@ class Program
         return report.HasBlocker ? 1 : 0;
     }
 
-    static int PerControllerCommand()
+    static int PerControllerCommand(bool json = false)
     {
         var report = PerControllerAuditService.Audit();
+        if (json)
+        {
+            Console.WriteLine(CliJson.Serialize("controllers", CliJson.BuildControllers(report)));
+            return 0;
+        }
         Console.WriteLine("Per-controller audit");
         Console.WriteLine("====================");
         Console.WriteLine(report.Summary);
@@ -663,9 +669,14 @@ class Program
         };
     }
 
-    static int WatchdogCommand(AppConfig config)
+    static int WatchdogCommand(AppConfig config, bool json = false)
     {
         var report = EventLogWatchdogService.Evaluate(config);
+        if (json)
+        {
+            Console.WriteLine(CliJson.Serialize("watchdog", CliJson.BuildWatchdog(report)));
+            return report.Verdict switch { WatchdogVerdict.Unstable => 1, WatchdogVerdict.Warning => 2, _ => 0 };
+        }
         Console.WriteLine("NVMe Driver Watchdog");
         Console.WriteLine("====================");
         Console.WriteLine($"Verdict: {report.Verdict}");
@@ -827,10 +838,21 @@ class Program
         return 0;
     }
 
-    static int StatusCommand()
+    static int StatusCommand(bool json = false)
     {
         var preflight = PreflightService.RunAll();
         var status = RegistryService.GetPatchStatus();
+
+        if (json)
+        {
+            var native = preflight.NativeNVMeStatus;
+            bool evidence = false;
+            try { evidence = FeatureStoreWriterService.HasFallbackEvidence(); } catch { }
+            var src = PatchVerificationService.ClassifyEnablementSource(native?.IsActive ?? false, status.Count, evidence);
+            Console.WriteLine(CliJson.Serialize("status",
+                CliJson.BuildStatus(status, native, src, WindowsBuildRulesService.MatchCurrent())));
+            return status.Applied ? 0 : status.Partial ? 2 : 1;
+        }
 
         Console.WriteLine();
         Console.WriteLine("NVMe Driver Patch Status");
