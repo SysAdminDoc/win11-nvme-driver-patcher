@@ -13,8 +13,28 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   rollback state detection, profile-driven key sets, and result defaults.
 - **Roadmap_Blocked.md** — items blocked on external resources (VMs, hardware) now live in a
   separate file to keep ROADMAP.md actionable-only.
+- **PowerShell module: 6 new JSON cmdlets** — `Get-NvmeRecoveryProof`, `Get-NvmeBypassIo`,
+  `Get-NvmeFirmwareCompat`, `Get-NvmeFeatureStore`, `Get-NvmeReliability`, `Get-NvmeMinidump`.
+  All read commands now use `--json` via `Invoke-CliJson` — no regex parsing remains.
+- **WmiQueryHelper** — centralized 30s timeout wrapper for all `ManagementObjectSearcher` calls
+  across 11 services. Prevents WMI provider hangs from freezing the GUI.
+
+### Security
+- **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the
+  System event log and writes to `%LocalAppData%\NVMePatcher\`. LocalSystem was unnecessarily
+  privileged. Also adds a restricted service SID via `sc sidtype ... restricted`.
+- **SQLite hardening PRAGMAs** — added `trusted_schema=OFF` (prevent schema-based injection),
+  `cell_size_check=ON` (catch corrupted pages), `quick_check` at startup (detect corruption).
+  3 new test fixtures verify each PRAGMA.
+- **DiskSpd Authenticode verification** — extracted `diskspd.exe` is now Authenticode-verified
+  when signtool is available. Download URL pinned to v2.2 release instead of `/releases/latest/`.
 
 ### Fixed
+- **StatusToColorConverter fallback brushes** — replaced dark-theme-only fallback hex values with
+  neutral mid-range colors that read acceptably in both light and dark themes.
+- **WMI query timeouts** — all 35+ `ManagementObjectSearcher.Get()` calls across DriveService,
+  HotSwapService, BenchmarkService, DiagnosticsService, and 7 other services now use
+  `WmiQueryHelper.ExecuteWithTimeout()` with a 30s default timeout.
 - **DeviceInfoSetSafeHandle** — `SetupDiGetClassDevs` now returns a `SafeHandle` that calls
   `SetupDiDestroyDeviceInfoList` automatically, preventing leaks on exceptions.
 - **SP_DEVINFO_DATA/SP_CLASSINSTALL_HEADER factory methods** — `Create()` pre-sets `cbSize` to
