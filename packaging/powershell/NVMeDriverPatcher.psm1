@@ -5,14 +5,13 @@
 
 .DESCRIPTION
   Locates the CLI exe (either next to the module or via Get-Command), invokes the
-  requested subcommand, captures stdout/stderr, and returns a typed PSCustomObject
-  the caller can pipeline. Each cmdlet parses the CLI's plain-text output defensively —
-  upstream changes to CLI messaging should not break the module even if the parsed
-  fields go null.
+  requested subcommand with --json, parses the versioned JSON envelope, and returns
+  a typed PSCustomObject the caller can pipeline. Read commands use the CliJson
+  contract; mutation commands (apply, remove) return raw text.
 
 .NOTES
-  No AI attribution — this module is plain-English PowerShell. Every function is a thin
-  wrapper around one CLI subcommand; the heavy lifting stays in the C# CLI exe.
+  Every function is a thin wrapper around one CLI subcommand; the heavy lifting
+  stays in the C# CLI exe.
 #>
 
 $script:CliExeCandidates = @(
@@ -139,6 +138,87 @@ function Get-NvmeControllerAudit {
     }
 }
 
+function Get-NvmeRecoveryProof {
+    [CmdletBinding()] param()
+    $j = Invoke-CliJson -Command 'recovery-proof'
+    $d = $j.Envelope.data
+    [PSCustomObject]@{
+        AllPassed   = [bool]$d.allPassed
+        PassedCount = $d.passedCount
+        TotalCount  = $d.totalCount
+        Items       = $d.items
+        ExitCode    = $j.ExitCode
+    }
+}
+
+function Get-NvmeBypassIo {
+    [CmdletBinding()] param()
+    $j = Invoke-CliJson -Command 'bypassio'
+    $d = $j.Envelope.data
+    [PSCustomObject]@{
+        Supported   = [bool]$d.supported
+        StorageType = $d.storageType
+        DriverCompat = $d.driverCompat
+        BlockedBy   = $d.blockedBy
+        Warning     = $d.warning
+        ExitCode    = $j.ExitCode
+    }
+}
+
+function Get-NvmeFirmwareCompat {
+    [CmdletBinding()] param()
+    $j = Invoke-CliJson -Command 'firmware'
+    $d = $j.Envelope.data
+    [PSCustomObject]@{
+        SchemaVersion = $d.schemaVersion
+        Updated       = $d.updated
+        EntryCount    = $d.entryCount
+        Entries       = $d.entries
+        ExitCode      = $j.ExitCode
+    }
+}
+
+function Get-NvmeFeatureStore {
+    [CmdletBinding()] param()
+    $j = Invoke-CliJson -Command 'featurestore'
+    $d = $j.Envelope.data
+    [PSCustomObject]@{
+        HasFallbackEvidence = [bool]$d.hasFallbackEvidence
+        Configurations      = $d.configurations
+        ExitCode            = $j.ExitCode
+    }
+}
+
+function Get-NvmeReliability {
+    [CmdletBinding()] param()
+    $j = Invoke-CliJson -Command 'reliability'
+    $d = $j.Envelope.data
+    [PSCustomObject]@{
+        DataAvailable    = [bool]$d.dataAvailable
+        PrePatchAverage  = $d.prePatchAverage
+        PostPatchAverage = $d.postPatchAverage
+        Delta            = $d.delta
+        Summary          = $d.summary
+        Series           = $d.series
+        ExitCode         = $j.ExitCode
+    }
+}
+
+function Get-NvmeMinidump {
+    [CmdletBinding()] param()
+    $j = Invoke-CliJson -Command 'minidump'
+    $d = $j.Envelope.data
+    [PSCustomObject]@{
+        TotalFound     = $d.totalFound
+        NewerThanPatch = $d.newerThanPatch
+        NVMeRelated    = $d.nvMeRelated
+        ScanCompleted  = [bool]$d.scanCompleted
+        Summary        = $d.summary
+        Dumps          = $d.dumps
+        ExitCode       = $j.ExitCode
+    }
+}
+
 function Invoke-NvmeDryRun {
     [CmdletBinding()] param()
     Invoke-Cli -Command 'dry-run'
@@ -155,5 +235,6 @@ function Export-NvmeDashboard {
 }
 
 Export-ModuleMember -Function Get-NvmePatchStatus, Invoke-NvmePatchApply, Invoke-NvmePatchRemove,
-    Get-NvmeWatchdogReport, Get-NvmeControllerAudit, Invoke-NvmeDryRun,
-    Export-NvmeDiagnostics, Export-NvmeDashboard
+    Get-NvmeWatchdogReport, Get-NvmeControllerAudit, Get-NvmeRecoveryProof, Get-NvmeBypassIo,
+    Get-NvmeFirmwareCompat, Get-NvmeFeatureStore, Get-NvmeReliability, Get-NvmeMinidump,
+    Invoke-NvmeDryRun, Export-NvmeDiagnostics, Export-NvmeDashboard

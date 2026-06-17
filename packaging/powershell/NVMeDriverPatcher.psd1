@@ -17,6 +17,12 @@
         'Invoke-NvmePatchRemove',
         'Get-NvmeWatchdogReport',
         'Get-NvmeControllerAudit',
+        'Get-NvmeRecoveryProof',
+        'Get-NvmeBypassIo',
+        'Get-NvmeFirmwareCompat',
+        'Get-NvmeFeatureStore',
+        'Get-NvmeReliability',
+        'Get-NvmeMinidump',
         'Invoke-NvmeDryRun',
         'Export-NvmeDiagnostics',
         'Export-NvmeDashboard'
