@@ -2,7 +2,35 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
-## [Unreleased] — 2026-06-14
+## [Unreleased] — 2026-06-16
+
+### Added
+- **NVMeDriverPatcher.Core library** — extracted all shared services, models, data, and interop
+  into a framework-agnostic class library; Tray no longer pulls the entire WPF framework.
+- **`--json` for firmware, featurestore, reliability, minidump** — all read CLI commands now return
+  the versioned JSON envelope, completing fleet-scriptable coverage.
+- **PatchService core-flow unit tests** — 15 tests covering pre-registry abort classification,
+  rollback state detection, profile-driven key sets, and result defaults.
+- **Roadmap_Blocked.md** — items blocked on external resources (VMs, hardware) now live in a
+  separate file to keep ROADMAP.md actionable-only.
+
+### Fixed
+- **DeviceInfoSetSafeHandle** — `SetupDiGetClassDevs` now returns a `SafeHandle` that calls
+  `SetupDiDestroyDeviceInfoList` automatically, preventing leaks on exceptions.
+- **SP_DEVINFO_DATA/SP_CLASSINSTALL_HEADER factory methods** — `Create()` pre-sets `cbSize` to
+  prevent silent SetupDi API failures from missing initialization.
+- **EventLogWatchdogService file lock** — `Evaluate()` acquires a file lock so concurrent
+  GUI+CLI evaluations can't clobber each other's cumulative event counts.
+- **FeatureStoreWriterService write lock** — `WriteOverrides`/`ResetOverrides` serialized with
+  `SemaphoreSlim` to prevent interleaved writes from producing incorrect state.
+- **FirmwareUpdateNudgeService "ct" pattern** — narrowed from `Contains` to `StartsWith` so
+  drives like "Direct" or "Connected" don't false-match as Crucial.
+- **xunit version alignment** — `xunit.runner.visualstudio` downgraded from 3.1.5 to 2.8.2
+  to match `xunit` 2.9.3 major version.
+- **DarkExpander keyboard focus** — added `IsKeyboardFocused` trigger to the expander's toggle
+  button so keyboard users can see which control is focused.
+- **PowerShell DiskSpd hash verification** — pinned to v2.2 release with SHA-256 check before
+  extraction, preventing MITM binary substitution on admin-executed downloads.
 
 ### Fixed (correctness / security — engineering audit)
 - **PatchService: untracked registry value on verify-read failure** — a written feature flag was not added
