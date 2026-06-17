@@ -1136,6 +1136,10 @@
                                                 <Setter TargetName="headerBorder" Property="Background" Value="{DynamicResource BgMedium}"/>
                                                 <Setter TargetName="chevron" Property="Stroke" Value="{DynamicResource TextPrimary}"/>
                                             </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="headerBorder" Property="BorderBrush" Value="{DynamicResource Focus}"/>
+                                                <Setter TargetName="headerBorder" Property="BorderThickness" Value="1"/>
+                                            </Trigger>
                                             <Trigger Property="IsChecked" Value="True">
                                                 <Setter TargetName="chevron" Property="Stroke" Value="{DynamicResource Accent}"/>
                                                 <Trigger.EnterActions>
