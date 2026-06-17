@@ -406,7 +406,7 @@ public static class DiagnosticsService
         try
         {
             using var search = new ManagementObjectSearcher("SELECT Caption, BuildNumber, Version, InstallDate, LastBootUpTime FROM Win32_OperatingSystem");
-            using var collection = search.Get();
+            using var collection = WmiQueryHelper.ExecuteWithTimeout(search);
             foreach (var raw in collection)
             {
                 if (raw is not ManagementObject os) continue;
@@ -427,7 +427,7 @@ public static class DiagnosticsService
         try
         {
             using var search = new ManagementObjectSearcher("SELECT Manufacturer, Model, TotalPhysicalMemory FROM Win32_ComputerSystem");
-            using var collection = search.Get();
+            using var collection = WmiQueryHelper.ExecuteWithTimeout(search);
             foreach (var raw in collection)
             {
                 if (raw is not ManagementObject cs) continue;

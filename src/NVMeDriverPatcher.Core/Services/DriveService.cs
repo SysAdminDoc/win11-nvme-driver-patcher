@@ -14,7 +14,7 @@ public static class DriveService
     // when these calls run on a recurring poll.
     private static IEnumerable<ManagementObject> Enumerate(ManagementObjectSearcher searcher)
     {
-        using var collection = searcher.Get();
+        using var collection = WmiQueryHelper.ExecuteWithTimeout(searcher);
         foreach (var obj in collection)
         {
             if (obj is ManagementObject mo)
@@ -156,9 +156,8 @@ public static class DriveService
         {
             using var search = new ManagementObjectSearcher("SELECT * FROM Win32_PnPSignedDriver");
 
-            // Stream drivers once: capture stornvme + scan for known 3rd-party in the same pass.
             string inboxVersion = "";
-            using (var collection = search.Get())
+            using (var collection = WmiQueryHelper.ExecuteWithTimeout(search))
             {
                 foreach (var raw in collection)
                 {
@@ -655,7 +654,7 @@ public static class DriveService
             }
 
             using var battSearch = new ManagementObjectSearcher("SELECT Name FROM Win32_Battery");
-            using var batteryCollection = battSearch.Get();
+            using var batteryCollection = WmiQueryHelper.ExecuteWithTimeout(battSearch);
             if (batteryCollection.Count > 0)
             {
                 foreach (var b in batteryCollection) (b as IDisposable)?.Dispose();
@@ -754,7 +753,7 @@ public static class DriveService
             {
                 using var poolSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
                     "SELECT FriendlyName, IsPrimordial FROM MSFT_StoragePool WHERE IsPrimordial=FALSE");
-                using var pools = poolSearch.Get();
+                using var pools = WmiQueryHelper.ExecuteWithTimeout(poolSearch);
                 bool any = pools.Count > 0;
                 foreach (var p in pools) (p as IDisposable)?.Dispose();
                 if (any)

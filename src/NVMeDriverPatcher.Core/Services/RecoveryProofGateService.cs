@@ -189,7 +189,7 @@ public static class RecoveryProofGateService
             string? sysVolumeGuid = null;
             using (var volSearch = new System.Management.ManagementObjectSearcher(
                 $"SELECT DeviceID FROM Win32_Volume WHERE DriveLetter='{systemDrive}'"))
-            using (var vols = volSearch.Get())
+            using (var vols = WmiQueryHelper.ExecuteWithTimeout(volSearch))
             {
                 foreach (var raw in vols)
                 {
@@ -205,7 +205,7 @@ public static class RecoveryProofGateService
             if (string.IsNullOrEmpty(sysVolumeGuid)) return false;
 
             using var ss = new System.Management.ManagementObjectSearcher("SELECT Volume, MaxSpace FROM Win32_ShadowStorage");
-            using var col = ss.Get();
+            using var col = WmiQueryHelper.ExecuteWithTimeout(ss);
             foreach (var raw in col)
             {
                 if (raw is not System.Management.ManagementObject m) continue;
