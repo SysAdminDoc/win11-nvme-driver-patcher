@@ -20,26 +20,26 @@ public static class FirmwareUpdateNudgeService
 {
     // Stable landing pages from each vendor. Kept conservative — a broken link here lives
     // in the app for a long time. If a vendor redomains, update here and ship a patch.
-    private static readonly (string VendorPattern, string Vendor, string Url)[] VendorTools =
+    private static readonly (string VendorPattern, string Vendor, string Url, bool StartsWith)[] VendorTools =
     {
-        ("samsung",          "Samsung",         "https://semiconductor.samsung.com/consumer-storage/support/tools/"),
-        ("wd_black",         "Western Digital", "https://dashboard.wd.com/"),
-        ("wdc ",             "Western Digital", "https://dashboard.wd.com/"),
-        ("western digital",  "Western Digital", "https://dashboard.wd.com/"),
-        ("crucial",          "Crucial",         "https://www.crucial.com/support/storage-executive"),
-        ("ct",               "Crucial",         "https://www.crucial.com/support/storage-executive"),
-        ("sk hynix",         "SK hynix",        "https://ssd.skhynix.com/downloads/"),
-        ("hynix",            "SK hynix",        "https://ssd.skhynix.com/downloads/"),
-        ("kingston",         "Kingston",        "https://www.kingston.com/unitedstates/us/support/technical/ssdmanager"),
-        ("sabrent",          "Sabrent",         "https://www.sabrent.com/downloads/"),
-        ("intel",            "Intel / Solidigm","https://www.solidigm.com/support-page/support-tools-downloads.html"),
-        ("solidigm",         "Intel / Solidigm","https://www.solidigm.com/support-page/support-tools-downloads.html"),
-        ("seagate",          "Seagate",         "https://www.seagate.com/support/downloads/seatools/"),
-        ("corsair",          "Corsair",         "https://www.corsair.com/us/en/s/downloads"),
-        ("adata",            "ADATA",           "https://www.adata.com/en/support/downloads/"),
-        ("xpg",              "ADATA",           "https://www.adata.com/en/support/downloads/"),
-        ("phison",           "Phison / OEM",    "https://www.phison.com/en-US/"),
-        ("micron",           "Micron / Crucial","https://www.crucial.com/support/storage-executive")
+        ("samsung",          "Samsung",         "https://semiconductor.samsung.com/consumer-storage/support/tools/", false),
+        ("wd_black",         "Western Digital", "https://dashboard.wd.com/",                                        false),
+        ("wdc ",             "Western Digital", "https://dashboard.wd.com/",                                        false),
+        ("western digital",  "Western Digital", "https://dashboard.wd.com/",                                        false),
+        ("crucial",          "Crucial",         "https://www.crucial.com/support/storage-executive",                 false),
+        ("ct",               "Crucial",         "https://www.crucial.com/support/storage-executive",                 true),
+        ("sk hynix",         "SK hynix",        "https://ssd.skhynix.com/downloads/",                               false),
+        ("hynix",            "SK hynix",        "https://ssd.skhynix.com/downloads/",                               false),
+        ("kingston",         "Kingston",        "https://www.kingston.com/unitedstates/us/support/technical/ssdmanager", false),
+        ("sabrent",          "Sabrent",         "https://www.sabrent.com/downloads/",                                false),
+        ("intel",            "Intel / Solidigm","https://www.solidigm.com/support-page/support-tools-downloads.html", false),
+        ("solidigm",         "Intel / Solidigm","https://www.solidigm.com/support-page/support-tools-downloads.html", false),
+        ("seagate",          "Seagate",         "https://www.seagate.com/support/downloads/seatools/",               false),
+        ("corsair",          "Corsair",         "https://www.corsair.com/us/en/s/downloads",                          false),
+        ("adata",            "ADATA",           "https://www.adata.com/en/support/downloads/",                        false),
+        ("xpg",              "ADATA",           "https://www.adata.com/en/support/downloads/",                        false),
+        ("phison",           "Phison / OEM",    "https://www.phison.com/en-US/",                                     false),
+        ("micron",           "Micron / Crucial","https://www.crucial.com/support/storage-executive",                  false)
     };
 
     public static FirmwareUpdateNudge Lookup(string driveModel, string currentFirmware)
@@ -49,10 +49,12 @@ public static class FirmwareUpdateNudgeService
             DriveModel = driveModel ?? string.Empty,
             CurrentFirmware = currentFirmware ?? string.Empty
         };
-        foreach (var (pattern, vendor, url) in VendorTools)
+        foreach (var (pattern, vendor, url, startsWith) in VendorTools)
         {
             if (!string.IsNullOrEmpty(driveModel) &&
-                driveModel.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                (startsWith
+                    ? driveModel.StartsWith(pattern, StringComparison.OrdinalIgnoreCase)
+                    : driveModel.Contains(pattern, StringComparison.OrdinalIgnoreCase)))
             {
                 nudge.Vendor = vendor;
                 nudge.UpdateToolUrl = url;
