@@ -14,7 +14,7 @@ public sealed class SafetyDataSchemaTests
     public void WindowsBuildRules_ConformsToSchema()
     {
         var errors = MiniJsonSchema.Validate(
-            DataFile("src", "NVMeDriverPatcher", "windows_build_rules.json"),
+            DataFile("src", "NVMeDriverPatcher.Core", "windows_build_rules.json"),
             SchemaFile("windows_build_rules.schema.json"));
         Assert.True(errors.Count == 0, string.Join("\n", errors));
     }
@@ -23,7 +23,7 @@ public sealed class SafetyDataSchemaTests
     public void CompatData_ConformsToSchema()
     {
         var errors = MiniJsonSchema.Validate(
-            DataFile("src", "NVMeDriverPatcher", "compat.json"),
+            DataFile("src", "NVMeDriverPatcher.Core", "compat.json"),
             SchemaFile("compat.schema.json"));
         Assert.True(errors.Count == 0, string.Join("\n", errors));
     }
