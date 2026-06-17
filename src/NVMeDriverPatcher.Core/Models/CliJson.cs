@@ -91,6 +91,68 @@ public static class CliJson
             CompatibleId = c.CompatibleId,
         }).ToList(),
     };
+
+    public static ReliabilityJson BuildReliability(ReliabilityCorrelationReport report) => new()
+    {
+        DataAvailable = report.DataAvailable,
+        PrePatchAverage = report.PrePatchAverage,
+        PostPatchAverage = report.PostPatchAverage,
+        Delta = report.Delta,
+        Summary = report.Summary,
+        Series = report.Series.Select(p => new ReliabilityPointJson
+        {
+            Timestamp = p.Timestamp.ToString("o"),
+            Index = p.Index,
+        }).ToList(),
+    };
+
+    public static MinidumpJson BuildMinidump(MinidumpTriageReport report) => new()
+    {
+        TotalFound = report.TotalFound,
+        NewerThanPatch = report.NewerThanPatch,
+        NVMeRelated = report.NVMeRelated,
+        ScanCompleted = report.ScanCompleted,
+        Summary = report.Summary,
+        Dumps = report.Dumps.Select(d => new MinidumpEntryJson
+        {
+            FilePath = d.FilePath,
+            SizeBytes = d.SizeBytes,
+            CreatedUtc = d.CreatedUtc.ToString("o"),
+            MentionsNVMeStack = d.MentionsNVMeStack,
+            MatchedModules = d.MatchedModules,
+        }).ToList(),
+    };
+
+    public static FirmwareCompatJson BuildFirmwareCompat(FirmwareCompatDatabase db) => new()
+    {
+        SchemaVersion = db.SchemaVersion,
+        Updated = db.Updated,
+        EntryCount = db.Entries.Count,
+        Entries = db.Entries.Select(e => new FirmwareCompatEntryJson
+        {
+            Controller = e.Controller,
+            Firmware = e.Firmware,
+            Level = e.Level.ToString(),
+            Note = e.Note,
+            Confidence = e.Confidence ?? string.Empty,
+        }).ToList(),
+    };
+
+    public static FeatureStoreJson BuildFeatureStore(
+        bool hasFallbackEvidence,
+        IReadOnlyList<FeatureConfigState> configurations) => new()
+    {
+        HasFallbackEvidence = hasFallbackEvidence,
+        Configurations = configurations.Select(s => new FeatureStoreConfigJson
+        {
+            FeatureId = s.FeatureId,
+            Store = s.Store,
+            Found = s.Found,
+            EnabledState = s.EnabledState,
+            Priority = s.Priority,
+            IsEnabled = s.IsEnabled,
+        }).ToList(),
+    };
 }
 
 public sealed class CliEnvelope
@@ -173,4 +235,72 @@ public sealed class ControllerJson
     public string DeviceClass { get; set; } = string.Empty;
     public string HardwareId { get; set; } = string.Empty;
     public string CompatibleId { get; set; } = string.Empty;
+}
+
+public sealed class ReliabilityJson
+{
+    public bool DataAvailable { get; set; }
+    public double? PrePatchAverage { get; set; }
+    public double? PostPatchAverage { get; set; }
+    public double? Delta { get; set; }
+    public string Summary { get; set; } = string.Empty;
+    public List<ReliabilityPointJson> Series { get; set; } = new();
+}
+
+public sealed class ReliabilityPointJson
+{
+    public string Timestamp { get; set; } = string.Empty;
+    public double Index { get; set; }
+}
+
+public sealed class MinidumpJson
+{
+    public int TotalFound { get; set; }
+    public int NewerThanPatch { get; set; }
+    public int NVMeRelated { get; set; }
+    public bool ScanCompleted { get; set; }
+    public string Summary { get; set; } = string.Empty;
+    public List<MinidumpEntryJson> Dumps { get; set; } = new();
+}
+
+public sealed class MinidumpEntryJson
+{
+    public string FilePath { get; set; } = string.Empty;
+    public long SizeBytes { get; set; }
+    public string CreatedUtc { get; set; } = string.Empty;
+    public bool MentionsNVMeStack { get; set; }
+    public List<string> MatchedModules { get; set; } = new();
+}
+
+public sealed class FirmwareCompatJson
+{
+    public int SchemaVersion { get; set; }
+    public string Updated { get; set; } = string.Empty;
+    public int EntryCount { get; set; }
+    public List<FirmwareCompatEntryJson> Entries { get; set; } = new();
+}
+
+public sealed class FirmwareCompatEntryJson
+{
+    public string Controller { get; set; } = string.Empty;
+    public string Firmware { get; set; } = string.Empty;
+    public string Level { get; set; } = string.Empty;
+    public string Note { get; set; } = string.Empty;
+    public string Confidence { get; set; } = string.Empty;
+}
+
+public sealed class FeatureStoreJson
+{
+    public bool HasFallbackEvidence { get; set; }
+    public List<FeatureStoreConfigJson> Configurations { get; set; } = new();
+}
+
+public sealed class FeatureStoreConfigJson
+{
+    public int FeatureId { get; set; }
+    public string Store { get; set; } = string.Empty;
+    public bool Found { get; set; }
+    public int EnabledState { get; set; }
+    public int Priority { get; set; }
+    public bool IsEnabled { get; set; }
 }

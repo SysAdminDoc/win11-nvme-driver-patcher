@@ -122,4 +122,98 @@ public sealed class CliJsonTests
         Assert.Equal("Microsoft", c.GetProperty("driverProvider").GetString());
         Assert.Equal("GenNvmeDisk", c.GetProperty("compatibleId").GetString());
     }
+
+    [Fact]
+    public void Reliability_FieldNamesAreStable()
+    {
+        var report = new ReliabilityCorrelationReport
+        {
+            DataAvailable = true,
+            PrePatchAverage = 8.5,
+            PostPatchAverage = 7.2,
+            Summary = "Stability dropped after patch",
+        };
+        report.Series.Add(new ReliabilityPoint { Timestamp = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc), Index = 8.5 });
+        var data = Parse("reliability", CliJson.BuildReliability(report)).GetProperty("data");
+
+        Assert.True(data.GetProperty("dataAvailable").GetBoolean());
+        Assert.Equal(8.5, data.GetProperty("prePatchAverage").GetDouble());
+        Assert.Equal(7.2, data.GetProperty("postPatchAverage").GetDouble());
+        Assert.Equal(-1.3, data.GetProperty("delta").GetDouble(), 2);
+        var point = data.GetProperty("series")[0];
+        Assert.True(point.TryGetProperty("timestamp", out _));
+        Assert.Equal(8.5, point.GetProperty("index").GetDouble());
+    }
+
+    [Fact]
+    public void Minidump_FieldNamesAreStable()
+    {
+        var report = new MinidumpTriageReport
+        {
+            TotalFound = 3, NewerThanPatch = 1, NVMeRelated = 1, ScanCompleted = true,
+            Summary = "1 NVMe-related dump found",
+        };
+        report.Dumps.Add(new MinidumpSummary
+        {
+            FilePath = @"C:\Windows\Minidump\061626-1234.dmp",
+            SizeBytes = 262144,
+            CreatedUtc = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc),
+            MentionsNVMeStack = true,
+            MatchedModules = { "nvmedisk.sys" },
+        });
+        var data = Parse("minidump", CliJson.BuildMinidump(report)).GetProperty("data");
+
+        Assert.Equal(3, data.GetProperty("totalFound").GetInt32());
+        Assert.Equal(1, data.GetProperty("newerThanPatch").GetInt32());
+        Assert.Equal(1, data.GetProperty("nvMeRelated").GetInt32());
+        Assert.True(data.GetProperty("scanCompleted").GetBoolean());
+        var dump = data.GetProperty("dumps")[0];
+        Assert.True(dump.GetProperty("mentionsNVMeStack").GetBoolean());
+        Assert.Equal(262144, dump.GetProperty("sizeBytes").GetInt64());
+        Assert.Equal("nvmedisk.sys", dump.GetProperty("matchedModules")[0].GetString());
+    }
+
+    [Fact]
+    public void FirmwareCompat_FieldNamesAreStable()
+    {
+        var db = new FirmwareCompatDatabase { SchemaVersion = 2, Updated = "2026-06-01" };
+        db.Entries.Add(new FirmwareCompatEntry
+        {
+            Controller = "Samsung 990 Pro",
+            Firmware = "4B2QJXD7",
+            Level = FirmwareCompatLevel.Good,
+            Note = "Works well",
+            Confidence = "verified",
+        });
+        var data = Parse("firmware", CliJson.BuildFirmwareCompat(db)).GetProperty("data");
+
+        Assert.Equal(2, data.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal("2026-06-01", data.GetProperty("updated").GetString());
+        Assert.Equal(1, data.GetProperty("entryCount").GetInt32());
+        var entry = data.GetProperty("entries")[0];
+        Assert.Equal("Samsung 990 Pro", entry.GetProperty("controller").GetString());
+        Assert.Equal("4B2QJXD7", entry.GetProperty("firmware").GetString());
+        Assert.Equal("Good", entry.GetProperty("level").GetString());
+        Assert.Equal("verified", entry.GetProperty("confidence").GetString());
+    }
+
+    [Fact]
+    public void FeatureStore_FieldNamesAreStable()
+    {
+        var configs = new List<FeatureConfigState>
+        {
+            new(735209102, true, 2, 8, "Runtime"),
+            new(735209102, true, 2, 8, "Boot"),
+        };
+        var data = Parse("featurestore", CliJson.BuildFeatureStore(true, configs)).GetProperty("data");
+
+        Assert.True(data.GetProperty("hasFallbackEvidence").GetBoolean());
+        var first = data.GetProperty("configurations")[0];
+        Assert.Equal(735209102, first.GetProperty("featureId").GetInt32());
+        Assert.Equal("Runtime", first.GetProperty("store").GetString());
+        Assert.True(first.GetProperty("found").GetBoolean());
+        Assert.Equal(2, first.GetProperty("enabledState").GetInt32());
+        Assert.Equal(8, first.GetProperty("priority").GetInt32());
+        Assert.True(first.GetProperty("isEnabled").GetBoolean());
+    }
 }
