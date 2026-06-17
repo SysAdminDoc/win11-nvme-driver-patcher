@@ -81,7 +81,7 @@ public static class PerControllerAuditService
                 "DriverProviderName, HardWareID, CompatID " +
                 "FROM Win32_PnPSignedDriver " +
                 "WHERE DeviceClass='SCSIAdapter' OR DeviceClass='DiskDrive'");
-            using var collection = search.Get();
+            using var collection = WmiQueryHelper.ExecuteWithTimeout(search);
             foreach (var raw in collection)
             {
                 if (raw is not ManagementObject mo) continue;

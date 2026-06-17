@@ -263,7 +263,7 @@ public static class PatchVerificationService
         try
         {
             using var search = new ManagementObjectSearcher("SELECT LastBootUpTime FROM Win32_OperatingSystem");
-            using var collection = search.Get();
+            using var collection = WmiQueryHelper.ExecuteWithTimeout(search);
             foreach (var raw in collection)
             {
                 if (raw is not ManagementObject os) continue;

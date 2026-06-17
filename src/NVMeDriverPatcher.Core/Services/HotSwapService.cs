@@ -409,7 +409,7 @@ public static class HotSwapService
             // locally — avoids per-partition ASSOCIATORS round trips that compound latency.
             var partToLogical = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             using (var mapSearch = new ManagementObjectSearcher("SELECT * FROM Win32_LogicalDiskToPartition"))
-            using (var mapResults = mapSearch.Get())
+            using (var mapResults = WmiQueryHelper.ExecuteWithTimeout(mapSearch))
             {
                 foreach (var rawMap in mapResults)
                 {
@@ -436,7 +436,7 @@ public static class HotSwapService
             using var partSearch = new ManagementObjectSearcher(
                 $"ASSOCIATORS OF {{Win32_DiskDrive.DeviceID='\\\\\\\\.\\\\PHYSICALDRIVE{driveNumber}'}} WHERE AssocClass=Win32_DiskDriveToDiskPartition");
 
-            using var partitions = partSearch.Get();
+            using var partitions = WmiQueryHelper.ExecuteWithTimeout(partSearch);
             foreach (var rawPart in partitions)
             {
                 if (rawPart is not ManagementObject partition) continue;
@@ -505,7 +505,7 @@ public static class HotSwapService
             using var search = new System.Management.ManagementObjectSearcher(
                 @"root\CIMV2\Security\MicrosoftVolumeEncryption",
                 "SELECT DriveLetter, ProtectionStatus, IsVolumeInitializedForProtection FROM Win32_EncryptableVolume");
-            using var results = search.Get();
+            using var results = WmiQueryHelper.ExecuteWithTimeout(search);
             foreach (var raw in results)
             {
                 if (raw is not System.Management.ManagementObject vol) continue;
@@ -554,7 +554,7 @@ public static class HotSwapService
             var escaped = EscapeWmiSingleQuotes(driveLetter);
             using var search = new ManagementObjectSearcher(
                 $"SELECT DeviceID FROM Win32_Volume WHERE DriveLetter='{escaped}'");
-            using var results = search.Get();
+            using var results = WmiQueryHelper.ExecuteWithTimeout(search);
             foreach (var raw in results)
             {
                 if (raw is not ManagementObject vol) continue;
@@ -647,7 +647,7 @@ public static class HotSwapService
             var escaped = EscapeWmiSingleQuotes(driveLetter);
             using var search = new ManagementObjectSearcher(
                 $"SELECT DeviceID FROM Win32_Volume WHERE DriveLetter='{escaped}'");
-            using var results = search.Get();
+            using var results = WmiQueryHelper.ExecuteWithTimeout(search);
             foreach (var raw in results)
             {
                 if (raw is not ManagementObject vol) continue;
@@ -794,7 +794,7 @@ public static class HotSwapService
                 @"root\Microsoft\Windows\Storage",
                 $"SELECT Number FROM MSFT_Disk WHERE Number={driveNumber}");
 
-            using var collection = search.Get();
+            using var collection = WmiQueryHelper.ExecuteWithTimeout(search);
             int count = collection.Count;
             foreach (var obj in collection) (obj as IDisposable)?.Dispose();
             return count > 0;
@@ -820,7 +820,7 @@ public static class HotSwapService
             using var search = new ManagementObjectSearcher(
                 $"SELECT DeviceID FROM Win32_PnPEntity WHERE DeviceID='{escaped}'");
 
-            using var devices = search.Get();
+            using var devices = WmiQueryHelper.ExecuteWithTimeout(search);
             foreach (var rawDev in devices)
             {
                 if (rawDev is not ManagementObject dev) continue;
@@ -829,7 +829,7 @@ public static class HotSwapService
                     using var parentSearch = new ManagementObjectSearcher(
                         $"ASSOCIATORS OF {{Win32_PnPEntity.DeviceID='{escaped}'}} WHERE AssocClass=CIM_BusController");
 
-                    using var parents = parentSearch.Get();
+                    using var parents = WmiQueryHelper.ExecuteWithTimeout(parentSearch);
                     foreach (var rawParent in parents)
                     {
                         if (rawParent is not ManagementObject parent) continue;

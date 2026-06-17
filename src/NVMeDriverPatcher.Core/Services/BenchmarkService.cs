@@ -214,7 +214,7 @@ public static class BenchmarkService
             {
                 using var partSearch = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
                     "SELECT DiskNumber, DriveLetter FROM MSFT_Partition WHERE DriveLetter!=0");
-                using var partCollection = partSearch.Get();
+                using var partCollection = WmiQueryHelper.ExecuteWithTimeout(partSearch);
                 foreach (var raw in partCollection)
                 {
                     if (raw is not ManagementObject part) continue;

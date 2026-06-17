@@ -33,7 +33,7 @@ public static class PhysicalDiskTelemetryService
             using var search = new ManagementObjectSearcher(
                 @"root\Microsoft\Windows\Storage",
                 "SELECT FriendlyName, HealthStatus, OperationalStatus, Size, MediaType, BusType, SpindleSpeed, ObjectId, DeviceId FROM MSFT_PhysicalDisk");
-            using var collection = search.Get();
+            using var collection = WmiQueryHelper.ExecuteWithTimeout(search);
             foreach (var raw in collection)
             {
                 if (raw is not ManagementObject mo) continue;
@@ -82,7 +82,7 @@ public static class PhysicalDiskTelemetryService
                 : $"ASSOCIATORS OF {{MSFT_PhysicalDisk.ObjectId='{EscapeWqlString(objectId!)}'}} WHERE ResultClass=MSFT_StorageReliabilityCounter";
 
             using var search = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", query);
-            using var collection = search.Get();
+            using var collection = WmiQueryHelper.ExecuteWithTimeout(search);
             foreach (var raw in collection)
             {
                 if (raw is not ManagementObject mo) continue;
