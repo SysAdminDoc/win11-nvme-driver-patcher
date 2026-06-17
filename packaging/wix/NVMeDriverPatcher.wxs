@@ -41,7 +41,7 @@
     <!--
       Opt-in (Level 2 = not installed by default). Select via the feature tree or
       `msiexec /i NVMeDriverPatcher.msi ADDLOCAL=WatchdogService`. Registers the
-      real-time event-log watchdog as a LocalSystem auto-start service and removes
+      real-time event-log watchdog as a LocalService auto-start service and removes
       it cleanly on uninstall.
     -->
     <Feature Id="WatchdogService" Title="Real-time Watchdog Service" Level="2">
@@ -100,7 +100,7 @@
                         Description="Subscribes to the System event log and feeds the NVMe Driver Patcher watchdog state in real time."
                         Start="auto"
                         Type="ownProcess"
-                        Account="LocalSystem"
+                        Account="NT AUTHORITY\LocalService"
                         ErrorControl="normal" />
         <ServiceControl Id="WatchdogSvcControl"
                         Name="NVMeDriverPatcherWatchdog"

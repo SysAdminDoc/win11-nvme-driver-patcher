@@ -14,8 +14,8 @@ namespace NVMeDriverPatcher.Watchdog;
 // task. On every matching event, increments the in-memory counter; every N minutes, flushes
 // state to watchdog.json so the GUI / CLI picks up the latest verdict.
 //
-// `/install` registers the service under SYSTEM. `/uninstall` removes it. Without arguments
-// it runs as an interactive console — useful for debugging before promoting to a service.
+// `/install` registers the service under LocalService with a restricted SID.
+// `/uninstall` removes it. Without arguments it runs as an interactive console.
 internal static class Program
 {
     private const string ServiceName = "NVMeDriverPatcherWatchdog";
@@ -56,9 +56,24 @@ internal static class Program
     {
         bool install = verb.EndsWith("install", StringComparison.OrdinalIgnoreCase) && !verb.Contains("uninstall");
         string exe = Environment.ProcessPath ?? "NVMeDriverPatcher.Watchdog.exe";
-        var args = install
-            ? new[] { "create", ServiceName, "binpath=", $"\"{exe}\"", "start=", "auto", "obj=", "LocalSystem", "DisplayName=", "NVMe Driver Patcher Watchdog" }
-            : new[] { "delete", ServiceName };
+        if (install)
+        {
+            int rc = RunSc("create", ServiceName, "binpath=", $"\"{exe}\"", "start=", "auto",
+                "obj=", "NT AUTHORITY\\LocalService", "DisplayName=", "NVMe Driver Patcher Watchdog");
+            if (rc != 0) return rc;
+
+            // Restrict the service SID so it can only access resources explicitly granted
+            // to its per-service SID, even if LocalService has broader permissions elsewhere.
+            rc = RunSc("sidtype", ServiceName, "restricted");
+            if (rc != 0)
+                Console.Error.WriteLine($"Warning: could not set restricted SID (sc sidtype exit {rc}). Service will still run under LocalService.");
+            return 0;
+        }
+        return RunSc("delete", ServiceName);
+    }
+
+    private static int RunSc(params string[] args)
+    {
         var psi = new ProcessStartInfo("sc.exe")
         {
             UseShellExecute = false,
@@ -70,9 +85,6 @@ internal static class Program
         using var proc = Process.Start(psi);
         if (proc is null) { Console.Error.WriteLine("sc.exe did not start."); return 1; }
 
-        // Start the pipe reads BEFORE waiting for exit — a chatty sc.exe error (localized
-        // failure detail, for example) can fill the stdout/stderr pipe buffers and deadlock
-        // the child while we sit in WaitForExit. Draining async keeps both sides moving.
         var stdoutTask = proc.StandardOutput.ReadToEndAsync();
         var stderrTask = proc.StandardError.ReadToEndAsync();
         if (!proc.WaitForExit(30_000))
