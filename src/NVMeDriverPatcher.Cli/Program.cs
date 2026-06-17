@@ -118,9 +118,9 @@ class Program
                 "dry-run" or "preview" => DryRunCommand(config),
                 "watchdog" => autoRevert ? WatchdogAutoRevertCommand(config) : WatchdogCommand(config, json),
                 "watchdog-service" or "service-status" => WatchdogServiceStateCommand(),
-                "reliability" => ReliabilityCommand(config),
-                "minidump" or "triage" => MinidumpCommand(config),
-                "firmware" or "compat" => FirmwareCompatCommand(),
+                "reliability" => ReliabilityCommand(config, json),
+                "minidump" or "triage" => MinidumpCommand(config, json),
+                "firmware" or "compat" => FirmwareCompatCommand(json),
                 "scope" => ScopeCommand(config),
                 "etw" => EtwCommand(config).GetAwaiter().GetResult(),
                 "winpe" => WinPECommand(config, isoOut).GetAwaiter().GetResult(),
@@ -154,7 +154,8 @@ class Program
                 "featurestore" or "feature-store" => FeatureStoreCommand(
                     config,
                     args.Any(a => a is not null && a.Equals("--write-native", StringComparison.OrdinalIgnoreCase)),
-                    args.Any(a => a is not null && a.Equals("--reset-native", StringComparison.OrdinalIgnoreCase))),
+                    args.Any(a => a is not null && a.Equals("--reset-native", StringComparison.OrdinalIgnoreCase)),
+                    json),
                 "kit-freshness" or "recovery-kit-freshness" => RecoveryKitFreshnessCommand(config),
                 "docs" or "help-topic" => DocsCommand(args.Skip(1).FirstOrDefault()),
                 "clean-data" => CleanDataCommand(config),
@@ -561,13 +562,21 @@ class Program
         return info.WinReEnabled ? 0 : 1;
     }
 
-    static int FeatureStoreCommand(AppConfig config, bool writeNative, bool resetNative)
+    static int FeatureStoreCommand(AppConfig config, bool writeNative, bool resetNative, bool json)
     {
         bool hasFallback = FeatureStoreWriterService.HasFallbackEvidence();
+        var configurations = FeatureStoreWriterService.QueryAllKnownConfigurations();
+
+        if (json && !writeNative && !resetNative)
+        {
+            Console.WriteLine(CliJson.Serialize("featurestore", CliJson.BuildFeatureStore(hasFallback, configurations)));
+            return 0;
+        }
+
         Console.WriteLine($"FeatureStore fallback evidence: {(hasFallback ? "PRESENT" : "not detected")}");
         Console.WriteLine();
         Console.WriteLine("Per-ID configuration (ntdll RtlQueryFeatureConfiguration):");
-        foreach (var state in FeatureStoreWriterService.QueryAllKnownConfigurations())
+        foreach (var state in configurations)
         {
             var desc = state.Found
                 ? $"state={state.EnabledState switch { 2 => "Enabled", 1 => "Disabled", _ => "Default" }} priority={state.Priority}"
@@ -699,7 +708,7 @@ class Program
         };
     }
 
-    static int ReliabilityCommand(AppConfig config)
+    static int ReliabilityCommand(AppConfig config, bool json)
     {
         DateTime? patchTs = null;
         if (!string.IsNullOrWhiteSpace(config.PendingVerificationSince) &&
@@ -708,6 +717,11 @@ class Program
                 System.Globalization.DateTimeStyles.RoundtripKind, out var ts))
             patchTs = ts;
         var report = ReliabilityService.GetCorrelation(patchTs);
+        if (json)
+        {
+            Console.WriteLine(CliJson.Serialize("reliability", CliJson.BuildReliability(report)));
+            return report.DataAvailable ? 0 : 1;
+        }
         Console.WriteLine("Reliability Monitor correlation");
         Console.WriteLine("===============================");
         Console.WriteLine(report.Summary);
@@ -716,7 +730,7 @@ class Program
         return report.DataAvailable ? 0 : 1;
     }
 
-    static int MinidumpCommand(AppConfig config)
+    static int MinidumpCommand(AppConfig config, bool json)
     {
         DateTime? patchTs = null;
         if (!string.IsNullOrWhiteSpace(config.PendingVerificationSince) &&
@@ -725,6 +739,11 @@ class Program
                 System.Globalization.DateTimeStyles.RoundtripKind, out var ts))
             patchTs = ts;
         var report = MinidumpTriageService.Analyze(patchTs);
+        if (json)
+        {
+            Console.WriteLine(CliJson.Serialize("minidump", CliJson.BuildMinidump(report)));
+            return report.NVMeRelated > 0 ? 1 : 0;
+        }
         Console.WriteLine("Minidump triage");
         Console.WriteLine("===============");
         Console.WriteLine(report.Summary);
@@ -733,9 +752,14 @@ class Program
         return report.NVMeRelated > 0 ? 1 : 0;
     }
 
-    static int FirmwareCompatCommand()
+    static int FirmwareCompatCommand(bool json)
     {
         var db = FirmwareCompatService.LoadDatabase();
+        if (json)
+        {
+            Console.WriteLine(CliJson.Serialize("firmware", CliJson.BuildFirmwareCompat(db)));
+            return 0;
+        }
         var provenance = DataFileProvenanceService.InspectFirmwareCompat();
         Console.WriteLine($"Firmware compat DB (schema {db.SchemaVersion}, updated {db.Updated}):");
         Console.WriteLine($"  Provenance: {provenance.Summary}");
