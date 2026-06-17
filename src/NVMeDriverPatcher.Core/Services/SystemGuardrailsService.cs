@@ -95,7 +95,7 @@ public static class SystemGuardrailsService
             using var search = new ManagementObjectSearcher(
                 @"root\Microsoft\Windows\DeviceGuard",
                 "SELECT SecurityServicesRunning FROM Win32_DeviceGuard");
-            using var collection = search.Get();
+            using var collection = WmiQueryHelper.ExecuteWithTimeout(search);
             foreach (var raw in collection)
             {
                 if (raw is not ManagementObject mo) continue;
@@ -161,7 +161,7 @@ public static class SystemGuardrailsService
         {
             using var search = new ManagementObjectSearcher(
                 "SELECT Name, PathName FROM Win32_SystemDriver WHERE State='Running'");
-            using var collection = search.Get();
+            using var collection = WmiQueryHelper.ExecuteWithTimeout(search);
             foreach (var raw in collection)
             {
                 if (raw is not ManagementObject mo) continue;

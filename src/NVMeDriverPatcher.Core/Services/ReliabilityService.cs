@@ -43,7 +43,7 @@ public static class ReliabilityService
             using var search = new ManagementObjectSearcher(
                 @"root\cimv2",
                 "SELECT TimeGenerated, SystemStabilityIndex FROM Win32_ReliabilityStabilityMetrics");
-            using var collection = search.Get();
+            using var collection = WmiQueryHelper.ExecuteWithTimeout(search);
             var cutoff = DateTime.UtcNow - LookbackWindow;
             foreach (var raw in collection)
             {
