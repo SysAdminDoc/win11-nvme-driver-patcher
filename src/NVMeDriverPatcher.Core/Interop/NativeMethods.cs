@@ -3,6 +3,14 @@ using Microsoft.Win32.SafeHandles;
 
 namespace NVMeDriverPatcher.Interop;
 
+internal sealed class DeviceInfoSetSafeHandle : SafeHandleMinusOneIsInvalid
+{
+    public DeviceInfoSetSafeHandle() : base(true) { }
+
+    protected override bool ReleaseHandle() =>
+        NativeMethods.SetupDiDestroyDeviceInfoList(handle);
+}
+
 /// <summary>
 /// P/Invoke declarations for NVMe device access, IOCTL operations, and device management.
 /// </summary>
@@ -72,6 +80,11 @@ internal static partial class NativeMethods
         public Guid ClassGuid;
         public uint DevInst;
         public IntPtr Reserved;
+
+        public static SP_DEVINFO_DATA Create() => new()
+        {
+            cbSize = (uint)Marshal.SizeOf<SP_DEVINFO_DATA>()
+        };
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -79,6 +92,12 @@ internal static partial class NativeMethods
     {
         public uint cbSize;
         public uint InstallFunction;
+
+        public static SP_CLASSINSTALL_HEADER Create(uint installFunction) => new()
+        {
+            cbSize = (uint)Marshal.SizeOf<SP_CLASSINSTALL_HEADER>(),
+            InstallFunction = installFunction
+        };
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -94,7 +113,7 @@ internal static partial class NativeMethods
     /// Returns a handle to a device information set that contains requested device information elements.
     /// </summary>
     [LibraryImport("setupapi.dll", EntryPoint = "SetupDiGetClassDevsW", SetLastError = true)]
-    internal static partial IntPtr SetupDiGetClassDevs(
+    internal static partial DeviceInfoSetSafeHandle SetupDiGetClassDevs(
         in Guid classGuid,
         [MarshalAs(UnmanagedType.LPWStr)] string? enumerator,
         IntPtr hwndParent,
@@ -104,7 +123,7 @@ internal static partial class NativeMethods
     /// Returns a handle to a device information set for all classes.
     /// </summary>
     [LibraryImport("setupapi.dll", EntryPoint = "SetupDiGetClassDevsW", SetLastError = true)]
-    internal static partial IntPtr SetupDiGetClassDevsAllClasses(
+    internal static partial DeviceInfoSetSafeHandle SetupDiGetClassDevsAllClasses(
         IntPtr classGuid,
         [MarshalAs(UnmanagedType.LPWStr)] string? enumerator,
         IntPtr hwndParent,
@@ -116,7 +135,7 @@ internal static partial class NativeMethods
     [LibraryImport("setupapi.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool SetupDiEnumDeviceInfo(
-        IntPtr deviceInfoSet,
+        DeviceInfoSetSafeHandle deviceInfoSet,
         uint memberIndex,
         ref SP_DEVINFO_DATA deviceInfoData);
 
@@ -126,7 +145,7 @@ internal static partial class NativeMethods
     [LibraryImport("setupapi.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool SetupDiSetClassInstallParams(
-        IntPtr deviceInfoSet,
+        DeviceInfoSetSafeHandle deviceInfoSet,
         ref SP_DEVINFO_DATA deviceInfoData,
         ref SP_PROPCHANGE_PARAMS classInstallParams,
         uint classInstallParamsSize);
@@ -138,7 +157,7 @@ internal static partial class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool SetupDiCallClassInstaller(
         uint installFunction,
-        IntPtr deviceInfoSet,
+        DeviceInfoSetSafeHandle deviceInfoSet,
         ref SP_DEVINFO_DATA deviceInfoData);
 
     /// <summary>
