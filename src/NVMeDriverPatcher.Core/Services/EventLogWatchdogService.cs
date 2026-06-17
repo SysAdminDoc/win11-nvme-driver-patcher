@@ -112,9 +112,6 @@ public static class EventLogWatchdogService
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
             var json = JsonSerializer.Serialize(state, JsonOptions);
             var tmp = path + ".tmp";
-            // Atomic write with fsync — without Flush(flushToDisk:true), a power loss between
-            // the WriteAllText return and the File.Move can leave the real file empty. Matches
-            // the hardened pattern in ConfigService / RegistryService.
             using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
             using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
             {
@@ -125,6 +122,26 @@ public static class EventLogWatchdogService
             File.Move(tmp, path, overwrite: true);
         }
         catch { /* best-effort — watchdog state lossy is acceptable */ }
+    }
+
+    private static readonly string LockFile = "watchdog.lock";
+
+    private static string LockPath(AppConfig config) =>
+        Path.Combine(string.IsNullOrWhiteSpace(config.WorkingDir) ? AppConfig.GetWorkingDir() : config.WorkingDir, LockFile);
+
+    private static FileStream? AcquireFileLock(AppConfig config)
+    {
+        try
+        {
+            var path = LockPath(config);
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -160,6 +177,8 @@ public static class EventLogWatchdogService
     /// </summary>
     public static WatchdogReport Evaluate(AppConfig config)
     {
+        using var fileLock = AcquireFileLock(config);
+
         var report = new WatchdogReport();
         var state = LoadState(config);
 

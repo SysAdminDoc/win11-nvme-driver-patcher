@@ -52,6 +52,8 @@ public sealed record FeatureConfigState(
 //     evidence heuristic when the Rtl API is unavailable.
 public static class FeatureStoreWriterService
 {
+    private static readonly SemaphoreSlim WriteLock = new(1, 1);
+
     public const string FeatureStoreSubkey =
         @"SYSTEM\CurrentControlSet\Control\FeatureManagement\Overrides";
 
@@ -162,12 +164,22 @@ public static class FeatureStoreWriterService
         if (ids.Length == 0)
             return new FeatureStoreWriteResult { Success = false, Summary = "No feature IDs supplied." };
 
+        WriteLock.Wait();
+        try
+        {
+            return WriteOverridesCore(ids);
+        }
+        finally
+        {
+            WriteLock.Release();
+        }
+    }
+
+    private static FeatureStoreWriteResult WriteOverridesCore(int[] ids)
+    {
         var updates = BuildEnableUpdates(ids);
         try
         {
-            // Write Runtime first, then Boot. If Boot fails, roll back Runtime to
-            // avoid a split state where features are enabled at runtime but missing
-            // from the Boot store — invisible until reboot.
             ulong runtimeStamp = 0;
             int runtimeStatus = RtlSetFeatureConfigurations(ref runtimeStamp, ConfigurationType.Runtime, updates, (uint)updates.Length);
             if (runtimeStatus != StatusSuccess)
@@ -184,7 +196,6 @@ public static class FeatureStoreWriterService
             int bootStatus = RtlSetFeatureConfigurations(ref bootStamp, ConfigurationType.Boot, updates, (uint)updates.Length);
             if (bootStatus != StatusSuccess)
             {
-                // Roll back the Runtime write so we don't leave a split state.
                 try
                 {
                     var resets = BuildResetUpdates(ids);
@@ -211,9 +222,6 @@ public static class FeatureStoreWriterService
             };
         }
 
-        // Verify what BOTH stores now report before claiming success. The write targets
-        // Runtime AND Boot; checking only Runtime hides a Boot-store failure until reboot —
-        // exactly the kind of silent partial-apply this gate exists to catch.
         var statuses = ids.Select(id => new FeatureStoreIdStatus(
             id,
             RuntimeEnabled: QueryConfiguration(id, bootStore: false).IsEnabled,
@@ -271,6 +279,19 @@ public static class FeatureStoreWriterService
         if (ids.Length == 0)
             return new FeatureStoreWriteResult { Success = false, Summary = "No feature IDs supplied." };
 
+        WriteLock.Wait();
+        try
+        {
+            return ResetOverridesCore(ids);
+        }
+        finally
+        {
+            WriteLock.Release();
+        }
+    }
+
+    private static FeatureStoreWriteResult ResetOverridesCore(int[] ids)
+    {
         var updates = BuildResetUpdates(ids);
         try
         {
