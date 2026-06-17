@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/packaging/schemas/config.schema.json",
   "title": "NVMe Driver Patcher Config",
-  "description": "Schema for %LocalAppData%\\NVMePatcher\\config.json (and the portable-mode Data\\config.json). Matches the AppConfig class in src/NVMeDriverPatcher/Models/AppConfig.cs.",
+  "description": "Schema for %LocalAppData%\\NVMePatcher\\config.json (and the portable-mode Data\\config.json). Matches the AppConfig class in src/NVMeDriverPatcher.Core/Models/AppConfig.cs.",
   "type": "object",
   "additionalProperties": false,
   "properties": {

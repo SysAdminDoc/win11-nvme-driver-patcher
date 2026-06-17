@@ -68,7 +68,7 @@ if ($intune -match "\`$minVersion\s*=\s*\[Version\]'([^']+)'") {
 } else { $failures.Add("intune: minVersion line not found") }
 
 # 5. AppConfig last-resort fallback literal
-$appConfigPath = Join-Path $repoRoot 'src/NVMeDriverPatcher/Models/AppConfig.cs'
+$appConfigPath = Join-Path $repoRoot 'src/NVMeDriverPatcher.Core/Models/AppConfig.cs'
 $appConfig = Get-Content -Raw $appConfigPath
 if ($appConfig -match 'FallbackVersionLiteral\s*=\s*"([^"]+)"') {
     Check "AppConfig.cs FallbackVersionLiteral" $Matches[1] $canonical

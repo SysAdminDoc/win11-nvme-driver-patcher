@@ -142,7 +142,7 @@ public sealed class PackagingVersionScriptTests
             Write(root, "packaging/wix/NVMeDriverPatcher.wxs", $"""<Package Version="{version}.0" />""");
             Write(root, "packaging/intune/Detect-NVMeDriverPatcher.ps1", $"$minVersion = [Version]'{version}'");
             Write(root, "packaging/intune/README.md", packagingMarkdown);
-            Write(root, "src/NVMeDriverPatcher/Models/AppConfig.cs", $"""private const string FallbackVersionLiteral = "{version}";""");
+            Write(root, "src/NVMeDriverPatcher.Core/Models/AppConfig.cs", $"""private const string FallbackVersionLiteral = "{version}";""");
 
             return new VersionFixture(root);
         }

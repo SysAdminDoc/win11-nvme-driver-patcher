@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>NVMeDriverPatcher.Core</AssemblyName>
+    <RootNamespace>NVMeDriverPatcher</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="compat.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="windows_build_rules.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Ship the ADMX/ADML templates beside every executable that references Core so
+         `policy-install` works from GUI, CLI, and portable publish folders. -->
+    <None Include="..\..\packaging\admx\NVMeDriverPatcher.admx" Link="admx\NVMeDriverPatcher.admx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\packaging\admx\en-US\NVMeDriverPatcher.adml" Link="admx\en-US\NVMeDriverPatcher.adml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
+    <!-- EF's transitive SQLitePCLRaw 2.1.11 bundles native SQLite 3.49.1, which is
+         vulnerable to CVE-2025-6965 (fixed in 3.50.2). Direct reference overrides the
+         bundle; SqliteVersionTests pins the floor so a regression fails the suite. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <PackageReference Include="System.Management" Version="10.0.9" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.9" />
+  </ItemGroup>
+
+</Project>
