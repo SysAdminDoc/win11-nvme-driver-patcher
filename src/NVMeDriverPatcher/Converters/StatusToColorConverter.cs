@@ -8,11 +8,11 @@ namespace NVMeDriverPatcher.Converters;
 
 public class StatusToColorConverter : IValueConverter
 {
-    private static readonly SolidColorBrush PassBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x22, 0xc5, 0x5e)));
-    private static readonly SolidColorBrush WarningBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xf5, 0x9e, 0x0b)));
-    private static readonly SolidColorBrush FailBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xef, 0x44, 0x44)));
-    private static readonly SolidColorBrush InfoBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x3b, 0x82, 0xf6)));
-    internal static readonly SolidColorBrush DefaultBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x71, 0x71, 0x7a)));
+    private static readonly SolidColorBrush PassBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x16, 0xA3, 0x4A)));
+    private static readonly SolidColorBrush WarningBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xCA, 0x8A, 0x04)));
+    private static readonly SolidColorBrush FailBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xDC, 0x26, 0x26)));
+    private static readonly SolidColorBrush InfoBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x25, 0x63, 0xEB)));
+    internal static readonly SolidColorBrush DefaultBrush = Freeze(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x71, 0x71, 0x7A)));
 
     private static SolidColorBrush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
 
