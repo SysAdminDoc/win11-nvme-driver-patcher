@@ -25,7 +25,7 @@ public static class BenchmarkService
         PropertyNameCaseInsensitive = true
     };
 
-    private const string DiskSpdArchiveUrl = "https://github.com/microsoft/diskspd/releases/latest/download/DiskSpd.ZIP";
+    private const string DiskSpdArchiveUrl = "https://github.com/microsoft/diskspd/releases/download/v2.2/DiskSpd.ZIP";
     private const long MinArchiveBytes = 32 * 1024;
     private const long MaxArchiveBytes = 64 * 1024 * 1024;
     private const long MinExeBytes = 32 * 1024;
@@ -87,13 +87,11 @@ public static class BenchmarkService
             using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(90) };
             client.DefaultRequestHeaders.UserAgent.ParseAdd($"NVMeDriverPatcher/{Models.AppConfig.AppVersion}");
 
-            // DiskSpd is a Microsoft-published archive from github.com/microsoft/diskspd that
-            // doesn't ship .sha256 sidecars and isn't Authenticode-signed as a zip — hence
-            // RequireIntegrity=false (the archive's own zip-slip defense + size caps
-            // substitute). If Microsoft later publishes sidecars the check activates
-            // automatically. Size caps come from the service-local MinArchiveBytes /
-            // MaxArchiveBytes constants; VerifiedDownloader rejects oversize before we
-            // even open the archive.
+            // DiskSpd is a Microsoft-published archive from github.com/microsoft/diskspd pinned
+            // to v2.2. The archive itself doesn't ship .sha256 sidecars — RequireIntegrity=false.
+            // After extraction, the diskspd.exe is Authenticode-verified when signtool is
+            // available (dev/CI machines). Size caps from MinArchiveBytes / MaxArchiveBytes
+            // catch obviously wrong payloads before extraction.
             var downloadPolicy = new VerifiedDownloader.DownloadPolicy
             {
                 AllowedHosts = AllowedAssetHosts,
@@ -146,6 +144,9 @@ public static class BenchmarkService
                 var stagedExe = new FileInfo(found);
                 if (stagedExe.Length < MinExeBytes)
                     throw new InvalidOperationException("DiskSpd executable looks incomplete after extraction.");
+
+                if (!VerifiedDownloader.VerifyAuthenticode(found))
+                    log?.Invoke("[WARNING] DiskSpd Authenticode verification unavailable (signtool not found) — using size + host validation only");
 
                 File.Copy(found, diskSpdExe, overwrite: true);
                 log?.Invoke("DiskSpd downloaded successfully");

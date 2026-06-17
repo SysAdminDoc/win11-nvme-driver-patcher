@@ -64,5 +64,8 @@ public class AppDbContext : DbContext
         try { db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;"); } catch { }
         try { db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=5000;"); } catch { }
         try { db.Database.ExecuteSqlRaw("PRAGMA synchronous=NORMAL;"); } catch { }
+        try { db.Database.ExecuteSqlRaw("PRAGMA trusted_schema=OFF;"); } catch { }
+        try { db.Database.ExecuteSqlRaw("PRAGMA cell_size_check=ON;"); } catch { }
+        try { db.Database.ExecuteSqlRaw("PRAGMA quick_check;"); } catch { }
     }
 }
