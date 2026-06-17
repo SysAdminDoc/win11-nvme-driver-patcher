@@ -43,7 +43,7 @@
                             Background="{DynamicResource SurfaceInset}"
                             BorderBrush="{DynamicResource Border}"
                             BorderThickness="1"
-                            CornerRadius="7"
+                            CornerRadius="8"
                             VerticalAlignment="Stretch"
                             AutomationProperties.LiveSetting="Polite">
                         <TextBlock x:Name="TelemetryStatusText"

@@ -26,7 +26,7 @@
 
             <Grid ClipToBounds="True">
                 <Border x:Name="ShellAccentBar"
-                        Height="1"
+                        Height="2"
                         VerticalAlignment="Top"
                         Background="{DynamicResource AccentLineBrush}"
                         CornerRadius="0"
@@ -42,7 +42,7 @@
 
                     <Border x:Name="TitleBarRegion"
                             Grid.Row="0"
-                            Padding="20,8,20,0"
+                            Padding="24,12,24,0"
                             Background="Transparent"
                             MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                         <Grid>
@@ -55,15 +55,15 @@
                                         Margin="0,2,0,0"
                                         VerticalAlignment="Top">
                                 <TextBlock Text="NVMe Driver Patcher"
-                                           FontSize="18"
+                                           FontSize="17"
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource TextPrimary}"/>
                                 <Border Width="1"
-                                        Height="18"
-                                        Margin="14,2,14,0"
+                                        Height="16"
+                                        Margin="14,3,14,0"
                                         Background="{DynamicResource Border}"/>
                                 <TextBlock Text="Windows 11 native driver control"
-                                           Margin="0,2,0,0"
+                                           Margin="0,3,0,0"
                                            FontSize="12"
                                            Foreground="{DynamicResource TextDim}"/>
                             </StackPanel>
@@ -119,7 +119,7 @@
                                         Background="{DynamicResource SurfaceInset}"
                                         BorderBrush="{DynamicResource Border}"
                                         BorderThickness="1"
-                                        CornerRadius="6">
+                                        CornerRadius="8">
                                     <TextBlock Text="{Binding VersionText}"
                                                FontSize="11"
                                                FontWeight="SemiBold"
@@ -148,7 +148,7 @@
                         </Grid>
                     </Border>
 
-                    <Grid x:Name="OverviewGrid" Grid.Row="1" Margin="20,12,20,0" Visibility="Collapsed">
+                    <Grid x:Name="OverviewGrid" Grid.Row="1" Margin="24,14,24,0" Visibility="Collapsed">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
@@ -189,7 +189,7 @@
                                             Background="{DynamicResource YellowBg}"
                                             BorderBrush="{DynamicResource Border}"
                                             BorderThickness="1"
-                                            CornerRadius="6"
+                                            CornerRadius="8"
                                             Visibility="{Binding ShowViVeToolFallbackBadge, Converter={StaticResource BoolVis}}">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -223,7 +223,7 @@
                                             Background="{DynamicResource YellowBg}"
                                             BorderBrush="{DynamicResource Border}"
                                             BorderThickness="1"
-                                            CornerRadius="6"
+                                            CornerRadius="8"
                                             Visibility="{Binding ShowSafeBootUpgradeBadge, Converter={StaticResource BoolVis}}"
                                             AutomationProperties.Name="SafeBoot entries need update notice">
                                         <Grid>
@@ -440,7 +440,7 @@
                                                         Background="{DynamicResource BgMedium}"
                                                         BorderBrush="{DynamicResource Border}"
                                                         BorderThickness="1"
-                                                        CornerRadius="6">
+                                                        CornerRadius="8">
                                                     <Border.Style>
                                                         <Style TargetType="Border">
                                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -475,7 +475,7 @@
                                                                     Background="{DynamicResource BgMedium}"
                                                                     BorderBrush="{DynamicResource Border}"
                                                                     BorderThickness="1"
-                                                                    CornerRadius="6">
+                                                                    CornerRadius="8">
                                                                 <StackPanel>
                                                                     <TextBlock Text="{Binding Title}"
                                                                                Foreground="{Binding ToneColor, Converter={StaticResource StrToBrush}}"
@@ -531,7 +531,7 @@
                                           Background="{DynamicResource SurfaceInset}"
                                           BorderBrush="{DynamicResource BorderLight}"
                                           BorderThickness="1"
-                                          CornerRadius="6"
+                                          CornerRadius="8"
                                           AutomationProperties.LiveSetting="Polite">
                                       <TextBlock Text="{Binding ActionReadinessText}"
                                                  Foreground="{Binding ActionReadinessColor, Converter={StaticResource StrToBrush}}"
@@ -622,7 +622,7 @@
                                                           Background="{DynamicResource BgMedium}"
                                                           BorderBrush="{DynamicResource Border}"
                                                           BorderThickness="1"
-                                                          CornerRadius="6">
+                                                          CornerRadius="8">
                                                       <StackPanel>
                                                           <TextBlock Text="Registry Backups" Style="{StaticResource SectionEyebrow}"/>
                                                           <TextBlock Text="{Binding BackupHistoryText}"
@@ -638,7 +638,7 @@
                                                           Background="{DynamicResource BgMedium}"
                                                           BorderBrush="{DynamicResource Border}"
                                                           BorderThickness="1"
-                                                          CornerRadius="6">
+                                                          CornerRadius="8">
                                                       <StackPanel>
                                                           <TextBlock Text="Change Snapshots" Style="{StaticResource SectionEyebrow}"/>
                                                           <TextBlock Text="{Binding SnapshotHistoryText}"
@@ -654,7 +654,7 @@
                                                           Background="{DynamicResource BgMedium}"
                                                           BorderBrush="{DynamicResource Border}"
                                                           BorderThickness="1"
-                                                          CornerRadius="6">
+                                                          CornerRadius="8">
                                                       <StackPanel>
                                                           <TextBlock Text="Benchmark Runs" Style="{StaticResource SectionEyebrow}"/>
                                                           <TextBlock Text="{Binding BenchmarkHistoryText}"
@@ -674,12 +674,12 @@
 
                     <Border x:Name="CommandDeck"
                             Grid.Row="1"
-                            Margin="18,6,18,0"
-                            Padding="12,8"
+                            Margin="20,10,20,0"
+                            Padding="16,12"
                             Background="{DynamicResource SurfaceCardBrush}"
                             BorderBrush="{DynamicResource Border}"
                             BorderThickness="1"
-                            CornerRadius="7">
+                            CornerRadius="8">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="0.95*"/>
@@ -773,7 +773,7 @@
                         </Grid>
                     </Border>
 
-                    <Grid x:Name="MainContentGrid" Grid.Row="2" Margin="18,10,18,0">
+                    <Grid x:Name="MainContentGrid" Grid.Row="2" Margin="20,12,20,0">
                         <Grid.RowDefinitions>
                             <RowDefinition x:Name="MainContentPrimaryRow" Height="*"/>
                             <RowDefinition x:Name="MainContentSecondaryRow" Height="Auto"/>
@@ -806,7 +806,7 @@
                                                    FontSize="12.5"
                                                    TextWrapping="Wrap"/>
 
-                                        <ItemsControl ItemsSource="{Binding ReadinessChecks}" Margin="0,12,0,0">
+                                        <ItemsControl ItemsSource="{Binding ReadinessChecks}" Margin="0,14,0,0">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
                                                     <UniformGrid Columns="5"/>
@@ -815,11 +815,11 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Border Margin="0,0,6,6"
-                                                            Padding="8,7"
+                                                            Padding="10,8"
                                                             Background="{DynamicResource BgMedium}"
                                                             BorderBrush="{DynamicResource Border}"
                                                             BorderThickness="1"
-                                                            CornerRadius="6"
+                                                            CornerRadius="8"
                                                             ToolTip="{Binding DetailTooltip}">
                                                         <StackPanel>
                                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -863,7 +863,7 @@
                                                 Background="{DynamicResource SurfaceInset}"
                                                 BorderBrush="{DynamicResource Border}"
                                                 BorderThickness="1"
-                                                CornerRadius="6">
+                                                CornerRadius="8">
                                             <Border.Style>
                                                 <Style TargetType="Border">
                                                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -905,7 +905,7 @@
                                                             Background="{DynamicResource BgMedium}"
                                                             BorderBrush="{DynamicResource Border}"
                                                             BorderThickness="1"
-                                                            CornerRadius="6">
+                                                            CornerRadius="8">
                                                         <Grid>
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="Auto"/>
@@ -993,7 +993,7 @@
                                                         Background="{DynamicResource SurfaceInset}"
                                                         BorderBrush="{DynamicResource Border}"
                                                         BorderThickness="1"
-                                                        CornerRadius="6">
+                                                        CornerRadius="8">
                                                     <TextBlock Text="Safe Mode is still the safest default for most systems. Add the Server 2025 key only when you need the broader compatibility path."
                                                                Foreground="{DynamicResource TextSecondary}"
                                                                FontSize="12"
@@ -1005,7 +1005,7 @@
                                                         Background="{DynamicResource YellowBg}"
                                                         BorderBrush="{DynamicResource Border}"
                                                         BorderThickness="1"
-                                                        CornerRadius="6"
+                                                        CornerRadius="8"
                                                         Visibility="{Binding DirectStoragePanelVisible, Converter={StaticResource BoolVis}}">
                                                     <TextBlock Text="{Binding DirectStorageImpactText}"
                                                                Foreground="{DynamicResource Yellow}"
@@ -1123,7 +1123,7 @@
                                                                 Background="{DynamicResource BgMedium}"
                                                                 BorderBrush="{DynamicResource Border}"
                                                                 BorderThickness="1"
-                                                                CornerRadius="6">
+                                                                CornerRadius="8">
                                                             <Grid>
                                                                 <Grid.ColumnDefinitions>
                                                                     <ColumnDefinition Width="*"/>
@@ -1252,7 +1252,7 @@
                                                                         Background="{DynamicResource BgMedium}"
                                                                         BorderBrush="{DynamicResource Border}"
                                                                         BorderThickness="1"
-                                                                        CornerRadius="6">
+                                                                        CornerRadius="8">
                                                                     <Grid>
                                                                         <Grid.RowDefinitions>
                                                                             <RowDefinition Height="Auto"/>
@@ -1318,7 +1318,7 @@
                                                                         Background="{DynamicResource BgMedium}"
                                                                         BorderBrush="{DynamicResource Border}"
                                                                         BorderThickness="1"
-                                                                        CornerRadius="6">
+                                                                        CornerRadius="8">
                                                                     <Grid>
                                                                         <Grid.RowDefinitions>
                                                                             <RowDefinition Height="Auto"/>
@@ -1447,19 +1447,19 @@
                                                     Margin="0"
                                                     Style="{StaticResource EmptyStateCard}">
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <Border Width="40"
-                                                            Height="40"
+                                                    <Border Width="48"
+                                                            Height="48"
                                                             Background="{DynamicResource AccentBg}"
                                                             BorderBrush="{DynamicResource BorderLight}"
                                                             BorderThickness="1"
-                                                            CornerRadius="4">
-                                                        <Grid Width="24" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                            <Border Width="4" Height="9" Background="{DynamicResource Accent}" CornerRadius="2" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
-                                                            <Border Width="4" Height="16" Margin="10,0,0,0" Background="{DynamicResource Accent}" CornerRadius="2" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
-                                                            <Border Width="4" Height="12" Background="{DynamicResource Accent}" CornerRadius="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+                                                            CornerRadius="10">
+                                                        <Grid Width="28" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Border Width="5" Height="10" Background="{DynamicResource Accent}" CornerRadius="2" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+                                                            <Border Width="5" Height="18" Margin="12,0,0,0" Background="{DynamicResource Accent}" CornerRadius="2" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+                                                            <Border Width="5" Height="14" Background="{DynamicResource Accent}" CornerRadius="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
                                                         </Grid>
                                                     </Border>
-                                                    <TextBlock Margin="0,10,0,0"
+                                                    <TextBlock Margin="0,14,0,0"
                                                                Text="No benchmark history yet"
                                                                Style="{StaticResource EmptyStateTitle}"/>
                                                     <TextBlock Text="Run a benchmark before or after applying the patch to build a machine-specific comparison."
@@ -1525,13 +1525,13 @@
                                                     Margin="0,10,0,0"
                                                     Style="{StaticResource EmptyStateCard}">
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <Border Width="40"
-                                                            Height="40"
+                                                    <Border Width="48"
+                                                            Height="48"
                                                             Background="{DynamicResource AccentBg}"
                                                             BorderBrush="{DynamicResource BorderLight}"
                                                             BorderThickness="1"
-                                                            CornerRadius="4">
-                                                        <Viewbox Width="25" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            CornerRadius="10">
+                                                        <Viewbox Width="28" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center">
                                                             <Path Data="M 1 12 L 6 12 L 9 5 L 13 18 L 16 10 L 20 10 L 23 12"
                                                                   Stroke="{DynamicResource Accent}"
                                                                   StrokeThickness="2"
@@ -1540,7 +1540,7 @@
                                                                   StrokeLineJoin="Round"/>
                                                         </Viewbox>
                                                     </Border>
-                                                    <TextBlock Margin="0,10,0,0"
+                                                    <TextBlock Margin="0,14,0,0"
                                                                Text="No NVMe telemetry source available"
                                                                Style="{StaticResource EmptyStateTitle}"/>
                                                     <TextBlock Text="This workspace activates when the current scan finds at least one NVMe drive that Windows can surface for health checks."
@@ -1913,7 +1913,7 @@
                                                     Background="{DynamicResource YellowBg}"
                                                     BorderBrush="{DynamicResource Border}"
                                                     BorderThickness="1"
-                                                    CornerRadius="6">
+                                                    CornerRadius="8">
                                                 <StackPanel>
                                                     <TextBlock Text="Keep one off-device copy"
                                                                Foreground="{DynamicResource Yellow}"
@@ -2132,7 +2132,7 @@
                                                             Background="{DynamicResource YellowBg}"
                                                             BorderBrush="{DynamicResource Border}"
                                                             BorderThickness="1"
-                                                            CornerRadius="6">
+                                                            CornerRadius="8">
                                                         <TextBlock Text="DirectStorage and BypassIO may fall back on nvmedisk.sys. Keep removal available on gaming systems."
                                                                    Foreground="{DynamicResource Yellow}"
                                                                    FontSize="12"
@@ -2250,11 +2250,11 @@
                                         Grid.Row="0"
                                         Grid.Column="2"
                                         Grid.RowSpan="2"
-                                        Padding="8"
+                                        Padding="12"
                                         Background="{DynamicResource SurfaceInset}"
                                         BorderBrush="{DynamicResource Border}"
                                         BorderThickness="1"
-                                        CornerRadius="7"
+                                        CornerRadius="8"
                                         AutomationProperties.Name="Always visible activity log">
                                     <Grid>
                                         <Grid.RowDefinitions>
@@ -2406,7 +2406,7 @@
                                         <Border Grid.Row="2"
                                                 Margin="0,6,0,0"
                                                 Padding="8"
-                                                CornerRadius="7">
+                                                CornerRadius="8">
                                             <Border.Style>
                                                 <Style TargetType="Border">
                                                     <Setter Property="Background" Value="{DynamicResource BgDarkest}"/>
@@ -2465,13 +2465,13 @@
                                                                 MaxWidth="260">
                                                         <TextBlock Text="No activity yet"
                                                                    Foreground="{DynamicResource TextPrimary}"
-                                                                   FontSize="15"
+                                                                   FontSize="14"
                                                                    FontWeight="SemiBold"
                                                                    TextAlignment="Center"/>
-                                                        <TextBlock Text="Checks and driver actions will stream here."
-                                                                   Margin="0,8,0,0"
+                                                        <TextBlock Text="Checks and driver actions will appear here as they run."
+                                                                   Margin="0,6,0,0"
                                                                    Foreground="{DynamicResource TextDim}"
-                                                                   FontSize="11"
+                                                                   FontSize="11.5"
                                                                    TextAlignment="Center"
                                                                    TextWrapping="Wrap"/>
                                                     </StackPanel>
@@ -2555,20 +2555,20 @@
                         AutomationProperties.LiveSetting="Polite"
                         Visibility="{Binding IsLoading, Converter={StaticResource BoolVis}}">
                     <Grid>
-                                <Border MaxWidth="500"
-                                Margin="18"
-                                Padding="20,18"
+                                <Border MaxWidth="520"
+                                Margin="24"
+                                Padding="28,24"
                                 Background="{DynamicResource BgDark}"
                                 BorderBrush="{DynamicResource BorderLight}"
                                 BorderThickness="1"
-                                CornerRadius="6"
+                                CornerRadius="10"
                                 Effect="{DynamicResource WindowShadow}"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
                             <StackPanel>
                                 <TextBlock Text="Checking readiness"
                                            Foreground="{DynamicResource TextPrimary}"
-                                           FontSize="24"
+                                           FontSize="22"
                                            FontWeight="SemiBold"/>
                                 <TextBlock Text="Verifying Windows build, storage path, NVMe inventory, and rollback safety."
                                            Margin="0,10,0,0"

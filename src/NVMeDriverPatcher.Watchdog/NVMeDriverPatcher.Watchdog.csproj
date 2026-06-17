@@ -29,7 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NVMeDriverPatcher\NVMeDriverPatcher.csproj" />
+    <ProjectReference Include="..\NVMeDriverPatcher.Core\NVMeDriverPatcher.Core.csproj" />
   </ItemGroup>
 
 </Project>

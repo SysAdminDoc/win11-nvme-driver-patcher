@@ -58,7 +58,7 @@
                             Background="{DynamicResource BgMedium}"
                             BorderBrush="{DynamicResource Border}"
                             BorderThickness="1"
-                            CornerRadius="6">
+                            CornerRadius="8">
                         <StackPanel>
                             <TextBlock Text="Selected preset" Style="{StaticResource SectionEyebrow}"/>
                             <TextBlock x:Name="ProfileTitleText"
@@ -323,7 +323,7 @@
                             Background="{DynamicResource YellowBg}"
                             BorderBrush="{DynamicResource Border}"
                             BorderThickness="1"
-                            CornerRadius="6">
+                            CornerRadius="8">
                         <TextBlock Text="Queue count 0 means automatic queue allocation, and timeout values of 0 disable that power-saving path. Benchmark after each reboot so the change earns its keep."
                                    Foreground="{DynamicResource Yellow}"
                                    FontSize="12"

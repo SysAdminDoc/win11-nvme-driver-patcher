@@ -38,7 +38,7 @@
     <SolidColorBrush x:Key="InsetCardBrush" Color="#FFF2F5FA"/>
     <SolidColorBrush x:Key="DisabledSurfaceBrush" Color="#FFE9EEF5"/>
     <SolidColorBrush x:Key="OverlayScrimBrush" Color="#CCF7FAFE"/>
-    <SolidColorBrush x:Key="AccentLineBrush" Color="#FFBFD0E8"/>
+    <SolidColorBrush x:Key="AccentLineBrush" Color="#992563EB"/>
     <DropShadowEffect x:Key="WindowShadow" BlurRadius="24" ShadowDepth="0" Opacity="0.18" Color="#FF526070"/>
     <DropShadowEffect x:Key="SurfaceShadow" BlurRadius="14" ShadowDepth="0" Opacity="0.08" Color="#FF526070"/>
     <DropShadowEffect x:Key="ToolTipShadow" BlurRadius="8" ShadowDepth="1" Opacity="0.12" Direction="270" Color="#FF526070"/>
