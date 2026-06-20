@@ -1,107 +1,98 @@
 # NVMe Driver Patcher — Roadmap
 
-Living document — **incomplete work only**. Shipped items are deleted (git history + [CHANGELOG.md](CHANGELOG.md) are the record). Current ship: **v5.0.0**.
+Living document — **incomplete work only**. Shipped items are deleted (git history + [CHANGELOG.md](CHANGELOG.md) are the record). Blocked items live in [Roadmap_Blocked.md](Roadmap_Blocked.md). Current ship: **v5.0.0**.
 
 **Scope rule:** every item must improve the core function — enabling, disabling, verifying, or rolling back Microsoft's native NVMe driver swap on Windows 11. No external integrations, no general-purpose storage tools, no theme/UI-locale polish. If an idea drifts into "separate tool that happens to live in the same exe," it doesn't belong here. Priority is by user impact / regret cost, not effort; S/M/L/XL are rough effort estimates.
 
 ---
 
-## P2 — Reliability, safety, and fleet
-
-- [ ] P2 — Preflight check: feature-management prerequisites broken by debloat tools
-  Why: A community report describes the native NVMe driver refusing to bind until previously disabled scheduled tasks were restored — debloated systems are common in exactly this tool's audience, and today the failure is silent and misdiagnosed as the Microsoft block. Reproduce on a debloated VM first; ship the check only once the responsible task/service set is confirmed.
-  Evidence: Overclock.net thread 1818467 page 5 user report (secondhand; Needs live validation — see RESEARCH.md Open Question 3).
-  Touches: `Services/SystemGuardrailsService.cs` (alongside HVCI/WDAC/VROC/AppLocker), `PreflightService`, tests.
-  Acceptance: On a VM with the offending tasks/services disabled, preflight surfaces a named warning with a one-click/`schtasks` restore hint; healthy systems show no new warning.
-  Complexity: M (including the reproduction work)
-
-- [ ] P3 — Surface the firmware disable/re-enable workflow in the GUI
-  Why: The CLI `disable-for-update` / `re-enable-after-update` roundtrip shipped, but there is no GUI
-  firmware-nudge panel yet, so GUI users can't trigger it with one click.
-  Touches: a new firmware-nudge panel in `MainWindow.xaml` + `MainViewModel` commands that call
-  `FirmwareUpdateWorkflowService` and the existing apply/remove flow.
-  Acceptance: A GUI button reverts to legacy with update guidance and a second re-applies the
-  remembered profile; the activity log shows the full roundtrip.
-  Complexity: M
-
----
-
-## P3 — Hardening & cleanup
-
----
-
-## Strategic / larger bets
-
-- [ ] P2 — WinRE driver-injection: execute the mount/commit (preview shipped)
-  Why: The `winre-inject` CLI command now previews the exact DISM plan (mount → add-driver →
-  unmount/commit) with blast-radius warnings via `WinReDriverInjectionService` (plan/render unit-tested,
-  no image mutation). The remaining genuinely-incomplete + risky part is executing the mount/commit and
-  validating it with a real WinRE boot — which needs live hardware/VM with WinRE, not available in the
-  build/CI environment.
-  Touches: an opt-in `--commit` execution path reusing the proven `WinPERecoveryBuilderService` DISM
-  mount/commit pattern (with discard-on-failure), recovery flow wiring, and a manual WinRE-boot test plan.
-  Acceptance: With `--commit`, the plan mounts the WinRE image, adds stornvme, and commits with rollback
-  on failure; after running it, WinRE boots and can access the system volume on a native-stack machine.
-  Complexity: L (down from XL — planning + preview done)
-
 ## Research-Driven Additions
 
-- [ ] P3 — Extend `--json` to the last few read commands
-  Why: The versioned `--json` envelope + `CliJson` framework now covers `status`, `watchdog`, `controllers`,
-  `recovery-proof`, and `bypassio`. The remaining read commands — `firmware`, `featurestore`, `reliability`,
-  `minidump` — could adopt the same one-line pattern so all fleet state is scriptable.
-  Touches: `CliJson` builders for each report type, `--json` branch in each command, contract tests.
-  Acceptance: Each listed command returns the versioned JSON envelope under `--json` with field-name tests; text stays the default.
-  Complexity: S
+### P0 — Root-cause fix
 
-### P1 — Reliability and Hardening
-
-- [ ] P1 — Extract shared services into a NVMeDriverPatcher.Core library
-  Why: The Tray project references the GUI project transitively, pulling the entire WPF framework into a WinForms-only app. Shared models and services should live in a framework-agnostic class library.
-  Touches: New `NVMeDriverPatcher.Core` project; move `Services/`, `Models/`, `Data/` from the GUI project; update all ProjectReferences.
-  Complexity: L
-
-- [ ] P1 — PatchService core-flow unit tests
-  Why: The most critical service (install/uninstall/rollback) has zero test coverage for its main flows. Only helper methods are tested.
-  Touches: `PatchServiceTests.cs`, mock infrastructure for `RegistryKey`/`DataService`/`EventLogService`.
+- [ ] P0 — Watchdog service: fix working-dir mismatch under LocalService
+  Why: The LocalSystem→LocalService downgrade (commit e524340) broke shared state. Under LocalService, `%LocalAppData%` resolves to `C:\Windows\ServiceProfiles\LocalService\AppData\Local`, so the watchdog writes `watchdog.json`, `config.json`, and the SQLite DB to a different path than the GUI/CLI reads under the interactive admin user. The service produces verdicts nobody consumes.
+  Evidence: Code inspection of `AppConfig.GetWorkingDir()` using `Environment.GetFolderPath(SpecialFolder.LocalApplicationData)` + `WatchdogWorker.FlushOnce()` calling `ConfigService.Load()` and `EventLogWatchdogService.Evaluate(config)`.
+  Touches: `src/NVMeDriverPatcher.Core/Models/AppConfig.cs` (add shared working-dir resolution that prefers `%ProgramData%\NVMePatcher\` when running as a service), `src/NVMeDriverPatcher.Watchdog/Program.cs` (pass shared dir or set environment), `packaging/wix/NVMeDriverPatcher.wxs` (create ProgramData dir on install), tests.
+  Acceptance: Watchdog service and GUI/CLI both read and write the same `watchdog.json`; `EventLogWatchdogService.Evaluate()` from the GUI shows events the service flushed; test fixture verifies path resolution under simulated service identity.
   Complexity: M
 
-- [ ] P2 — NativeMethods: SafeHandle for SetupDi device info sets
-  Why: `SetupDiGetClassDevs` returns a raw `IntPtr` that callers must manually free with `SetupDiDestroyDeviceInfoList`. A custom `SafeHandle` subclass would ensure cleanup on exceptions.
-  Touches: `Interop/NativeMethods.cs`, `HotSwapService.cs`, any SetupDi callers.
+### P1 — Reliability and trust
+
+- [ ] P1 — Watchdog service: grant LocalService read access to System event log
+  Why: LocalService does not have default read access to the System event log channel. The watchdog catches the `UnauthorizedAccessException` and silently falls back to poll-only (loses real-time push model). After the P0 working-dir fix, this is the remaining gap preventing the service from functioning as designed.
+  Evidence: Microsoft docs on event log security ACLs; `WatchdogWorker.ExecuteAsync()` line 133 catches and logs the failure but the user never sees it.
+  Touches: `src/NVMeDriverPatcher.Watchdog/Program.cs` (grant ACL on install via `wevtutil sl System /ca:...` or equivalent), `packaging/wix/NVMeDriverPatcher.wxs` (add custom action or document manual step), tests.
+  Acceptance: Watchdog service running as LocalService successfully subscribes to System event log events via `EventLogWatcher`; no fallback-to-poll log entry appears; test validates the subscription succeeds.
+  Complexity: S (after P0 lands)
+
+- [ ] P1 — Add tests for untested safety-critical services
+  Why: 11 Core services have zero test files. Several have pure-logic paths testable without admin privileges: `BackupIntegrityService` (hash verification), `PortableModeService` (flag detection), `WmiQueryHelper` (timeout option wiring), `TuningProfileIoService` (JSON round-trip), `ReliabilityService` (correlation math from canned data).
+  Evidence: Test coverage gap analysis — cross-referencing `src/NVMeDriverPatcher.Core/Services/*.cs` against `tests/NVMeDriverPatcher.Tests/*Tests.cs`.
+  Touches: New test files in `tests/NVMeDriverPatcher.Tests/` for at minimum: `BackupIntegrityServiceTests.cs`, `PortableModeServiceTests.cs`, `WmiQueryHelperTests.cs`, `TuningProfileIoServiceTests.cs`, `ReliabilityServiceTests.cs`.
+  Acceptance: Each new test file contains at least 2 fixtures testing the pure-logic decision paths; all pass; total test count increases by 10+; CI remains green.
+  Complexity: M
+
+### P2 — Safety and UX
+
+- [ ] P2 — Expand compat.json with community-reported problem firmware (8+ new entries)
+  Why: Community reports document boot loops, HMB BSODs, performance degradation, and power-loss data corruption on specific controller/firmware combinations not currently in compat.json. Current DB has 12 entries; at least 8 more are documented.
+  Evidence: WD SN850X boot loops (GigXP "Critical Failure"); WD SN770/SN580/SN5000 2TB HMB BSOD with specific fix firmware (SanDisk KB51469); Samsung 990 Pro 2TB 7B2QJXD7 degradation (AnandTech Forums); SK Hynix P41 negligible gains (HotHardware benchmark); Phison E18/E26 RAW partition on power loss (GigXP "Phantom Ack"); https://gigxp.com/windows-11-native-nvme-driver/ ; https://support-en.sandisk.com/app/answers/detailweb/a_id/51469
+  Touches: `src/NVMeDriverPatcher.Core/compat.json` — add entries: WD SN850X (`Bad`), WD SN770/SN580/SN5000 2TB pre-fix firmware (`Caution` with fix firmware note), Samsung 990 Pro 2TB 7B2QJXD7 (`Caution`), SK Hynix P41 (`Caution` advisory for negligible gains), Phison E18/E26 (`Caution` with power-loss warning). `FirmwareCompatService` tests to verify new entries parse and match.
+  Acceptance: Preflight flags a warning for at least 5 newly-documented problematic firmware/controller combinations; existing compat tests pass; schema validation passes.
   Complexity: S
 
-- [ ] P2 — NativeMethods: enforce SP_DEVINFO_DATA.cbSize initialization
-  Why: `SP_DEVINFO_DATA` and `SP_CLASSINSTALL_HEADER` require `cbSize` to be pre-set. Missing initialization causes silent SetupDi API failures.
-  Touches: `Interop/NativeMethods.cs` — add static factory methods.
+- [ ] P2 — Enhance BypassIO/DirectStorage regression warning with named games
+  Why: Current BypassIO warning is generic ("BypassIO not supported"). nvmedisk.sys vetoes BypassIO, forcing DirectStorage games back to legacy I/O paths. Confirmed affected: Ratchet & Clank: Rift Apart, Forspoken, Forza Motorsport, Horizon Forbidden West. EasyAntiCheat's EOSSys.sys also vetoes BypassIO independently, compounding issues. Users need actionable guidance, not a boolean flag.
+  Evidence: GigXP detailed analysis; PCWorld DirectStorage adoption report; ElevenForum EAC thread; https://gigxp.com/windows-11-native-nvme-driver/ ; https://www.pcworld.com/article/2609584/what-happened-to-directstorage-why-dont-more-pc-games-use-it.html
+  Touches: `src/NVMeDriverPatcher.Core/Services/BypassIoInspectorService.cs` (enrich warning text with named games and per-drive scope recommendation), `src/NVMeDriverPatcher.Core/Models/CliJson.cs` (add `gamingImpact` field to `BypassIoJson`), `BypassIoInspectorService` test fixture (currently no tests — add alongside enriched warning).
+  Acceptance: When BypassIO is blocked, warning text names specific affected games and suggests keeping gaming drives on stornvme.sys via per-drive scope; `--json` output includes a `gamingImpact` field; at least 3 test fixtures cover the enriched paths.
   Complexity: S
 
-- [ ] P2 — EventLogWatchdogService: file-level locking for concurrent evaluate
-  Why: The read-modify-write cycle on the watchdog state file has no file lock, so concurrent evaluations (GUI + CLI) can clobber each other's cumulative event counts.
-  Touches: `Services/EventLogWatchdogService.cs`.
+### P3 — Quality
+
+- [ ] P3 — Add integration test for Watchdog shared-state round-trip
+  Why: The P0 working-dir fix changes a critical data path (shared `watchdog.json` between service and GUI). An integration test that writes via the service path and reads via the GUI path catches future regressions in the shared-dir strategy.
+  Evidence: The P0 regression was undetectable by existing unit tests because they don't exercise cross-process path resolution.
+  Touches: `tests/NVMeDriverPatcher.Tests/WatchdogSharedStateTests.cs` — write to the shared dir, verify the GUI path resolves the same file.
+  Acceptance: Test writes a watchdog state file via the service-context path resolution and reads it back via the user-context path resolution; both resolve to the same physical file.
   Complexity: S
 
-- [ ] P2 — FeatureStoreWriterService: concurrency protection for WriteOverrides
-  Why: No lock serializes concurrent calls; interleaved writes could produce incorrect verification results.
-  Touches: `Services/FeatureStoreWriterService.cs` — add SemaphoreSlim.
+### P2 — Safety and compat (research pass 4, 2026-06-20)
+
+- [ ] P2 — Detect CrystalDiskInfo as incompatible software
+  Why: CrystalDiskInfo is confirmed broken under nvmedisk.sys — it uses SCSI pass-through for SMART data, which the native driver does not implement. It is not currently detected or warned about, despite being the most popular third-party NVMe health tool.
+  Evidence: HotHardware confirmation; GigXP analysis; CrystalDiskInfo 9.9.1 still uses SCSI pass-through as of May 2026.
+  Touches: `src/NVMeDriverPatcher.Core/Services/DriveService.cs` — add CrystalDiskInfo detection pattern (service name or process name) to incompatible-software scan. Point users to `Get-StorageReliabilityCounter` as the replacement.
+  Acceptance: Preflight surfaces a Medium-severity warning when CrystalDiskInfo is installed; warning text explains SMART monitoring stops working and names the PowerShell alternative; no false positives on systems without it.
   Complexity: S
 
-- [ ] P2 — PowerShell: DiskSpd hash verification
-  Why: DiskSpd is downloaded from GitHub and executed as admin without SHA-256 hash verification. A compromised proxy could inject a malicious binary.
-  Touches: `NVMe_Driver_Patcher.ps1` lines 910-912.
+- [ ] P2 — Add Phison E18/E26 power-loss warning to preflight
+  Why: nvmedisk.sys can acknowledge writes before data physically reaches NAND. On Phison E18/E26 controllers specifically, power loss during writes causes RAW partition corruption ("Phantom Ack"). This is a firmware-level behavior the patcher can't fix, but users with these controllers need a UPS/power-protection advisory.
+  Evidence: GigXP technical analysis of MFT corruption mechanism; Overclock.net reports on Phison E18 instability.
+  Touches: `src/NVMeDriverPatcher.Core/Services/FirmwareCompatService.cs` or `PreflightService.cs` — when compat.json matches a Phison E18/E26 controller, surface a "power protection recommended" advisory alongside the existing compat level. `compat.json` entries for Phison should carry a `powerLossRisk` flag or note.
+  Acceptance: Preflight surfaces an advisory when a Phison E18/E26 controller is detected, recommending UPS/power protection; advisory does not block patching; test verifies the advisory triggers on Phison controller match.
   Complexity: S
 
-- [ ] P3 — ComboBox/Expander keyboard focus indicators
-  Why: `DarkComboBox` and `DarkExpander` suppress focus visuals via `FocusHidden` and have no substitute trigger. Keyboard users cannot see which control is focused.
-  Touches: `Themes/DarkTheme.xaml` ComboBox and Expander templates.
+- [ ] P2 — Enrich Event ID 129 watchdog guidance
+  Why: Storport Event ID 129 ("Reset to device") indicates command timeout / controller saturation — a sign the drive is struggling under the native driver. The watchdog already watches for it, but the user-facing verdict text does not explain what ID 129 means or that it specifically warrants immediate revert consideration.
+  Evidence: GigXP documents Event ID 129 as a "command saturation" signal requiring immediate revert; current `EventLogWatchdogService.BuildDetail()` counts the events but does not explain their significance.
+  Touches: `src/NVMeDriverPatcher.Core/Services/EventLogWatchdogService.cs` — enrich `BuildDetail` and `BuildSummary` with ID-129-specific guidance when those events are present. CLI `watchdog` output should name the event type. `DocsService` watchdog topic should mention it.
+  Acceptance: When watchdog detects Storport ID 129 events, the summary text includes "command timeout (Storport 129)" with a recommendation to consider revert; existing watchdog test fixtures updated.
   Complexity: S
 
-- [ ] P3 — FirmwareUpdateNudgeService: overly broad "ct" vendor pattern
-  Why: The `"ct"` pattern intended for Crucial drives matches any model containing "ct" (e.g., "Direct", "Connected"). Could show wrong firmware update guidance.
-  Touches: `Services/FirmwareUpdateNudgeService.cs`.
-  Complexity: S
+### P3 — Quality and distribution (research pass 4, 2026-06-20)
 
-- [ ] P3 — xunit 2.x / xunit.runner.visualstudio 3.x version alignment
-  Why: Cross-major pairing can cause subtle test discovery issues. Should be on consistent major version.
-  Touches: `tests/NVMeDriverPatcher.Tests/NVMeDriverPatcher.Tests.csproj`.
-  Complexity: S
+- [ ] P3 — Monitor SkiaSharp for libpng >= 1.6.55 and bump when available
+  Why: SkiaSharp 3.119.4 bundles libpng 1.6.54. CVE-2026-25646 (out-of-bounds read in `png_set_quantize()`) and CVE-2026-33416 (use-after-free) affect libpng < 1.6.55. Attack surface is low (requires crafted PNG in charting engine) but should be tracked.
+  Evidence: SentinelOne CVE-2026-25646; Powder Keg CVE-2026-33416; mono/SkiaSharp#3426.
+  Touches: `src/NVMeDriverPatcher/NVMeDriverPatcher.csproj` — bump all SkiaSharp packages when a version bundling libpng >= 1.6.55 ships. Run `ChartingSmokeTests` before and after per dependency update checklist.
+  Acceptance: All SkiaSharp packages updated to a version bundling libpng >= 1.6.55; `ChartingSmokeTests` pass; csproj comment updated with CVE references.
+  Complexity: S (when available)
+
+- [ ] P3 — Add `win-arm64` to release build matrix
+  Why: Windows on ARM (Snapdragon X Elite/Plus) is a growing market. nvmedisk.sys is x64-only today, so ARM64 builds provide diagnostic/status/monitoring value only — but the build change is low effort and future-proofs for when Microsoft ships an ARM64 variant. ViVeTool already ships split-arch assets (v0.3.4+).
+  Evidence: ARM64 WDK support confirmed (Microsoft Learn); Surface Pro 11 / Snapdragon X laptops use PCIe NVMe; no ARM64 nvmedisk.sys exists yet.
+  Touches: `.github/workflows/release.yml` — add `win-arm64` publish steps for GUI, CLI, Tray, Watchdog alongside existing `win-x64`. MSI may need a separate ARM64 build or a dual-arch approach. `packaging/release-artifacts.json` — add ARM64 entries.
+  Acceptance: Release workflow produces ARM64 self-contained exe artifacts with SHA-256 sidecars; ARM64 exe launches and shows "status" on an ARM64 machine (x64 emulation is fallback); release notes mention ARM64 as diagnostic-only until Microsoft ships the driver.
+  Complexity: M
