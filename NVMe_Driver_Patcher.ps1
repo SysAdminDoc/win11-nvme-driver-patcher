@@ -1910,11 +1910,23 @@ function Install-DiskSpd {
     if (Test-Path $diskSpdExe) { return $diskSpdExe }
 
     Write-Log "Downloading Microsoft DiskSpd benchmark tool..." -Level "INFO"
+    # Pinned to v2.2 release with known SHA-256 to prevent MITM binary substitution.
+    $zipUrl = "https://github.com/microsoft/diskspd/releases/download/v2.2/DiskSpd.ZIP"
+    $expectedHash = "496DF11E6375C1D564AF3F8F2990734D9AFC2B558469FD57B1BFFA9313A5A6CE"
+    $zipPath = Join-Path $diskSpdDir "DiskSpd.zip"
+
     try {
         if (-not (Test-Path $diskSpdDir)) { New-Item -Path $diskSpdDir -ItemType Directory -Force | Out-Null }
-        $zipUrl = "https://github.com/microsoft/diskspd/releases/latest/download/DiskSpd.ZIP"
-        $zipPath = Join-Path $diskSpdDir "DiskSpd.zip"
         Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
+
+        $actualHash = (Get-FileHash -Algorithm SHA256 -Path $zipPath).Hash
+        if ($actualHash -ne $expectedHash) {
+            Write-Log "DiskSpd hash mismatch: expected $expectedHash, got $actualHash -- aborting (possible tampering)" -Level "ERROR"
+            Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+            return $null
+        }
+        Write-Log "DiskSpd SHA-256 verified" -Level "INFO"
+
         Expand-Archive -Path $zipPath -DestinationPath $diskSpdDir -Force -ErrorAction Stop
         Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
         $exeFound = Get-ChildItem -Path $diskSpdDir -Recurse -Filter "diskspd.exe" |
