@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           # Resolves the SDK from global.json (exact pin + rollForward policy) so CI and
           # local builds can never silently diverge on SDK major version again.
