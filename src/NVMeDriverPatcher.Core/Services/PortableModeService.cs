@@ -12,9 +12,14 @@ public static class PortableModeService
 
     public static bool IsPortable()
     {
+        try { return IsPortable(AppContext.BaseDirectory); }
+        catch { return false; }
+    }
+
+    internal static bool IsPortable(string exeDir)
+    {
         try
         {
-            var exeDir = AppContext.BaseDirectory;
             if (string.IsNullOrEmpty(exeDir)) return false;
             return File.Exists(Path.Combine(exeDir, FlagFile));
         }
@@ -23,9 +28,14 @@ public static class PortableModeService
 
     public static string? PortableDataPath()
     {
+        try { return PortableDataPath(AppContext.BaseDirectory); }
+        catch { return null; }
+    }
+
+    internal static string? PortableDataPath(string exeDir)
+    {
         try
         {
-            var exeDir = AppContext.BaseDirectory;
             if (string.IsNullOrEmpty(exeDir)) return null;
             var dir = Path.Combine(exeDir, PortableDataDir);
             Directory.CreateDirectory(dir);
@@ -40,9 +50,18 @@ public static class PortableModeService
     /// </summary>
     public static bool Enable(Action<string>? log = null)
     {
+        try { return Enable(AppContext.BaseDirectory, log); }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[ERROR] Could not enable portable mode: {ex.Message}");
+            return false;
+        }
+    }
+
+    internal static bool Enable(string exeDir, Action<string>? log = null)
+    {
         try
         {
-            var exeDir = AppContext.BaseDirectory;
             var flag = Path.Combine(exeDir, FlagFile);
             File.WriteAllText(flag, $"Portable mode enabled at {DateTime.UtcNow:O}. Delete this file to return to shared ProgramData mode.");
             log?.Invoke($"[OK] Portable mode enabled. Data directory: {Path.Combine(exeDir, PortableDataDir)}");
@@ -57,9 +76,18 @@ public static class PortableModeService
 
     public static bool Disable(Action<string>? log = null)
     {
+        try { return Disable(AppContext.BaseDirectory, log); }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[ERROR] Could not disable portable mode: {ex.Message}");
+            return false;
+        }
+    }
+
+    internal static bool Disable(string exeDir, Action<string>? log = null)
+    {
         try
         {
-            var exeDir = AppContext.BaseDirectory;
             var flag = Path.Combine(exeDir, FlagFile);
             if (File.Exists(flag)) File.Delete(flag);
             log?.Invoke("[OK] Portable mode disabled. Data returns to %ProgramData%\\NVMePatcher on next launch.");
