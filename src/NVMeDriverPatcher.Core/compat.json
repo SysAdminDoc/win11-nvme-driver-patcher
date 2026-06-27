@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "updated": "2026-06-10",
-  "note": "Curated from community BSOD threads and vendor forums. 'level' applies to Native NVMe (nvmedisk.sys) operation. Patterns: controller substring (case-insensitive), firmware exact (case-insensitive) or '*' wildcard. Prefix with '=' for exact controller match. Unknown entries are treated as 'proceed with caution' in the UI.",
+  "updated": "2026-06-27",
+  "note": "Curated from community BSOD threads, vendor advisories, and storage forums. 'level' applies to Native NVMe (nvmedisk.sys) operation. Patterns: controller substring (case-insensitive), firmware exact (case-insensitive) or '*' wildcard. Prefix with '=' for exact controller match. Unknown entries are treated as 'proceed with caution' in the UI.",
   "entries": [
     {
       "controller": "Samsung SSD 990 PRO",
@@ -14,11 +14,20 @@
     },
     {
       "controller": "Samsung SSD 990 PRO",
+      "firmware": "7B2QJXD7",
+      "level": "Caution",
+      "note": "Community reports isolate 990 Pro 2TB random-write degradation after 7B2QJXD7. Benchmark before/after and update firmware if Samsung publishes a replacement.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://forums.anandtech.com/threads/samsung-990-pro-2tb-performance-degradation-after-7b2qjxd7-firmware-upgrade-capacity-specific-bug.2632571/"
+    },
+    {
+      "controller": "Samsung SSD 990 PRO",
       "firmware": "*",
       "level": "Good",
-      "note": "Reported stable on 4B2QJXD7 and later.",
+      "note": "Reported stable on 4B2QJXD7 and later except separately flagged firmware builds.",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-10",
+      "lastReviewed": "2026-06-27",
       "sourceUrl": "https://windowsforum.com/threads/native-nvme-on-windows-11-registry-hack-delivers-gains-with-risks.394775/"
     },
     {
@@ -40,48 +49,133 @@
     {
       "controller": "WD_BLACK SN850X",
       "firmware": "*",
-      "level": "Good",
-      "note": "Stable on latest 620331WD and later firmware.",
+      "level": "Bad",
+      "note": "Community reports tie SN850X to Critical Failure / boot-loop behavior under nvmedisk.sys. Keep this model on stornvme.sys unless you have local recovery coverage and a known-good firmware result.",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
+    },
+    {
+      "controller": "WD_BLACK SN770",
+      "firmware": "731130WD",
+      "level": "Good",
+      "note": "WD 2TB HMB BSOD fix firmware. Firmware 731130WD or later is the vendor-recommended baseline before evaluating nvmedisk.sys.",
+      "confidence": "vendor-advisory",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://support-en.sandisk.com/app/answers/detailweb/a_id/51469"
     },
     {
       "controller": "WD_BLACK SN770",
       "firmware": "*",
+      "level": "Caution",
+      "note": "2TB SN770 HMB BSOD risk before firmware 731130WD. Update firmware first; nvmedisk.sys can compound instability while the HMB issue is present.",
+      "confidence": "vendor-advisory",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://support-en.sandisk.com/app/answers/detailweb/a_id/51469"
+    },
+    {
+      "controller": "WD_BLACK SN770M",
+      "firmware": "731130WD",
       "level": "Good",
-      "note": "No BSOD reports. SN770 on latest firmware is the most common 'works fine' report.",
-      "confidence": "community-reported",
-      "lastReviewed": "2026-06-10"
+      "note": "WD 2TB HMB BSOD fix firmware. Firmware 731130WD or later is the vendor-recommended baseline before evaluating nvmedisk.sys.",
+      "confidence": "vendor-advisory",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://support-en.sandisk.com/app/answers/detailweb/a_id/51469"
+    },
+    {
+      "controller": "WD_BLACK SN770M",
+      "firmware": "*",
+      "level": "Caution",
+      "note": "2TB SN770M HMB BSOD risk before firmware 731130WD. Update firmware first; nvmedisk.sys can compound instability while the HMB issue is present.",
+      "confidence": "vendor-advisory",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://support-en.sandisk.com/app/answers/detailweb/a_id/51469"
+    },
+    {
+      "controller": "WD Blue SN580",
+      "firmware": "281050WD",
+      "level": "Good",
+      "note": "WD 2TB HMB BSOD fix firmware. Firmware 281050WD or later is the vendor-recommended baseline before evaluating nvmedisk.sys.",
+      "confidence": "vendor-advisory",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://support-en.sandisk.com/app/answers/detailweb/a_id/51469"
+    },
+    {
+      "controller": "WD Blue SN580",
+      "firmware": "*",
+      "level": "Caution",
+      "note": "2TB SN580 HMB BSOD risk before firmware 281050WD. Update firmware first; nvmedisk.sys can compound instability while the HMB issue is present.",
+      "confidence": "vendor-advisory",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://support-en.sandisk.com/app/answers/detailweb/a_id/51469"
+    },
+    {
+      "controller": "WD Blue SN5000",
+      "firmware": "291020WD",
+      "level": "Good",
+      "note": "WD 2TB HMB BSOD fix firmware. Firmware 291020WD or later is the vendor-recommended baseline before evaluating nvmedisk.sys.",
+      "confidence": "vendor-advisory",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://support-en.sandisk.com/app/answers/detailweb/a_id/51469"
+    },
+    {
+      "controller": "WD Blue SN5000",
+      "firmware": "*",
+      "level": "Caution",
+      "note": "2TB SN5000 HMB BSOD risk before firmware 291020WD. Update firmware first; nvmedisk.sys can compound instability while the HMB issue is present.",
+      "confidence": "vendor-advisory",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://support-en.sandisk.com/app/answers/detailweb/a_id/51469"
+    },
+    {
+      "controller": "SanDisk Extreme M.2 NVMe",
+      "firmware": "731130WD",
+      "level": "Good",
+      "note": "WD/SanDisk 2TB HMB BSOD fix firmware. Firmware 731130WD or later is the vendor-recommended baseline before evaluating nvmedisk.sys.",
+      "confidence": "vendor-advisory",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://support-en.sandisk.com/app/answers/detailweb/a_id/51469"
+    },
+    {
+      "controller": "SanDisk Extreme M.2 NVMe",
+      "firmware": "*",
+      "level": "Caution",
+      "note": "2TB SanDisk Extreme M.2 NVMe HMB BSOD risk before firmware 731130WD. Update firmware first; nvmedisk.sys can compound instability while the HMB issue is present.",
+      "confidence": "vendor-advisory",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://support-en.sandisk.com/app/answers/detailweb/a_id/51469"
     },
     {
       "controller": "CT1000P3",
       "firmware": "*",
       "level": "Caution",
-      "note": "Crucial P3 — some reports of paging errors under sustained 4K random write on early firmware. Benchmark with the watchdog active.",
+      "note": "Crucial P3 - some reports of paging errors under sustained 4K random write on early firmware. Benchmark with the watchdog active.",
       "confidence": "community-reported",
       "lastReviewed": "2026-06-10"
     },
     {
       "controller": "SK hynix Platinum P41",
       "firmware": "*",
-      "level": "Good",
-      "note": "Phison E18 controller, stable.",
+      "level": "Caution",
+      "note": "Mixed community benchmark result: stable reports exist, but gains are negligible on some P41 systems. Benchmark before/after and keep rollback ready.",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
     },
     {
       "controller": "KINGSTON SKC3000",
       "firmware": "*",
-      "level": "Good",
-      "note": "Phison E18, stable.",
+      "level": "Caution",
+      "note": "Phison E18-based drive. Community reports warn about power-loss corruption risk under nvmedisk.sys write acknowledgement behavior; use UPS/power protection and keep backups current.",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
     },
     {
       "controller": "Intel SSDPEKNU",
       "firmware": "*",
       "level": "Bad",
-      "note": "Intel 670p / 665p — known to hang under Native NVMe. Keep on stornvme.sys.",
+      "note": "Intel 670p / 665p - known to hang under Native NVMe. Keep on stornvme.sys.",
       "confidence": "community-reported",
       "lastReviewed": "2026-06-10",
       "sourceUrl": "https://www.overclock.net/threads/enable-native-nvme-driver-in-windows-11-24h2-25h2-with-last-update.1818467/"
@@ -90,18 +184,55 @@
       "controller": "Sabrent Rocket",
       "firmware": "*",
       "level": "Caution",
-      "note": "Phison controllers — stable on current firmware, update first.",
+      "note": "Phison-based Rocket models need current firmware plus power-loss protection; community reports warn about RAW partition corruption risk during writes under nvmedisk.sys.",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
     },
     {
       "controller": "Phison",
       "firmware": "EIFM72.1",
       "level": "Bad",
-      "note": "Early Phison E18 firmware — avoid Native NVMe, update drive first.",
+      "note": "Early Phison E18 firmware - avoid Native NVMe, update drive first.",
       "confidence": "community-reported",
       "lastReviewed": "2026-06-10",
       "sourceUrl": "https://www.overclock.net/threads/enable-native-nvme-driver-in-windows-11-24h2-25h2-with-last-update.1818467/"
+    },
+    {
+      "controller": "Phison E18",
+      "firmware": "*",
+      "level": "Caution",
+      "note": "Community reports warn Phison E18 platforms can expose RAW partition corruption after power loss while writes are in flight under nvmedisk.sys. Use UPS/power protection and keep backups current.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
+    },
+    {
+      "controller": "Phison E26",
+      "firmware": "*",
+      "level": "Caution",
+      "note": "Community reports warn Phison E26 platforms can expose RAW partition corruption after power loss while writes are in flight under nvmedisk.sys. Use UPS/power protection and keep backups current.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
+    },
+    {
+      "controller": "Corsair MP600",
+      "firmware": "*",
+      "level": "Caution",
+      "note": "Phison-based MP600 models need current firmware plus power-loss protection; community reports warn about RAW partition corruption risk during writes under nvmedisk.sys.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
+    },
+    {
+      "controller": "Seagate FireCuda 530",
+      "firmware": "*",
+      "level": "Caution",
+      "note": "Phison E18-based drive. Community reports warn about RAW partition corruption risk during writes under nvmedisk.sys; use UPS/power protection and keep backups current.",
+      "confidence": "community-reported",
+      "lastReviewed": "2026-06-27",
+      "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
     }
   ],
   "cveAdvisories": [

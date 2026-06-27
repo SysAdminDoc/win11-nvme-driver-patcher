@@ -10,13 +10,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P2 — Safety and UX
 
-- [ ] P2 — Expand compat.json with community-reported problem firmware (8+ new entries)
-  Why: Community reports document boot loops, HMB BSODs, performance degradation, and power-loss data corruption on specific controller/firmware combinations not currently in compat.json. Current DB has 12 entries; at least 8 more are documented.
-  Evidence: WD SN850X boot loops (GigXP "Critical Failure"); WD SN770/SN580/SN5000 2TB HMB BSOD with specific fix firmware (SanDisk KB51469); Samsung 990 Pro 2TB 7B2QJXD7 degradation (AnandTech Forums); SK Hynix P41 negligible gains (HotHardware benchmark); Phison E18/E26 RAW partition on power loss (GigXP "Phantom Ack"); https://gigxp.com/windows-11-native-nvme-driver/ ; https://support-en.sandisk.com/app/answers/detailweb/a_id/51469
-  Touches: `src/NVMeDriverPatcher.Core/compat.json` — add entries: WD SN850X (`Bad`), WD SN770/SN580/SN5000 2TB pre-fix firmware (`Caution` with fix firmware note), Samsung 990 Pro 2TB 7B2QJXD7 (`Caution`), SK Hynix P41 (`Caution` advisory for negligible gains), Phison E18/E26 (`Caution` with power-loss warning). `FirmwareCompatService` tests to verify new entries parse and match.
-  Acceptance: Preflight flags a warning for at least 5 newly-documented problematic firmware/controller combinations; existing compat tests pass; schema validation passes.
-  Complexity: S
-
 - [ ] P2 — Enhance BypassIO/DirectStorage regression warning with named games
   Why: Current BypassIO warning is generic ("BypassIO not supported"). nvmedisk.sys vetoes BypassIO, forcing DirectStorage games back to legacy I/O paths. Confirmed affected: Ratchet & Clank: Rift Apart, Forspoken, Forza Motorsport, Horizon Forbidden West. EasyAntiCheat's EOSSys.sys also vetoes BypassIO independently, compounding issues. Users need actionable guidance, not a boolean flag.
   Evidence: GigXP detailed analysis; PCWorld DirectStorage adoption report; ElevenForum EAC thread; https://gigxp.com/windows-11-native-nvme-driver/ ; https://www.pcworld.com/article/2609584/what-happened-to-directstorage-why-dont-more-pc-games-use-it.html
