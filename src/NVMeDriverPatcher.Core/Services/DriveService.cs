@@ -64,6 +64,7 @@ public static class DriveService
     private static readonly Regex RxUrBackup   = new(@"UrBackup|UrBackupClientBackend", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex RxNinjaOne   = new(@"NinjaOne|NinjaRMM|NinjaRMMAgent|NinjaAgent", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex RxParagon    = new(@"Paragon|UimFIO|Uim_IM|psmounter", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxCrystalDiskInfo = new(@"^(CrystalDiskInfo|DiskInfo|DiskInfo32|DiskInfo64|DiskInfoA64)(\.exe)?$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Pre-compiled patterns for fsutil bypassio output parsing.
     private static readonly Regex RxStorageType   = new(@"Storage Type:\s*(.+)",   RegexOptions.Compiled);
@@ -715,6 +716,20 @@ public static class DriveService
                 if (!string.IsNullOrEmpty(name)) allServices.Add(name);
             }
 
+            var allProcesses = new List<string>();
+            try
+            {
+                using var processSearch = new ManagementObjectSearcher("SELECT Name, ExecutablePath FROM Win32_Process");
+                foreach (var p in Enumerate(processSearch))
+                {
+                    var name = p["Name"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(name)) allProcesses.Add(name);
+                    var path = p["ExecutablePath"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(path)) allProcesses.Add(path);
+                }
+            }
+            catch { }
+
             if (allServices.Any(s => RxAcronis.IsMatch(s)))
                 found.Add(new() { Name = "Acronis", Severity = "High", Message = "Backup cannot see drives under Storage disks category" });
 
@@ -819,6 +834,19 @@ public static class DriveService
                 if (paths.Any(Directory.Exists))
                     found.Add(new() { Name = name, Severity = "Low", Message = "Will not detect drives under native NVMe (uses SCSI pass-through)" });
             }
+
+            var crystalPaths = new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "CrystalDiskInfo"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "CrystalDiskInfo"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Crystal Dew World", "CrystalDiskInfo"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Crystal Dew World", "CrystalDiskInfo")
+            };
+            if (DetectCrystalDiskInfo(allServices.Concat(allProcesses).Concat(crystalPaths.Where(Directory.Exists)))
+                && found.All(f => f.Name != "CrystalDiskInfo"))
+            {
+                found.Add(CrystalDiskInfoFinding());
+            }
         }
         catch { }
         return found;
@@ -861,6 +889,41 @@ public static class DriveService
                           "the NVMe driver swap."
             });
 
+        if (DetectCrystalDiskInfo(allServices))
+            found.Add(CrystalDiskInfoFinding());
+
         return found;
     }
+
+    internal static bool DetectCrystalDiskInfo(IEnumerable<string> processServiceOrPathNames) =>
+        processServiceOrPathNames.Any(IsCrystalDiskInfoName);
+
+    internal static bool IsCrystalDiskInfoName(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate)) return false;
+        var value = candidate.Trim();
+
+        string leaf;
+        try
+        {
+            leaf = Path.GetFileName(value);
+        }
+        catch
+        {
+            leaf = value;
+        }
+
+        if (RxCrystalDiskInfo.IsMatch(leaf)) return true;
+
+        var normalized = value.Replace('/', '\\');
+        return normalized.Contains("\\CrystalDiskInfo\\", StringComparison.OrdinalIgnoreCase)
+               || normalized.EndsWith("\\CrystalDiskInfo", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IncompatibleSoftwareInfo CrystalDiskInfoFinding() => new()
+    {
+        Name = "CrystalDiskInfo",
+        Severity = "Medium",
+        Message = "SMART monitoring uses SCSI pass-through and may stop reading NVMe health under nvmedisk.sys; use Get-StorageReliabilityCounter instead."
+    };
 }

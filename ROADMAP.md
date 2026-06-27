@@ -12,13 +12,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P2 — Safety and compat (research pass 4, 2026-06-20)
 
-- [ ] P2 — Detect CrystalDiskInfo as incompatible software
-  Why: CrystalDiskInfo is confirmed broken under nvmedisk.sys — it uses SCSI pass-through for SMART data, which the native driver does not implement. It is not currently detected or warned about, despite being the most popular third-party NVMe health tool.
-  Evidence: HotHardware confirmation; GigXP analysis; CrystalDiskInfo 9.9.1 still uses SCSI pass-through as of May 2026.
-  Touches: `src/NVMeDriverPatcher.Core/Services/DriveService.cs` — add CrystalDiskInfo detection pattern (service name or process name) to incompatible-software scan. Point users to `Get-StorageReliabilityCounter` as the replacement.
-  Acceptance: Preflight surfaces a Medium-severity warning when CrystalDiskInfo is installed; warning text explains SMART monitoring stops working and names the PowerShell alternative; no false positives on systems without it.
-  Complexity: S
-
 - [ ] P2 — Add Phison E18/E26 power-loss warning to preflight
   Why: nvmedisk.sys can acknowledge writes before data physically reaches NAND. On Phison E18/E26 controllers specifically, power loss during writes causes RAW partition corruption ("Phantom Ack"). This is a firmware-level behavior the patcher can't fix, but users with these controllers need a UPS/power-protection advisory.
   Evidence: GigXP technical analysis of MFT corruption mechanism; Overclock.net reports on Phison E18 instability.
