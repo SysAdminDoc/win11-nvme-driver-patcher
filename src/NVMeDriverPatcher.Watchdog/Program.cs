@@ -15,6 +15,7 @@ namespace NVMeDriverPatcher.Watchdog;
 // state to watchdog.json so the GUI / CLI picks up the latest verdict.
 //
 // `/install` registers the service under LocalService with a restricted SID.
+// `/grant-eventlog` grants that identity read access to the System channel.
 // `/uninstall` removes it. Without arguments it runs as an interactive console.
 internal static class Program
 {
@@ -49,11 +50,16 @@ internal static class Program
     private static bool IsControlVerb(string arg) =>
         arg.Equals("/install", StringComparison.OrdinalIgnoreCase) ||
         arg.Equals("/uninstall", StringComparison.OrdinalIgnoreCase) ||
+        arg.Equals("/grant-eventlog", StringComparison.OrdinalIgnoreCase) ||
         arg.Equals("--install", StringComparison.OrdinalIgnoreCase) ||
-        arg.Equals("--uninstall", StringComparison.OrdinalIgnoreCase);
+        arg.Equals("--uninstall", StringComparison.OrdinalIgnoreCase) ||
+        arg.Equals("--grant-eventlog", StringComparison.OrdinalIgnoreCase);
 
     private static int HandleServiceControl(string verb)
     {
+        if (verb.Contains("grant-eventlog", StringComparison.OrdinalIgnoreCase))
+            return GrantEventLogAccess(warnOnly: false);
+
         bool install = verb.EndsWith("install", StringComparison.OrdinalIgnoreCase) && !verb.Contains("uninstall");
         string exe = Environment.ProcessPath ?? "NVMeDriverPatcher.Watchdog.exe";
         if (install)
@@ -67,9 +73,30 @@ internal static class Program
             rc = RunSc("sidtype", ServiceName, "restricted");
             if (rc != 0)
                 Console.Error.WriteLine($"Warning: could not set restricted SID (sc sidtype exit {rc}). Service will still run under LocalService.");
+            GrantEventLogAccess(warnOnly: true);
             return 0;
         }
         return RunSc("delete", ServiceName);
+    }
+
+    private static int GrantEventLogAccess(bool warnOnly)
+    {
+        var result = EventLogChannelAclService.EnsureSystemLogLocalServiceReadAccess();
+        if (result.Success)
+        {
+            Console.WriteLine(result.Summary);
+            return 0;
+        }
+
+        var message = $"{result.Summary} {result.Error}";
+        if (warnOnly)
+        {
+            Console.Error.WriteLine($"Warning: {message}");
+            return 0;
+        }
+
+        Console.Error.WriteLine(message);
+        return 1;
     }
 
     private static int RunSc(params string[] args)

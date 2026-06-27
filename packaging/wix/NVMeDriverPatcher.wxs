@@ -54,6 +54,19 @@
     </UI>
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
 
+    <CustomAction Id="GrantWatchdogSystemLogRead"
+                  FileRef="WatchdogExeFile"
+                  ExeCommand="/grant-eventlog"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="no" />
+
+    <InstallExecuteSequence>
+      <Custom Action="GrantWatchdogSystemLogRead"
+              Before="StartServices"
+              Condition="&amp;WatchdogService=3" />
+    </InstallExecuteSequence>
+
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="NVMe Driver Patcher" />
     </StandardDirectory>
