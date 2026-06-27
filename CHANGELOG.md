@@ -18,6 +18,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   All read commands now use `--json` via `Invoke-CliJson` — no regex parsing remains.
 - **WmiQueryHelper** — centralized 30s timeout wrapper for all `ManagementObjectSearcher` calls
   across 11 services. Prevents WMI provider hangs from freezing the GUI.
+- **Safety-service unit coverage** — added pure fixtures for `BackupIntegrityService`,
+  `PortableModeService`, `WmiQueryHelper`, `TuningProfileIoService`, and `ReliabilityService`,
+  covering backup parsing, portable-mode flags, timeout option wiring, tuning JSON round-trips,
+  and Reliability Monitor correlation math.
 
 ### Security
 - **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the

@@ -8,15 +8,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ## Research-Driven Additions
 
-### P1 — Reliability and trust
-
-- [ ] P1 — Add tests for untested safety-critical services
-  Why: 11 Core services have zero test files. Several have pure-logic paths testable without admin privileges: `BackupIntegrityService` (hash verification), `PortableModeService` (flag detection), `WmiQueryHelper` (timeout option wiring), `TuningProfileIoService` (JSON round-trip), `ReliabilityService` (correlation math from canned data).
-  Evidence: Test coverage gap analysis — cross-referencing `src/NVMeDriverPatcher.Core/Services/*.cs` against `tests/NVMeDriverPatcher.Tests/*Tests.cs`.
-  Touches: New test files in `tests/NVMeDriverPatcher.Tests/` for at minimum: `BackupIntegrityServiceTests.cs`, `PortableModeServiceTests.cs`, `WmiQueryHelperTests.cs`, `TuningProfileIoServiceTests.cs`, `ReliabilityServiceTests.cs`.
-  Acceptance: Each new test file contains at least 2 fixtures testing the pure-logic decision paths; all pass; total test count increases by 10+; CI remains green.
-  Complexity: M
-
 ### P2 — Safety and UX
 
 - [ ] P2 — Expand compat.json with community-reported problem firmware (8+ new entries)

@@ -33,7 +33,7 @@ public static class ReliabilityService
 
     public static ReliabilityCorrelationReport GetCorrelation(DateTime? patchAppliedAt)
     {
-        var report = new ReliabilityCorrelationReport { PatchAppliedAt = patchAppliedAt };
+        var points = new List<ReliabilityPoint>();
 
         try
         {
@@ -57,7 +57,7 @@ public static class ReliabilityService
                         var ts = ManagementDateTimeConverter.ToDateTime(dmtf).ToUniversalTime();
                         if (ts < cutoff) continue;
                         var idx = Convert.ToDouble(row["SystemStabilityIndex"], System.Globalization.CultureInfo.InvariantCulture);
-                        report.Series.Add(new ReliabilityPoint { Timestamp = ts, Index = idx });
+                        points.Add(new ReliabilityPoint { Timestamp = ts, Index = idx });
                     }
                     catch { /* one malformed row shouldn't nuke the whole query */ }
                 }
@@ -65,12 +65,29 @@ public static class ReliabilityService
         }
         catch
         {
-            report.DataAvailable = false;
-            report.Summary = "Reliability Monitor data unavailable (service not started or query denied).";
-            return report;
+            return new ReliabilityCorrelationReport
+            {
+                PatchAppliedAt = patchAppliedAt,
+                DataAvailable = false,
+                Summary = "Reliability Monitor data unavailable (service not started or query denied)."
+            };
         }
 
-        report.Series = report.Series.OrderBy(p => p.Timestamp).ToList();
+        return BuildCorrelationReport(points, patchAppliedAt, DateTime.UtcNow);
+    }
+
+    internal static ReliabilityCorrelationReport BuildCorrelationReport(
+        IEnumerable<ReliabilityPoint> points,
+        DateTime? patchAppliedAt,
+        DateTime utcNow)
+    {
+        var report = new ReliabilityCorrelationReport { PatchAppliedAt = patchAppliedAt };
+        var cutoff = utcNow - LookbackWindow;
+        report.Series = points
+            .Where(p => p.Timestamp >= cutoff)
+            .OrderBy(p => p.Timestamp)
+            .ToList();
+
         report.DataAvailable = report.Series.Count > 0;
         if (!report.DataAvailable)
         {

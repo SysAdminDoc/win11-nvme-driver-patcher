@@ -10,14 +10,15 @@ public static class WmiQueryHelper
         ManagementObjectSearcher searcher,
         TimeSpan? timeout = null)
     {
-        var options = new System.Management.EnumerationOptions
-        {
-            Timeout = timeout ?? DefaultTimeout,
-            ReturnImmediately = true
-        };
-        searcher.Options = options;
+        searcher.Options = CreateEnumerationOptions(timeout);
         return searcher.Get();
     }
+
+    internal static System.Management.EnumerationOptions CreateEnumerationOptions(TimeSpan? timeout = null) => new()
+    {
+        Timeout = timeout ?? DefaultTimeout,
+        ReturnImmediately = true
+    };
 
     public static ManagementObjectCollection ExecuteWithTimeout(
         string query,
