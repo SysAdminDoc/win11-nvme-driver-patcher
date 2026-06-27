@@ -966,15 +966,12 @@ public partial class MainViewModel : ObservableObject
 
             if (enabledCount == 0)
             {
-                DirectStorageImpactText = "BypassIO is not active on any volume. DirectStorage games will not be affected by the patch.";
+                DirectStorageImpactText = BypassIoInspectorService.BuildGamingImpactSummary(volumes);
                 DirectStorageImpactSeverity = "Info";
             }
             else
             {
-                var volumeList = string.Join(", ", volumes.Where(v => v.Enabled).Select(v => v.Letter));
-                DirectStorageImpactText = $"BypassIO is active on {enabledCount} volume(s) ({volumeList}). " +
-                    "After patching, nvmedisk.sys will veto BypassIO — DirectStorage games on these volumes will fall back to a slower I/O path. " +
-                    "Consider using per-drive scope to keep gaming drives on stornvme.sys.";
+                DirectStorageImpactText = BypassIoInspectorService.BuildGamingImpactSummary(volumes);
                 DirectStorageImpactSeverity = "Warning";
             }
             DirectStoragePanelVisible = true;
@@ -1184,9 +1181,13 @@ public partial class MainViewModel : ObservableObject
             // BypassIO / DirectStorage — elevated from an afterthought to a first-class
             // warning. nvmedisk.sys vetoes BypassIO, which hurts DirectStorage games.
             if (_preflight.BypassIOStatus?.Supported == true)
-                warnings.Add("DirectStorage tradeoff — BypassIO is active on the system drive. nvmedisk.sys does not support it, so DirectStorage games may fall back to a slower path.");
+                warnings.Add(string.IsNullOrWhiteSpace(_preflight.BypassIOStatus.GamingImpact)
+                    ? $"DirectStorage impact: BypassIO is active on the system drive. nvmedisk.sys can force DirectStorage titles such as {DriveService.DirectStorageGameExamplesText} onto legacy I/O."
+                    : _preflight.BypassIOStatus.GamingImpact);
             else
-                notes.Add("DirectStorage — BypassIO is not active on the system drive, so games should not notice the switch.");
+                notes.Add(_preflight.BypassIOStatus is not null && !string.IsNullOrWhiteSpace(_preflight.BypassIOStatus.GamingImpact)
+                    ? _preflight.BypassIOStatus.GamingImpact
+                    : "DirectStorage impact: BypassIO is not active on the system drive, so games should not notice the switch.");
 
             var ssdTools = _preflight.IncompatibleSoftware.Where(s => s.Message.Contains("SCSI pass-through")).ToList();
             if (ssdTools.Count > 0)

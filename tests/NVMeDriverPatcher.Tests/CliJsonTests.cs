@@ -90,6 +90,7 @@ public sealed class CliJsonTests
         {
             Supported = false, StorageType = "NVMe", DriverCompat = "nvmedisk.sys",
             BlockedBy = "native stack", Warning = "DirectStorage slower",
+            GamingImpact = "Ratchet impact",
         };
         var data = Parse("bypassio", CliJson.BuildBypassIo(result)).GetProperty("data");
 
@@ -98,6 +99,7 @@ public sealed class CliJsonTests
         Assert.Equal("nvmedisk.sys", data.GetProperty("driverCompat").GetString());
         Assert.Equal("native stack", data.GetProperty("blockedBy").GetString());
         Assert.Equal("DirectStorage slower", data.GetProperty("warning").GetString());
+        Assert.Equal("Ratchet impact", data.GetProperty("gamingImpact").GetString());
     }
 
     [Fact]

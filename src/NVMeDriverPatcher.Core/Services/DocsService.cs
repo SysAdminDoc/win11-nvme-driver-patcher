@@ -16,6 +16,7 @@ Available topics:
   profiles         Safe vs Full patch profiles.
   recovery         How to recover if the system won't boot.
   watchdog         The post-patch stability watchdog + auto-revert.
+  bypassio         DirectStorage / BypassIO gaming impact.
   vivetool         The post-block ViVeTool fallback path.
   firmware         Controller/firmware compatibility hints.
   gpo              Group Policy / ADMX deployment for fleets.
@@ -58,6 +59,13 @@ BugCheck 1001, Kernel-Power 41) inside a user-configurable window (default 48h).
 count crosses the revert threshold AND AutoRevertEnabled is true, the next-boot
 AutoRevertService stages an uninstall. Tune via HKLM Policies or the CLI's
 `register-tasks` + watchdog.json.
+",
+        ["bypassio"] = @"
+nvmedisk.sys vetoes BypassIO, so DirectStorage titles such as Ratchet & Clank: Rift Apart,
+Forspoken, Forza Motorsport, and Horizon Forbidden West can fall back to legacy I/O with
+higher CPU use or stutter. Keep game-library drives on stornvme.sys with per-drive scope
+when gaming performance matters. EasyAntiCheat's EOSSys.sys can also veto BypassIO
+independently, so an EOSSys.sys blocker is separate from the storage-driver choice.
 ",
         ["vivetool"] = @"
 Microsoft silently neutered the FeatureManagement override path on early 2026 Insider

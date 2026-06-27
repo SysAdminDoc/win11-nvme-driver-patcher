@@ -9,6 +9,7 @@ public sealed class DocsServiceTests
     [InlineData("profiles")]
     [InlineData("recovery")]
     [InlineData("watchdog")]
+    [InlineData("bypassio")]
     [InlineData("vivetool")]
     [InlineData("firmware")]
     [InlineData("gpo")]

@@ -72,6 +72,7 @@ public static class CliJson
         DriverCompat = result.DriverCompat,
         BlockedBy = result.BlockedBy,
         Warning = result.Warning,
+        GamingImpact = result.GamingImpact,
     };
 
     public static ControllersJson BuildControllers(PerControllerAuditReport report) => new()
@@ -222,6 +223,7 @@ public sealed class BypassIoJson
     public string DriverCompat { get; set; } = string.Empty;
     public string BlockedBy { get; set; } = string.Empty;
     public string Warning { get; set; } = string.Empty;
+    public string GamingImpact { get; set; } = string.Empty;
 }
 
 public sealed class ControllerJson

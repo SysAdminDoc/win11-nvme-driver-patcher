@@ -339,7 +339,17 @@ public static class PreflightService
             if (result.BypassIOStatus is not null && result.BypassIOStatus.Supported)
                 checks["BypassIO"] = new(CheckStatus.Pass, "Supported");
             else if (result.NativeNVMeStatus is not null && result.NativeNVMeStatus.IsActive)
-                checks["BypassIO"] = new(CheckStatus.Warning, "Not supported (gaming impact)");
+            {
+                var bypassWarning = result.BypassIOStatus is null
+                    ? string.Empty
+                    : !string.IsNullOrWhiteSpace(result.BypassIOStatus.Warning)
+                        ? result.BypassIOStatus.Warning
+                        : result.BypassIOStatus.GamingImpact;
+                checks["BypassIO"] = new(CheckStatus.Warning,
+                    string.IsNullOrWhiteSpace(bypassWarning)
+                        ? "BypassIO not supported; DirectStorage games may fall back to legacy I/O."
+                        : bypassWarning);
+            }
             else
             {
                 string blockedMsg = result.BypassIOStatus is not null && !string.IsNullOrEmpty(result.BypassIOStatus.BlockedBy)

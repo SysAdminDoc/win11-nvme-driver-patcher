@@ -25,6 +25,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **Firmware compatibility DB refresh** — added source-backed warnings for WD/SanDisk 2TB HMB
   BSOD firmware baselines, WD SN850X Critical Failure reports, Samsung 990 Pro 2TB `7B2QJXD7`
   degradation, SK hynix Platinum P41 mixed performance, and Phison E18/E26 power-loss risk.
+- **BypassIO gaming-impact guidance** — preflight, GUI, CLI, JSON output, and offline docs now
+  name DirectStorage titles affected by `nvmedisk.sys` BypassIO vetoes and recommend per-drive
+  scope for game-library drives.
 
 ### Security
 - **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the
