@@ -71,6 +71,16 @@ public static class DriveService
     private static readonly Regex RxDriverName    = new(@"Driver Name:\s*(.+)",    RegexOptions.Compiled);
     private static readonly Regex RxDriverSys     = new(@"Driver:\s*(\S+\.sys)",   RegexOptions.Compiled);
 
+    public static readonly IReadOnlyList<string> DirectStorageGameExamples =
+    [
+        "Ratchet & Clank: Rift Apart",
+        "Forspoken",
+        "Forza Motorsport",
+        "Horizon Forbidden West"
+    ];
+
+    public static string DirectStorageGameExamplesText => string.Join(", ", DirectStorageGameExamples);
+
     public static List<SystemDrive> GetSystemDrives()
     {
         var drives = new List<SystemDrive>();
@@ -425,15 +435,42 @@ public static class DriveService
                 if (blockedAlt.Success) result.BlockedBy = blockedAlt.Groups[1].Value.Trim();
             }
 
-            if (!result.Supported && result.StorageType == "NVMe")
-                result.Warning = "Native NVMe driver does not support BypassIO. DirectStorage games may have higher CPU usage.";
+            result.GamingImpact = BuildBypassIoGamingImpact(result);
+            if (!result.Supported && IsNvmeStorage(result.StorageType))
+                result.Warning = result.GamingImpact;
         }
         catch (Exception ex)
         {
             result.RawOutput = $"Unable to check BypassIO: {ex.Message}";
+            result.GamingImpact = BuildBypassIoGamingImpact(result);
         }
         return result;
     }
+
+    internal static string BuildBypassIoGamingImpact(BypassIOResult result)
+    {
+        var blocker = string.IsNullOrWhiteSpace(result.BlockedBy)
+            ? "the current storage stack"
+            : result.BlockedBy.Trim();
+
+        if (result.Supported)
+        {
+            return $"DirectStorage impact: BypassIO is currently available. If this drive is patched to nvmedisk.sys, DirectStorage titles such as {DirectStorageGameExamplesText} can fall back to legacy I/O with higher CPU use or stutter. Keep game-library drives on stornvme.sys with per-drive scope when gaming performance matters.";
+        }
+
+        if (IsNvmeStorage(result.StorageType))
+        {
+            var eac = blocker.Contains("EOSSys", StringComparison.OrdinalIgnoreCase)
+                ? " EasyAntiCheat's EOSSys.sys is the current BypassIO veto, so address that driver separately from the storage-driver choice."
+                : " EasyAntiCheat's EOSSys.sys can also veto BypassIO independently on systems using that anti-cheat driver.";
+            return $"DirectStorage impact: BypassIO is blocked by {blocker}. DirectStorage titles such as {DirectStorageGameExamplesText} can fall back to legacy I/O with higher CPU use or stutter. Keep game-library drives on stornvme.sys with per-drive scope when gaming performance matters.{eac}";
+        }
+
+        return "DirectStorage impact: no NVMe BypassIO regression detected on the queried system drive.";
+    }
+
+    private static bool IsNvmeStorage(string storageType) =>
+        string.Equals(storageType, "NVMe", StringComparison.OrdinalIgnoreCase);
 
     internal static string? NormalizeDriveRoot(string? drive)
     {

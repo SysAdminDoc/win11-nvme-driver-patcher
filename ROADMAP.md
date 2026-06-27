@@ -10,13 +10,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P2 — Safety and UX
 
-- [ ] P2 — Enhance BypassIO/DirectStorage regression warning with named games
-  Why: Current BypassIO warning is generic ("BypassIO not supported"). nvmedisk.sys vetoes BypassIO, forcing DirectStorage games back to legacy I/O paths. Confirmed affected: Ratchet & Clank: Rift Apart, Forspoken, Forza Motorsport, Horizon Forbidden West. EasyAntiCheat's EOSSys.sys also vetoes BypassIO independently, compounding issues. Users need actionable guidance, not a boolean flag.
-  Evidence: GigXP detailed analysis; PCWorld DirectStorage adoption report; ElevenForum EAC thread; https://gigxp.com/windows-11-native-nvme-driver/ ; https://www.pcworld.com/article/2609584/what-happened-to-directstorage-why-dont-more-pc-games-use-it.html
-  Touches: `src/NVMeDriverPatcher.Core/Services/BypassIoInspectorService.cs` (enrich warning text with named games and per-drive scope recommendation), `src/NVMeDriverPatcher.Core/Models/CliJson.cs` (add `gamingImpact` field to `BypassIoJson`), `BypassIoInspectorService` test fixture (currently no tests — add alongside enriched warning).
-  Acceptance: When BypassIO is blocked, warning text names specific affected games and suggests keeping gaming drives on stornvme.sys via per-drive scope; `--json` output includes a `gamingImpact` field; at least 3 test fixtures cover the enriched paths.
-  Complexity: S
-
 ### P2 — Safety and compat (research pass 4, 2026-06-20)
 
 - [ ] P2 — Detect CrystalDiskInfo as incompatible software

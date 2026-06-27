@@ -83,7 +83,7 @@ public static class CliCommandRegistry
         new("physical-disks", [], CommandGroup.Diagnostics,
             "MSFT_PhysicalDisk + StorageReliabilityCounter telemetry"),
         new("bypassio", [], CommandGroup.Diagnostics,
-            "Per-volume BypassIO/DirectStorage status with gaming impact (--history for pre/post diff)"),
+            "Per-volume BypassIO/DirectStorage status with named-game gaming impact (--history for pre/post diff)"),
         new("apst", [], CommandGroup.Diagnostics,
             "APST power-state inspector and current override state"),
         new("identify", [], CommandGroup.Diagnostics,

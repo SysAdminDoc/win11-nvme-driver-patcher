@@ -1,4 +1,5 @@
 using NVMeDriverPatcher.Data;
+using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.Tests;
@@ -45,6 +46,71 @@ public sealed class BypassIoHistoryTests
             Assert.False(string.IsNullOrWhiteSpace(v.Letter));
             Assert.False(string.IsNullOrWhiteSpace(v.Status));
         }
+    }
+
+    [Fact]
+    public void BuildBypassIoGamingImpact_NvmediskBlocked_NamesGamesAndPerDriveScope()
+    {
+        var impact = DriveService.BuildBypassIoGamingImpact(new BypassIOResult
+        {
+            Supported = false,
+            StorageType = "NVMe",
+            BlockedBy = "nvmedisk.sys"
+        });
+
+        Assert.Contains("Ratchet & Clank: Rift Apart", impact);
+        Assert.Contains("Forspoken", impact);
+        Assert.Contains("Forza Motorsport", impact);
+        Assert.Contains("Horizon Forbidden West", impact);
+        Assert.Contains("stornvme.sys", impact);
+        Assert.Contains("per-drive scope", impact);
+    }
+
+    [Fact]
+    public void BuildBypassIoGamingImpact_EasyAntiCheatBlocked_NamesIndependentVeto()
+    {
+        var impact = DriveService.BuildBypassIoGamingImpact(new BypassIOResult
+        {
+            Supported = false,
+            StorageType = "NVMe",
+            BlockedBy = "EOSSys.sys"
+        });
+
+        Assert.Contains("EasyAntiCheat", impact);
+        Assert.Contains("EOSSys.sys", impact);
+        Assert.Contains("address that driver separately", impact);
+    }
+
+    [Fact]
+    public void BuildBypassIoGamingImpact_CurrentlySupported_WarnsPatchCanRegressGames()
+    {
+        var impact = DriveService.BuildBypassIoGamingImpact(new BypassIOResult
+        {
+            Supported = true,
+            StorageType = "NVMe",
+            DriverCompat = "stornvme.sys"
+        });
+
+        Assert.Contains("currently available", impact);
+        Assert.Contains("nvmedisk.sys", impact);
+        Assert.Contains("legacy I/O", impact);
+    }
+
+    [Fact]
+    public void BuildGamingImpactSummary_EnabledVolumes_NamesGamesAndVolumes()
+    {
+        var impact = BypassIoInspectorService.BuildGamingImpactSummary(
+        [
+            new BypassIoVolumeInfo { Letter = "D:", Enabled = true },
+            new BypassIoVolumeInfo { Letter = "E:", Enabled = false },
+            new BypassIoVolumeInfo { Letter = "F:", Enabled = true },
+        ]);
+
+        Assert.Contains("D:", impact);
+        Assert.Contains("F:", impact);
+        Assert.DoesNotContain("E:", impact);
+        Assert.Contains("Ratchet & Clank: Rift Apart", impact);
+        Assert.Contains("game-library drives", impact);
     }
 
     [Fact]

@@ -18,6 +18,24 @@ public static class BypassIoInspectorService
 {
     private static readonly Regex RxBypassEnabled = new(@"BypassIO\s*:?\s*Enabled", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex RxStorageStack  = new(@"Storage\s+stack\s*:?\s*(.+)",  RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    public static string BuildGamingImpactSummary(IEnumerable<BypassIoVolumeInfo> volumes)
+    {
+        var enabledVolumes = volumes
+            .Where(v => v.Enabled)
+            .Select(v => v.Letter)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .ToList();
+
+        if (enabledVolumes.Count == 0)
+            return "Gaming impact: none - BypassIO is already off on all volumes.";
+
+        var volumeList = string.Join(", ", enabledVolumes);
+        return $"Gaming impact: BypassIO is active on {enabledVolumes.Count} volume(s) ({volumeList}). " +
+            $"After patching to nvmedisk.sys, DirectStorage titles such as {DriveService.DirectStorageGameExamplesText} can fall back to legacy I/O with higher CPU use or stutter. " +
+            "Keep game-library drives on stornvme.sys with per-drive scope when gaming performance matters.";
+    }
+
     public static List<BypassIoVolumeInfo> Inspect()
     {
         var results = new List<BypassIoVolumeInfo>();

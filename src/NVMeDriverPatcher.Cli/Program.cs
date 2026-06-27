@@ -351,11 +351,7 @@ class Program
             Console.WriteLine($"  {v.Letter}  {icon}  stack={v.Stack}");
         }
 
-        var enabledCount = list.Count(v => v.Enabled);
-        if (enabledCount == 0)
-            Console.WriteLine("  Gaming impact: none — BypassIO is already off on all volumes.");
-        else
-            Console.WriteLine($"  Gaming impact: {enabledCount} volume(s) have BypassIO enabled. After patching to nvmedisk.sys, DirectStorage games on those volumes will fall back to a slower path.");
+        Console.WriteLine($"  {BypassIoInspectorService.BuildGamingImpactSummary(list)}");
 
         if (showHistory)
         {

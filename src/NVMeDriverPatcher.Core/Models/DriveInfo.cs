@@ -38,6 +38,7 @@ public class BypassIOResult
     public string BlockedBy { get; set; } = string.Empty;
     public string RawOutput { get; set; } = string.Empty;
     public string Warning { get; set; } = string.Empty;
+    public string GamingImpact { get; set; } = string.Empty;
 }
 
 public class NVMeHealthInfo
