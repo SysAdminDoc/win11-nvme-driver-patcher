@@ -24,7 +24,7 @@ public class RegressionVerdict
 
 // Persistent rolling baseline of benchmark results. Pairs with the `scheduled-benchmark`
 // CLI subcommand to detect long-term regressions (Windows Update quietly altering driver
-// behavior is the common cause). Stores under %LocalAppData%\NVMePatcher\baseline.json.
+// behavior is the common cause). Stores under %ProgramData%\NVMePatcher\baseline.json.
 public static class AutoBenchmarkService
 {
     private const string BaselineFile = "baseline.json";

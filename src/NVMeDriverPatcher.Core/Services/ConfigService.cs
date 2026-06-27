@@ -8,6 +8,26 @@ namespace NVMeDriverPatcher.Services;
 
 public static class ConfigService
 {
+    private const string LegacyMigrationMarker = "localappdata_migrated.flag";
+
+    private static readonly string[] LegacyMigrationFiles =
+    [
+        "config.json",
+        "watchdog.json",
+        "drive_scope.json",
+        "maintenance_window.json",
+        "firmware_update_pending.json",
+        "baseline.json",
+        "benchmark_results.json",
+        "windows_build_rules.json",
+        "compat.json",
+        "compat_report.json",
+        "anon_id.txt",
+        "nvmepatcher.db",
+        "nvmepatcher.db-wal",
+        "nvmepatcher.db-shm"
+    ];
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -28,6 +48,9 @@ public static class ConfigService
         {
             WorkingDir = AppConfig.GetWorkingDir()
         };
+        if (AppConfig.IsSharedProgramDataWorkingDir(config.WorkingDir))
+            MigrateLegacyWorkingDirIfNeeded(config.WorkingDir, AppConfig.GetLegacyUserWorkingDirPath());
+
         config.ConfigFile = Path.Combine(config.WorkingDir, "config.json");
 
         if (!File.Exists(config.ConfigFile)) return config;
@@ -84,6 +107,53 @@ public static class ConfigService
         }
 
         return config;
+    }
+
+    internal static int MigrateLegacyWorkingDirIfNeeded(string targetDir, string? legacyDir)
+    {
+        if (string.IsNullOrWhiteSpace(targetDir) ||
+            string.IsNullOrWhiteSpace(legacyDir) ||
+            AppConfig.PathsEqual(targetDir, legacyDir) ||
+            !Directory.Exists(legacyDir))
+        {
+            return 0;
+        }
+
+        var marker = Path.Combine(targetDir, LegacyMigrationMarker);
+        if (File.Exists(marker))
+            return 0;
+
+        int copied = 0;
+        foreach (var fileName in LegacyMigrationFiles)
+        {
+            try
+            {
+                var source = Path.Combine(legacyDir, fileName);
+                var destination = Path.Combine(targetDir, fileName);
+                if (!File.Exists(source) || File.Exists(destination))
+                    continue;
+
+                Directory.CreateDirectory(targetDir);
+                File.Copy(source, destination, overwrite: false);
+                copied++;
+            }
+            catch
+            {
+                // Best-effort compatibility bridge. A failed copy must not block startup.
+            }
+        }
+
+        try
+        {
+            Directory.CreateDirectory(targetDir);
+            File.WriteAllText(marker, $"Migrated legacy LocalAppData state at {DateTime.UtcNow:O}.");
+        }
+        catch
+        {
+            // Marker is advisory; failed marker writes should not block app startup.
+        }
+
+        return copied;
     }
 
     private static string? ExistingDir(string? path)

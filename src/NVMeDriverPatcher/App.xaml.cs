@@ -80,7 +80,7 @@ public partial class App : Application
             try { Services.DataService.PruneSnapshots(500); } catch { }
             try { Services.DataService.PruneBenchmarks(500); } catch { }
         }
-        catch { /* Best-effort local data store */ }
+        catch { /* Best-effort app data store */ }
 
         // Rotate local log files before any service starts writing. Bounded retention keeps
         // the support-bundle ZIP small for users who've been running the app for months.
@@ -118,7 +118,7 @@ public partial class App : Application
         }
         catch { }
 
-        // If GetWorkingDir() had to fall back off LocalAppData, stamp a crash-log entry so
+        // If GetWorkingDir() had to fall back off ProgramData, stamp a crash-log entry so
         // we have a breadcrumb if the app is writing to an unexpected directory.
         var fallbackReason = Models.AppConfig.WorkingDirFallbackReason;
         if (!string.IsNullOrEmpty(fallbackReason))

@@ -21,7 +21,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 
 ### Security
 - **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the
-  System event log and writes to `%LocalAppData%\NVMePatcher\`. LocalSystem was unnecessarily
+  System event log and writes to the shared `%ProgramData%\NVMePatcher\` working directory. LocalSystem was unnecessarily
   privileged. Also adds a restricted service SID via `sc sidtype ... restricted`.
 - **SQLite hardening PRAGMAs** — added `trusted_schema=OFF` (prevent schema-based injection),
   `cell_size_check=ON` (catch corrupted pages), `quick_check` at startup (detect corruption).
@@ -30,6 +30,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   when signtool is available. Download URL pinned to v2.2 release instead of `/releases/latest/`.
 
 ### Fixed
+- **Watchdog shared state under LocalService** — non-portable app state now resolves to
+  `%ProgramData%\NVMePatcher\` so the GUI, CLI, tray, and LocalService watchdog read the same
+  `config.json`, `watchdog.json`, and SQLite database. First launch copies legacy
+  `%LocalAppData%\NVMePatcher\` state files forward without overwriting already-shared files,
+  and the MSI creates the ProgramData directory during install.
 - **StatusToColorConverter fallback brushes** — replaced dark-theme-only fallback hex values with
   neutral mid-range colors that read acceptably in both light and dark themes.
 - **WMI query timeouts** — all 35+ `ManagementObjectSearcher.Get()` calls across DriveService,

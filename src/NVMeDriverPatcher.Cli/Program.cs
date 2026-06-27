@@ -43,7 +43,7 @@ class Program
                 if (changed) ConfigService.Save(config);
             }
             catch { }
-            // GPO overlay takes precedence over per-user config.json so a pinned fleet policy
+            // GPO overlay takes precedence over shared config.json so a pinned fleet policy
             // isn't quietly overridden by a local run of the CLI.
             GpoPolicyService.ApplyTo(config, GpoPolicyService.Read());
             LogRotationService.RotateAll(config);

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "updated": "2026-06-10",
-  "note": "Per-build expected enablement behavior for Microsoft's native NVMe driver on Windows client. First matching rule wins (rules are ordered most-specific first). 'expectedPath' values: registry-override | vivetool-fallback | none-known | official-optin. Microsoft changes this behavior out-of-band — update this file (a user-edited copy in %LocalAppData%\\NVMePatcher takes precedence over the bundled one).",
+  "note": "Per-build expected enablement behavior for Microsoft's native NVMe driver on Windows client. First matching rule wins (rules are ordered most-specific first). 'expectedPath' values: registry-override | vivetool-fallback | none-known | official-optin. Microsoft changes this behavior out-of-band — update this file (an admin-edited copy in %ProgramData%\\NVMePatcher takes precedence over the bundled one).",
   "rules": [
     {
       "id": "server-2025",

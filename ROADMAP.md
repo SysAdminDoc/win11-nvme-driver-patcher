@@ -8,15 +8,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ## Research-Driven Additions
 
-### P0 — Root-cause fix
-
-- [ ] P0 — Watchdog service: fix working-dir mismatch under LocalService
-  Why: The LocalSystem→LocalService downgrade (commit e524340) broke shared state. Under LocalService, `%LocalAppData%` resolves to `C:\Windows\ServiceProfiles\LocalService\AppData\Local`, so the watchdog writes `watchdog.json`, `config.json`, and the SQLite DB to a different path than the GUI/CLI reads under the interactive admin user. The service produces verdicts nobody consumes.
-  Evidence: Code inspection of `AppConfig.GetWorkingDir()` using `Environment.GetFolderPath(SpecialFolder.LocalApplicationData)` + `WatchdogWorker.FlushOnce()` calling `ConfigService.Load()` and `EventLogWatchdogService.Evaluate(config)`.
-  Touches: `src/NVMeDriverPatcher.Core/Models/AppConfig.cs` (add shared working-dir resolution that prefers `%ProgramData%\NVMePatcher\` when running as a service), `src/NVMeDriverPatcher.Watchdog/Program.cs` (pass shared dir or set environment), `packaging/wix/NVMeDriverPatcher.wxs` (create ProgramData dir on install), tests.
-  Acceptance: Watchdog service and GUI/CLI both read and write the same `watchdog.json`; `EventLogWatchdogService.Evaluate()` from the GUI shows events the service flushed; test fixture verifies path resolution under simulated service identity.
-  Complexity: M
-
 ### P1 — Reliability and trust
 
 - [ ] P1 — Watchdog service: grant LocalService read access to System event log
@@ -47,15 +38,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
   Evidence: GigXP detailed analysis; PCWorld DirectStorage adoption report; ElevenForum EAC thread; https://gigxp.com/windows-11-native-nvme-driver/ ; https://www.pcworld.com/article/2609584/what-happened-to-directstorage-why-dont-more-pc-games-use-it.html
   Touches: `src/NVMeDriverPatcher.Core/Services/BypassIoInspectorService.cs` (enrich warning text with named games and per-drive scope recommendation), `src/NVMeDriverPatcher.Core/Models/CliJson.cs` (add `gamingImpact` field to `BypassIoJson`), `BypassIoInspectorService` test fixture (currently no tests — add alongside enriched warning).
   Acceptance: When BypassIO is blocked, warning text names specific affected games and suggests keeping gaming drives on stornvme.sys via per-drive scope; `--json` output includes a `gamingImpact` field; at least 3 test fixtures cover the enriched paths.
-  Complexity: S
-
-### P3 — Quality
-
-- [ ] P3 — Add integration test for Watchdog shared-state round-trip
-  Why: The P0 working-dir fix changes a critical data path (shared `watchdog.json` between service and GUI). An integration test that writes via the service path and reads via the GUI path catches future regressions in the shared-dir strategy.
-  Evidence: The P0 regression was undetectable by existing unit tests because they don't exercise cross-process path resolution.
-  Touches: `tests/NVMeDriverPatcher.Tests/WatchdogSharedStateTests.cs` — write to the shared dir, verify the GUI path resolves the same file.
-  Acceptance: Test writes a watchdog state file via the service-context path resolution and reads it back via the user-context path resolution; both resolve to the same physical file.
   Complexity: S
 
 ### P2 — Safety and compat (research pass 4, 2026-06-20)

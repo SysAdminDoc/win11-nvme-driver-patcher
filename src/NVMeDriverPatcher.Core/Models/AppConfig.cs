@@ -112,6 +112,8 @@ public class AppConfig
     public const string GitHubURL = "https://github.com/SysAdminDoc/win11-nvme-driver-patcher";
     public const string DocumentationURL = "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353";
     public const string GitHubApiReleasesUrl = "https://api.github.com/repos/SysAdminDoc/win11-nvme-driver-patcher/releases/latest";
+    public const string WorkingDirFolderName = "NVMePatcher";
+    private const string TempFallbackFolderName = "NVMePatcher_Backups";
 
     public static IReadOnlyList<string> FeatureIDs { get; } = ["735209102", "1853569164", "156965516"];
 
@@ -163,14 +165,15 @@ public class AppConfig
 
     /// <summary>
     /// Records which fallback path was used so startup can log a warning when running
-    /// from something other than LocalAppData. Null when LocalAppData succeeded normally.
+    /// from something other than the shared ProgramData directory. Null when the shared
+    /// directory resolved normally.
     /// </summary>
     public static string? WorkingDirFallbackReason { get; private set; }
 
     public static string GetWorkingDir()
     {
         // Portable mode (v4.5) trumps everything — if the user opted in via portable.flag
-        // we write state to Data\ beside the exe instead of %LocalAppData%. Catch-all on the
+        // we write state to Data\ beside the exe instead of %ProgramData%. Catch-all on the
         // portable path so a flaky exe-dir permission doesn't wedge startup.
         try
         {
@@ -184,26 +187,37 @@ public class AppConfig
                 }
             }
         }
-        catch { /* fall through to per-user path */ }
+        catch { /* fall through to shared path */ }
 
-        // Try in order: LocalAppData (preferred), TEMP fallback, current directory last-resort.
-        // Each step is independently try-wrapped so a denied LocalAppData (rare, hardened SKUs)
-        // still gets us a usable working folder instead of NRE'ing the rest of the app.
+        // Try in order: ProgramData (shared GUI/CLI/service state), legacy LocalAppData
+        // fallback, TEMP fallback, current directory last-resort. Each step is independently
+        // try-wrapped so a denied ProgramData path still gets us a usable working folder.
+        string? programDataError = null;
+        try
+        {
+            var shared = GetSharedWorkingDirPath();
+            if (!string.IsNullOrEmpty(shared))
+            {
+                Directory.CreateDirectory(shared);
+                WorkingDirFallbackReason = null;
+                return shared;
+            }
+            programDataError = "ProgramData path was empty";
+        }
+        catch (Exception ex)
+        {
+            programDataError = $"ProgramData unavailable: {ex.GetType().Name}";
+        }
+
         string? localAppDataError = null;
         try
         {
-            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            if (!string.IsNullOrEmpty(localAppData))
+            var legacy = GetLegacyUserWorkingDirPath();
+            if (!string.IsNullOrEmpty(legacy))
             {
-                var dir = Path.Combine(localAppData, "NVMePatcher");
-                if (Directory.Exists(dir))
-                {
-                    WorkingDirFallbackReason = null;
-                    return dir;
-                }
-                Directory.CreateDirectory(dir);
-                WorkingDirFallbackReason = null;
-                return dir;
+                Directory.CreateDirectory(legacy);
+                WorkingDirFallbackReason = $"Using LocalAppData fallback ({programDataError ?? "shared path unavailable"})";
+                return legacy;
             }
             localAppDataError = "LocalAppData path was empty";
         }
@@ -214,9 +228,9 @@ public class AppConfig
 
         try
         {
-            var temp = Path.Combine(Path.GetTempPath(), "NVMePatcher_Backups");
+            var temp = Path.Combine(Path.GetTempPath(), TempFallbackFolderName);
             if (!Directory.Exists(temp)) Directory.CreateDirectory(temp);
-            WorkingDirFallbackReason = $"Using TEMP fallback ({localAppDataError ?? "unknown reason"})";
+            WorkingDirFallbackReason = $"Using TEMP fallback ({localAppDataError ?? programDataError ?? "unknown reason"})";
             return temp;
         }
         catch (Exception ex)
@@ -224,8 +238,61 @@ public class AppConfig
             // Absolute last resort — current directory. Always exists. This is the most
             // concerning fallback because launching from a privileged directory (e.g.
             // C:\Windows\System32) would land DB/backups there too.
-            WorkingDirFallbackReason = $"Using CurrentDirectory last-resort fallback: {Environment.CurrentDirectory} (TEMP failed: {ex.GetType().Name}; {localAppDataError ?? "unknown"})";
+            WorkingDirFallbackReason = $"Using CurrentDirectory last-resort fallback: {Environment.CurrentDirectory} (TEMP failed: {ex.GetType().Name}; {localAppDataError ?? programDataError ?? "unknown"})";
             return Environment.CurrentDirectory;
+        }
+    }
+
+    internal static string? GetSharedWorkingDirPath(string? commonAppData = null)
+    {
+        try
+        {
+            commonAppData ??= Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+            return string.IsNullOrWhiteSpace(commonAppData)
+                ? null
+                : Path.Combine(commonAppData, WorkingDirFolderName);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static string? GetLegacyUserWorkingDirPath(string? localAppData = null)
+    {
+        try
+        {
+            localAppData ??= Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return string.IsNullOrWhiteSpace(localAppData)
+                ? null
+                : Path.Combine(localAppData, WorkingDirFolderName);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static bool IsSharedProgramDataWorkingDir(string? path)
+    {
+        var shared = GetSharedWorkingDirPath();
+        return PathsEqual(path, shared);
+    }
+
+    internal static bool PathsEqual(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return false;
+
+        try
+        {
+            var normalizedLeft = Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var normalizedRight = Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
         }
     }
 }

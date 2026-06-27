@@ -96,10 +96,13 @@ public sealed class CleanDataServiceTests : IDisposable
     }
 
     [Fact]
-    public void IsSafeCleanRoot_AllowsLocalAppDataAndPortableStyleDirs()
+    public void IsSafeCleanRoot_AllowsProgramDataLocalAppDataAndPortableStyleDirs()
     {
+        var programData = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "NVMePatcher");
         var localAppData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NVMePatcher");
+        Assert.True(CleanDataService.IsSafeCleanRoot(programData, out _));
         Assert.True(CleanDataService.IsSafeCleanRoot(localAppData, out _));
         Assert.True(CleanDataService.IsSafeCleanRoot(_dir, out _)); // temp-based test dir
     }
@@ -132,7 +135,8 @@ public sealed class CleanDataServiceTests : IDisposable
     [Fact]
     public void IsSafeCleanRoot_AllowsAppManagedRootsUnderProtectedParents()
     {
-        // The default app dir lives under LocalAppData (itself under the user profile) and must pass.
+        // The legacy fallback app dir lives under LocalAppData (itself under the user profile)
+        // and must still pass for migrated installs.
         var localAppData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NVMePatcher");
         Assert.True(CleanDataService.IsSafeCleanRoot(localAppData, out _));
