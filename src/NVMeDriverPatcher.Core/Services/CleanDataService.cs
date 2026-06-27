@@ -12,7 +12,7 @@ public class CleanDataResult
     public List<string> Errors { get; set; } = new();
 }
 
-// Purges the per-user working directory (crash logs, watchdog state, ETL captures, snapshot
+// Purges the app working directory (logs, watchdog state, ETL captures, snapshot
 // DB). Separate from the patch uninstaller — removing the patch doesn't and shouldn't wipe
 // the user's history. Intended for final "uninstall the app" flow + explicit CLI invocation.
 public static class CleanDataService
@@ -85,7 +85,7 @@ public static class CleanDataService
 
     /// <summary>
     /// A clean root is safe when it is a real, absolute, non-root path that is NOT a
-    /// protected system location. Both the default %LocalAppData%\NVMePatcher dir and
+    /// protected system location. Both the default %ProgramData%\NVMePatcher dir and
     /// portable-mode exe-adjacent dirs pass; drive roots, Windows, Program Files, and
     /// user-profile roots refuse.
     /// </summary>
@@ -117,10 +117,9 @@ public static class CleanDataService
             return false;
         }
 
-        // App-managed roots are always cleanable even though they sit under a protected root:
-        // the default %LocalAppData%\NVMePatcher (and the TEMP scratch area) live under the user
-        // profile, and a portable install's Data\ dir lives beside the exe (possibly under
-        // Program Files). Anything strictly under one of these passes before the subtree guard.
+        // App-managed roots are always cleanable even though some sit under protected roots:
+        // ProgramData, LocalAppData fallback, TEMP scratch, and portable exe-adjacent Data\.
+        // Anything strictly under one of these passes before the subtree guard.
         foreach (var safe in SafeAppRoots())
         {
             if (string.IsNullOrEmpty(safe)) continue;
@@ -160,10 +159,14 @@ public static class CleanDataService
         return true;
     }
 
-    // App-managed roots under which cleaning is always permitted (the per-user LocalAppData tree,
-    // which also contains TEMP, and the portable exe directory). Computed without side effects.
+    // App-managed roots under which cleaning is always permitted. Computed without side effects.
     private static IEnumerable<string> SafeAppRoots()
     {
+        string? programData = null;
+        try { programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData); }
+        catch { }
+        if (!string.IsNullOrEmpty(programData)) yield return programData;
+
         string? localApp = null;
         try { localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData); }
         catch { }

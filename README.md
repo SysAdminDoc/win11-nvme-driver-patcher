@@ -125,7 +125,7 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 - **Firmware + controller compat JSON** -- shipped `compat.json` maps `{controller, firmware}` → `{Good, Caution, Bad}`. Preflight consults it before proceeding.
 - **Per-drive scope** -- exclude specific NVMe drives from the swap by serial or model pattern (e.g. keep a DirectStorage gaming drive on `stornvme.sys` while the OS drive moves to `nvmedisk.sys`).
 - **Dry-run preview** (`--dry-run` / "Preview Changes") -- prints every registry write the patch would perform, without touching the registry.
-- **ETW storage trace** (`etw`) -- wraps `wpr.exe` for 60-second pre/post captures; ETL files land in `%LocalAppData%\NVMePatcher\etl\`.
+- **ETW storage trace** (`etw`) -- wraps `wpr.exe` for 60-second pre/post captures; ETL files land in `%ProgramData%\NVMePatcher\etl\`.
 - **WinPE recovery USB builder** (`winpe`) -- detects the Windows ADK + WinPE add-on and produces a bootable tree/ISO with the Recovery Kit pre-staged and a custom `startnet.cmd`.
 - **Opt-in compatibility telemetry** -- build an anonymized `{controller, firmware, OS build, profile, verification, watchdog, reliability delta}` JSON and optionally `POST` it to a user-configured HTTPS endpoint. No serials, machine names, drive letters, or user names.
 - **Driver Verifier harness** (`verifier-on` / `-off` / `-status`) -- dev/tester-mode wrapper around `verifier.exe` for kernel-level stress checks on the NVMe stack.

@@ -111,7 +111,7 @@ public static class FirmwareCompatService
     public static FirmwareCompatDatabase LoadDatabase(string? workingDir = null)
     {
         // Resolve order:
-        //   1. %LocalAppData%\NVMePatcher\compat.json (user-editable, takes precedence)
+        //   1. %ProgramData%\NVMePatcher\compat.json (admin-editable, takes precedence)
         //   2. <app exe dir>\compat.json (shipped default)
         //   3. Empty DB with a "loaded fallback" note so callers can render an honest UI.
         var candidates = new List<string>();

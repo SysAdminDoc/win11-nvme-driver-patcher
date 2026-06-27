@@ -93,7 +93,7 @@ public static class CliCommandRegistry
 
         // ── Storage & Performance ──
         new("etw", [], CommandGroup.StoragePerformance,
-            "Capture a 60s ETW storage trace (wpr.exe) to %LocalAppData%\\NVMePatcher\\etl"),
+            "Capture a 60s ETW storage trace (wpr.exe) to %ProgramData%\\NVMePatcher\\etl"),
         new("firmware", ["compat"], CommandGroup.StoragePerformance,
             "List bundled controller/firmware compat entries (compat.json)"),
         new("compare-benchmarks", [], CommandGroup.StoragePerformance,
@@ -128,7 +128,7 @@ public static class CliCommandRegistry
         new("portable-enable", [], CommandGroup.FleetAdmin,
             "Enable portable mode (data beside the exe, for USB deployment)"),
         new("portable-disable", [], CommandGroup.FleetAdmin,
-            "Disable portable mode (revert to %LocalAppData% storage)"),
+            "Disable portable mode (revert to ProgramData storage)"),
         new("winpe", [], CommandGroup.FleetAdmin,
             "Build a WinPE recovery USB tree/ISO from the current Recovery Kit (--output=<dir>)"),
         new("winre", [], CommandGroup.FleetAdmin,

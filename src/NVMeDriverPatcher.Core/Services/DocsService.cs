@@ -69,14 +69,14 @@ pending. `featurestore` CLI probes whether the fallback has been applied.
         ["firmware"] = @"
 compat.json ships a curated `{controller, firmware} -> {Good, Caution, Bad, Unknown}`
 map. Preflight surfaces hits. Drop a custom compat.json at
-%LocalAppData%\NVMePatcher\ to override the shipped defaults. Use `firmware` CLI to
+%ProgramData%\NVMePatcher\ to override the shipped defaults. Use `firmware` CLI to
 inspect the active DB; `compat-checksum` flags when a local copy differs from shipped.
 ",
         ["gpo"] = @"
 packaging/admx/NVMeDriverPatcher.admx + en-US/*.adml provide Group Policy templates.
 Copy the ADMX to C:\Windows\PolicyDefinitions\ (the ADML to the en-US\ subfolder).
 Policies land under HKLM\SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher and override
-per-user config.json. Six policies: PatchProfile, IncludeServerKey, SkipWarnings,
+shared config.json. Six policies: PatchProfile, IncludeServerKey, SkipWarnings,
 WatchdogAutoRevert, WatchdogWindowHours, CompatTelemetryEnabled.
 ",
         ["portable"] = @"

@@ -36,7 +36,7 @@ public static class PortableModeService
 
     /// <summary>
     /// Creates portable.flag beside the exe. After the next launch the app writes state to
-    /// `Data\` beside the exe instead of %LocalAppData%.
+    /// `Data\` beside the exe instead of the shared ProgramData directory.
     /// </summary>
     public static bool Enable(Action<string>? log = null)
     {
@@ -44,7 +44,7 @@ public static class PortableModeService
         {
             var exeDir = AppContext.BaseDirectory;
             var flag = Path.Combine(exeDir, FlagFile);
-            File.WriteAllText(flag, $"Portable mode enabled at {DateTime.UtcNow:O}. Delete this file to return to per-user mode.");
+            File.WriteAllText(flag, $"Portable mode enabled at {DateTime.UtcNow:O}. Delete this file to return to shared ProgramData mode.");
             log?.Invoke($"[OK] Portable mode enabled. Data directory: {Path.Combine(exeDir, PortableDataDir)}");
             return true;
         }
@@ -62,7 +62,7 @@ public static class PortableModeService
             var exeDir = AppContext.BaseDirectory;
             var flag = Path.Combine(exeDir, FlagFile);
             if (File.Exists(flag)) File.Delete(flag);
-            log?.Invoke("[OK] Portable mode disabled. Data returns to %LocalAppData%\\NVMePatcher on next launch.");
+            log?.Invoke("[OK] Portable mode disabled. Data returns to %ProgramData%\\NVMePatcher on next launch.");
             return true;
         }
         catch (Exception ex)

@@ -182,7 +182,7 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel()
     {
         Config = ConfigService.Load();
-        // GPO overlay wins over per-user config — a pinned fleet policy shouldn't be
+        // GPO overlay wins over shared config — a pinned fleet policy shouldn't be
         // quietly overridden by a stale local setting.
         try { GpoPolicyService.ApplyTo(Config, GpoPolicyService.Read()); } catch { }
         VersionText = $"v{AppConfig.AppVersion}";

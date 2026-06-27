@@ -3,7 +3,7 @@ using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
 
-// Keeps %LocalAppData%\NVMePatcher\ from unbounded growth. Rotates crash.log and activity.log
+// Keeps %ProgramData%\NVMePatcher\ from unbounded growth. Rotates crash.log and activity.log
 // on startup if they've crossed the size cap. Five files × 5MB each by default — 25MB total
 // headroom is enough to contain a noisy week of activity while staying cheap to zip into a
 // support bundle.

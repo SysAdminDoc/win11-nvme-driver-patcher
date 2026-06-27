@@ -4,7 +4,7 @@ using NVMeDriverPatcher.Services;
 namespace NVMeDriverPatcher.Tests;
 
 // LogRotationService.RotateOne is pure once the file exists. These tests run against a
-// per-test TEMP working dir so they don't interfere with the developer's %LocalAppData%.
+// per-test TEMP working dir so they don't interfere with the developer's app data.
 public sealed class LogRotationServiceTests : IDisposable
 {
     private readonly string _dir;
