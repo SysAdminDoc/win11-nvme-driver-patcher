@@ -10,13 +10,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P1 — Reliability and trust
 
-- [ ] P1 — Watchdog service: grant LocalService read access to System event log
-  Why: LocalService does not have default read access to the System event log channel. The watchdog catches the `UnauthorizedAccessException` and silently falls back to poll-only (loses real-time push model). After the P0 working-dir fix, this is the remaining gap preventing the service from functioning as designed.
-  Evidence: Microsoft docs on event log security ACLs; `WatchdogWorker.ExecuteAsync()` line 133 catches and logs the failure but the user never sees it.
-  Touches: `src/NVMeDriverPatcher.Watchdog/Program.cs` (grant ACL on install via `wevtutil sl System /ca:...` or equivalent), `packaging/wix/NVMeDriverPatcher.wxs` (add custom action or document manual step), tests.
-  Acceptance: Watchdog service running as LocalService successfully subscribes to System event log events via `EventLogWatcher`; no fallback-to-poll log entry appears; test validates the subscription succeeds.
-  Complexity: S (after P0 lands)
-
 - [ ] P1 — Add tests for untested safety-critical services
   Why: 11 Core services have zero test files. Several have pure-logic paths testable without admin privileges: `BackupIntegrityService` (hash verification), `PortableModeService` (flag detection), `WmiQueryHelper` (timeout option wiring), `TuningProfileIoService` (JSON round-trip), `ReliabilityService` (correlation math from canned data).
   Evidence: Test coverage gap analysis — cross-referencing `src/NVMeDriverPatcher.Core/Services/*.cs` against `tests/NVMeDriverPatcher.Tests/*Tests.cs`.

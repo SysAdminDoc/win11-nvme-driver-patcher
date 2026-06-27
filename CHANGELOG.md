@@ -35,6 +35,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   `config.json`, `watchdog.json`, and SQLite database. First launch copies legacy
   `%LocalAppData%\NVMePatcher\` state files forward without overwriting already-shared files,
   and the MSI creates the ProgramData directory during install.
+- **Watchdog LocalService System log access** — added an SDDL merge helper that grants
+  LocalService read access to the System event-log channel without replacing existing ACLs.
+  The watchdog `/install` path attempts the grant, `/grant-eventlog` exposes it for automation,
+  and the MSI runs it before starting the optional watchdog service.
 - **StatusToColorConverter fallback brushes** — replaced dark-theme-only fallback hex values with
   neutral mid-range colors that read acceptably in both light and dark themes.
 - **WMI query timeouts** — all 35+ `ManagementObjectSearcher.Get()` calls across DriveService,
