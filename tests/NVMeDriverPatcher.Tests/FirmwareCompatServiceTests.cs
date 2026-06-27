@@ -1,3 +1,6 @@
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.Tests;
@@ -7,6 +10,12 @@ namespace NVMeDriverPatcher.Tests;
 // beats wildcard, worst severity wins on ties, "=" prefix exact-matches, unknown is default.
 public sealed class FirmwareCompatServiceTests
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     private static FirmwareCompatDatabase Db(params FirmwareCompatEntry[] entries) =>
         new() { Entries = entries.ToList() };
 
@@ -79,5 +88,45 @@ public sealed class FirmwareCompatServiceTests
         // But a null/empty model short-circuits because MatchesController returns false on empty model.
         // Note: wildcard controller ("*") is the one case where empty model still matches.
         Assert.Equal(FirmwareCompatLevel.Good, FirmwareCompatService.Lookup(db, string.Empty, "F").Level);
+    }
+
+    [Theory]
+    [InlineData("WD_BLACK SN850X 2000GB", "620331WD", FirmwareCompatLevel.Bad, "Critical Failure")]
+    [InlineData("WD_BLACK SN770 NVMe SSD 2TB", "730120WD", FirmwareCompatLevel.Caution, "731130WD")]
+    [InlineData("WD Blue SN580 NVMe SSD 2TB", "280080WD", FirmwareCompatLevel.Caution, "281050WD")]
+    [InlineData("WD Blue SN5000 NVMe SSD 2TB", "290030WD", FirmwareCompatLevel.Caution, "291020WD")]
+    [InlineData("Samsung SSD 990 PRO 2TB", "7B2QJXD7", FirmwareCompatLevel.Caution, "random-write degradation")]
+    [InlineData("SK hynix Platinum P41 2TB", "51060A20", FirmwareCompatLevel.Caution, "negligible")]
+    [InlineData("Phison E18 NVMe Controller", "1.0", FirmwareCompatLevel.Caution, "power loss")]
+    [InlineData("Phison E26 NVMe Controller", "1.0", FirmwareCompatLevel.Caution, "power loss")]
+    [InlineData("Seagate FireCuda 530", "SU6SM005", FirmwareCompatLevel.Caution, "power protection")]
+    public void ShippedDatabase_FlagsCommunityProblemFirmware(string model, string firmware, FirmwareCompatLevel expectedLevel, string noteFragment)
+    {
+        var finding = FirmwareCompatService.Lookup(ShippedDatabase(), model, firmware);
+
+        Assert.Equal(expectedLevel, finding.Level);
+        Assert.Contains(noteFragment, finding.Note, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("WD_BLACK SN770 NVMe SSD 2TB", "731130WD")]
+    [InlineData("WD_BLACK SN770M NVMe SSD 2TB", "731130WD")]
+    [InlineData("WD Blue SN580 NVMe SSD 2TB", "281050WD")]
+    [InlineData("WD Blue SN5000 NVMe SSD 2TB", "291020WD")]
+    [InlineData("SanDisk Extreme M.2 NVMe 2TB", "731130WD")]
+    public void ShippedDatabase_ExactVendorFixFirmwareOverridesWildcardCaution(string model, string firmware)
+    {
+        var finding = FirmwareCompatService.Lookup(ShippedDatabase(), model, firmware);
+
+        Assert.Equal(FirmwareCompatLevel.Good, finding.Level);
+        Assert.Contains("fix firmware", finding.Note, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static FirmwareCompatDatabase ShippedDatabase([CallerFilePath] string sourceFile = "")
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFile)!, "..", ".."));
+        var json = File.ReadAllText(Path.Combine(repoRoot, "src", "NVMeDriverPatcher.Core", "compat.json"));
+        return JsonSerializer.Deserialize<FirmwareCompatDatabase>(json, JsonOptions)
+            ?? throw new InvalidOperationException("Failed to load shipped compat.json.");
     }
 }

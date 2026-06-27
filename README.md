@@ -243,14 +243,16 @@ The patch works with any NVMe drive using the Windows inbox `StorNVMe.sys` drive
 
 | Brand | Models |
 |-------|--------|
-| Samsung | 970 Evo/Plus, 980, 980 Pro, 990 Pro (when using inbox driver) |
-| WD | SN570, SN580, SN770, SN850X (when using inbox driver) |
+| Samsung | 970 Evo/Plus, 980, 980 Pro, 990 Pro on known-good firmware (when using inbox driver) |
+| WD | SN570 and compat-cleared SN580/SN770/SN850X firmware (when using inbox driver) |
 | Crucial | P3, P3 Plus, P5, P5 Plus, T705 |
-| SK Hynix | Platinum P41, Gold P31 |
-| Kingston | NV2, KC3000 |
-| Sabrent | Rocket 4 Plus |
+| SK Hynix | Gold P31, Platinum P41 with preflight performance caution |
+| Kingston | NV2, KC3000 with Phison E18 power-loss caution |
+| Sabrent | Rocket 4 Plus with Phison power-loss caution |
 | Solidigm | P5316 (enterprise, Server 2025 tested) |
 | Generic/OEM | Any drive using StorNVMe.sys |
+
+Run preflight before enabling the patch. The bundled `compat.json` flags known risky controller/firmware combinations including WD/SanDisk 2TB HMB BSOD firmware, WD SN850X Critical Failure reports, Samsung 990 Pro 2TB `7B2QJXD7`, SK hynix Platinum P41 mixed performance, and Phison E18/E26 power-loss risk.
 
 **Not compatible (uses vendor driver by default):**
 

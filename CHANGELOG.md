@@ -22,6 +22,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   `PortableModeService`, `WmiQueryHelper`, `TuningProfileIoService`, and `ReliabilityService`,
   covering backup parsing, portable-mode flags, timeout option wiring, tuning JSON round-trips,
   and Reliability Monitor correlation math.
+- **Firmware compatibility DB refresh** — added source-backed warnings for WD/SanDisk 2TB HMB
+  BSOD firmware baselines, WD SN850X Critical Failure reports, Samsung 990 Pro 2TB `7B2QJXD7`
+  degradation, SK hynix Platinum P41 mixed performance, and Phison E18/E26 power-loss risk.
 
 ### Security
 - **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the
