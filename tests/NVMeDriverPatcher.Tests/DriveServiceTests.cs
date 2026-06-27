@@ -45,6 +45,39 @@ public sealed class DriveServiceTests
         Assert.Equal(expected, DriveService.NormalizeDriveRoot(raw));
     }
 
+    [Theory]
+    [InlineData("DiskInfo64.exe")]
+    [InlineData("DiskInfo32.exe")]
+    [InlineData("DiskInfoA64.exe")]
+    [InlineData("CrystalDiskInfo.exe")]
+    [InlineData(@"C:\Tools\CrystalDiskInfo\DiskInfo64.exe")]
+    [InlineData(@"C:\Program Files\CrystalDiskInfo")]
+    public void IsCrystalDiskInfoName_MatchesKnownProcessAndInstallPaths(string candidate)
+    {
+        Assert.True(DriveService.IsCrystalDiskInfoName(candidate));
+    }
+
+    [Theory]
+    [InlineData("CrystalDiskMark.exe")]
+    [InlineData("DiskInfoCollector.exe")]
+    [InlineData(@"C:\Tools\CrystalDiskMark\DiskMark64.exe")]
+    [InlineData("")]
+    public void IsCrystalDiskInfoName_DoesNotMatchAdjacentTools(string candidate)
+    {
+        Assert.False(DriveService.IsCrystalDiskInfoName(candidate));
+    }
+
+    [Fact]
+    public void ServiceFixture_CrystalDiskInfo_GetsMediumSmartWarning()
+    {
+        var findings = DriveService.DetectServiceIncompatibilities(["DiskInfo64.exe"]);
+
+        var crystal = Assert.Single(findings.Where(f => f.Name == "CrystalDiskInfo"));
+        Assert.Equal("Medium", crystal.Severity);
+        Assert.Contains("SCSI pass-through", crystal.Message);
+        Assert.Contains("Get-StorageReliabilityCounter", crystal.Message);
+    }
+
     [Fact]
     public void IsLaptopChassis_DetectsLaptop_RegardlessOfWmiArrayBoxing()
     {

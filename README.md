@@ -88,7 +88,7 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 **Safety & Compatibility**
 - **VeraCrypt hard block** -- detects system encryption and refuses to patch ([breaks boot entirely](https://github.com/veracrypt/VeraCrypt/issues/1640))
 - **Automatic BitLocker suspension** -- suspends BitLocker for one reboot cycle to prevent recovery key prompts
-- **Comprehensive software detection** -- warns about Intel RST (BSOD risk), Intel VMD (boot failures), Hyper-V/WSL2 (40% I/O regression), Storage Spaces (array degradation), Veeam, Acronis, Macrium, UrBackup, NinjaOne, Paragon, Samsung Magician, WD Dashboard, Crucial Storage Executive, Data Deduplication
+- **Comprehensive software detection** -- warns about Intel RST (BSOD risk), Intel VMD (boot failures), Hyper-V/WSL2 (40% I/O regression), Storage Spaces (array degradation), Veeam, Acronis, Macrium, UrBackup, NinjaOne, Paragon, Samsung Magician, WD Dashboard, Crucial Storage Executive, CrystalDiskInfo, Data Deduplication
 - **Laptop/power warning** -- detects laptops and warns about APST battery regression (~15% impact)
 - **Rollback on partial failure** -- undoes all applied registry keys if patch doesn't complete fully
 - **Registry backup** export + system restore point creation before any changes
@@ -310,6 +310,7 @@ The tool automatically detects and warns about all of these. VeraCrypt is a hard
 | **Samsung Magician** | Cannot detect drives (SCSI pass-through) | Low | Yes (warns) |
 | **WD Dashboard** | Cannot detect drives (SCSI pass-through) | Low | Yes (warns) |
 | **Crucial Storage Executive** | Cannot detect drives (SCSI pass-through) | Low | Yes (warns) |
+| **CrystalDiskInfo** | SMART monitoring may stop reading NVMe health (SCSI pass-through) | Medium | Yes (warns) |
 | **Data Deduplication** | Microsoft confirms incompatibility | High | Yes (warns) |
 | **Laptop / Battery** | APST broken, ~15% battery life reduction | Medium | Yes (warns) |
 | DirectStorage games | BypassIO not supported, higher CPU | Low-Medium | Yes (warns) |
@@ -377,7 +378,7 @@ Windows automatically disables the native NVMe driver after 2-3 consecutive fail
 This shouldn't happen if you used this tool (SafeBoot keys are included). If it does, follow the WinRE steps above.
 
 ### SSD vendor tools stopped working
-Samsung Magician, WD Dashboard, and Crucial Storage Executive use legacy SCSI pass-through to communicate with drives. The native NVMe driver doesn't implement this interface. Use Windows built-in tools (Device Manager, `Get-PhysicalDisk`, `Get-StorageReliabilityCounter`) for health monitoring instead, or remove the patch to restore compatibility.
+Samsung Magician, WD Dashboard, Crucial Storage Executive, and CrystalDiskInfo use legacy SCSI pass-through to communicate with drives. The native NVMe driver doesn't implement this interface. Use Windows built-in tools (Device Manager, `Get-PhysicalDisk`, `Get-StorageReliabilityCounter`) for health monitoring instead, or remove the patch to restore compatibility.
 
 ## Credits & Sources
 

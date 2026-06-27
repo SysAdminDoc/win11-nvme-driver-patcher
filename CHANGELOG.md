@@ -28,6 +28,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **BypassIO gaming-impact guidance** — preflight, GUI, CLI, JSON output, and offline docs now
   name DirectStorage titles affected by `nvmedisk.sys` BypassIO vetoes and recommend per-drive
   scope for game-library drives.
+- **CrystalDiskInfo incompatibility warning** — preflight now detects CrystalDiskInfo process,
+  service, and install-path signals, warns that SMART monitoring may fail under `nvmedisk.sys`,
+  and points users to `Get-StorageReliabilityCounter`.
 
 ### Security
 - **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the
