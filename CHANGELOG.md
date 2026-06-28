@@ -143,7 +143,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   the runner disk. Wrapped in try/finally with ErrorAction SilentlyContinue.
 - **Release workflow signtool missing `/d` description** — added `/d "NVMe Driver Patcher"` for better
   SmartScreen and certificate dialog metadata.
-- **CLAUDE.md: ".NET 9.0 SDK" → ".NET 10.0 SDK"** — the build snippet contradicted the tech stack
+- **Build docs: ".NET 9.0 SDK" → ".NET 10.0 SDK"** — the build snippet contradicted the tech stack
   section. Also simplified to `dotnet build NVMeDriverPatcher.sln`.
 
 ### Improved (UX / accessibility)
@@ -254,10 +254,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 
 ### Changed (release pipeline)
 - **Version validator now covers narrative docs** (P3): `Validate-ReleaseVersions.ps1` checked packaging
-  surfaces but not the README version badge, the ROADMAP "Current ship" line, or the CLAUDE.md status
-  version, so those could silently lag the `Directory.Build.props` SSOT. It now validates each (guarded by
+  surfaces but not the README version badge or the ROADMAP "Current ship" line,
+  so those could silently lag the `Directory.Build.props` SSOT. It now validates each (guarded by
   presence, so gitignored/missing files are skipped) and the relative-path computation no longer crashes
-  on UNC checkouts. CLAUDE.md was reconciled to v5.0.0 locally.
+  on UNC checkouts.
 - **WiX pinned via a restorable tool manifest** (P3): WiX was hard-installed in the release workflow
   (`dotnet tool install --global wix --version 5.0.2`), outside Dependabot's update coverage despite
   WiX's security releases. It now lives in `.config/dotnet-tools.json` (still pinned to 5.0.2, which
@@ -393,7 +393,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **Charting native-dependency smoke** (P3): `ChartingSmokeTests` renders the benchmark
   (`ColumnSeries`) and telemetry (`LineSeries`) chart shapes headlessly via `SKCartesianChart` and
   PNG-encodes them, exercising the native Skia + libpng path with no WPF window. Run before/after
-  any Skia/OpenTK/HarfBuzz bump per the new dependency-update checklist in CLAUDE.md; a native ABI
+  any Skia/OpenTK/HarfBuzz bump per the dependency-update checklist; a native ABI
   break or broken libpng now fails a test instead of crashing in front of a user.
 - **FeatureStore fallback undo in rollback & recovery** (P1): removal only ever cleaned the
   registry-override route — a user who enabled native NVMe via the ViVeTool/native FeatureStore
@@ -1001,7 +1001,7 @@ receiver, and a light-theme resource dictionary.
   can't replay. 16KB payload cap, 1-year KV TTL. Deploy doc included.
 - **`src/NVMeDriverPatcher/Themes/LightTheme.xaml`** — companion to DarkTheme. Same key set,
   light palette (zinc-50 / slate-100 / blue-600 accent). Dark stays the default per the
-  global CLAUDE.md rule.
+  project convention.
 
 ### Changed
 
