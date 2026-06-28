@@ -243,8 +243,12 @@ public static class EventLogWatchdogService
         return windowExpired ? WatchdogVerdict.Completed : WatchdogVerdict.Healthy;
     }
 
-    internal static string BuildSummary(WatchdogReport report, WatchdogState state) =>
-        report.Verdict switch
+    private const string CommandTimeoutGuidance =
+        "command timeout (Storport 129) detected; this usually means the controller stopped responding under load. Consider reverting immediately if it repeats or appears with disk 51/153 events.";
+
+    internal static string BuildSummary(WatchdogReport report, WatchdogState state)
+    {
+        var summary = report.Verdict switch
         {
             WatchdogVerdict.Unstable => $"Storage instability detected ({report.TotalEvents} events) — auto-revert eligible.",
             WatchdogVerdict.Warning => $"Elevated storage events ({report.TotalEvents}) in post-patch window.",
@@ -252,6 +256,11 @@ public static class EventLogWatchdogService
             WatchdogVerdict.Completed => $"Watchdog window completed with {report.TotalEvents} events. Patch considered stable.",
             _ => "Watchdog idle."
         };
+
+        return HasStorportCommandTimeout(report)
+            ? $"{summary} {CommandTimeoutGuidance}"
+            : summary;
+    }
 
     internal static string BuildDetail(WatchdogReport report, WatchdogState state)
     {
@@ -264,9 +273,17 @@ public static class EventLogWatchdogService
         {
             sb.AppendLine($"  [{c.Count}] {c.Source}/{c.Id} — {c.Description} (last: {c.LatestOccurrence:u})");
         }
+        if (HasStorportCommandTimeout(report))
+        {
+            sb.AppendLine();
+            sb.AppendLine($"Guidance: {CommandTimeoutGuidance}");
+        }
         if (report.TotalEvents == 0) sb.AppendLine("  (no matching events — looking good)");
         return sb.ToString();
     }
+
+    internal static bool HasStorportCommandTimeout(WatchdogReport report) =>
+        report.Counts.Any(c => c.Id == 129 && c.Count > 0);
 
     // Safety cap on the per-evaluation event loop. Above this many matching records we stop
     // reading — the verdict would already be locked in as Unstable (revert threshold is

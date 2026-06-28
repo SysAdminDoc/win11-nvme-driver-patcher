@@ -12,13 +12,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P2 — Safety and compat (research pass 4, 2026-06-20)
 
-- [ ] P2 — Enrich Event ID 129 watchdog guidance
-  Why: Storport Event ID 129 ("Reset to device") indicates command timeout / controller saturation — a sign the drive is struggling under the native driver. The watchdog already watches for it, but the user-facing verdict text does not explain what ID 129 means or that it specifically warrants immediate revert consideration.
-  Evidence: GigXP documents Event ID 129 as a "command saturation" signal requiring immediate revert; current `EventLogWatchdogService.BuildDetail()` counts the events but does not explain their significance.
-  Touches: `src/NVMeDriverPatcher.Core/Services/EventLogWatchdogService.cs` — enrich `BuildDetail` and `BuildSummary` with ID-129-specific guidance when those events are present. CLI `watchdog` output should name the event type. `DocsService` watchdog topic should mention it.
-  Acceptance: When watchdog detects Storport ID 129 events, the summary text includes "command timeout (Storport 129)" with a recommendation to consider revert; existing watchdog test fixtures updated.
-  Complexity: S
-
 ### P3 — Quality and distribution (research pass 4, 2026-06-20)
 
 - [ ] P3 — Monitor SkiaSharp for libpng >= 1.6.55 and bump when available

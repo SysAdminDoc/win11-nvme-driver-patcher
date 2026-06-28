@@ -59,6 +59,10 @@ BugCheck 1001, Kernel-Power 41) inside a user-configurable window (default 48h).
 count crosses the revert threshold AND AutoRevertEnabled is true, the next-boot
 AutoRevertService stages an uninstall. Tune via HKLM Policies or the CLI's
 `register-tasks` + watchdog.json.
+
+Storport Event ID 129 means a command timeout / device reset. Treat repeated
+command timeout (Storport 129) events as a strong revert signal, especially when paired
+with disk 51/153 paging or reset events.
 ",
         ["bypassio"] = @"
 nvmedisk.sys vetoes BypassIO, so DirectStorage titles such as Ratchet & Clank: Rift Apart,

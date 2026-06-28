@@ -33,6 +33,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   and points users to `Get-StorageReliabilityCounter`.
 - **Phison power-loss preflight advisory** — compat entries can now carry `powerLossRisk`;
   Phison E18/E26 matches surface a non-blocking UPS/power-protection warning before patching.
+- **Storport 129 watchdog guidance** — watchdog summaries/details now call out
+  `command timeout (Storport 129)` and recommend immediate revert consideration when it repeats
+  or appears with disk 51/153 events.
 
 ### Security
 - **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the
