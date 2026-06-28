@@ -222,7 +222,7 @@ NVMeDriverPatcher.Cli config-import --import=<path>        # Import config bundl
 
 | Requirement | Details |
 |-------------|---------|
-| **OS** | Windows 11 Build 22000+ (24H2 or 25H2 recommended) |
+| **OS** | Windows 11 Build 22000+ (24H2 or 25H2 recommended when the bundled build-rule check reports a working path) |
 | **Privileges** | Administrator (auto-elevation prompt) |
 | **Hardware** | NVMe SSD using Windows inbox driver (`StorNVMe.sys`) |
 | **Update** | KB5066835 (October 2025 cumulative update) or newer |
@@ -231,13 +231,16 @@ NVMeDriverPatcher.Cli config-import --import=<path>        # Import config bundl
 
 | Windows 11 Version | Build | Support |
 |--------------------|-------|---------|
-| 25H2 | 26200+ | Full support, best performance |
-| 24H2 | 26100 | Full support, recommended minimum |
-| 23H2 | 22631 | Partial -- feature flags apply but driver may not activate |
-| 22H2 | 22621 | Not recommended -- driver not present in base image |
-| 21H2 | 22000 | Unsupported |
+| 25H2 pre-26200.8524 | 26200.0-26200.8523 | Registry override is blocked; the build-specific FeatureStore fallback is the expected path. |
+| 25H2 26200.8524+ | 26200.8524+ | Verify / monitor / rollback only. No known registry or fallback route binds `GenNvmeDisk` on this branch. |
+| 24H2 pre-block | 26100.0-26100.3774 | Registry override route works on known builds. |
+| 24H2 post-block | 26100.3775+ | Registry keys can write but may not bind; use the fallback path and verify after reboot. |
+| 26300+ Insider | 26300+ | Check the native Settings Feature flags page first; registry and fallback routes are not expected to bind. |
+| 23H2 | 22631 | Partial -- feature flags may write but the driver may not activate. |
+| 22H2 / 21H2 | 22621 / 22000 | Not recommended or unsupported; the native driver may be absent or incomplete. |
 
-> The tool will warn you if your build is below 26100 but will not block the patch.
+> The app and CLI use `src/NVMeDriverPatcher.Core/windows_build_rules.json` at runtime. Trust `status`
+> and preflight output over this static table when Microsoft changes Insider or cumulative-update behavior.
 
 ## Hardware Compatibility
 
