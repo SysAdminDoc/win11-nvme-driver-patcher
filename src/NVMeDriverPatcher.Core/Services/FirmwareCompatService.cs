@@ -28,6 +28,9 @@ public class FirmwareCompatEntry
     [JsonPropertyName("note")]
     public string Note { get; set; } = string.Empty;
 
+    [JsonPropertyName("powerLossRisk")]
+    public bool PowerLossRisk { get; set; }
+
     // --- Lifecycle metadata (optional; older DB files omit them) ---
 
     // Where the verdict came from: a thread/advisory URL or "telemetry".
@@ -92,6 +95,7 @@ public class FirmwareCompatFinding
     public string Firmware { get; set; } = string.Empty;
     public FirmwareCompatLevel Level { get; set; } = FirmwareCompatLevel.Unknown;
     public string Note { get; set; } = string.Empty;
+    public bool PowerLossRisk { get; set; }
 }
 
 // Maps {controller model, firmware version} → {Good, Caution, Bad, Unknown} against a
@@ -184,6 +188,7 @@ public static class FirmwareCompatService
         {
             finding.Level = best.Level;
             finding.Note = best.Note;
+            finding.PowerLossRisk = best.PowerLossRisk;
         }
         return finding;
     }

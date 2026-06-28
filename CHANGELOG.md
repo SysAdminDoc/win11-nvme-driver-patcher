@@ -31,6 +31,8 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **CrystalDiskInfo incompatibility warning** — preflight now detects CrystalDiskInfo process,
   service, and install-path signals, warns that SMART monitoring may fail under `nvmedisk.sys`,
   and points users to `Get-StorageReliabilityCounter`.
+- **Phison power-loss preflight advisory** — compat entries can now carry `powerLossRisk`;
+  Phison E18/E26 matches surface a non-blocking UPS/power-protection warning before patching.
 
 ### Security
 - **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the

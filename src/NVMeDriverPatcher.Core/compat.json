@@ -167,6 +167,7 @@
       "firmware": "*",
       "level": "Caution",
       "note": "Phison E18-based drive. Community reports warn about power-loss corruption risk under nvmedisk.sys write acknowledgement behavior; use UPS/power protection and keep backups current.",
+      "powerLossRisk": true,
       "confidence": "community-reported",
       "lastReviewed": "2026-06-27",
       "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
@@ -185,6 +186,7 @@
       "firmware": "*",
       "level": "Caution",
       "note": "Phison-based Rocket models need current firmware plus power-loss protection; community reports warn about RAW partition corruption risk during writes under nvmedisk.sys.",
+      "powerLossRisk": true,
       "confidence": "community-reported",
       "lastReviewed": "2026-06-27",
       "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
@@ -194,6 +196,7 @@
       "firmware": "EIFM72.1",
       "level": "Bad",
       "note": "Early Phison E18 firmware - avoid Native NVMe, update drive first.",
+      "powerLossRisk": true,
       "confidence": "community-reported",
       "lastReviewed": "2026-06-10",
       "sourceUrl": "https://www.overclock.net/threads/enable-native-nvme-driver-in-windows-11-24h2-25h2-with-last-update.1818467/"
@@ -203,6 +206,7 @@
       "firmware": "*",
       "level": "Caution",
       "note": "Community reports warn Phison E18 platforms can expose RAW partition corruption after power loss while writes are in flight under nvmedisk.sys. Use UPS/power protection and keep backups current.",
+      "powerLossRisk": true,
       "confidence": "community-reported",
       "lastReviewed": "2026-06-27",
       "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
@@ -212,6 +216,7 @@
       "firmware": "*",
       "level": "Caution",
       "note": "Community reports warn Phison E26 platforms can expose RAW partition corruption after power loss while writes are in flight under nvmedisk.sys. Use UPS/power protection and keep backups current.",
+      "powerLossRisk": true,
       "confidence": "community-reported",
       "lastReviewed": "2026-06-27",
       "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
@@ -221,6 +226,7 @@
       "firmware": "*",
       "level": "Caution",
       "note": "Phison-based MP600 models need current firmware plus power-loss protection; community reports warn about RAW partition corruption risk during writes under nvmedisk.sys.",
+      "powerLossRisk": true,
       "confidence": "community-reported",
       "lastReviewed": "2026-06-27",
       "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"
@@ -230,6 +236,7 @@
       "firmware": "*",
       "level": "Caution",
       "note": "Phison E18-based drive. Community reports warn about RAW partition corruption risk during writes under nvmedisk.sys; use UPS/power protection and keep backups current.",
+      "powerLossRisk": true,
       "confidence": "community-reported",
       "lastReviewed": "2026-06-27",
       "sourceUrl": "https://gigxp.com/windows-11-native-nvme-driver/"

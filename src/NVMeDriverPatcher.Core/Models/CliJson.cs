@@ -135,6 +135,7 @@ public static class CliJson
             Firmware = e.Firmware,
             Level = e.Level.ToString(),
             Note = e.Note,
+            PowerLossRisk = e.PowerLossRisk,
             Confidence = e.Confidence ?? string.Empty,
         }).ToList(),
     };
@@ -288,6 +289,7 @@ public sealed class FirmwareCompatEntryJson
     public string Firmware { get; set; } = string.Empty;
     public string Level { get; set; } = string.Empty;
     public string Note { get; set; } = string.Empty;
+    public bool PowerLossRisk { get; set; }
     public string Confidence { get; set; } = string.Empty;
 }
 
