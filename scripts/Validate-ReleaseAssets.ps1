@@ -29,6 +29,21 @@ if (Test-Path $sumsPath) {
     }
 }
 
+function Get-Sha256Hex {
+    param([Parameter(Mandatory)] [string]$Path)
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = $sha.ComputeHash($stream)
+        return -join ($bytes | ForEach-Object { $_.ToString('x2') })
+    }
+    finally {
+        $sha.Dispose()
+        $stream.Dispose()
+    }
+}
+
 foreach ($a in $contract.artifacts) {
     $rel = $a.path -replace '\{version\}', $Version
     $full = Join-Path $repoRoot $rel
@@ -40,7 +55,7 @@ foreach ($a in $contract.artifacts) {
     }
 
     $leaf = Split-Path $rel -Leaf
-    $actualHash = (Get-FileHash -Algorithm SHA256 -Path $full).Hash.ToLower()
+    $actualHash = Get-Sha256Hex $full
 
     if ($a.checksum) {
         # Per-asset sidecar — the in-app auto-updater requires it.
@@ -79,7 +94,7 @@ foreach ($a in $contract.artifacts) {
         }
         $guiPath = Join-Path $repoRoot 'publish/gui/NVMeDriverPatcher.exe'
         if (Test-Path $guiPath) {
-            $guiHash = (Get-FileHash -Algorithm SHA256 -Path $guiPath).Hash.ToUpper()
+            $guiHash = (Get-Sha256Hex $guiPath).ToUpper()
             if ($yaml -notmatch [regex]::Escape($guiHash)) {
                 $failures.Add("winget manifest InstallerSha256 does not match publish/gui/NVMeDriverPatcher.exe")
             }
@@ -101,7 +116,7 @@ foreach ($a in $contract.artifacts) {
             }
             if ($arch.hash -match 'REPLACE_ME') { $failures.Add("scoop manifest still has the REPLACE_ME hash placeholder") }
             if (Test-Path $guiPath) {
-                $guiHashLower = (Get-FileHash -Algorithm SHA256 -Path $guiPath).Hash.ToLower()
+                $guiHashLower = Get-Sha256Hex $guiPath
                 if ($arch.hash -ne $guiHashLower) {
                     $failures.Add("scoop manifest 64bit hash does not match publish/gui/NVMeDriverPatcher.exe")
                 }

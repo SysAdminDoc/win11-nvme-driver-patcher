@@ -42,6 +42,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **ARM64 portable release assets** — GUI, CLI, tray, and watchdog projects now publish
   `win-arm64` self-contained binaries with distinct release filenames and checksums. ARM64
   builds are documented as diagnostic/status-only until Microsoft ships an ARM64 `nvmedisk.sys`.
+- **Local release artifact builder** — `scripts/Build-ReleaseArtifacts.ps1` now builds x64 and
+  ARM64 binaries, the x64 MSI, PowerShell module ZIP, winget/Scoop manifests, Chocolatey nupkg,
+  and SHA-256 sidecars. Release validation no longer depends on `Get-FileHash` auto-loading.
 
 ### Security
 - **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the
