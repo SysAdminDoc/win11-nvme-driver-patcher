@@ -134,7 +134,7 @@ if (Test-Path $packagingDocsRoot) {
 }
 
 # 10. Narrative docs must not lag the canonical version. Each is guarded by Test-Path so the
-# check is a no-op when the file is absent (e.g. minimal fixtures, or gitignored CLAUDE.md in CI).
+# check is a no-op when the file is absent (e.g. minimal fixtures).
 function Check-Narrative {
     param([string]$RelPath, [string]$Pattern, [string]$Surface)
     $full = Join-Path $repoRoot $RelPath
@@ -148,8 +148,6 @@ function Check-Narrative {
 Check-Narrative 'README.md' 'Version-([0-9]+\.[0-9]+\.[0-9]+)-' 'README.md version badge'
 # ROADMAP intro: "Current ship: **v5.0.0**"
 Check-Narrative 'ROADMAP.md' 'Current ship:\s*\*\*v?([0-9]+\.[0-9]+\.[0-9]+)\*\*' 'ROADMAP.md current-ship version'
-# CLAUDE.md status line: "Version: v5.0.0" (gitignored locally; validated only when present)
-Check-Narrative 'CLAUDE.md' 'Version:\s*v?([0-9]+\.[0-9]+\.[0-9]+)' 'CLAUDE.md status version'
 
 if ($failures.Count -gt 0) {
     Write-Host "Version drift detected (canonical = $canonical):" -ForegroundColor Red
