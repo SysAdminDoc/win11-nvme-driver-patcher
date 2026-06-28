@@ -39,6 +39,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **SkiaSharp 4.148.0 libpng refresh** — charting dependencies now pin the aligned SkiaSharp
   4.148.0 native stack with libpng 1.6.58 coverage for the libpng < 1.6.55 CVE floor, and the
   chart PNG smoke test verifies the native render/encode path.
+- **ARM64 portable release assets** — GUI, CLI, tray, and watchdog projects now publish
+  `win-arm64` self-contained binaries with distinct release filenames and checksums. ARM64
+  builds are documented as diagnostic/status-only until Microsoft ships an ARM64 `nvmedisk.sys`.
 
 ### Security
 - **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the

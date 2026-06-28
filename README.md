@@ -22,6 +22,10 @@ A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driv
 .\NVMeDriverPatcher.Cli.exe apply --safe
 ```
 
+**Windows on ARM** releases also ship `*-win-arm64.exe` portable builds for GUI, CLI, tray,
+and watchdog. These are diagnostic/status builds until Microsoft ships an ARM64 `nvmedisk.sys`;
+use the x64 assets under emulation if you need the current native-NVMe enablement path.
+
 **MSI (managed deployment)** — `NVMeDriverPatcher-<version>.msi` from the release installs GUI + CLI + tray per-machine; the real-time watchdog service is an opt-in feature (`ADDLOCAL=WatchdogService`).
 
 <details>

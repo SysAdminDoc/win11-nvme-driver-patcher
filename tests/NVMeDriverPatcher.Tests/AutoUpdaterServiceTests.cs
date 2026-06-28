@@ -122,6 +122,7 @@ public sealed class AutoUpdaterServiceTests
         ("NVMeDriverPatcher.Cli.exe", "https://example/cli"),
         ("NVMeDriverPatcher.Tray.exe", "https://example/tray"),
         ("NVMeDriverPatcher.Watchdog.exe", "https://example/watchdog"),
+        ("NVMeDriverPatcher-win-arm64.exe", "https://example/gui-arm64"),
         ("NVMeDriverPatcher-4.6.2.msi", "https://example/msi"),
         ("SHA256SUMS.txt", "https://example/sums"),
         ("NVMeDriverPatcher.exe", "https://example/gui"),
