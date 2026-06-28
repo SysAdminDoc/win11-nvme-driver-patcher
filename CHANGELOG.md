@@ -36,6 +36,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **Storport 129 watchdog guidance** — watchdog summaries/details now call out
   `command timeout (Storport 129)` and recommend immediate revert consideration when it repeats
   or appears with disk 51/153 events.
+- **SkiaSharp 4.148.0 libpng refresh** — charting dependencies now pin the aligned SkiaSharp
+  4.148.0 native stack with libpng 1.6.58 coverage for the libpng < 1.6.55 CVE floor, and the
+  chart PNG smoke test verifies the native render/encode path.
 
 ### Security
 - **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the
