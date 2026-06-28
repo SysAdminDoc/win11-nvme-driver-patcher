@@ -66,4 +66,49 @@ public sealed class PreflightServiceTests
     {
         Assert.Equal(expected, AppConfig.HasNativeFeatureFlagsPage(build));
     }
+
+    [Fact]
+    public void ClassifyFirmwarePowerLossRisk_WarnsWithoutBlocking()
+    {
+        var check = PreflightService.ClassifyFirmwarePowerLossRisk(
+        [
+            new FirmwareCompatFinding
+            {
+                DriveModel = "Phison E18 NVMe Controller",
+                Firmware = "1.0",
+                Level = FirmwareCompatLevel.Caution,
+                Note = "power-loss risk",
+                PowerLossRisk = true
+            }
+        ]);
+
+        Assert.NotNull(check);
+        Assert.Equal(CheckStatus.Warning, check!.Status);
+        Assert.False(check.Critical);
+        Assert.Contains("UPS/power protection", check.Message);
+        Assert.Contains("Phison E18", check.Message);
+    }
+
+    [Fact]
+    public void BuildFirmwareCompatibilityFindings_UsesDiskNumberFirmwareMap()
+    {
+        var db = new FirmwareCompatDatabase();
+        db.Entries.Add(new FirmwareCompatEntry
+        {
+            Controller = "Phison E18",
+            Firmware = "*",
+            Level = FirmwareCompatLevel.Caution,
+            Note = "power-loss risk",
+            PowerLossRisk = true
+        });
+
+        var findings = PreflightService.BuildFirmwareCompatibilityFindings(
+            db,
+            [new SystemDrive { Number = 2, Name = "Phison E18 NVMe Controller", IsNVMe = true }],
+            new Dictionary<string, string> { ["2"] = "1.0" });
+
+        var finding = Assert.Single(findings);
+        Assert.Equal("1.0", finding.Firmware);
+        Assert.True(finding.PowerLossRisk);
+    }
 }

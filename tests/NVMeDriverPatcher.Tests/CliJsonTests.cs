@@ -185,6 +185,7 @@ public sealed class CliJsonTests
             Firmware = "4B2QJXD7",
             Level = FirmwareCompatLevel.Good,
             Note = "Works well",
+            PowerLossRisk = true,
             Confidence = "verified",
         });
         var data = Parse("firmware", CliJson.BuildFirmwareCompat(db)).GetProperty("data");
@@ -196,6 +197,7 @@ public sealed class CliJsonTests
         Assert.Equal("Samsung 990 Pro", entry.GetProperty("controller").GetString());
         Assert.Equal("4B2QJXD7", entry.GetProperty("firmware").GetString());
         Assert.Equal("Good", entry.GetProperty("level").GetString());
+        Assert.True(entry.GetProperty("powerLossRisk").GetBoolean());
         Assert.Equal("verified", entry.GetProperty("confidence").GetString());
     }
 

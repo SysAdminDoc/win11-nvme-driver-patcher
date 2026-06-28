@@ -21,6 +21,7 @@
           "firmware": { "type": "string" },
           "level": { "type": "string", "enum": ["Good", "Caution", "Bad"] },
           "note": { "type": "string" },
+          "powerLossRisk": { "type": "boolean" },
           "confidence": { "type": "string" },
           "lastReviewed": { "type": "string" },
           "sourceUrl": { "type": "string" }

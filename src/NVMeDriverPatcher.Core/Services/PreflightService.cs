@@ -14,6 +14,7 @@ public class PreflightResult
     public bool IsLaptop { get; set; }
     public List<IncompatibleSoftwareInfo> IncompatibleSoftware { get; set; } = [];
     public NVMeDriverDetails? DriverInfo { get; set; }
+    public List<FirmwareCompatFinding> FirmwareCompatibility { get; set; } = [];
     public NativeNVMeStatus? NativeNVMeStatus { get; set; }
     public BypassIOResult? BypassIOStatus { get; set; }
     public List<CodeIntegrityBlockedDriverEvent> CodeIntegrityBlockedDrivers { get; set; } = [];
@@ -246,6 +247,14 @@ public static class PreflightService
                 checks["ThirdPartyDriver"] = result.DriverInfo.HasThirdParty
                     ? new(CheckStatus.Warning, result.DriverInfo.ThirdPartyName)
                     : new(CheckStatus.Pass, "Using inbox driver");
+
+            result.FirmwareCompatibility = BuildFirmwareCompatibilityFindings(
+                FirmwareCompatService.LoadDatabase(),
+                result.CachedDrives,
+                result.DriverInfo?.FirmwareVersions);
+            var powerLossCheck = ClassifyFirmwarePowerLossRisk(result.FirmwareCompatibility);
+            if (powerLossCheck is not null)
+                checks["FirmwarePowerLossRisk"] = powerLossCheck;
         }
         catch (Exception ex)
         {
@@ -472,5 +481,36 @@ public static class PreflightService
         }
 
         return new(CheckStatus.Pass, "No conflicts");
+    }
+
+    internal static List<FirmwareCompatFinding> BuildFirmwareCompatibilityFindings(
+        FirmwareCompatDatabase db,
+        IEnumerable<SystemDrive> drives,
+        IReadOnlyDictionary<string, string>? firmwareVersions)
+    {
+        var findings = new List<FirmwareCompatFinding>();
+        foreach (var drive in drives.Where(d => d.IsNVMe))
+        {
+            var key = drive.Number.ToString();
+            var firmware = firmwareVersions is not null && firmwareVersions.TryGetValue(key, out var fw)
+                ? fw
+                : string.Empty;
+            var finding = FirmwareCompatService.Lookup(db, drive.Name, firmware);
+            if (finding.Level != FirmwareCompatLevel.Unknown || finding.PowerLossRisk)
+                findings.Add(finding);
+        }
+        return findings;
+    }
+
+    internal static PreflightCheck? ClassifyFirmwarePowerLossRisk(IReadOnlyCollection<FirmwareCompatFinding> findings)
+    {
+        var risky = findings.Where(f => f.PowerLossRisk).ToList();
+        if (risky.Count == 0) return null;
+
+        var names = risky.Select(f => string.IsNullOrWhiteSpace(f.DriveModel) ? "matched NVMe drive" : f.DriveModel).ToList();
+        var summary = names.Count <= 2 ? string.Join(", ", names) : $"{string.Join(", ", names.Take(2))} +{names.Count - 2} more";
+        return new(
+            CheckStatus.Warning,
+            $"Power-loss advisory: {summary} matches a Phison E18/E26 power-loss risk entry. Use UPS/power protection and current backups before enabling nvmedisk.sys.");
     }
 }

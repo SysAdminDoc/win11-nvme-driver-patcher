@@ -12,13 +12,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P2 — Safety and compat (research pass 4, 2026-06-20)
 
-- [ ] P2 — Add Phison E18/E26 power-loss warning to preflight
-  Why: nvmedisk.sys can acknowledge writes before data physically reaches NAND. On Phison E18/E26 controllers specifically, power loss during writes causes RAW partition corruption ("Phantom Ack"). This is a firmware-level behavior the patcher can't fix, but users with these controllers need a UPS/power-protection advisory.
-  Evidence: GigXP technical analysis of MFT corruption mechanism; Overclock.net reports on Phison E18 instability.
-  Touches: `src/NVMeDriverPatcher.Core/Services/FirmwareCompatService.cs` or `PreflightService.cs` — when compat.json matches a Phison E18/E26 controller, surface a "power protection recommended" advisory alongside the existing compat level. `compat.json` entries for Phison should carry a `powerLossRisk` flag or note.
-  Acceptance: Preflight surfaces an advisory when a Phison E18/E26 controller is detected, recommending UPS/power protection; advisory does not block patching; test verifies the advisory triggers on Phison controller match.
-  Complexity: S
-
 - [ ] P2 — Enrich Event ID 129 watchdog guidance
   Why: Storport Event ID 129 ("Reset to device") indicates command timeout / controller saturation — a sign the drive is struggling under the native driver. The watchdog already watches for it, but the user-facing verdict text does not explain what ID 129 means or that it specifically warrants immediate revert consideration.
   Evidence: GigXP documents Event ID 129 as a "command saturation" signal requiring immediate revert; current `EventLogWatchdogService.BuildDetail()` counts the events but does not explain their significance.

@@ -109,6 +109,18 @@ public sealed class FirmwareCompatServiceTests
     }
 
     [Theory]
+    [InlineData("Phison E18 NVMe Controller")]
+    [InlineData("Phison E26 NVMe Controller")]
+    [InlineData("Seagate FireCuda 530")]
+    public void ShippedDatabase_PhisonRiskEntriesCarryPowerLossFlag(string model)
+    {
+        var finding = FirmwareCompatService.Lookup(ShippedDatabase(), model, "1.0");
+
+        Assert.True(finding.PowerLossRisk);
+        Assert.Contains("power", finding.Note, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData("WD_BLACK SN770 NVMe SSD 2TB", "731130WD")]
     [InlineData("WD_BLACK SN770M NVMe SSD 2TB", "731130WD")]
     [InlineData("WD Blue SN580 NVMe SSD 2TB", "281050WD")]
