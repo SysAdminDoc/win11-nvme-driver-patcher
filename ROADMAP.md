@@ -14,13 +14,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P3 — Quality and distribution (research pass 4, 2026-06-20)
 
-- [ ] P3 — Monitor SkiaSharp for libpng >= 1.6.55 and bump when available
-  Why: SkiaSharp 3.119.4 bundles libpng 1.6.54. CVE-2026-25646 (out-of-bounds read in `png_set_quantize()`) and CVE-2026-33416 (use-after-free) affect libpng < 1.6.55. Attack surface is low (requires crafted PNG in charting engine) but should be tracked.
-  Evidence: SentinelOne CVE-2026-25646; Powder Keg CVE-2026-33416; mono/SkiaSharp#3426.
-  Touches: `src/NVMeDriverPatcher/NVMeDriverPatcher.csproj` — bump all SkiaSharp packages when a version bundling libpng >= 1.6.55 ships. Run `ChartingSmokeTests` before and after per dependency update checklist.
-  Acceptance: All SkiaSharp packages updated to a version bundling libpng >= 1.6.55; `ChartingSmokeTests` pass; csproj comment updated with CVE references.
-  Complexity: S (when available)
-
 - [ ] P3 — Add `win-arm64` to release build matrix
   Why: Windows on ARM (Snapdragon X Elite/Plus) is a growing market. nvmedisk.sys is x64-only today, so ARM64 builds provide diagnostic/status/monitoring value only — but the build change is low effort and future-proofs for when Microsoft ships an ARM64 variant. ViVeTool already ships split-arch assets (v0.3.4+).
   Evidence: ARM64 WDK support confirmed (Microsoft Learn); Surface Pro 11 / Snapdragon X laptops use PCIe NVMe; no ARM64 nvmedisk.sys exists yet.
