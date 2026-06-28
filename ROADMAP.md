@@ -13,10 +13,3 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 ### P2 — Safety and compat (research pass 4, 2026-06-20)
 
 ### P3 — Quality and distribution (research pass 4, 2026-06-20)
-
-- [ ] P3 — Add `win-arm64` to release build matrix
-  Why: Windows on ARM (Snapdragon X Elite/Plus) is a growing market. nvmedisk.sys is x64-only today, so ARM64 builds provide diagnostic/status/monitoring value only — but the build change is low effort and future-proofs for when Microsoft ships an ARM64 variant. ViVeTool already ships split-arch assets (v0.3.4+).
-  Evidence: ARM64 WDK support confirmed (Microsoft Learn); Surface Pro 11 / Snapdragon X laptops use PCIe NVMe; no ARM64 nvmedisk.sys exists yet.
-  Touches: `.github/workflows/release.yml` — add `win-arm64` publish steps for GUI, CLI, Tray, Watchdog alongside existing `win-x64`. MSI may need a separate ARM64 build or a dual-arch approach. `packaging/release-artifacts.json` — add ARM64 entries.
-  Acceptance: Release workflow produces ARM64 self-contained exe artifacts with SHA-256 sidecars; ARM64 exe launches and shows "status" on an ARM64 machine (x64 emulation is fallback); release notes mention ARM64 as diagnostic-only until Microsoft ships the driver.
-  Complexity: M

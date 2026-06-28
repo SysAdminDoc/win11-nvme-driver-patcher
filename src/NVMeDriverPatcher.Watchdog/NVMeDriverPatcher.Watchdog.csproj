@@ -19,7 +19,8 @@
     <Description>Windows Service that subscribes to System event log and feeds the watchdog state in real time.</Description>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <ApplicationManifest>..\NVMeDriverPatcher\app.manifest</ApplicationManifest>
   </PropertyGroup>
 
