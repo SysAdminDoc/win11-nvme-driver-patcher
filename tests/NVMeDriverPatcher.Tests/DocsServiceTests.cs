@@ -45,4 +45,13 @@ public sealed class DocsServiceTests
         var upper = DocsService.Render("WATCHDOG");
         Assert.Contains("watchdog", upper, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void WatchdogTopic_ExplainsStorport129CommandTimeout()
+    {
+        var text = DocsService.Render("watchdog");
+
+        Assert.Contains("command timeout (Storport 129)", text);
+        Assert.Contains("revert", text, StringComparison.OrdinalIgnoreCase);
+    }
 }

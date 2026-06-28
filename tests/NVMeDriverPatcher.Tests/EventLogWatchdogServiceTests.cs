@@ -27,6 +27,25 @@ public sealed class EventLogWatchdogServiceTests
     }
 
     [Fact]
+    public void Summary_WithStorport129_NamesCommandTimeoutAndRevertGuidance()
+    {
+        var report = new WatchdogReport
+        {
+            Verdict = WatchdogVerdict.Warning,
+            TotalEvents = 3,
+            Counts =
+            [
+                new() { Source = "storport", Id = 129, Description = "Storport timeout", Count = 3 }
+            ]
+        };
+
+        var s = EventLogWatchdogService.BuildSummary(report, StateWith(3, 6));
+
+        Assert.Contains("command timeout (Storport 129)", s);
+        Assert.Contains("Consider reverting", s);
+    }
+
+    [Fact]
     public void Unstable_SummaryMentionsAutoRevertEligible()
     {
         var report = new WatchdogReport { Verdict = WatchdogVerdict.Unstable, TotalEvents = 7 };
@@ -67,5 +86,7 @@ public sealed class EventLogWatchdogServiceTests
         Assert.Contains("Warn threshold: 3", d);
         Assert.Contains("Revert threshold: 6", d);
         Assert.Contains("Storport timeout", d);
+        Assert.Contains("command timeout (Storport 129)", d);
+        Assert.Contains("disk 51/153", d);
     }
 }
