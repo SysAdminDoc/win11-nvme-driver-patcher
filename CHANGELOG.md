@@ -57,6 +57,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   when signtool is available. Download URL pinned to v2.2 release instead of `/releases/latest/`.
 
 ### Fixed
+- **Windows build compatibility guidance** — README and offline docs now mirror the bundled
+  build rules for 24H2 registry/fallback paths, 25H2 pre-8524 fallback, 26200.8524+
+  verify/rollback-only handling, and 26300+ Feature flags-page guidance.
 - **Watchdog shared state under LocalService** — non-portable app state now resolves to
   `%ProgramData%\NVMePatcher\` so the GUI, CLI, tray, and LocalService watchdog read the same
   `config.json`, `watchdog.json`, and SQLite database. First launch copies legacy

@@ -16,13 +16,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P0 - Safety and truthfulness
 
-- [ ] P0 - Sync public compatibility claims with build rules
-  Why: `README.md` says 25H2 / 26200+ has full support while `windows_build_rules.json` marks 26200.8524+ and newer trains as no known enablement path.
-  Evidence: `README.md`; `src/NVMeDriverPatcher.Core/windows_build_rules.json`; ViVe issue #164.
-  Touches: `README.md`, `src/NVMeDriverPatcher.Core/Services/DocsService.cs`, `tests/NVMeDriverPatcher.Tests/DocsServiceTests.cs`, `tests/NVMeDriverPatcher.Tests/WindowsBuildRulesServiceTests.cs`.
-  Acceptance: README and offline docs distinguish 24H2 registry/fallback paths, 25H2 pre-8524 fallback, 26200.8524+ verify/rollback-only, and 26300+ Feature Flags-page guidance; a test fails if README support text contradicts bundled build rules.
-  Complexity: S
-
 - [ ] P0 - Make native FeatureStore writer the default fallback path
   Why: The app already has tested in-process Rtl FeatureStore writes/resets, but GUI and CLI fallback still download ViVeTool first and may run with weak archive integrity.
   Evidence: `src/NVMeDriverPatcher.Core/Services/FeatureStoreWriterService.cs`; `src/NVMeDriverPatcher.Core/Services/ViVeToolService.cs`; `src/NVMeDriverPatcher/ViewModels/MainViewModel.Commands.cs`.
