@@ -16,13 +16,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P1 - Recovery and supply-chain hardening
 
-- [ ] P1 - Fix GitHub release sidecar lookup before CDN redirect
-  Why: `VerifiedDownloader` checks `.sha256` at the final redirected asset URI, but release sidecars are sibling GitHub release assets; this can silently degrade updater verification to Authenticode only.
-  Evidence: `src/NVMeDriverPatcher.Core/Services/VerifiedDownloader.cs`; `src/NVMeDriverPatcher.Core/Services/AutoUpdaterService.cs`; `packaging/release-artifacts.json`.
-  Touches: `src/NVMeDriverPatcher.Core/Services/VerifiedDownloader.cs`, `src/NVMeDriverPatcher.Core/Services/AutoUpdaterService.cs`, `tests/NVMeDriverPatcher.Tests/VerifiedDownloaderTests.cs`, `tests/NVMeDriverPatcher.Tests/AutoUpdaterServiceTests.cs`.
-  Acceptance: A redirect-chain test proves the downloader requests `<original-browser-download-url>.sha256` and accepts a matching sidecar before falling back to final-URI sidecar/Authenticode; README updater claims match observed verification.
-  Complexity: M
-
 - [ ] P1 - Detect and warn on custom-INF/test-signing native NVMe workarounds
   Why: The 26200.8524+ community workaround uses a test-signed custom INF and `pnputil /add-driver /install`, which changes driver-store state outside this tool's rollback model.
   Evidence: ViVe issue #164; Microsoft TESTSIGNING docs; Microsoft PnPUtil docs.

@@ -66,6 +66,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   verify/rollback-only handling, and 26300+ Feature flags-page guidance.
 - **CLI help long-command wrapping** — long command names now wrap before the summary instead
   of running into it in `help` output.
+- **Auto-updater release sidecars before CDN redirects** — `VerifiedDownloader` now checks
+  the original GitHub release asset's `.sha256` sidecar before trying the final redirected
+  asset URL, preserving strong sidecar verification when GitHub serves binaries through CDN
+  redirects.
 - **Watchdog shared state under LocalService** — non-portable app state now resolves to
   `%ProgramData%\NVMePatcher\` so the GUI, CLI, tray, and LocalService watchdog read the same
   `config.json`, `watchdog.json`, and SQLite database. First launch copies legacy
