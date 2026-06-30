@@ -99,7 +99,7 @@ WHAT THIS KIT CAN AND CANNOT UNDO:
 - It CANNOT undo the native FeatureStore / ViVeTool FALLBACK route. Those feature
   flags live in the live feature-configuration store and can only be cleared by a
   running Windows kernel - there is no offline (WinRE) equivalent. If you used the
-  'Try ViVeTool Fallback' button or 'featurestore --write-native', undo it from
+  'Try Fallback' button, the CLI 'fallback' command, or 'featurestore --write-native', undo it from
   INSIDE Windows with either:
     * the app's Remove Patch button, or
     * NVMeDriverPatcher.Cli featurestore --reset-native

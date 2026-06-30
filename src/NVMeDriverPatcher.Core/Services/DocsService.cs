@@ -17,7 +17,7 @@ Available topics:
   recovery         How to recover if the system won't boot.
   watchdog         The post-patch stability watchdog + auto-revert.
   bypassio         DirectStorage / BypassIO gaming impact.
-  vivetool         The post-block ViVeTool fallback path.
+  vivetool         The post-block FeatureStore fallback path.
   buildrules       Windows build support matrix.
   firmware         Controller/firmware compatibility hints.
   gpo              Group Policy / ADMX deployment for fleets.
@@ -74,12 +74,13 @@ independently, so an EOSSys.sys blocker is separate from the storage-driver choi
 ",
         ["vivetool"] = @"
 Microsoft silently neutered the FeatureManagement override path on early 2026 Insider
-builds. The fallback writes build-specific feature IDs to FeatureStore instead:
+builds. The fallback writes build-specific feature IDs to FeatureStore instead, using
+the native Rtl API first and ViVeTool only if native both-store verification fails:
 24H2 post-block builds use 60786016 + 48433719, while 25H2 26200 builds below
 UBR 8524 use 55369237 + 48433719 + 49453572. Build 26200.8524+, 26201-26299,
 and 26300+ have no known registry or fallback route that binds GenNvmeDisk; treat
 this tool as verify/monitor/rollback-only there. `featurestore` probes whether the
-fallback has been applied.
+fallback has been applied; `fallback` applies the native-first path.
 ",
         ["buildrules"] = @"
 The app and CLI load windows_build_rules.json at runtime before recommending an enablement

@@ -398,9 +398,9 @@ public partial class MainViewModel
         }
     }
 
-    // ViVeTool fallback — downloads ViVeTool from its official GitHub release, caches it in
-    // <workingDir>\tools\, then runs it with the two feature IDs the community adopted after
-    // Microsoft's Feb/Mar 2026 block on the FeatureManagement\Overrides route.
+    // Fallback path after Microsoft's Feb/Mar 2026 block on the FeatureManagement\Overrides
+    // route. Native FeatureStore writes are attempted first; ViVeTool is only the secondary
+    // path if native both-store verification fails.
     // Called both from the post-reboot OverrideBlocked dialog and from a persistent badge so
     // the user can retry without quitting the app.
     [RelayCommand]
@@ -408,20 +408,20 @@ public partial class MainViewModel
     {
         if (!TryAcquireInFlight(ref _fallbackInFlight))
         {
-            Log("ViVeTool fallback is already running.", "WARNING");
+            Log("Fallback apply is already running.", "WARNING");
             return;
         }
         ButtonsEnabled = false;
         try
         {
             Log("========================================");
-            Log("Applying ViVeTool fallback");
+            Log("Applying fallback (native FeatureStore first)");
             Log("========================================");
-            var result = await ViVeToolService.ApplyFallbackAsync(Config.WorkingDir, msg => Log(msg));
+            var result = await FallbackApplyService.ApplyAsync(Config.WorkingDir, msg => Log(msg));
             if (!result.Success)
             {
-                Log($"[ERROR] ViVeTool fallback failed: {result.Message}", "ERROR");
-                InfoDialog?.Invoke("ViVeTool Fallback Failed",
+                Log($"[ERROR] Fallback apply failed: {result.Message}", "ERROR");
+                InfoDialog?.Invoke("Fallback Failed",
                     "The fallback could not be applied:\n\n" + result.Message +
                     "\n\nYour registry backup, restore point, and recovery kit from the original patch are still in place. " +
                     "You can remove the patch at any time or retry the fallback later (the app will remember the block state until you do).",
@@ -429,9 +429,10 @@ public partial class MainViewModel
                 return;
             }
 
-            Log($"[SUCCESS] ViVeTool fallback applied: {string.Join(", ", result.AppliedIDs)}", "SUCCESS");
+            Log($"[SUCCESS] FeatureStore fallback applied via {result.Method}: {string.Join(", ", result.AppliedIds)}", "SUCCESS");
+            Log($"Fallback integrity check: {result.IntegritySignal}", "INFO");
             ShowViVeToolFallbackBadge = false;
-            ToastService.Show("ViVeTool Fallback Applied",
+            ToastService.Show("Fallback Applied",
                 "Fallback feature IDs written. Restart to activate the native NVMe driver.",
                 ToastType.Success, Config.EnableToasts);
             // Reuse the verification pipeline — the fallback is just a different way of
@@ -440,7 +441,7 @@ public partial class MainViewModel
             ConfigService.Save(Config);
 
             var restartMsg =
-                $"ViVeTool wrote feature IDs {string.Join(" and ", result.AppliedIDs)}.\n\n" +
+                $"Fallback wrote feature IDs {string.Join(" and ", result.AppliedIds)} via {result.Method}.\n\n" +
                 "Restart now to let Windows pick up the native NVMe driver?\n\n" +
                 $"(System will restart in {Config.RestartDelay} seconds if you click Yes.)";
             if (ConfirmDialog?.Invoke("Fallback Applied", restartMsg) == true)

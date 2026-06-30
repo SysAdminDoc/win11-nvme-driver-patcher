@@ -64,7 +64,7 @@
       "maxUbr": 8523,
       "expectedPath": "vivetool-fallback",
       "fallbackSet": "native-nvme-stack-25h2",
-      "summary": "25H2 (26200.x before .8524): the registry override is neutered; the ViVeTool fallback works with the newer ID set (55369237 + 48433719 + 49453572 — 60786016 reportedly no longer exists on these builds).",
+      "summary": "25H2 (26200.x before .8524): the registry override is neutered; the FeatureStore fallback works with the newer ID set (55369237 + 48433719 + 49453572 — 60786016 reportedly no longer exists on these builds).",
       "sourceUrl": "https://www.elevenforum.com/t/windows-11-25h2-nvmedisk-sys-driver-support.46678/",
       "confidence": "community-reported",
       "lastReviewed": "2026-06-10"
@@ -78,7 +78,7 @@
       "maxUbr": 999999,
       "expectedPath": "vivetool-fallback",
       "fallbackSet": "post-block-2026-03",
-      "summary": "24H2 with Feb/Mar 2026+ servicing: Microsoft neutered the FeatureManagement\\Overrides registry route (keys write successfully but the driver never binds). The ViVeTool fallback (60786016 + 48433719) still works.",
+      "summary": "24H2 with Feb/Mar 2026+ servicing: Microsoft neutered the FeatureManagement\\Overrides registry route (keys write successfully but the driver never binds). The FeatureStore fallback (60786016 + 48433719) still works.",
       "sourceUrl": "https://www.tomshardware.com/software/windows/microsoft-blocks-the-registry-hack-trick-that-unlocked-native-nvme-performance-on-windows-11",
       "confidence": "verified",
       "lastReviewed": "2026-06-10"

@@ -6,10 +6,10 @@ using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
 
-// ViVeTool fallback path — when the FeatureManagement\Overrides route is blocked
-// (Microsoft's Feb/Mar 2026 Insider change), the community solution is ViVeTool, which
-// writes the new feature IDs to a different store entirely. We download ViVeTool from
-// its official GitHub releases, cache it in the working dir, then shell out.
+// Secondary ViVeTool fallback path — the normal GUI/CLI fallback first writes the same
+// build-specific IDs through the in-process Rtl FeatureStore API. If native both-store
+// verification fails, this service downloads ViVeTool from its official GitHub releases,
+// caches it in the working dir, then shells out.
 //
 // Source: https://github.com/thebookisclosed/ViVe (permissive, MIT-style license)
 // Feature IDs come from Models/FallbackFeatureCatalog (build-gated; Microsoft rotates them).

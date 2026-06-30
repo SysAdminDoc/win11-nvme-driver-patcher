@@ -201,18 +201,18 @@
                                                            Foreground="{DynamicResource Yellow}"
                                                            FontSize="13"
                                                            FontWeight="SemiBold"/>
-                                                <TextBlock Text="Your last patch applied the feature flags, but Windows is still using the legacy driver. This is the Feb/Mar 2026 Microsoft block. The ViVeTool fallback writes to a different feature store that still works."
+                                                <TextBlock Text="Your last patch applied the feature flags, but Windows is still using the legacy driver. This is the Feb/Mar 2026 Microsoft block. The fallback writes build-specific IDs to FeatureStore without network access first, then offers ViVeTool only if the native write fails."
                                                            Margin="0,6,0,0"
                                                            Foreground="{DynamicResource TextSecondary}"
                                                            FontSize="12"
                                                            TextWrapping="Wrap"/>
                                             </StackPanel>
                                             <Button Grid.Column="1"
-                                                    Content="Try ViVeTool Fallback"
+                                                    Content="Try Fallback"
                                                     Margin="14,0,0,0"
                                                     VerticalAlignment="Center"
                                                     Style="{StaticResource SecondaryButton}"
-                                                    ToolTip="Downloads ViVeTool from its official GitHub release, caches it in this app's tools folder, then applies the community fallback feature IDs for your Windows build. Requires a restart."
+                                                    ToolTip="Writes build-specific FeatureStore IDs through the native Rtl API first. Downloads ViVeTool only if native both-store verification fails. Requires a restart."
                                                     IsEnabled="{Binding ButtonsEnabled}"
                                                     Command="{Binding ApplyViVeToolFallbackCommand}"/>
                                         </Grid>

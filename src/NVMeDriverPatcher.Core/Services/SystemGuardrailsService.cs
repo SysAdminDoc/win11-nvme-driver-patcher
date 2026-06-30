@@ -43,7 +43,7 @@ public static class SystemGuardrailsService
     {
         // AppLocker enforced rules live under HKLM\SOFTWARE\Policies\Microsoft\Windows\SrpV2\
         // with EnforcementMode values. SRP lives under \Safer\CodeIdentifiers\. Either mode
-        // being non-audit will refuse our ViVeTool download + MSI side-load path. Warn — but
+        // being non-audit can refuse the secondary ViVeTool download + MSI side-load path. Warn — but
         // never block; a well-pinned fleet may have exceptions already.
         try
         {
@@ -60,7 +60,7 @@ public static class SystemGuardrailsService
                         {
                             Name = "AppLocker",
                             Severity = GuardrailSeverity.Warning,
-                            Detail = $"AppLocker collection '{name}' is in Enforced mode. Downloaded binaries (ViVeTool) may be blocked — pre-approve or whitelist the hash."
+                            Detail = $"AppLocker collection '{name}' is in Enforced mode. The secondary ViVeTool binary may be blocked if native FeatureStore writing fails — pre-approve or whitelist the hash."
                         };
                     }
                 }
@@ -125,7 +125,7 @@ public static class SystemGuardrailsService
     internal static GuardrailFinding CheckWdac()
     {
         // WDAC policy state lives at HKLM\SYSTEM\CurrentControlSet\Control\CI\Protected.
-        // A non-audit enforced policy blocks arbitrary downloaded binaries (i.e. ViVeTool.exe).
+        // A non-audit enforced policy blocks arbitrary downloaded binaries (i.e. the secondary ViVeTool.exe path).
         try
         {
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
@@ -139,7 +139,7 @@ public static class SystemGuardrailsService
                     {
                         Name = "WDAC enforcement",
                         Severity = GuardrailSeverity.Warning,
-                        Detail = "Windows Defender Application Control is enforced. The ViVeTool fallback download will likely be blocked — have a pre-approved copy ready."
+                        Detail = "Windows Defender Application Control is enforced. The native FeatureStore fallback is still local, but the secondary ViVeTool download will likely be blocked — have a pre-approved copy ready."
                     };
                 }
             }

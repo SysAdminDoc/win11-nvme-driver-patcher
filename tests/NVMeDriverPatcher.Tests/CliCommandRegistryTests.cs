@@ -112,6 +112,15 @@ public sealed class CliCommandRegistryTests
     }
 
     [Fact]
+    public void RenderUsage_WrapsLongCommandNamesBeforeSummary()
+    {
+        var usage = CliCommandRegistry.RenderUsage("test");
+
+        Assert.Contains("    re-enable-after-update" + Environment.NewLine + "                          Re-apply", usage);
+        Assert.DoesNotContain("re-enable-after-updateRe-apply", usage);
+    }
+
+    [Fact]
     public void DescriptorCount_MatchesExpectedCommandSurface()
     {
         Assert.True(CliCommandRegistry.All.Length >= 42,
