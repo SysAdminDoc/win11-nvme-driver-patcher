@@ -57,6 +57,10 @@ Flip via `apply --safe` / `apply --full` or the GUI's Install Mode radio.
    Update driver > Browse > Let me pick > select the Standard NVM Express Controller /
    stornvme. If an OEM INF is confirmed, remove it with
    `pnputil /delete-driver <oem#.inf> /uninstall` only after rollback proof.
+5. WinRE driver hardening. `winre-inject` previews the DISM plan to inject stornvme.inf
+   into winre.wim. `winre-inject --apply` backs up winre.wim, logs SHA-256 before/after,
+   mounts under the app working dir, commits or discards, and runs DISM cleanup on failure.
+   After applying, boot into WinRE once and confirm the system volume is accessible.
 ",
         ["watchdog"] = @"
 The post-patch watchdog counts storage-stack distress signals (Storport 129, disk 51/153,

@@ -338,6 +338,8 @@ A recovery kit is **automatically generated** after each successful patch instal
 
 **Copy this folder to a USB drive** before rebooting to have an offline recovery option if the system won't boot.
 
+Advanced hardening: `NVMeDriverPatcher.Cli.exe winre-inject` previews the DISM plan to inject `stornvme.inf` into the local WinRE image. `winre-inject --apply` backs up `winre.wim`, logs original/backup/final SHA-256 hashes, mounts to an app-owned temp folder, injects the driver, and commits or discards cleanly. After applying, boot into WinRE once and confirm the system volume is accessible.
+
 ## Scope
 
 **This patch affects ALL NVMe drives** in your system that use the Windows inbox driver (`StorNVMe.sys`), not just the OS drive.

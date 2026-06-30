@@ -59,7 +59,7 @@ public static class CliCommandRegistry
         new("fallback", ["vivetool-fallback", "apply-fallback"], CommandGroup.Recovery,
             "Apply native FeatureStore fallback first; use ViVeTool only if native write fails"),
         new("winre-inject", ["inject-winre"], CommandGroup.Recovery,
-            "Preview the DISM plan to inject the legacy stornvme driver into the WinRE image (preview only)"),
+            "Preview or --apply the guarded DISM injection of stornvme.inf into the WinRE image"),
 
         // ── Diagnostics ──
         new("diagnostics", ["export-diagnostics"], CommandGroup.Diagnostics,

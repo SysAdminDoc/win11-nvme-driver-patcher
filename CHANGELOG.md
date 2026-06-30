@@ -45,6 +45,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **Local release artifact builder** — `scripts/Build-ReleaseArtifacts.ps1` now builds x64 and
   ARM64 binaries, the x64 MSI, PowerShell module ZIP, winget/Scoop manifests, Chocolatey nupkg,
   and SHA-256 sidecars. Release validation no longer depends on `Get-FileHash` auto-loading.
+- **Guarded WinRE `stornvme.inf` injection** — `winre-inject` remains preview by default, while
+  `winre-inject --apply` backs up `winre.wim`, logs original/backup/final SHA-256 hashes,
+  mounts under the app working directory, injects `stornvme.inf`, commits on success, discards
+  and runs DISM mount cleanup on failure.
 
 ### Security
 - **Native-first FeatureStore fallback** — GUI and CLI `fallback` now call

@@ -133,6 +133,33 @@ public static class RecoveryProofGateService
         }
     }
 
+    internal static RecoveryProofItem EvaluateWinReInjectionPlan(WinReInjectionPlan plan)
+    {
+        if (plan.IsExecutable)
+        {
+            return new()
+            {
+                Label = "WinRE stornvme injection",
+                Passed = true,
+                Detail = "WinRE image and stornvme.inf are available; --apply will back up and checksum before DISM changes"
+            };
+        }
+
+        var warnings = plan.Warnings
+            .Where(w => w.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
+                        w.Contains("NOT", StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToList();
+        return new()
+        {
+            Label = "WinRE stornvme injection",
+            Passed = false,
+            Detail = warnings.Count == 0
+                ? "WinRE injection plan is not executable"
+                : string.Join("; ", warnings)
+        };
+    }
+
     private static RecoveryProofItem EvaluateRestorePointCapability()
     {
         try
