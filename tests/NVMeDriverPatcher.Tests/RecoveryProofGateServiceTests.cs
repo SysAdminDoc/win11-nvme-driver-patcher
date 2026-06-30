@@ -97,6 +97,29 @@ public sealed class RecoveryProofGateServiceTests
         Assert.False(string.IsNullOrWhiteSpace(item.Detail));
     }
 
+    [Fact]
+    public void EvaluateWinReInjectionPlan_PassesOnlyExecutablePlan()
+    {
+        var ready = WinReDriverInjectionService.BuildPlan(
+            @"C:\Recovery\WindowsRE\winre.wim",
+            @"C:\ProgramData\NVMePatcher\WinREMount",
+            @"C:\Windows\INF\stornvme.inf");
+        var blocked = WinReDriverInjectionService.BuildPlan(
+            "(unknown)",
+            @"C:\ProgramData\NVMePatcher\WinREMount",
+            "",
+            imageMissing: true,
+            driverInfMissing: true);
+
+        var readyItem = RecoveryProofGateService.EvaluateWinReInjectionPlan(ready);
+        var blockedItem = RecoveryProofGateService.EvaluateWinReInjectionPlan(blocked);
+
+        Assert.True(readyItem.Passed);
+        Assert.Contains("back up", readyItem.Detail);
+        Assert.False(blockedItem.Passed);
+        Assert.Contains("not found", blockedItem.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
     // --- Restore-point capability: protection state, not RPSessionInterval, decides ---
 
     [Fact]

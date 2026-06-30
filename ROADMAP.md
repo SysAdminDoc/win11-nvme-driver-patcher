@@ -16,13 +16,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P1 - Recovery and supply-chain hardening
 
-- [ ] P1 - Add guarded WinRE stornvme injection execution
-  Why: The repo can preview DISM commands for injecting `stornvme.inf` into WinRE, but users still have to perform the risky recovery hardening manually.
-  Evidence: `src/NVMeDriverPatcher.Core/Services/WinReDriverInjectionService.cs`; Microsoft DISM offline-driver docs; Microsoft REAgentC docs.
-  Touches: `src/NVMeDriverPatcher.Core/Services/WinReDriverInjectionService.cs`, `src/NVMeDriverPatcher.Cli/Program.cs`, `src/NVMeDriverPatcher.Core/Services/RecoveryProofGateService.cs`, `tests/NVMeDriverPatcher.Tests/WinReDriverInjectionServiceTests.cs`.
-  Acceptance: `winre-inject --apply` backs up `winre.wim`, mounts to an app-owned temp dir, adds `stornvme.inf`, commits or discards cleanly, runs DISM cleanup on failure, logs checksums, and leaves preview mode as the default.
-  Complexity: L
-
 - [ ] P1 - Add a fallback-active recovery gate before reboot
   Why: `RecoveryKitService` correctly states WinRE cannot reset FeatureStore fallback IDs, so fallback apply needs stronger proof and automatic reset behavior before the first reboot.
   Evidence: `src/NVMeDriverPatcher.Core/Services/RecoveryKitService.cs`; `src/NVMeDriverPatcher.Core/Services/FeatureStoreWriterService.cs`.

@@ -77,6 +77,7 @@ class Program
 
             bool json = args.Any(a => a is not null && MatchesAny(a, "--json"));
             bool dryRun = args.Any(a => a is not null && MatchesAny(a, "--dry-run", "--preview"));
+            bool applyWinReInjection = args.Any(a => a is not null && MatchesAny(a, "--apply"));
             bool unattended = args.Any(a => a is not null && MatchesAny(a, "--unattended"));
             bool autoRevert = args.Any(a => a is not null && MatchesAny(a, "--auto-revert"));
             string? isoOut = args.Select(a => (a ?? string.Empty))
@@ -150,7 +151,7 @@ class Program
                 "portable-disable" => PortableDisableCommand(),
                 "update-check" => UpdateCheckCommand().GetAwaiter().GetResult(),
                 "winre" => WinReCommand(),
-                "winre-inject" or "inject-winre" => WinReInjectCommand(),
+                "winre-inject" or "inject-winre" => WinReInjectCommand(config, applyWinReInjection).GetAwaiter().GetResult(),
                 "featurestore" or "feature-store" => FeatureStoreCommand(
                     config,
                     args.Any(a => a is not null && a.Equals("--write-native", StringComparison.OrdinalIgnoreCase)),
@@ -1109,19 +1110,49 @@ class Program
         return rc;
     }
 
-    static int WinReInjectCommand()
+    static async Task<int> WinReInjectCommand(AppConfig config, bool apply)
     {
-        // Preview-only: probe WinRE for the image path, locate stornvme.inf, and print the exact
-        // DISM plan + blast-radius warnings. This command never mounts or mutates the image.
         var info = WinReBcdPrepService.Probe();
         var inf = WinReDriverInjectionService.DefaultStornvmeInf();
-        var imageMissing = string.IsNullOrWhiteSpace(info.ImagePath);
+        var imageMissing = string.IsNullOrWhiteSpace(info.ImagePath) || !System.IO.File.Exists(info.ImagePath);
         var driverMissing = !System.IO.File.Exists(inf);
-        var mountDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "NVMePatcher_WinReMount");
+        var workingDir = string.IsNullOrWhiteSpace(config.WorkingDir) ? AppConfig.GetWorkingDir() : config.WorkingDir;
+        var mountDir = apply
+            ? WinReDriverInjectionService.CreateDefaultMountDir(workingDir)
+            : System.IO.Path.Combine(workingDir, "WinREMount-preview");
         var plan = WinReDriverInjectionService.BuildPlan(
             info.ImagePath ?? "(WinRE image path unknown)", mountDir, inf, imageMissing, driverMissing);
-        Console.WriteLine(WinReDriverInjectionService.RenderPlan(plan));
-        return plan.IsExecutable ? 0 : 1;
+        var readiness = RecoveryProofGateService.EvaluateWinReInjectionPlan(plan);
+
+        if (!apply)
+        {
+            Console.WriteLine(WinReDriverInjectionService.RenderPlan(plan));
+            Console.WriteLine();
+            Console.WriteLine("Preview only. Re-run `winre-inject --apply` to back up, mount, inject, and commit.");
+            return plan.IsExecutable ? 0 : 1;
+        }
+
+        Console.WriteLine("WinRE stornvme injection -- APPLY mode");
+        Console.WriteLine($"  WinRE image : {plan.WinReImagePath}");
+        Console.WriteLine($"  Driver INF  : {plan.DriverInfPath}");
+        Console.WriteLine($"  Mount dir   : {plan.MountDir}");
+        foreach (var warning in plan.Warnings)
+            Console.WriteLine($"  ! {warning}");
+        Console.WriteLine($"Readiness: {(readiness.Passed ? "OK" : "BLOCKED")} - {readiness.Detail}");
+        if (!readiness.Passed)
+            return 1;
+
+        var result = await WinReDriverInjectionService.ApplyAsync(plan, workingDir, Console.WriteLine);
+        Console.WriteLine(result.Summary);
+        if (!string.IsNullOrWhiteSpace(result.BackupPath))
+            Console.WriteLine($"Backup: {result.BackupPath}");
+        if (!string.IsNullOrWhiteSpace(result.OriginalSha256))
+            Console.WriteLine($"Original SHA-256: {result.OriginalSha256}");
+        if (!string.IsNullOrWhiteSpace(result.BackupSha256))
+            Console.WriteLine($"Backup SHA-256:   {result.BackupSha256}");
+        if (!string.IsNullOrWhiteSpace(result.FinalSha256))
+            Console.WriteLine($"Final SHA-256:    {result.FinalSha256}");
+        return result.Success ? 0 : 1;
     }
 
     static int PolicyInstallCommand(string? source, string? policyDefs)
