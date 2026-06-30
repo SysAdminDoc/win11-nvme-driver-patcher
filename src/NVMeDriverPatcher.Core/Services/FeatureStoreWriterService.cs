@@ -44,10 +44,9 @@ public sealed record FeatureConfigState(
 //
 //   - Query path (read-only, no admin): per-ID enabled-state/priority for the Boot and
 //     Runtime stores. Powers HasFallbackEvidence and the CLI `featurestore` report.
-//   - Write path (EXPERIMENTAL, admin): sets the same configuration ViVeTool's /enable
-//     sets (priority User, state Enabled, both stores). Exposed only behind the explicit
-//     CLI `featurestore --write-native` switch — the ViVeTool download remains the
-//     default fallback route until this path has soaked.
+//   - Write path (admin): sets the same configuration ViVeTool's /enable sets
+//     (priority User, state Enabled, both stores). The normal GUI/CLI fallback now uses
+//     this in-process path first and tries ViVeTool only when native verification fails.
 //   - Blob export is kept for support bundles; the blob scan remains only as a last-resort
 //     evidence heuristic when the Rtl API is unavailable.
 public static class FeatureStoreWriterService
@@ -188,7 +187,7 @@ public static class FeatureStoreWriterService
                 {
                     Success = false,
                     Summary = $"RtlSetFeatureConfigurations(Runtime) failed with NTSTATUS 0x{runtimeStatus:X8}. " +
-                              "Run elevated; if this persists, use the ViVeTool fallback instead.",
+                              "Run elevated; if this persists, use the secondary ViVeTool fallback instead.",
                 };
             }
 
@@ -209,7 +208,7 @@ public static class FeatureStoreWriterService
                     Success = false,
                     Summary = $"RtlSetFeatureConfigurations(Boot) failed with NTSTATUS 0x{bootStatus:X8}. " +
                               "Runtime store was rolled back to avoid split state. " +
-                              "Run elevated; if this persists, use the ViVeTool fallback instead.",
+                              "Run elevated; if this persists, use the secondary ViVeTool fallback instead.",
                 };
             }
         }
@@ -218,7 +217,7 @@ public static class FeatureStoreWriterService
             return new FeatureStoreWriteResult
             {
                 Success = false,
-                Summary = $"Native feature-configuration write unavailable: {ex.Message}. Use the ViVeTool fallback.",
+                Summary = $"Native feature-configuration write unavailable: {ex.Message}. Use the secondary ViVeTool fallback.",
             };
         }
 
@@ -260,7 +259,7 @@ public static class FeatureStoreWriterService
         {
             Success = false,
             Summary = "Write call returned success but verification shows ID(s) not enabled in BOTH stores: " +
-                      detail + ". A Boot-store gap would surface only after reboot — use the ViVeTool fallback and report this.",
+                      detail + ". A Boot-store gap would surface only after reboot — use the secondary ViVeTool fallback and report this.",
             AppliedIds = fullyEnabled,
             IdStatuses = statuses,
         };

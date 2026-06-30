@@ -42,7 +42,7 @@ irm https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/dow
 > | Capability | Legacy script | GUI / CLI |
 > |---|---|---|
 > | Registry override patch + SafeBoot keys | ✅ | ✅ |
-> | ViVeTool fallback for post-block builds | ❌ | ✅ |
+> | Native FeatureStore fallback for post-block builds (ViVeTool only after native failure) | ❌ | ✅ |
 > | Post-reboot bind verification (honest status) | ❌ | ✅ |
 > | Watchdog auto-revert, minidump triage, reliability correlation | ❌ | ✅ |
 > | Per-drive scope, dry-run preview, recovery USB builder | ❌ | ✅ |

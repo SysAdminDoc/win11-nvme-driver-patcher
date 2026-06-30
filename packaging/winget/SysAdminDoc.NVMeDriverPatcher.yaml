@@ -25,8 +25,9 @@ Description: |
   (nvmedisk.sys) on Windows 11, replacing the legacy SCSI translation layer for
   improved NVMe performance. Includes Safe Mode + Full Mode profiles, BitLocker
   auto-suspend, VeraCrypt detection, registry backup + rollback, recovery kit
-  generation, post-reboot verification, automated ViVeTool fallback for post-block
-  Insider builds, and a post-patch stability watchdog with auto-revert.
+  generation, post-reboot verification, native FeatureStore fallback for post-block
+  Insider builds with ViVeTool as the secondary path, and a post-patch stability watchdog
+  with auto-revert.
 Moniker: nvmedriverpatcher
 Tags:
   - nvme

@@ -13,7 +13,7 @@ public enum VerificationOutcome
     AwaitingRestart,
     /// <summary>Keys written AND rebooted, but nvmedisk.sys still isn't bound. The build
     /// is likely one Microsoft has locked against the FeatureManagement override route
-    /// (Feb/Mar 2026 Insider change). User needs the ViVeTool fallback.</summary>
+    /// (Feb/Mar 2026 Insider change). User needs the FeatureStore fallback.</summary>
     OverrideBlocked,
     /// <summary>The ViVeTool/FeatureStore fallback was applied (feature flags read as
     /// enabled), the machine rebooted, and nvmedisk.sys STILL didn't bind. On builds
@@ -217,7 +217,7 @@ public static class PatchVerificationService
             "Patch applied but inactive on this build",
             "The registry keys are set, but Windows is still using the legacy stornvme.sys driver. " +
             "Microsoft began neutering this override path on recent Insider builds in early 2026. " +
-            "You can remove the patch safely, or try the ViVeTool fallback (the app selects the right feature IDs for your Windows build) " +
+            "You can remove the patch safely, or try the FeatureStore fallback (the app selects the right feature IDs for your Windows build and uses ViVeTool only if native writing fails) " +
             "covered on the project's GitHub README.");
     }
 

@@ -14,15 +14,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P3 — Quality and distribution (research pass 4, 2026-06-20)
 
-### P0 - Safety and truthfulness
-
-- [ ] P0 - Make native FeatureStore writer the default fallback path
-  Why: The app already has tested in-process Rtl FeatureStore writes/resets, but GUI and CLI fallback still download ViVeTool first and may run with weak archive integrity.
-  Evidence: `src/NVMeDriverPatcher.Core/Services/FeatureStoreWriterService.cs`; `src/NVMeDriverPatcher.Core/Services/ViVeToolService.cs`; `src/NVMeDriverPatcher/ViewModels/MainViewModel.Commands.cs`.
-  Touches: `src/NVMeDriverPatcher/ViewModels/MainViewModel.Commands.cs`, `src/NVMeDriverPatcher.Cli/Program.cs`, `src/NVMeDriverPatcher.Core/Services/FeatureStoreWriterService.cs`, `tests/NVMeDriverPatcher.Tests/FeatureStoreWriterServiceTests.cs`.
-  Acceptance: GUI "fallback" and CLI `fallback` first call `FeatureStoreWriterService.WriteOverrides` with both-store verification and no network; ViVeTool is offered only after native write failure, with the integrity level shown in logs/JSON.
-  Complexity: M
-
 ### P1 - Recovery and supply-chain hardening
 
 - [ ] P1 - Fix GitHub release sidecar lookup before CDN redirect

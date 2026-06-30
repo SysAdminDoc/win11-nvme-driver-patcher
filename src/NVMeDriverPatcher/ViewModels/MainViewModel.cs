@@ -133,7 +133,7 @@ public partial class MainViewModel : ObservableObject
         "Safe Mode writes only 735209102 — enough to swap the driver with no boot-crash reports tied to it.";
 
     // Lit when post-reboot verification detects that the override was blocked. Surfaces a
-    // persistent "Try ViVeTool Fallback" affordance on the Overview card so the user can
+    // persistent fallback affordance on the Overview card so the user can
     // revisit the choice without reopening the dialog.
     [ObservableProperty] private bool _showViVeToolFallbackBadge;
     [ObservableProperty] private bool _showSafeBootUpgradeBadge;
@@ -647,10 +647,10 @@ public partial class MainViewModel : ObservableObject
                 "The registry changes are in place, but Windows is still loading the legacy stornvme.sys driver.\n\n" +
                 "Microsoft began blocking this override path on recent Insider builds in early 2026. " +
                 "On those builds the FeatureManagement\\Overrides route is a no-op.\n\n" +
-                $"A community fallback exists: ViVeTool writes to a different feature store using IDs {ViVeToolService.SelectFallbackSet().IdsDisplay}. " +
-                "This works on post-block builds at the cost of an extra dependency.\n\n" +
-                "Choose Apply Fallback to download ViVeTool from its official GitHub repository " +
-                $"({ViVeToolService.ViVeToolProjectUrl}) and apply the fallback now.\n\n" +
+                $"A fallback exists: the app can write build-specific FeatureStore IDs {ViVeToolService.SelectFallbackSet().IdsDisplay} with the native Rtl API first. " +
+                "If native both-store verification fails, it will try ViVeTool from its official GitHub release " +
+                $"({ViVeToolService.ViVeToolProjectUrl}) as the secondary path.\n\n" +
+                "Choose Apply Fallback to apply the fallback now.\n\n" +
                 "If you choose Not Now, your registry backup, restore point, and recovery kit stay in place. " +
                 "You can remove the patch from this app at any time."
             ) == true;
@@ -659,11 +659,11 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Log($"ViVeTool fallback dialog flow failed: {ex.Message}", "ERROR");
+            Log($"Fallback dialog flow failed: {ex.Message}", "ERROR");
             try
             {
                 EventLogService.Write(
-                    $"ViVeTool fallback dialog flow failed: {ex}",
+                    $"Fallback dialog flow failed: {ex}",
                     System.Diagnostics.EventLogEntryType.Error,
                     3101);
             }

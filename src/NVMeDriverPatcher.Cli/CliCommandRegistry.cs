@@ -57,7 +57,7 @@ public static class CliCommandRegistry
         new("upgrade-safeboot", ["safeboot-upgrade"], CommandGroup.Recovery,
             "Add KB5079391 service-name SafeBoot entries missing from pre-v4.6.1 patches"),
         new("fallback", ["vivetool-fallback", "apply-fallback"], CommandGroup.Recovery,
-            "Apply ViVeTool fallback (build-specific feature IDs, post-block builds)"),
+            "Apply native FeatureStore fallback first; use ViVeTool only if native write fails"),
         new("winre-inject", ["inject-winre"], CommandGroup.Recovery,
             "Preview the DISM plan to inject the legacy stornvme driver into the WinRE image (preview only)"),
 
@@ -223,7 +223,15 @@ public static class CliCommandRegistry
                     RiskLevel.Experimental => " [experimental]",
                     _ => ""
                 };
-                sb.AppendLine($"    {name,-22}{d.Summary}{suffix}");
+                if (name.Length >= 22)
+                {
+                    sb.AppendLine($"    {name}");
+                    sb.AppendLine($"    {"",22}{d.Summary}{suffix}");
+                }
+                else
+                {
+                    sb.AppendLine($"    {name,-22}{d.Summary}{suffix}");
+                }
                 if (d.Aliases.Length > 0)
                     sb.AppendLine($"    {"",22}Aliases: {string.Join(", ", d.Aliases)}");
             }

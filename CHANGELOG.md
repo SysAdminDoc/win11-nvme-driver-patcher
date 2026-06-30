@@ -47,6 +47,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   and SHA-256 sidecars. Release validation no longer depends on `Get-FileHash` auto-loading.
 
 ### Security
+- **Native-first FeatureStore fallback** — GUI and CLI `fallback` now call
+  `FeatureStoreWriterService.WriteOverrides` before any network access. ViVeTool is only
+  attempted after native both-store verification fails, and the chosen method plus integrity
+  signal are logged / printed for unattended audits.
 - **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the
   System event log and writes to the shared `%ProgramData%\NVMePatcher\` working directory. LocalSystem was unnecessarily
   privileged. Also adds a restricted service SID via `sc sidtype ... restricted`.
@@ -60,6 +64,8 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **Windows build compatibility guidance** — README and offline docs now mirror the bundled
   build rules for 24H2 registry/fallback paths, 25H2 pre-8524 fallback, 26200.8524+
   verify/rollback-only handling, and 26300+ Feature flags-page guidance.
+- **CLI help long-command wrapping** — long command names now wrap before the summary instead
+  of running into it in `help` output.
 - **Watchdog shared state under LocalService** — non-portable app state now resolves to
   `%ProgramData%\NVMePatcher\` so the GUI, CLI, tray, and LocalService watchdog read the same
   `config.json`, `watchdog.json`, and SQLite database. First launch copies legacy

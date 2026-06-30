@@ -938,7 +938,7 @@ class Program
                     Console.WriteLine();
                     Console.WriteLine("NOTE: The feature flags are set but Windows is still loading the legacy driver.");
                     Console.WriteLine("      On post-block Insider builds (early 2026+) the override is a no-op.");
-                    Console.WriteLine($"      Community workaround: ViVeTool with feature IDs {ViVeToolService.SelectFallbackSet().IdsDisplay}.");
+                    Console.WriteLine($"      Use 'fallback' to write FeatureStore IDs {ViVeToolService.SelectFallbackSet().IdsDisplay} natively first.");
                 }
             }
         }
@@ -1164,13 +1164,13 @@ class Program
 
     static int FallbackCommand(AppConfig config)
     {
-        Console.WriteLine("ViVeTool fallback (downloads from https://github.com/thebookisclosed/ViVe)");
+        Console.WriteLine("FeatureStore fallback (native Rtl API first; no network unless native write fails)");
         var fbSet = ViVeToolService.SelectFallbackSet();
         Console.WriteLine($"Writes feature IDs {fbSet.IdsDisplay} to Windows's FeatureStore");
         Console.WriteLine($"(set '{fbSet.Name}' for {fbSet.AppliesTo}; confidence: {fbSet.Confidence}).");
         Console.WriteLine();
         Action<string> log = msg => Console.WriteLine(msg);
-        var result = ViVeToolService.ApplyFallbackAsync(config.WorkingDir, log).GetAwaiter().GetResult();
+        var result = FallbackApplyService.ApplyAsync(config.WorkingDir, log).GetAwaiter().GetResult();
         if (!result.Success)
         {
             Console.Error.WriteLine();
@@ -1178,11 +1178,8 @@ class Program
             return 1;
         }
         Console.WriteLine();
-        Console.WriteLine($"Applied feature ID(s): {string.Join(", ", result.AppliedIDs)}");
-        // Expose the integrity-verification signal so unattended callers can audit how the
-        // third-party binary was trusted. `sha256` means a published hash matched the archive
-        // byte-for-byte; `weak` means we fell back to size + host allowlist (upstream ViVeTool
-        // does not currently publish sidecars — activates automatically once they do).
+        Console.WriteLine($"Applied feature ID(s): {string.Join(", ", result.AppliedIds)}");
+        Console.WriteLine($"Method: {result.Method}");
         Console.WriteLine($"Integrity check: {result.IntegritySignal}");
         PatchVerificationService.MarkPending(config);
         ConfigService.Save(config);
