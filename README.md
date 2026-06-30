@@ -65,9 +65,10 @@ if ($expected -eq $actual) { "OK: $file" } else { "MISMATCH: expected $expected,
 ```
 
 The GUI's in-app auto-updater (**Help → Check for updates**) performs the same
-SHA-256 sidecar check automatically and refuses to stage any binary that either
-fails the hash or has no sidecar / Authenticode signature available — this is
-load-bearing supply-chain defense, not just UI polish.
+SHA-256 sidecar check automatically at the original GitHub release asset URL
+before falling back to any redirected CDN URL. It refuses to stage any binary
+that either fails the hash or has no sidecar / Authenticode signature available
+— this is load-bearing supply-chain defense, not just UI polish.
 
 ## What Does This Do?
 

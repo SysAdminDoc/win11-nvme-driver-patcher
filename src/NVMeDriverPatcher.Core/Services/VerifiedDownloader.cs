@@ -109,7 +109,8 @@ public static class VerifiedDownloader
             // to be Authenticode-signed); Authenticode is a last-resort fallback; neither ==
             // weak trust, which we accept only when policy explicitly allows it.
             var signal = IntegritySignal.None;
-            var sidecarHash = await TryFetchSidecarHashAsync(client, finalUri, policy.AllowedHosts, cancellationToken).ConfigureAwait(false);
+            var sidecarHash = await TryFetchPreferredSidecarHashAsync(
+                client, initialUri, finalUri, policy.AllowedHosts, cancellationToken).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(sidecarHash))
             {
                 var actual = await ComputeSha256Async(partPath, cancellationToken).ConfigureAwait(false);
@@ -192,6 +193,28 @@ public static class VerifiedDownloader
         {
             return null;
         }
+    }
+
+    private static async Task<string?> TryFetchPreferredSidecarHashAsync(
+        HttpClient client,
+        Uri initialUri,
+        Uri finalUri,
+        IReadOnlyCollection<string> allowedHosts,
+        CancellationToken cancellationToken)
+    {
+        var candidates = string.Equals(finalUri.AbsoluteUri, initialUri.AbsoluteUri, StringComparison.Ordinal)
+            ? new[] { initialUri }
+            : new[] { initialUri, finalUri };
+
+        foreach (var candidate in candidates)
+        {
+            var hash = await TryFetchSidecarHashAsync(
+                client, candidate, allowedHosts, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(hash))
+                return hash;
+        }
+
+        return null;
     }
 
     /// <summary>
