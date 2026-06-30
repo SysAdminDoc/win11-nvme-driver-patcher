@@ -16,13 +16,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P1 - Recovery and supply-chain hardening
 
-- [ ] P1 - Detect and warn on custom-INF/test-signing native NVMe workarounds
-  Why: The 26200.8524+ community workaround uses a test-signed custom INF and `pnputil /add-driver /install`, which changes driver-store state outside this tool's rollback model.
-  Evidence: ViVe issue #164; Microsoft TESTSIGNING docs; Microsoft PnPUtil docs.
-  Touches: `src/NVMeDriverPatcher.Core/Services/PreflightService.cs`, `src/NVMeDriverPatcher.Core/Services/PerControllerAuditService.cs`, `src/NVMeDriverPatcher.Core/Services/DiagnosticsService.cs`, `src/NVMeDriverPatcher.Core/Services/DocsService.cs`, `tests/NVMeDriverPatcher.Tests/PreflightServiceTests.cs`.
-  Acceptance: Preflight/diagnostics flag BCD TESTSIGNING, non-Microsoft `nvmedisk`/`NvmeDisk` OEM INF bindings, and `SCSI\DiskNVMe____` custom matches; warning explains that the app will not automate the route and gives `pnputil /enum-drivers /files` evidence collection/removal guidance.
-  Complexity: M
-
 - [ ] P1 - Add guarded WinRE stornvme injection execution
   Why: The repo can preview DISM commands for injecting `stornvme.inf` into WinRE, but users still have to perform the risky recovery hardening manually.
   Evidence: `src/NVMeDriverPatcher.Core/Services/WinReDriverInjectionService.cs`; Microsoft DISM offline-driver docs; Microsoft REAgentC docs.

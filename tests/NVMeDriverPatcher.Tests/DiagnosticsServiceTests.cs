@@ -113,6 +113,42 @@ public sealed class DiagnosticsServiceTests : IDisposable
         Assert.DoesNotContain(@"C:\Users\alice", report, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Export_IncludesCustomNativeWorkaroundEvidenceFromPreflight()
+    {
+        var preflight = new PreflightResult
+        {
+            TestSigningEnabled = true,
+            ControllerAudit = new PerControllerAuditReport
+            {
+                Controllers =
+                {
+                    new ControllerAudit
+                    {
+                        FriendlyName = "WD SN850X",
+                        InstanceId = "SCSI\\DISK&VEN_NVME&PROD_WD",
+                        BoundDriver = "nvmedisk.sys",
+                        IsNative = true,
+                        InfName = "oem42.inf",
+                        DriverProvider = "Community Test",
+                        HardwareId = "SCSI\\DiskNVMe____Custom_Model",
+                        CompatibleId = "GenNvmeDisk"
+                    }
+                }
+            }
+        };
+
+        var reportPath = DiagnosticsService.Export(_tempRoot, preflight, []);
+
+        Assert.NotNull(reportPath);
+        var report = File.ReadAllText(reportPath!);
+        Assert.Contains("CUSTOM / TEST-SIGNED NVMe WORKAROUND EVIDENCE", report, StringComparison.Ordinal);
+        Assert.Contains("BCD TESTSIGNING: Yes", report, StringComparison.Ordinal);
+        Assert.Contains("WD SN850X", report, StringComparison.Ordinal);
+        Assert.Contains("oem42.inf", report, StringComparison.Ordinal);
+        Assert.Contains("pnputil /enum-drivers /files", report, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         try

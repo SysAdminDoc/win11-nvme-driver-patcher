@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using NVMeDriverPatcher.Models;
 
@@ -19,6 +20,8 @@ public class PreflightResult
     public BypassIOResult? BypassIOStatus { get; set; }
     public List<CodeIntegrityBlockedDriverEvent> CodeIntegrityBlockedDrivers { get; set; } = [];
     public List<DataFileProvenance> DataFileProvenance { get; set; } = [];
+    public bool? TestSigningEnabled { get; set; }
+    public PerControllerAuditReport? ControllerAudit { get; set; }
     public Dictionary<string, NVMeHealthInfo> CachedHealth { get; set; } = [];
     public StorageMigrationResult? CachedMigration { get; set; }
     public UpdateInfo? UpdateAvailable { get; set; }
@@ -340,6 +343,17 @@ public static class PreflightService
         }
         catch { /* informational only */ }
 
+        try
+        {
+            result.TestSigningEnabled = DetectBcdTestSigningEnabled();
+            result.ControllerAudit = PerControllerAuditService.Audit();
+            var customWorkaround = ClassifyCustomNativeWorkaround(
+                result.TestSigningEnabled, result.ControllerAudit);
+            if (customWorkaround is not null)
+                checks["CustomNativeWorkaround"] = customWorkaround;
+        }
+        catch { /* driver-store workaround evidence is advisory */ }
+
         // 10. BypassIO
         log?.Invoke("  [10/11] Checking BypassIO / DirectStorage...");
         try
@@ -512,5 +526,99 @@ public static class PreflightService
         return new(
             CheckStatus.Warning,
             $"Power-loss advisory: {summary} matches a Phison E18/E26 power-loss risk entry. Use UPS/power protection and current backups before enabling nvmedisk.sys.");
+    }
+
+    internal static PreflightCheck? ClassifyCustomNativeWorkaround(
+        bool? testSigningEnabled,
+        PerControllerAuditReport? controllerAudit)
+    {
+        List<ControllerAudit> customControllers = controllerAudit is null
+            ? []
+            : PerControllerAuditService.FindCustomNativeWorkaroundEvidence(controllerAudit.Controllers);
+
+        if (testSigningEnabled != true && customControllers.Count == 0)
+            return null;
+
+        var signals = new List<string>();
+        if (testSigningEnabled == true)
+            signals.Add("BCD TESTSIGNING is ON");
+        if (customControllers.Count > 0)
+        {
+            var names = customControllers
+                .Select(c => string.IsNullOrWhiteSpace(c.FriendlyName) ? c.InstanceId : c.FriendlyName)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            signals.Add(names.Count == 0
+                ? $"{customControllers.Count} custom native NVMe driver binding(s)"
+                : $"custom native NVMe binding(s): {string.Join(", ", names.Take(2))}" +
+                  (names.Count > 2 ? $" +{names.Count - 2} more" : string.Empty));
+        }
+
+        return new(
+            CheckStatus.Warning,
+            "Custom/test-signed native NVMe workaround detected (" + string.Join("; ", signals) + "). " +
+            "This app will not automate or remove this driver-store route. Capture evidence with " +
+            "`pnputil /enum-drivers /files`; revert through Device Manager or " +
+            "`pnputil /delete-driver <oem#.inf> /uninstall` only after confirming the OEM INF.");
+    }
+
+    internal static bool? ParseBcdTestSigning(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        foreach (var rawLine in text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = rawLine.Trim();
+            if (!line.StartsWith("testsigning", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var value = line["testsigning".Length..].Trim();
+            if (value.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("on", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("1", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (value.Equals("no", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("off", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("false", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("0", StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        return null;
+    }
+
+    internal static bool? DetectBcdTestSigningEnabled()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("bcdedit.exe")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            psi.ArgumentList.Add("/enum");
+            psi.ArgumentList.Add("{current}");
+
+            using var proc = Process.Start(psi);
+            if (proc is null) return null;
+            var stdout = proc.StandardOutput.ReadToEnd();
+            var stderr = proc.StandardError.ReadToEnd();
+            if (!proc.WaitForExit(10_000))
+            {
+                try { proc.Kill(true); } catch { }
+                return null;
+            }
+
+            return ParseBcdTestSigning(stdout + Environment.NewLine + stderr);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

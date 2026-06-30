@@ -111,4 +111,77 @@ public sealed class PreflightServiceTests
         Assert.Equal("1.0", finding.Firmware);
         Assert.True(finding.PowerLossRisk);
     }
+
+    [Fact]
+    public void ClassifyCustomNativeWorkaround_NoEvidence_ReturnsNull()
+    {
+        var report = new PerControllerAuditReport
+        {
+            Controllers =
+            {
+                new ControllerAudit
+                {
+                    FriendlyName = "Inbox native",
+                    BoundDriver = "nvmedisk.sys",
+                    IsNative = true,
+                    InfName = "nvmedisk.inf",
+                    DriverProvider = "Microsoft",
+                    CompatibleId = "GenNvmeDisk"
+                }
+            }
+        };
+
+        Assert.Null(PreflightService.ClassifyCustomNativeWorkaround(false, report));
+    }
+
+    [Fact]
+    public void ClassifyCustomNativeWorkaround_TestSigning_WarnsWithPnPUtilGuidance()
+    {
+        var check = PreflightService.ClassifyCustomNativeWorkaround(true, new PerControllerAuditReport());
+
+        Assert.NotNull(check);
+        Assert.Equal(CheckStatus.Warning, check!.Status);
+        Assert.False(check.Critical);
+        Assert.Contains("TESTSIGNING", check.Message);
+        Assert.Contains("pnputil /enum-drivers /files", check.Message);
+        Assert.Contains("pnputil /delete-driver <oem#.inf> /uninstall", check.Message);
+        Assert.Contains("will not automate", check.Message);
+    }
+
+    [Fact]
+    public void ClassifyCustomNativeWorkaround_CustomNativeBinding_NamesController()
+    {
+        var report = new PerControllerAuditReport
+        {
+            Controllers =
+            {
+                new ControllerAudit
+                {
+                    FriendlyName = "WD SN850X",
+                    BoundDriver = "nvmedisk.sys",
+                    IsNative = true,
+                    InfName = "oem42.inf",
+                    DriverProvider = "Community Test",
+                    CompatibleId = "GenNvmeDisk"
+                }
+            }
+        };
+
+        var check = PreflightService.ClassifyCustomNativeWorkaround(false, report);
+
+        Assert.NotNull(check);
+        Assert.Equal(CheckStatus.Warning, check!.Status);
+        Assert.Contains("WD SN850X", check.Message);
+        Assert.Contains("driver-store", check.Message);
+    }
+
+    [Theory]
+    [InlineData("testsigning              Yes", true)]
+    [InlineData("testsigning              on", true)]
+    [InlineData("testsigning              No", false)]
+    [InlineData("path                    \\Windows\\system32\\winload.efi", null)]
+    public void ParseBcdTestSigning_HandlesBcdEditOutput(string text, bool? expected)
+    {
+        Assert.Equal(expected, PreflightService.ParseBcdTestSigning(text));
+    }
 }
