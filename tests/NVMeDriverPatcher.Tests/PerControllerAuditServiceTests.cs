@@ -51,6 +51,7 @@ public sealed class PerControllerAuditServiceTests
         Assert.Contains("WD SN850X", text);
         // The note must steer a forced install to Device Manager, not registry cleanup.
         Assert.Contains("Device Manager", text);
+        Assert.Contains("pnputil /enum-drivers /files", text);
     }
 
     [Fact]
@@ -85,5 +86,60 @@ public sealed class PerControllerAuditServiceTests
 
         Assert.Contains("Native Drive", text);
         Assert.DoesNotContain("Legacy Drive", text);
+    }
+
+    [Fact]
+    public void FindCustomNativeWorkaroundEvidence_FlagsOemNativeInf()
+    {
+        var controller = new ControllerAudit
+        {
+            FriendlyName = "Custom Native",
+            BoundDriver = "nvmedisk.sys",
+            IsNative = true,
+            InfName = "oem42.inf",
+            DriverProvider = "Community Test"
+        };
+
+        var evidence = PerControllerAuditService.FindCustomNativeWorkaroundEvidence([controller]);
+
+        Assert.Single(evidence);
+        Assert.True(PerControllerAuditService.HasNonMicrosoftNativeInf(controller));
+    }
+
+    [Fact]
+    public void FindCustomNativeWorkaroundEvidence_FlagsScsiDiskNvmeCustomMatch()
+    {
+        var controller = new ControllerAudit
+        {
+            FriendlyName = "Custom Match",
+            BoundDriver = "nvmedisk.sys",
+            IsNative = true,
+            InfName = "nvmedisk.inf",
+            DriverProvider = "Microsoft",
+            HardwareIds = ["SCSI\\DiskNVMe____Custom_Model"]
+        };
+
+        var evidence = PerControllerAuditService.FindCustomNativeWorkaroundEvidence([controller]);
+
+        Assert.Single(evidence);
+        Assert.True(PerControllerAuditService.HasScsiDiskNvmeCustomMatch(controller));
+    }
+
+    [Fact]
+    public void FindCustomNativeWorkaroundEvidence_IgnoresInboxNativeBinding()
+    {
+        var controller = new ControllerAudit
+        {
+            FriendlyName = "Inbox Native",
+            BoundDriver = "nvmedisk.sys",
+            IsNative = true,
+            InfName = "nvmedisk.inf",
+            DriverProvider = "Microsoft",
+            CompatibleId = "GenNvmeDisk"
+        };
+
+        var evidence = PerControllerAuditService.FindCustomNativeWorkaroundEvidence([controller]);
+
+        Assert.Empty(evidence);
     }
 }

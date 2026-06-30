@@ -24,6 +24,7 @@ Available topics:
   portable         Portable-mode deployment.
   telemetry        The opt-in compat telemetry payload.
   featureflags     The native Feature flags page on Windows 11 26300+.
+  driverworkaround Custom INF / TESTSIGNING native NVMe workarounds.
   uninstall        Removing the app cleanly.
 ",
         ["overview"] = @"
@@ -50,9 +51,12 @@ Flip via `apply --safe` / `apply --full` or the GUI's Install Mode radio.
    full reg load / reg delete / reg unload sequence.
 3. Auto-disable. Windows disables the native driver after 2-3 consecutive failed boots.
 4. Driver method (force-loaded). If nvmedisk.sys was forced via Device Manager or PnPUtil
-   (no registry keys / fallback flags — `status` shows enablement source 'untracked'), the
-   .reg/.bat will NOT revert it. Revert in Device Manager: Disk drives > your NVMe > Update
-   driver > Browse > Let me pick > select the Standard NVM Express Controller / stornvme.
+    (no registry keys / fallback flags — `status` shows enablement source 'untracked'), the
+   .reg/.bat will NOT revert it. Capture evidence first with
+   `pnputil /enum-drivers /files`, then revert in Device Manager: Disk drives > your NVMe >
+   Update driver > Browse > Let me pick > select the Standard NVM Express Controller /
+   stornvme. If an OEM INF is confirmed, remove it with
+   `pnputil /delete-driver <oem#.inf> /uninstall` only after rollback proof.
 ",
         ["watchdog"] = @"
 The post-patch watchdog counts storage-stack distress signals (Storport 129, disk 51/153,
@@ -130,6 +134,20 @@ An official toggle is always preferable to this tool's overrides — on these bu
 registry and ViVeTool routes do not bind the driver anyway (the GenNvmeDisk compatible ID
 was removed). If a native NVMe flag appears on that page, use it and treat this tool as a
 verify/monitor/rollback helper rather than the enabler.
+",
+        ["driverworkaround"] = @"
+Some 26200.8524+ community experiments force nvmedisk.sys with a custom/test-signed INF
+and BCD TESTSIGNING. That changes driver-store state outside this tool's registry and
+FeatureStore rollback model. Preflight and diagnostics flag three evidence types:
+
+* BCD TESTSIGNING is enabled.
+* nvmedisk/NvmeDisk is bound through an OEM INF or non-Microsoft provider.
+* a controller exposes a custom `SCSI\DiskNVMe____` match.
+
+This app will not automate or remove that route. Capture evidence with
+`pnputil /enum-drivers /files`; revert through Device Manager or remove the confirmed OEM
+package with `pnputil /delete-driver <oem#.inf> /uninstall` only after you have rollback
+proof and know which INF owns the binding.
 ",
         ["uninstall"] = @"
 1. Remove the patch:   `NVMeDriverPatcher.Cli remove`  (restart required)

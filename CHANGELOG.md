@@ -51,6 +51,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   `FeatureStoreWriterService.WriteOverrides` before any network access. ViVeTool is only
   attempted after native both-store verification fails, and the chosen method plus integrity
   signal are logged / printed for unattended audits.
+- **Custom INF / TESTSIGNING workaround warning** — preflight and diagnostics now flag BCD
+  TESTSIGNING, non-Microsoft native NVMe OEM INF bindings, and `SCSI\DiskNVMe____` custom
+  matches. Guidance keeps this route manual and points operators to `pnputil /enum-drivers /files`
+  plus confirmed-INF removal only.
 - **Watchdog service downgraded from LocalSystem to LocalService** — the watchdog only reads the
   System event log and writes to the shared `%ProgramData%\NVMePatcher\` working directory. LocalSystem was unnecessarily
   privileged. Also adds a restricted service SID via `sc sidtype ... restricted`.

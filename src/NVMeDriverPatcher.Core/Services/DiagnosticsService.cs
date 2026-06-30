@@ -564,10 +564,30 @@ public static class DiagnosticsService
         // compatible IDs for each NVMe controller. When nvmedisk.sys is bound with no patch
         // breadcrumbs this is the evidence that distinguishes Microsoft's official rollout from a
         // forced 'driver method' install (which reverts via Device Manager, not registry cleanup).
-        sb.AppendLine().AppendLine("PER-CONTROLLER PnP EVIDENCE").AppendLine("---------------------------");
         try
         {
-            var controllerAudit = PerControllerAuditService.Audit();
+            var controllerAudit = preflight?.ControllerAudit ?? PerControllerAuditService.Audit();
+            var testSigningEnabled = preflight?.TestSigningEnabled ?? PreflightService.DetectBcdTestSigningEnabled();
+            var customWorkaround = PreflightService.ClassifyCustomNativeWorkaround(testSigningEnabled, controllerAudit);
+
+            sb.AppendLine().AppendLine("CUSTOM / TEST-SIGNED NVMe WORKAROUND EVIDENCE").AppendLine("---------------------------------------------");
+            sb.AppendLine($"BCD TESTSIGNING: {FormatNullableBool(testSigningEnabled)}");
+            if (customWorkaround is null)
+            {
+                sb.AppendLine("  No custom-INF/test-signing native NVMe workaround evidence detected.");
+            }
+            else
+            {
+                sb.AppendLine($"  WARNING: {customWorkaround.Message}");
+                foreach (var c in PerControllerAuditService.FindCustomNativeWorkaroundEvidence(controllerAudit.Controllers))
+                {
+                    sb.AppendLine($"  Suspect binding: {c.FriendlyName} (id={c.InstanceId})");
+                    sb.AppendLine($"    driver={c.BoundDriver}  inf={c.InfName}  provider={c.DriverProvider}");
+                    sb.AppendLine($"    hardware={c.HardwareId}  compat={c.CompatibleId}");
+                }
+            }
+
+            sb.AppendLine().AppendLine("PER-CONTROLLER PnP EVIDENCE").AppendLine("---------------------------");
             sb.AppendLine(controllerAudit.Summary);
 
             bool fallbackEvidence;
@@ -673,6 +693,13 @@ public static class DiagnosticsService
         Path.IsPathRooted(value)
         || value.Contains(Path.DirectorySeparatorChar)
         || value.Contains(Path.AltDirectorySeparatorChar);
+
+    private static string FormatNullableBool(bool? value) => value switch
+    {
+        true => "Yes",
+        false => "No",
+        _ => "Unknown"
+    };
 
     private static string RedactPathValue(string value)
     {

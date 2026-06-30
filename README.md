@@ -98,6 +98,7 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 - **Rollback on partial failure** -- undoes all applied registry keys if patch doesn't complete fully
 - **Registry backup** export + system restore point creation before any changes
 - **Third-party driver detection** (Samsung, WD, Intel RST, AMD, SK Hynix, Crucial, Phison)
+- **Custom INF / TESTSIGNING warning** -- flags test-signed native NVMe driver-store workarounds that the registry rollback cannot remove
 - **Recovery Kit generation** -- creates .reg + .bat files for offline WinRE recovery (auto-detects WinRE, loads offline registry hive)
 
 **Diagnostics & Benchmarking**
@@ -381,6 +382,9 @@ reg unload HKLM\OFFLINE
 
 **Option 3: Wait for auto-recovery**
 Windows automatically disables the native NVMe driver after 2-3 consecutive failed boots and reverts to the legacy stack.
+
+### Custom/test-signed native NVMe workaround detected
+Some community workarounds force `nvmedisk.sys` with a custom OEM INF and BCD TESTSIGNING. This tool warns on that evidence but will not automate or remove the route because it changes driver-store state outside the registry/FeatureStore rollback model. Capture evidence with `pnputil /enum-drivers /files`, then revert through Device Manager or remove the confirmed package with `pnputil /delete-driver <oem#.inf> /uninstall` only after you know which INF owns the binding.
 
 ### Can't boot into Safe Mode
 This shouldn't happen if you used this tool (SafeBoot keys are included). If it does, follow the WinRE steps above.

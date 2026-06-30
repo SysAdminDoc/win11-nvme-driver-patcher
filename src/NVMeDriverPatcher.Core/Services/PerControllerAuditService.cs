@@ -20,6 +20,8 @@ public class ControllerAudit
     public string DeviceClass { get; set; } = string.Empty;
     public string HardwareId { get; set; } = string.Empty;
     public string CompatibleId { get; set; } = string.Empty;
+    public List<string> HardwareIds { get; set; } = [];
+    public List<string> CompatibleIds { get; set; } = [];
 }
 
 public class PerControllerAuditReport
@@ -46,21 +48,30 @@ public class PerControllerAuditReport
         sb.AppendLine("nvmedisk.sys is bound on the controllers below. A Microsoft INF/provider with");
         sb.AppendLine("no patch breadcrumbs indicates the official rollout; a non-Microsoft provider or a");
         sb.AppendLine("manually-matched compatible ID indicates a forced 'driver method' install that must");
-        sb.AppendLine("be rolled back in Device Manager (not by registry cleanup).");
+        sb.AppendLine("be rolled back in Device Manager or with pnputil after collecting driver-store evidence.");
+        sb.AppendLine("Evidence command: pnputil /enum-drivers /files");
         foreach (var c in native)
         {
             sb.AppendLine($"  {c.FriendlyName}  (id={c.InstanceId})");
             sb.AppendLine($"    INF        : {Blankable(c.InfName)}");
             sb.AppendLine($"    Provider   : {Blankable(c.DriverProvider)}");
             sb.AppendLine($"    Class      : {Blankable(c.DeviceClass)}");
-            sb.AppendLine($"    HardwareID : {Blankable(c.HardwareId)}");
-            sb.AppendLine($"    CompatID   : {Blankable(c.CompatibleId)}");
+            sb.AppendLine($"    HardwareID : {Blankable(JoinIds(c.HardwareIds, c.HardwareId))}");
+            sb.AppendLine($"    CompatID   : {Blankable(JoinIds(c.CompatibleIds, c.CompatibleId))}");
         }
         return sb.ToString().TrimEnd();
     }
 
     private static string Blankable(string value) =>
         string.IsNullOrWhiteSpace(value) ? "(unknown)" : value;
+
+    private static string JoinIds(IReadOnlyCollection<string> allIds, string primary)
+    {
+        IEnumerable<string> ids = allIds.Count > 0
+            ? allIds
+            : string.IsNullOrWhiteSpace(primary) ? Array.Empty<string>() : new[] { primary };
+        return string.Join("; ", ids.Where(id => !string.IsNullOrWhiteSpace(id)));
+    }
 }
 
 // Per-controller version of PatchVerificationService. Enumerates every NVMe PnP instance
@@ -97,6 +108,9 @@ public static class PerControllerAuditService
                               || inf.IndexOf("nvme", StringComparison.OrdinalIgnoreCase) >= 0;
                     if (!isNvme) continue;
 
+                    var hardwareIds = AllOf(mo["HardWareID"]);
+                    var compatibleIds = AllOf(mo["CompatID"]);
+
                     report.Controllers.Add(new ControllerAudit
                     {
                         InstanceId = devId,
@@ -107,8 +121,10 @@ public static class PerControllerAuditService
                         DriverProvider = (mo["DriverProviderName"] as string) ?? string.Empty,
                         DeviceClass = (mo["DeviceClass"] as string) ?? string.Empty,
                         // HardWareID / CompatID come back as string[] in WMI; take the primary entry.
-                        HardwareId = FirstOf(mo["HardWareID"]),
-                        CompatibleId = FirstOf(mo["CompatID"]),
+                        HardwareId = hardwareIds.FirstOrDefault() ?? string.Empty,
+                        CompatibleId = compatibleIds.FirstOrDefault() ?? string.Empty,
+                        HardwareIds = hardwareIds,
+                        CompatibleIds = compatibleIds,
                     });
                 }
             }
@@ -124,12 +140,55 @@ public static class PerControllerAuditService
         return report;
     }
 
-    // WMI string-array properties (HardWareID, CompatID) arrive as string[]; some providers
-    // return a bare string. Take the primary (first) entry either way.
-    private static string FirstOf(object? value) => value switch
+    internal static List<ControllerAudit> FindCustomNativeWorkaroundEvidence(IEnumerable<ControllerAudit> controllers) =>
+        controllers.Where(HasCustomNativeWorkaroundEvidence).ToList();
+
+    internal static bool HasCustomNativeWorkaroundEvidence(ControllerAudit controller)
     {
-        string[] arr when arr.Length > 0 => arr[0] ?? string.Empty,
-        string s => s,
-        _ => string.Empty,
+        if (!MentionsNativeDriver(controller))
+            return false;
+
+        return HasNonMicrosoftNativeInf(controller) || HasScsiDiskNvmeCustomMatch(controller);
+    }
+
+    internal static bool HasNonMicrosoftNativeInf(ControllerAudit controller)
+    {
+        var oemInf = controller.InfName.StartsWith("oem", StringComparison.OrdinalIgnoreCase) &&
+                     controller.InfName.EndsWith(".inf", StringComparison.OrdinalIgnoreCase);
+        var nonMicrosoftProvider =
+            !string.IsNullOrWhiteSpace(controller.DriverProvider) &&
+            controller.DriverProvider.IndexOf("Microsoft", StringComparison.OrdinalIgnoreCase) < 0;
+        return oemInf || nonMicrosoftProvider;
+    }
+
+    internal static bool HasScsiDiskNvmeCustomMatch(ControllerAudit controller) =>
+        AllControllerIds(controller).Any(id =>
+            id.StartsWith(@"SCSI\DiskNVMe____", StringComparison.OrdinalIgnoreCase));
+
+    private static bool MentionsNativeDriver(ControllerAudit controller) =>
+        controller.IsNative ||
+        controller.BoundDriver.IndexOf("nvmedisk", StringComparison.OrdinalIgnoreCase) >= 0 ||
+        controller.InfName.IndexOf("nvmedisk", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    private static IEnumerable<string> AllControllerIds(ControllerAudit controller)
+    {
+        foreach (var id in IdsOrPrimary(controller.HardwareIds, controller.HardwareId))
+            if (!string.IsNullOrWhiteSpace(id)) yield return id;
+        foreach (var id in IdsOrPrimary(controller.CompatibleIds, controller.CompatibleId))
+            if (!string.IsNullOrWhiteSpace(id)) yield return id;
+    }
+
+    private static IEnumerable<string> IdsOrPrimary(IReadOnlyCollection<string> ids, string primary) =>
+        ids.Count > 0
+            ? ids
+            : string.IsNullOrWhiteSpace(primary) ? Array.Empty<string>() : new[] { primary };
+
+    // WMI string-array properties (HardWareID, CompatID) arrive as string[]; some providers
+    // return a bare string.
+    private static List<string> AllOf(object? value) => value switch
+    {
+        string[] arr => arr.Where(s => !string.IsNullOrWhiteSpace(s)).ToList(),
+        string s when !string.IsNullOrWhiteSpace(s) => [s],
+        _ => [],
     };
 }
