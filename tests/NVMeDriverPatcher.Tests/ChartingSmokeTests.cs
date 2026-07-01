@@ -72,4 +72,17 @@ public sealed class ChartingSmokeTests
         var header = data.ToArray().AsSpan(0, 8).ToArray();
         Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, header);
     }
+
+    [Fact]
+    public void OpenTK_IsTransitiveOnly_NotDirectlyReferenced()
+    {
+        var csprojPath = Path.GetFullPath(Path.Combine(
+            Path.GetDirectoryName(typeof(ChartingSmokeTests).Assembly.Location)!,
+            "..", "..", "..", "..", "..",
+            "src", "NVMeDriverPatcher", "NVMeDriverPatcher.csproj"));
+        var csproj = File.ReadAllText(csprojPath);
+        Assert.DoesNotContain("\"OpenTK\"", csproj);
+        Assert.DoesNotContain("\"OpenTK.Core\"", csproj);
+        Assert.DoesNotContain("\"OpenTK.redist.glfw\"", csproj);
+    }
 }

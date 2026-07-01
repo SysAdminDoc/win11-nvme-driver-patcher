@@ -29,6 +29,11 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
+    <!-- LiveCharts SkiaSharpView.WPF → OpenTK.GLWpfControl → OpenTK 4.3.0 + GLFW 3.3.0-pre.
+         This project does NOT use OpenGL directly; the transitive pull is for WPF GL interop
+         used by the charting canvas. Do NOT pin or upgrade OpenTK independently — the native
+         GLFW binary must stay ABI-compatible with the LiveCharts WPF host. Upgrade gate:
+         ChartingSmokeTests (render + PNG encode the native path). -->
     <!-- LiveChartsCore pulls SkiaSharp transitively, but NuGet advisories do not track the
          statically-linked libpng inside native libSkiaSharp. Keep direct aligned SkiaSharp pins
          as the control: SkiaSharp 4.148.0 includes the v4 libpng 1.6.58 update (mono/SkiaSharp
