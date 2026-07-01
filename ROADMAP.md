@@ -16,14 +16,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 
 
-### P3 - Dependency watch
-
-- [ ] P3 - Add an explicit OpenTK/GLFW native-dependency watch gate
-  Why: `dotnet list package --outdated --include-transitive` reports OpenTK/GLFW transitive updates through charting, while direct project code does not use OpenGL.
-  Evidence: NuGet outdated scan; `src/NVMeDriverPatcher/NVMeDriverPatcher.csproj`; OpenTK NuGet/release pages.
-  Touches: `src/NVMeDriverPatcher/NVMeDriverPatcher.csproj`, `tests/NVMeDriverPatcher.Tests/ChartingSmokeTests.cs`, `CLAUDE.md`.
-  Acceptance: Dependency notes explain why OpenTK is transitive, charting smoke tests remain the upgrade gate, and any future direct pin/upgrade keeps SkiaSharp/OpenTK native assets ABI-compatible.
-  Complexity: S
 
 
 ### P2 - Truth and distribution guardrails

@@ -27,6 +27,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   cmdlets (6 JSON cmdlets were missing). WiX README points to the local release builder and
   removes Dependabot references. Intune README documents ARM64 diagnostic builds. A new
   `PowerShellModuleDriftTests` test fails when `.psd1` exports and README diverge.
+- **OpenTK/GLFW dependency watch gate** — csproj documents the transitive OpenTK/GLFW pull
+  (LiveCharts → GLWpfControl → OpenTK 4.3.0 + GLFW 3.3.0-pre) and why it must not be pinned
+  directly. A new test asserts OpenTK is not a direct PackageReference. ChartingSmokeTests
+  remain the native-path upgrade gate.
 - **NVMeDriverPatcher.Core library** — extracted all shared services, models, data, and interop
   into a framework-agnostic class library; Tray no longer pulls the entire WPF framework.
 - **`--json` for firmware, featurestore, reliability, minidump** — all read CLI commands now return
