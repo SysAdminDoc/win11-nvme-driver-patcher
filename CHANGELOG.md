@@ -18,6 +18,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   entries; Scoop manifest has `64bit` and `arm64` architecture blocks with autoupdate URLs.
   `Update-PackageManifests.ps1` accepts `-Arm64ExePath` to hash the ARM64 exe. Release validation
   fails on missing ARM64 entries or stale hashes.
+- **Source provenance gates for safety data** — `sourceUrl` and `lastReviewed` are now required
+  fields in both `compat.json` and `windows_build_rules.json` schemas. Schema tests fail when
+  entries lack provenance metadata. CLI `status --json` now exposes `buildRuleSource`,
+  `buildRuleConfidence`, and `buildRuleLastReviewed` in the JSON envelope. Three compat entries
+  that were missing `sourceUrl` have been backfilled.
 - **NVMeDriverPatcher.Core library** — extracted all shared services, models, data, and interop
   into a framework-agnostic class library; Tray no longer pulls the entire WPF framework.
 - **`--json` for firmware, featurestore, reliability, minidump** — all read CLI commands now return

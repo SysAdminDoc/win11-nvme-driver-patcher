@@ -28,13 +28,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P2 - Truth and distribution guardrails
 
-- [ ] P2 - Add source provenance and recency gates to build-rule and compatibility data
-  Why: Microsoft and community native-NVMe behavior changes by build train; `windows_build_rules.json` and `compat.json` need source URLs/review timestamps so public guidance cannot silently drift.
-  Evidence: `src/NVMeDriverPatcher.Core/windows_build_rules.json`; `src/NVMeDriverPatcher.Core/compat.json`; ViVe issue #164; Microsoft native NVMe and DISM docs.
-  Touches: `src/NVMeDriverPatcher.Core/windows_build_rules.json`, `src/NVMeDriverPatcher.Core/compat.json`, schema tests, `DocsService`, README compatibility table.
-  Acceptance: Data schemas include source URL and last-reviewed fields where applicable; tests fail when required source metadata is missing or stale; CLI/diagnostics expose the matched rule source in JSON output.
-  Complexity: M
-
 - [ ] P2 - Refresh packaging/operator docs and add drift checks
   Why: Packaging docs still describe direct x64 staging and dependency-bot-era updates, the PowerShell README omits exported JSON cmdlets, and Intune docs still say x64-only despite ARM64 diagnostic artifacts.
   Evidence: `packaging/wix/README.md`; `packaging/powershell/README.md`; `packaging/powershell/NVMeDriverPatcher.psd1`; `packaging/intune/README.md`; `scripts/Build-ReleaseArtifacts.ps1`.

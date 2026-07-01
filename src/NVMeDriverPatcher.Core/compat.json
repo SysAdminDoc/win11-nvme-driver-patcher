@@ -36,7 +36,8 @@
       "level": "Caution",
       "note": "Known stutter with older firmware. Update to 5B2QGXA8+ before enabling Native NVMe.",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-06-10",
+      "sourceUrl": "https://www.overclock.net/threads/windows-11-native-nvme-driver-nvmedisk-sys.1818467/"
     },
     {
       "controller": "Samsung SSD 980 PRO",
@@ -44,7 +45,8 @@
       "level": "Good",
       "note": "Reported stable on 5B2QGXA8 and later.",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-06-10",
+      "sourceUrl": "https://www.overclock.net/threads/windows-11-native-nvme-driver-nvmedisk-sys.1818467/"
     },
     {
       "controller": "WD_BLACK SN850X",
@@ -151,7 +153,8 @@
       "level": "Caution",
       "note": "Crucial P3 - some reports of paging errors under sustained 4K random write on early firmware. Benchmark with the watchdog active.",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-06-10",
+      "sourceUrl": "https://www.overclock.net/threads/windows-11-native-nvme-driver-nvmedisk-sys.1818467/"
     },
     {
       "controller": "SK hynix Platinum P41",

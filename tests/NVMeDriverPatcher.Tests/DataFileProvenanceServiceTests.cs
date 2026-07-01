@@ -97,7 +97,8 @@ public sealed class DataFileProvenanceServiceTests : IDisposable
                   "firmware": "*",
                   "level": "Good",
                   "note": "{{note}}",
-                  "lastReviewed": "{{reviewed}}"
+                  "lastReviewed": "{{reviewed}}",
+                  "sourceUrl": "https://example.test/{{note}}"
                 }
               ]
             }
