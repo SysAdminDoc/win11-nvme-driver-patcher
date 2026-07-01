@@ -7,6 +7,10 @@
         "64bit": {
             "url": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.0.0/NVMeDriverPatcher.exe#/NVMeDriverPatcher.exe",
             "hash": "REPLACE_ME_WITH_RELEASE_SHA256"
+        },
+        "arm64": {
+            "url": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.0.0/NVMeDriverPatcher-win-arm64.exe#/NVMeDriverPatcher-win-arm64.exe",
+            "hash": "REPLACE_ME_WITH_ARM64_SHA256"
         }
     },
     "bin": "NVMeDriverPatcher.exe",
@@ -18,6 +22,9 @@
         "architecture": {
             "64bit": {
                 "url": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v$version/NVMeDriverPatcher.exe#/NVMeDriverPatcher.exe"
+            },
+            "arm64": {
+                "url": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v$version/NVMeDriverPatcher-win-arm64.exe#/NVMeDriverPatcher-win-arm64.exe"
             }
         }
     }

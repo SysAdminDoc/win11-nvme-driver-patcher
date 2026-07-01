@@ -45,5 +45,12 @@ Installers:
     ElevationRequirement: elevatesSelf
     Commands:
       - NVMeDriverPatcher
+  - Architecture: arm64
+    InstallerType: portable
+    InstallerUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.0.0/NVMeDriverPatcher-win-arm64.exe
+    InstallerSha256: REPLACE_ME_WITH_ARM64_SHA256
+    ElevationRequirement: elevatesSelf
+    Commands:
+      - NVMeDriverPatcher-win-arm64
 ManifestType: singleton
 ManifestVersion: 1.6.0
