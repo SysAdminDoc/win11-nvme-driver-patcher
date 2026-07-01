@@ -6,18 +6,4 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ---
 
-## Research-Driven Additions
-
-### P2 — Safety and UX
-
-### P2 — Safety and compat (research pass 4, 2026-06-20)
-
-### P3 — Quality and distribution (research pass 4, 2026-06-20)
-
-
-
-
-
-### P2 - Truth and distribution guardrails
-
-
+No actionable items remain. All codeable work has been shipped; items blocked on external resources (hardware, VMs, credentials) live in [Roadmap_Blocked.md](Roadmap_Blocked.md).
