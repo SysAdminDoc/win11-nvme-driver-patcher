@@ -2,9 +2,13 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
-## [Unreleased] — 2026-06-16
+## [Unreleased] — 2026-06-30
 
 ### Added
+- **SQLite FTS5 CVE surface mitigation** — defensive mode (`SQLITE_DBCONFIG_DEFENSIVE`) enabled
+  via raw C API on every DB connection, blocking FTS5 shadow-table writes. Tests prove the
+  mitigation works, FTS5 is compiled in but unexploitable, and no FTS5 virtual tables exist in
+  the app schema. Version floor remains ≥ 3.50.2; the 3.53.2 FTS5-specific CVEs do not apply.
 - **NVMeDriverPatcher.Core library** — extracted all shared services, models, data, and interop
   into a framework-agnostic class library; Tray no longer pulls the entire WPF framework.
 - **`--json` for firmware, featurestore, reliability, minidump** — all read CLI commands now return

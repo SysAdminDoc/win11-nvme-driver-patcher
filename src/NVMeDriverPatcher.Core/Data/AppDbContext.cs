@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace NVMeDriverPatcher.Data;
@@ -55,6 +56,15 @@ public class AppDbContext : DbContext
         });
     }
 
+    private const int SQLITE_DBCONFIG_DEFENSIVE = 1010;
+
+    private static void EnableDefensiveMode(AppDbContext db)
+    {
+        var conn = (SqliteConnection)db.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open) conn.Open();
+        SQLitePCL.raw.sqlite3_db_config(conn.Handle, SQLITE_DBCONFIG_DEFENSIVE, 1, out _);
+    }
+
     public static void EnsureCreated()
     {
         using var db = new AppDbContext();
@@ -66,6 +76,7 @@ public class AppDbContext : DbContext
         try { db.Database.ExecuteSqlRaw("PRAGMA synchronous=NORMAL;"); } catch { }
         try { db.Database.ExecuteSqlRaw("PRAGMA trusted_schema=OFF;"); } catch { }
         try { db.Database.ExecuteSqlRaw("PRAGMA cell_size_check=ON;"); } catch { }
+        try { EnableDefensiveMode(db); } catch { }
         try { db.Database.ExecuteSqlRaw("PRAGMA quick_check;"); } catch { }
     }
 }
