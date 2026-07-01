@@ -41,14 +41,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
   Acceptance: Dependency notes explain why OpenTK is transitive, charting smoke tests remain the upgrade gate, and any future direct pin/upgrade keeps SkiaSharp/OpenTK native assets ABI-compatible.
   Complexity: S
 
-### P1 - Security and data safety
-
-- [ ] P1 - Raise the bundled SQLite security floor or prove the compiled surface is safe
-  Why: The app runs elevated and bundles native SQLite 3.50.4.5 while SQLite's CVE page now lists FTS5-related fixes in 3.53.2; the current regression test only pins the older 3.50.2 floor.
-  Evidence: `src/NVMeDriverPatcher.Core/NVMeDriverPatcher.Core.csproj`; `tests/NVMeDriverPatcher.Tests/SqliteVersionTests.cs`; `https://sqlite.org/cves.html`; `https://github.com/ericsink/SQLitePCL.raw`.
-  Touches: `src/NVMeDriverPatcher.Core/NVMeDriverPatcher.Core.csproj`, `tests/NVMeDriverPatcher.Tests/SqliteVersionTests.cs`, `src/NVMeDriverPatcher.Core/Data/AppDbContext.cs`, release validation notes.
-  Acceptance: `sqlite_version()` is at least 3.53.2, or tests prove FTS5 is unavailable and SQLite defensive mode is enabled for every app DB connection; downgrade tests fail below the accepted floor and telemetry/support-bundle DB smoke tests still pass.
-  Complexity: M
 
 ### P2 - Truth and distribution guardrails
 
