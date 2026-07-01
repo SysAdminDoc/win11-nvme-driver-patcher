@@ -21,11 +21,3 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 ### P2 - Truth and distribution guardrails
 
 
-### P3 - Test toolchain hygiene
-
-- [ ] P3 - Refresh test infrastructure package pins without changing runtime packages
-  Why: The local suite is the release trust gate, and `dotnet list package --outdated --include-transitive` shows newer Microsoft.NET.Test.Sdk, test platform, xUnit analyzer, and Newtonsoft.Json test dependencies.
-  Evidence: local NuGet outdated scan; `tests/NVMeDriverPatcher.Tests/NVMeDriverPatcher.Tests.csproj`; `https://www.nuget.org/packages/Microsoft.NET.Test.Sdk/18.7.0`.
-  Touches: `tests/NVMeDriverPatcher.Tests/NVMeDriverPatcher.Tests.csproj`, test runner configuration, package audit notes.
-  Acceptance: Test-only package pins are current where compatible, the suite still runs locally on .NET 10, the xUnit v2 runner decision is preserved or explicitly migrated, and no runtime project package changes are included in the same commit.
-  Complexity: S
