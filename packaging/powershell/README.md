@@ -21,6 +21,7 @@ Get-NvmePatchStatus
 Get-NvmeControllerAudit | Where-Object { -not $_.IsNative } | Select-Object Name, Driver
 Invoke-NvmePatchApply -Profile Safe -Unattended -NoRestart
 Get-NvmeWatchdogReport
+Get-NvmeFirmwareCompat | Where-Object Level -eq 'Bad'
 ```
 
 ## Cmdlets
@@ -30,6 +31,12 @@ Get-NvmeWatchdogReport
 - `Invoke-NvmePatchRemove`         — remove the patch
 - `Get-NvmeWatchdogReport`         — verdict + raw output
 - `Get-NvmeControllerAudit`        — parsed per-controller list with IsNative flag
+- `Get-NvmeRecoveryProof`          — recovery readiness proof (JSON)
+- `Get-NvmeBypassIo`               — BypassIO status and gaming-impact guidance (JSON)
+- `Get-NvmeFirmwareCompat`         — firmware/controller compatibility matches (JSON)
+- `Get-NvmeFeatureStore`           — FeatureStore fallback state per feature ID (JSON)
+- `Get-NvmeReliability`            — Reliability Monitor correlation (JSON)
+- `Get-NvmeMinidump`               — minidump triage for NVMe-related crashes (JSON)
 - `Invoke-NvmeDryRun`              — Markdown change preview
 - `Export-NvmeDiagnostics`         — invoke the `diagnostics` CLI subcommand
 - `Export-NvmeDashboard`           — invoke the `dashboard` HTML report

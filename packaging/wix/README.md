@@ -31,10 +31,16 @@ dotnet wix extension add WixToolset.UI.wixext/5.0.2
 dotnet wix extension add WixToolset.Util.wixext/5.0.2
 ```
 
-Then invoke the build below with `dotnet wix build ...`. Dependabot's nuget ecosystem watches the
-tool manifest, so WiX updates arrive as PRs.
-
 ## Build
+
+Use the local release builder (`scripts/Build-ReleaseArtifacts.ps1`) which publishes x64 and ARM64
+binaries, builds the MSI, and generates checksums in a single pass:
+
+```powershell
+.\scripts\Build-ReleaseArtifacts.ps1 -Version 5.0.0
+```
+
+Or build the MSI manually:
 
 ```powershell
 # 1. Publish the four projects to a staging folder
