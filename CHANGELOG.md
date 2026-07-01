@@ -31,6 +31,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   (LiveCharts → GLWpfControl → OpenTK 4.3.0 + GLFW 3.3.0-pre) and why it must not be pinned
   directly. A new test asserts OpenTK is not a direct PackageReference. ChartingSmokeTests
   remain the native-path upgrade gate.
+- **Test infrastructure refresh** — `Microsoft.NET.Test.Sdk` 18.6.0 → 18.7.0;
+  `xunit.runner.visualstudio` 2.8.2 → 3.1.5 (backward-compatible with xUnit v2 test
+  assemblies). No runtime package changes. Full suite passes on .NET 10.
 - **NVMeDriverPatcher.Core library** — extracted all shared services, models, data, and interop
   into a framework-agnostic class library; Tray no longer pulls the entire WPF framework.
 - **`--json` for firmware, featurestore, reliability, minidump** — all read CLI commands now return
