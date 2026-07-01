@@ -28,12 +28,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P2 - Truth and distribution guardrails
 
-- [ ] P2 - Refresh packaging/operator docs and add drift checks
-  Why: Packaging docs still describe direct x64 staging and dependency-bot-era updates, the PowerShell README omits exported JSON cmdlets, and Intune docs still say x64-only despite ARM64 diagnostic artifacts.
-  Evidence: `packaging/wix/README.md`; `packaging/powershell/README.md`; `packaging/powershell/NVMeDriverPatcher.psd1`; `packaging/intune/README.md`; `scripts/Build-ReleaseArtifacts.ps1`.
-  Touches: `packaging/wix/README.md`, `packaging/powershell/README.md`, `packaging/intune/README.md`, README packaging section, package/readme drift tests.
-  Acceptance: Existing packaging docs point operators to the local release builder, remove dependency-bot/CI language, document x64 versus ARM64 diagnostic channels accurately, and a test compares exported PowerShell cmdlets against the module README list.
-  Complexity: M
 
 ### P3 - Test toolchain hygiene
 

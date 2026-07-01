@@ -10,7 +10,7 @@ Thin deployment assets for fleet installs. The primary installer is the WiX MSI
 3. **Install command**: `msiexec /i NVMeDriverPatcher-<version>.msi /qn`
 4. **Uninstall command**: `msiexec /x {9C2E3F01-6B91-4C1A-8F4D-09F7D8B4A3C2} /qn`
 5. **Detection**: paste `Detect-NVMeDriverPatcher.ps1` into "Use a custom detection script."
-6. **Requirements**: Windows 11 23H2 (10.0.22631) or later, x64.
+6. **Requirements**: Windows 11 23H2 (10.0.22631) or later. x64 for full enablement; ARM64 portable builds are available for diagnostics/status only (until Microsoft ships an ARM64 `nvmedisk.sys`).
 7. **Return codes**: `0` success, `1707` success, `1641`/`3010` success (restart required).
 
 ## SCCM / MEMCM
