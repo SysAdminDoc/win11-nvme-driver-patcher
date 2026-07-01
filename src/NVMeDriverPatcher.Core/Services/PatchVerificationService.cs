@@ -168,7 +168,50 @@ public static class PatchVerificationService
         report.Outcome = outcome;
         report.Summary = summary;
         report.Detail = AppendBuildRuleDetail(detail, WindowsBuildRulesService.MatchCurrent());
+
+        if (config.PendingFallbackApplied && ShouldAutoResetFallback(outcome, config))
+        {
+            try
+            {
+                var resetResult = FeatureStoreWriterService.ResetAppliedFallback();
+                report.Detail += Environment.NewLine + Environment.NewLine +
+                    (resetResult.Success
+                        ? "Auto-reset: FeatureStore fallback IDs cleared because binding failed or watchdog severity crossed the revert threshold. " + resetResult.Summary
+                        : "Auto-reset attempted but failed: " + resetResult.Summary);
+            }
+            catch (Exception ex)
+            {
+                report.Detail += Environment.NewLine + Environment.NewLine +
+                    "Auto-reset of FeatureStore fallback IDs failed: " + ex.Message;
+            }
+        }
+
         return report;
+    }
+
+    internal static bool ShouldAutoResetFallback(VerificationOutcome outcome, AppConfig config)
+    {
+        if (outcome == VerificationOutcome.FlagsEnabledNotBound)
+            return true;
+
+        return ShouldAutoResetForWatchdog(config);
+    }
+
+    private static bool ShouldAutoResetForWatchdog(AppConfig config)
+    {
+        try
+        {
+            var watchdog = EventLogWatchdogService.Evaluate(config);
+            return EventLogWatchdogService.ShouldAutoRevert(config, watchdog);
+        }
+        catch { return false; }
+    }
+
+    internal static bool ClassifyAutoResetDecision(VerificationOutcome outcome, bool watchdogWantsRevert)
+    {
+        if (outcome == VerificationOutcome.FlagsEnabledNotBound)
+            return true;
+        return watchdogWantsRevert;
     }
 
     /// <summary>
@@ -237,10 +280,11 @@ public static class PatchVerificationService
                $"{rule.Summary} Confidence: {rule.Confidence}; reviewed {rule.LastReviewed}. Source: {rule.SourceUrl}";
     }
 
-    public static void MarkPending(AppConfig config)
+    public static void MarkPending(AppConfig config, bool isFallback = false)
     {
         config.PendingVerificationSince = DateTime.UtcNow.ToString("o");
         config.PendingVerificationProfile = config.PatchProfile.ToString();
+        config.PendingFallbackApplied = isFallback;
         config.LastVerifiedProfile = null;
         config.LastVerificationResult = null;
     }
@@ -252,6 +296,7 @@ public static class PatchVerificationService
             : config.PendingVerificationProfile;
         config.PendingVerificationSince = null;
         config.PendingVerificationProfile = null;
+        config.PendingFallbackApplied = false;
         config.LastVerifiedProfile = verifiedProfile;
         config.LastVerificationResult = report.Outcome.ToString();
     }

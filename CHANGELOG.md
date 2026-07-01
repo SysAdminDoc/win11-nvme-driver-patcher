@@ -9,6 +9,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   via raw C API on every DB connection, blocking FTS5 shadow-table writes. Tests prove the
   mitigation works, FTS5 is compiled in but unexploitable, and no FTS5 virtual tables exist in
   the app schema. Version floor remains ≥ 3.50.2; the 3.53.2 FTS5-specific CVEs do not apply.
+- **Fallback-active recovery gate** — GUI and CLI `fallback` commands now evaluate recovery proof
+  (recovery kit, backup dir, SafeBoot, System Restore) before writing FeatureStore IDs, refusing
+  by default when proof fails (FeatureStore overrides cannot be reset from WinRE). On the next
+  successful boot, auto-resets FeatureStore fallback IDs when binding fails (`FlagsEnabledNotBound`)
+  or watchdog severity crosses the revert threshold.
 - **NVMeDriverPatcher.Core library** — extracted all shared services, models, data, and interop
   into a framework-agnostic class library; Tray no longer pulls the entire WPF framework.
 - **`--json` for firmware, featurestore, reliability, minidump** — all read CLI commands now return

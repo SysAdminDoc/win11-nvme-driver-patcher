@@ -414,6 +414,28 @@ public partial class MainViewModel
         ButtonsEnabled = false;
         try
         {
+            var proof = RecoveryProofGateService.Evaluate(Config);
+            if (!proof.AllPassed)
+            {
+                Log($"Recovery proof: {proof.Summary}", "WARNING");
+                foreach (var item in proof.Items.Where(i => !i.Passed))
+                    Log($"  FAIL: {item.Label} — {item.Detail}", "WARNING");
+
+                var gateMsg =
+                    "Recovery proof failed before applying FeatureStore fallback.\n\n" +
+                    "Unlike registry patches, FeatureStore overrides CANNOT be reset from WinRE or Safe Mode " +
+                    "(the Rtl API requires a running Windows kernel). If the fallback causes instability, " +
+                    "recovery depends on the items below.\n\n" +
+                    proof.Summary + "\n\n" +
+                    string.Join("\n", proof.Items.Where(i => !i.Passed).Select(i => $"• {i.Label}: {i.Detail}")) +
+                    "\n\nProceed anyway?";
+                if (ConfirmDialog?.Invoke("Recovery Not Ready", gateMsg) != true)
+                {
+                    Log("Fallback apply cancelled — recovery proof not satisfied.", "WARNING");
+                    return;
+                }
+            }
+
             Log("========================================");
             Log("Applying fallback (native FeatureStore first)");
             Log("========================================");
@@ -435,9 +457,7 @@ public partial class MainViewModel
             ToastService.Show("Fallback Applied",
                 "Fallback feature IDs written. Restart to activate the native NVMe driver.",
                 ToastType.Success, Config.EnableToasts);
-            // Reuse the verification pipeline — the fallback is just a different way of
-            // asking Windows to swap the driver, so the same post-reboot check applies.
-            PatchVerificationService.MarkPending(Config);
+            PatchVerificationService.MarkPending(Config, isFallback: true);
             ConfigService.Save(Config);
 
             var restartMsg =

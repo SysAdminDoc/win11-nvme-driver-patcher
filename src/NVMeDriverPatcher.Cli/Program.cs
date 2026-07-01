@@ -1195,6 +1195,19 @@ class Program
 
     static int FallbackCommand(AppConfig config)
     {
+        var proof = RecoveryProofGateService.Evaluate(config);
+        if (!proof.AllPassed)
+        {
+            Console.Error.WriteLine("Recovery proof FAILED — FeatureStore overrides cannot be reset from WinRE/Safe Mode.");
+            foreach (var item in proof.Items.Where(i => !i.Passed))
+                Console.Error.WriteLine($"  FAIL: {item.Label} — {item.Detail}");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Fix the above or use --force to override (not recommended).");
+            if (!Environment.GetCommandLineArgs().Any(a => a.Equals("--force", StringComparison.OrdinalIgnoreCase)))
+                return 1;
+            Console.WriteLine("--force specified: proceeding despite recovery proof failure.");
+        }
+
         Console.WriteLine("FeatureStore fallback (native Rtl API first; no network unless native write fails)");
         var fbSet = ViVeToolService.SelectFallbackSet();
         Console.WriteLine($"Writes feature IDs {fbSet.IdsDisplay} to Windows's FeatureStore");
@@ -1212,7 +1225,7 @@ class Program
         Console.WriteLine($"Applied feature ID(s): {string.Join(", ", result.AppliedIds)}");
         Console.WriteLine($"Method: {result.Method}");
         Console.WriteLine($"Integrity check: {result.IntegritySignal}");
-        PatchVerificationService.MarkPending(config);
+        PatchVerificationService.MarkPending(config, isFallback: true);
         ConfigService.Save(config);
         Console.WriteLine("Restart required. Run: shutdown /r /t 30");
         return 0;
