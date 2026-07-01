@@ -110,16 +110,55 @@ public sealed class PatchVerificationServiceTests
         PatchVerificationService.MarkPending(config);
 
         Assert.False(string.IsNullOrWhiteSpace(config.PendingVerificationSince));
-        // Must round-trip via the same ISO-8601 roundtrip format MarkPending uses, so
-        // Evaluate can read it back later without a culture/format mismatch.
         Assert.True(DateTime.TryParse(
             config.PendingVerificationSince,
             System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.RoundtripKind,
             out _));
         Assert.Equal("Safe", config.PendingVerificationProfile);
+        Assert.False(config.PendingFallbackApplied);
         Assert.Null(config.LastVerifiedProfile);
         Assert.Null(config.LastVerificationResult);
+    }
+
+    [Fact]
+    public void MarkPending_Fallback_SetsFallbackFlag()
+    {
+        var config = new AppConfig();
+
+        PatchVerificationService.MarkPending(config, isFallback: true);
+
+        Assert.True(config.PendingFallbackApplied);
+        Assert.False(string.IsNullOrWhiteSpace(config.PendingVerificationSince));
+    }
+
+    [Fact]
+    public void Clear_ResetsFallbackFlag()
+    {
+        var config = new AppConfig
+        {
+            PendingVerificationSince = DateTime.UtcNow.ToString("o"),
+            PendingFallbackApplied = true
+        };
+        var report = new VerificationReport { Outcome = VerificationOutcome.Confirmed };
+
+        PatchVerificationService.Clear(config, report);
+
+        Assert.False(config.PendingFallbackApplied);
+    }
+
+    [Theory]
+    [InlineData(VerificationOutcome.FlagsEnabledNotBound, false, true)]
+    [InlineData(VerificationOutcome.Confirmed, false, false)]
+    [InlineData(VerificationOutcome.OverrideBlocked, false, false)]
+    [InlineData(VerificationOutcome.Reverted, false, false)]
+    [InlineData(VerificationOutcome.None, false, false)]
+    [InlineData(VerificationOutcome.Confirmed, true, true)]
+    [InlineData(VerificationOutcome.OverrideBlocked, true, true)]
+    public void ClassifyAutoResetDecision_TruthTable(
+        VerificationOutcome outcome, bool watchdogRevert, bool expected)
+    {
+        Assert.Equal(expected, PatchVerificationService.ClassifyAutoResetDecision(outcome, watchdogRevert));
     }
 
     [Fact]

@@ -154,6 +154,7 @@ public class AppConfig
     // ISO-8601 UTC timestamp so the next launch can compare vs OS boot time.
     public string? PendingVerificationSince { get; set; }
     public string? PendingVerificationProfile { get; set; }
+    public bool PendingFallbackApplied { get; set; }
     public string? LastVerifiedProfile { get; set; }
     public string? LastVerificationResult { get; set; }
 

@@ -14,14 +14,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P3 — Quality and distribution (research pass 4, 2026-06-20)
 
-### P1 - Recovery and supply-chain hardening
-
-- [ ] P1 - Add a fallback-active recovery gate before reboot
-  Why: `RecoveryKitService` correctly states WinRE cannot reset FeatureStore fallback IDs, so fallback apply needs stronger proof and automatic reset behavior before the first reboot.
-  Evidence: `src/NVMeDriverPatcher.Core/Services/RecoveryKitService.cs`; `src/NVMeDriverPatcher.Core/Services/FeatureStoreWriterService.cs`.
-  Touches: `src/NVMeDriverPatcher.Core/Services/RecoveryProofGateService.cs`, `src/NVMeDriverPatcher.Core/Services/PatchVerificationService.cs`, `src/NVMeDriverPatcher.Core/Services/FeatureStoreWriterService.cs`, `src/NVMeDriverPatcher/ViewModels/MainViewModel.Commands.cs`, `src/NVMeDriverPatcher.Cli/Program.cs`.
-  Acceptance: Fallback apply refuses or strongly blocks when recovery proof fails, records pending fallback state, and on the next successful boot automatically resets FeatureStore IDs when binding fails or watchdog severity crosses revert thresholds.
-  Complexity: M
 
 ### P2 - Distribution and dependency hygiene
 
