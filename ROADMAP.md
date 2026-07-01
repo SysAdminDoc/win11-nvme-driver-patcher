@@ -15,14 +15,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 ### P3 — Quality and distribution (research pass 4, 2026-06-20)
 
 
-### P2 - Distribution and dependency hygiene
-
-- [ ] P2 - Add ARM64 entries to package-manager manifests
-  Why: Release artifacts now require signed ARM64 portable builds, but winget and Scoop manifests still publish only x64 GUI URLs.
-  Evidence: `packaging/release-artifacts.json`; `packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml`; `packaging/scoop/nvme-driver-patcher.json`; winget and Scoop manifest docs.
-  Touches: `packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml`, `packaging/scoop/nvme-driver-patcher.json`, `scripts/Build-ReleaseArtifacts.ps1`, `scripts/Update-PackageManifests.ps1`, `scripts/Validate-ReleaseAssets.ps1`, `tests/NVMeDriverPatcher.Tests/PackageManifestsScriptTests.cs`.
-  Acceptance: Generated winget manifest has x64 and arm64 installers with matching hashes; Scoop manifest has `64bit` and `arm64` architecture blocks/autoupdate URLs; release validation fails on missing or stale ARM64 hashes.
-  Complexity: M
 
 ### P3 - Dependency watch
 

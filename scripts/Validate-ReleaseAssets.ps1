@@ -90,21 +90,33 @@ foreach ($a in $contract.artifacts) {
             $failures.Add("winget manifest PackageVersion is not $Version")
         }
         if ($yaml -notmatch "InstallerUrl:\s*\S*/download/v$([regex]::Escape($Version))/NVMeDriverPatcher\.exe") {
-            $failures.Add("winget manifest InstallerUrl does not point at tag v$Version")
+            $failures.Add("winget manifest InstallerUrl (x64) does not point at tag v$Version")
+        }
+        if ($yaml -notmatch "Architecture:\s*arm64") {
+            $failures.Add("winget manifest missing arm64 Architecture entry")
+        }
+        if ($yaml -notmatch "InstallerUrl:\s*\S*/download/v$([regex]::Escape($Version))/NVMeDriverPatcher-win-arm64\.exe") {
+            $failures.Add("winget manifest InstallerUrl (arm64) does not point at tag v$Version")
         }
         $guiPath = Join-Path $repoRoot 'publish/gui/NVMeDriverPatcher.exe'
         if (Test-Path $guiPath) {
             $guiHash = (Get-Sha256Hex $guiPath).ToUpper()
             if ($yaml -notmatch [regex]::Escape($guiHash)) {
-                $failures.Add("winget manifest InstallerSha256 does not match publish/gui/NVMeDriverPatcher.exe")
+                $failures.Add("winget manifest InstallerSha256 (x64) does not match publish/gui/NVMeDriverPatcher.exe")
+            }
+        }
+        $arm64Path = Join-Path $repoRoot 'publish/NVMeDriverPatcher-win-arm64.exe'
+        if (Test-Path $arm64Path) {
+            $arm64Hash = (Get-Sha256Hex $arm64Path).ToUpper()
+            if ($yaml -notmatch [regex]::Escape($arm64Hash)) {
+                $failures.Add("winget manifest InstallerSha256 (arm64) does not match publish/NVMeDriverPatcher-win-arm64.exe")
             }
         }
     }
 
     if ($a.id -eq 'scoop-manifest') {
-        # The Scoop manifest must carry this release's version, the tagged download URL, and the
-        # real GUI exe hash — not the REPLACE_ME placeholder or a stale version.
         $guiPath = Join-Path $repoRoot 'publish/gui/NVMeDriverPatcher.exe'
+        $arm64Path = Join-Path $repoRoot 'publish/NVMeDriverPatcher-win-arm64.exe'
         try { $scoop = Get-Content -Raw $full | ConvertFrom-Json } catch { $scoop = $null }
         if ($null -eq $scoop) {
             $failures.Add("scoop manifest is not valid JSON")
@@ -114,12 +126,30 @@ foreach ($a in $contract.artifacts) {
             if ($arch.url -notmatch "/releases/download/v$([regex]::Escape($Version))/NVMeDriverPatcher\.exe") {
                 $failures.Add("scoop manifest 64bit url does not point at tag v$Version")
             }
-            if ($arch.hash -match 'REPLACE_ME') { $failures.Add("scoop manifest still has the REPLACE_ME hash placeholder") }
+            if ($arch.hash -match 'REPLACE_ME') { $failures.Add("scoop manifest 64bit still has a REPLACE_ME hash placeholder") }
             if (Test-Path $guiPath) {
                 $guiHashLower = Get-Sha256Hex $guiPath
                 if ($arch.hash -ne $guiHashLower) {
                     $failures.Add("scoop manifest 64bit hash does not match publish/gui/NVMeDriverPatcher.exe")
                 }
+            }
+            $arm64Arch = $scoop.architecture.arm64
+            if ($null -eq $arm64Arch) {
+                $failures.Add("scoop manifest missing arm64 architecture block")
+            } else {
+                if ($arm64Arch.url -notmatch "/releases/download/v$([regex]::Escape($Version))/NVMeDriverPatcher-win-arm64\.exe") {
+                    $failures.Add("scoop manifest arm64 url does not point at tag v$Version")
+                }
+                if ($arm64Arch.hash -match 'REPLACE_ME') { $failures.Add("scoop manifest arm64 still has a REPLACE_ME hash placeholder") }
+                if (Test-Path $arm64Path) {
+                    $arm64HashLower = Get-Sha256Hex $arm64Path
+                    if ($arm64Arch.hash -ne $arm64HashLower) {
+                        $failures.Add("scoop manifest arm64 hash does not match publish/NVMeDriverPatcher-win-arm64.exe")
+                    }
+                }
+            }
+            if ($null -eq $scoop.autoupdate.architecture.arm64) {
+                $failures.Add("scoop manifest missing arm64 autoupdate block")
             }
         }
     }

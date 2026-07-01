@@ -14,6 +14,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   by default when proof fails (FeatureStore overrides cannot be reset from WinRE). On the next
   successful boot, auto-resets FeatureStore fallback IDs when binding fails (`FlagsEnabledNotBound`)
   or watchdog severity crosses the revert threshold.
+- **ARM64 package-manager manifests** — winget manifest now has both `x64` and `arm64` installer
+  entries; Scoop manifest has `64bit` and `arm64` architecture blocks with autoupdate URLs.
+  `Update-PackageManifests.ps1` accepts `-Arm64ExePath` to hash the ARM64 exe. Release validation
+  fails on missing ARM64 entries or stale hashes.
 - **NVMeDriverPatcher.Core library** — extracted all shared services, models, data, and interop
   into a framework-agnostic class library; Tray no longer pulls the entire WPF framework.
 - **`--json` for firmware, featurestore, reliability, minidump** — all read CLI commands now return

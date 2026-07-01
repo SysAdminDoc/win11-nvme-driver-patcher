@@ -13,9 +13,9 @@ public sealed class PackageManifestsScriptTests
     [Fact]
     public void Update_RewritesChocoAndScoopWithUrlHashAndVersion()
     {
-        using var repo = ManifestFixture.Create(out var expectedHash);
+        using var repo = ManifestFixture.Create(out var expectedHash, out var expectedArm64Hash);
 
-        var result = RunScript(repo.Path, "9.9.9", repo.ExePath);
+        var result = RunScript(repo.Path, "9.9.9", repo.ExePath, repo.Arm64ExePath);
         Assert.True(result.ExitCode == 0, $"stdout: {result.StdOut}\nstderr: {result.StdErr}");
 
         var choco = File.ReadAllText(Path.Combine(repo.Path, "packaging/chocolatey/tools/chocolateyInstall.ps1"));
@@ -34,12 +34,18 @@ public sealed class PackageManifestsScriptTests
         var arch64 = root.GetProperty("architecture").GetProperty("64bit");
         Assert.Contains("download/v9.9.9/NVMeDriverPatcher.exe", arch64.GetProperty("url").GetString());
         Assert.Equal(expectedHash, arch64.GetProperty("hash").GetString());
+        // ARM64 block must exist with versioned URL and correct hash
+        var archArm64 = root.GetProperty("architecture").GetProperty("arm64");
+        Assert.Contains("download/v9.9.9/NVMeDriverPatcher-win-arm64.exe", archArm64.GetProperty("url").GetString());
+        Assert.Equal(expectedArm64Hash, archArm64.GetProperty("hash").GetString());
         // The autoupdate template must keep its literal $version token, not be pinned to 9.9.9.
         Assert.Contains("download/v$version/NVMeDriverPatcher.exe",
             root.GetProperty("autoupdate").GetProperty("architecture").GetProperty("64bit").GetProperty("url").GetString());
+        Assert.Contains("download/v$version/NVMeDriverPatcher-win-arm64.exe",
+            root.GetProperty("autoupdate").GetProperty("architecture").GetProperty("arm64").GetProperty("url").GetString());
     }
 
-    private static ScriptResult RunScript(string repoRoot, string version, string exePath)
+    private static ScriptResult RunScript(string repoRoot, string version, string exePath, string? arm64ExePath = null)
     {
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo("powershell.exe")
@@ -49,8 +55,14 @@ public sealed class PackageManifestsScriptTests
             UseShellExecute = false
         };
         process.StartInfo.Environment.Remove("PSModulePath"); // let Windows PowerShell find Get-FileHash
-        foreach (var a in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ScriptPath(),
-                                  "-Version", version, "-ExePath", exePath, "-RepoRoot", repoRoot })
+        var args = new List<string> { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ScriptPath(),
+                                      "-Version", version, "-ExePath", exePath, "-RepoRoot", repoRoot };
+        if (arm64ExePath is not null)
+        {
+            args.Add("-Arm64ExePath");
+            args.Add(arm64ExePath);
+        }
+        foreach (var a in args)
             process.StartInfo.ArgumentList.Add(a);
 
         process.Start();
@@ -70,11 +82,12 @@ public sealed class PackageManifestsScriptTests
 
     private sealed class ManifestFixture : IDisposable
     {
-        private ManifestFixture(string path, string exePath) { Path = path; ExePath = exePath; }
+        private ManifestFixture(string path, string exePath, string arm64ExePath) { Path = path; ExePath = exePath; Arm64ExePath = arm64ExePath; }
         public string Path { get; }
         public string ExePath { get; }
+        public string Arm64ExePath { get; }
 
-        public static ManifestFixture Create(out string expectedHash)
+        public static ManifestFixture Create(out string expectedHash, out string expectedArm64Hash)
         {
             var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"NVMeDriverPatcher.Manifests.Tests.{Guid.NewGuid():N}");
 
@@ -95,22 +108,33 @@ public sealed class PackageManifestsScriptTests
                         "64bit": {
                             "url": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.0.0/NVMeDriverPatcher.exe#/NVMeDriverPatcher.exe",
                             "hash": "REPLACE_ME_WITH_RELEASE_SHA256"
+                        },
+                        "arm64": {
+                            "url": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.0.0/NVMeDriverPatcher-win-arm64.exe#/NVMeDriverPatcher-win-arm64.exe",
+                            "hash": "REPLACE_ME_WITH_ARM64_SHA256"
                         }
                     },
                     "autoupdate": {
                         "architecture": {
-                            "64bit": { "url": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v$version/NVMeDriverPatcher.exe#/NVMeDriverPatcher.exe" }
+                            "64bit": { "url": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v$version/NVMeDriverPatcher.exe#/NVMeDriverPatcher.exe" },
+                            "arm64": { "url": "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v$version/NVMeDriverPatcher-win-arm64.exe#/NVMeDriverPatcher-win-arm64.exe" }
                         }
                     }
                 }
                 """);
 
-            var exePath = System.IO.Path.Combine(root, "publish", "NVMeDriverPatcher.exe");
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(exePath)!);
+            var publishDir = System.IO.Path.Combine(root, "publish");
+            Directory.CreateDirectory(publishDir);
+
+            var exePath = System.IO.Path.Combine(publishDir, "NVMeDriverPatcher.exe");
             File.WriteAllBytes(exePath, new byte[] { 0x4D, 0x5A, 9, 8, 7, 6 });
             expectedHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(exePath))).ToLowerInvariant();
 
-            return new ManifestFixture(root, exePath);
+            var arm64ExePath = System.IO.Path.Combine(publishDir, "NVMeDriverPatcher-win-arm64.exe");
+            File.WriteAllBytes(arm64ExePath, new byte[] { 0x4D, 0x5A, 1, 2, 3, 4 });
+            expectedArm64Hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(arm64ExePath))).ToLowerInvariant();
+
+            return new ManifestFixture(root, exePath, arm64ExePath);
         }
 
         public void Dispose()
