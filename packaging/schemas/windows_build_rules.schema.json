@@ -15,7 +15,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "expectedPath", "summary"],
+        "required": ["id", "expectedPath", "summary", "sourceUrl", "lastReviewed"],
         "properties": {
           "id": { "type": "string" },
           "server": { "type": "boolean" },

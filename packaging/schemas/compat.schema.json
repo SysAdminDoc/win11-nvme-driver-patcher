@@ -15,7 +15,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["controller", "firmware", "level"],
+        "required": ["controller", "firmware", "level", "sourceUrl", "lastReviewed"],
         "properties": {
           "controller": { "type": "string" },
           "firmware": { "type": "string" },

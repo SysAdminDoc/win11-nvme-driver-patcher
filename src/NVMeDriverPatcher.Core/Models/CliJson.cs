@@ -35,6 +35,9 @@ public static class CliJson
         ActiveDriver = native?.ActiveDriver,
         EnablementSource = source.ToString(),
         BuildRuleId = rule?.Id,
+        BuildRuleSource = rule?.SourceUrl,
+        BuildRuleConfidence = rule?.Confidence,
+        BuildRuleLastReviewed = rule?.LastReviewed,
     };
 
     public static WatchdogJson BuildWatchdog(WatchdogReport report) => new()
@@ -176,6 +179,9 @@ public sealed class StatusJson
     public string? ActiveDriver { get; set; }
     public string EnablementSource { get; set; } = string.Empty;
     public string? BuildRuleId { get; set; }
+    public string? BuildRuleSource { get; set; }
+    public string? BuildRuleConfidence { get; set; }
+    public string? BuildRuleLastReviewed { get; set; }
 }
 
 public sealed class WatchdogJson
