@@ -62,6 +62,14 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   clears and persists on success, and retains the checkpoint for retry on failure.
 
 ### Changed
+- **Corner-radius consistency** — normalized every control's corner radius to the house set
+  (0/4/6/8/10/12): the pervasive `7` on buttons/inputs/combobox/menu/tooltip → `8` (matches cards),
+  `5` → `4`, badge `3` → `4`, and hairline `1`/`2` accents → `0`. One coherent rounding language.
+- **Native title bar follows the theme** — the OS caption/title colors are now derived from the same
+  `WindowCanvasBrush`/`TextPrimary` theme tokens the window body uses, instead of hardcoded warm-tinted
+  values that clashed with the cool app canvas; they also stay correct across theme switches.
+- **Clearer microcopy** — reworded the unsupported-build notice, the "skip confirmation prompts
+  (advanced)" setting (with a risk tooltip), and the registry-details hint to be calmer and less jargon-y.
 - **MSI installer content fixed (issue #12)** — the license/info page now uses a real product
   `License.rtf` (purpose, risk, recovery, MIT license) instead of WiX's default sample text, product
   strings live in a `packaging/wix/en-US.wxl` contract wired into the build, and the WiX README no

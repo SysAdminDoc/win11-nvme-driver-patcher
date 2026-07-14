@@ -147,13 +147,14 @@ public partial class MainWindow : Window
             int useDarkMode = dark ? 1 : 0;
             DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkMode, ref useDarkMode, sizeof(int));
 
-            int captionColor = ThemeService.CurrentTheme switch
-            {
-                AppTheme.HighContrast => 0x00000000,
-                AppTheme.Dark => 0x00191411,
-                _ => 0x00FEFBF9
-            };
-            int textColor = dark ? 0x00FFFFFF : 0x0020120B;
+            // Derive the native caption from the SAME theme tokens the app canvas uses so the OS title
+            // bar can't drift into a different tint than the window body. HighContrast forces black.
+            int captionColor = ThemeService.CurrentTheme == AppTheme.HighContrast
+                ? 0x00000000
+                : ResourceColorRef("WindowCanvasBrush", dark ? 0x00130F0D : 0x00FEFAF7);
+            int textColor = ThemeService.CurrentTheme == AppTheme.HighContrast
+                ? 0x00FFFFFF
+                : ResourceColorRef("TextPrimary", dark ? 0x00FFF9F6 : 0x0020120B);
             DwmSetWindowAttribute(hwnd, DwmwaCaptionColor, ref captionColor, sizeof(int));
             DwmSetWindowAttribute(hwnd, DwmwaTextColor, ref textColor, sizeof(int));
         }
@@ -161,6 +162,18 @@ public partial class MainWindow : Window
         {
             // Native title-bar tinting is best-effort and unavailable on older Windows builds.
         }
+    }
+
+    // DWM caption/text attributes take a COLORREF (0x00BBGGRR). Pull the RGB from a theme brush so the
+    // title bar always matches the active theme; fall back to the passed COLORREF if the key is absent.
+    private static int ResourceColorRef(string resourceKey, int fallbackColorRef)
+    {
+        if (Application.Current?.TryFindResource(resourceKey) is System.Windows.Media.SolidColorBrush b)
+        {
+            var c = b.Color;
+            return c.R | (c.G << 8) | (c.B << 16);
+        }
+        return fallbackColorRef;
     }
 
     private bool ShowConfirmDialog(string title, string message)
