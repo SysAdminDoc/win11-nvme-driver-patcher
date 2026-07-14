@@ -122,6 +122,28 @@ public static class PreflightService
         }
         catch { /* probe is best-effort */ }
 
+        // SafeBoot writability (issue #13): classify the two boot-critical GUID keys BEFORE any
+        // feature write. On newer builds Windows ships these keys itself (a named "NvmeDisk" value)
+        // and may deny writes; blindly proceeding risks a failed apply or, on removal, erasing
+        // OS-owned state. Surface denied/conflicting/foreign keys honestly.
+        try
+        {
+            var (min, net) = SafeBootStateService.ClassifyGuidKeys(new RealSafeBootRegistry());
+            var worst = new[] { min, net }.Max();
+            checks["SafeBootWritable"] = worst switch
+            {
+                SafeBootKeyDisposition.AccessDenied => new(CheckStatus.Fail,
+                    "SafeBoot GUID key write access DENIED — Windows owns these keys on this build (issue #13). Apply would fail and could not add Safe Mode protection.", true),
+                SafeBootKeyDisposition.ForeignValuesPresent => new(CheckStatus.Warning,
+                    "SafeBoot GUID keys already carry OS-owned values (e.g. NvmeDisk). The patch will preserve them and remove only what it adds."),
+                SafeBootKeyDisposition.ConflictingDefault => new(CheckStatus.Warning,
+                    "SafeBoot GUID keys hold a different default value than expected — the patch will record and restore it on removal."),
+                SafeBootKeyDisposition.AlreadyCorrect => new(CheckStatus.Pass, "SafeBoot GUID keys already set correctly"),
+                _ => new(CheckStatus.Pass, "SafeBoot GUID keys are writable"),
+            };
+        }
+        catch { /* probe is best-effort */ }
+
         // 2. NVMe Drives
         log?.Invoke("  [2/11] Scanning drives...");
         try

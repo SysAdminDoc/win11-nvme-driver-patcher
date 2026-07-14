@@ -14,7 +14,7 @@ public sealed class PatchServiceTests
         // non-empty descriptor. Any store it cannot confirm clean is reported as residue
         // (fail-closed) rather than throwing.
         using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-        var residue = PatchService.ProbeRemovalResidue(hklm, null);
+        var residue = PatchService.ProbeRemovalResidue(hklm, workingDir: null, log: null);
 
         Assert.NotNull(residue);
         Assert.All(residue, r => Assert.False(string.IsNullOrWhiteSpace(r)));

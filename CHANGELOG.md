@@ -5,6 +5,15 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-06-30
 
 ### Fixed
+- **SafeBoot state is now a reversible transaction (issue #13)** — apply captures a durable journal
+  (`safeboot_journal.json`) of every SafeBoot key's exact prior state before writing; removal and
+  partial-install rollback restore that state byte-for-byte, deleting the GUID key only when the app
+  created it and otherwise removing just the app's default value while preserving OS-owned values
+  (e.g. the "NvmeDisk" value Windows ships on build 26200.8737). ACLs are never changed. A new
+  preflight check classifies the boot-critical GUID keys as writable / already-correct / conflicting /
+  foreign-owned / access-denied before any feature write, so a denied or OS-owned key is surfaced up
+  front instead of failing mid-apply or erasing OS state on removal. New `SafeBootStateService` with
+  an injectable registry seam and in-memory fakes covers empty/correct/NvmeDisk/conflict/denied.
 - **Residue-verified patch removal** — `PatchService.Uninstall` no longer reports success just
   because it ran; it now re-reads every store (feature-override values, the app-owned SafeBoot GUID
   keys, and the FeatureStore fallback IDs) and only reports success on a zero-residue probe. Any
