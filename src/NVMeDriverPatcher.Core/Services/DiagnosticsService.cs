@@ -131,18 +131,29 @@ public static class DiagnosticsService
                 }
                 catch { }
 
-                // Copy the SQLite DB and any live WAL sidecars via read-only FileStreams with
-                // FileShare.ReadWrite so we don't collide with open EF Core connections.
-                try
+                // SQLite's Online Backup API takes one point-in-time view across the main DB and
+                // active WAL. Only the quick_check-validated, standalone snapshot enters the ZIP.
+                var sourceDatabase = Path.Combine(workingDir, "nvmepatcher.db");
+                if (File.Exists(sourceDatabase))
                 {
-                    foreach (var name in new[] { "nvmepatcher.db", "nvmepatcher.db-wal", "nvmepatcher.db-shm" })
+                    var snapshotPath = Path.Combine(
+                        Path.GetTempPath(),
+                        $"NVMePatcher_SupportDb_{Guid.NewGuid():N}.db");
+                    try
                     {
-                        var sourcePath = Path.Combine(workingDir, name);
-                        if (File.Exists(sourcePath))
-                            AddSharedFileEntry(zip, sourcePath, $"data/{name}");
+                        var snapshot = SqliteSnapshotService.CreateValidatedSnapshot(
+                            sourceDatabase,
+                            snapshotPath);
+                        if (snapshot.Success && snapshot.SnapshotPath is not null)
+                            AddSharedFileEntry(zip, snapshot.SnapshotPath, "data/nvmepatcher.db");
+                        else
+                            AddTextEntry(zip, "data/nvmepatcher.db.omitted.txt", snapshot.Summary);
+                    }
+                    finally
+                    {
+                        SqliteSnapshotService.DeleteSnapshotFiles(snapshotPath);
                     }
                 }
-                catch { }
 
                 // Benchmark history JSON is useful to support even when the DB is unavailable.
                 try
@@ -167,7 +178,7 @@ public static class DiagnosticsService
                 manifest.AppendLine("  config.json       App configuration with local paths redacted");
                 manifest.AppendLine("  crash/*           Crash logs (if present)");
                 manifest.AppendLine("  registry/*.reg    Up to 5 most-recent registry backups");
-                manifest.AppendLine("  data/*.db*        SQLite DB plus WAL sidecars (if present)");
+                manifest.AppendLine("  data/nvmepatcher.db  Validated point-in-time SQLite Online Backup snapshot (if present)");
                 manifest.AppendLine("  data/benchmark_results.json  Benchmark history cache (if present)");
                 manifest.AppendLine();
                 manifest.Append(BuildTrustLedger(workingDir));
@@ -341,10 +352,10 @@ public static class DiagnosticsService
         if (relativePath.Equals("diagnostics.txt", StringComparison.OrdinalIgnoreCase)) return "diagnostics";
         if (relativePath.Equals("config.json", StringComparison.OrdinalIgnoreCase)) return "redacted-config";
         if (relativePath.Equals("MANIFEST.txt", StringComparison.OrdinalIgnoreCase)) return "human-readable-index";
+        if (relativePath.EndsWith("-omitted.txt", StringComparison.OrdinalIgnoreCase)) return "omission-notice";
         if (relativePath.StartsWith("crash/", StringComparison.OrdinalIgnoreCase)) return "redacted-crash-log";
         if (relativePath.StartsWith("registry/", StringComparison.OrdinalIgnoreCase)) return "registry-backup";
         if (relativePath.StartsWith("data/", StringComparison.OrdinalIgnoreCase)) return "diagnostic-data";
-        if (relativePath.EndsWith("-omitted.txt", StringComparison.OrdinalIgnoreCase)) return "omission-notice";
         return "support-evidence";
     }
 
