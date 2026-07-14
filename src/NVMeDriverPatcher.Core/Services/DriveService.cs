@@ -780,10 +780,10 @@ public static class DriveService
             catch { }
 
             if (allServices.Any(s => RxAcronis.IsMatch(s)))
-                found.Add(new() { Name = "Acronis", Severity = "High", Message = "Backup cannot see drives under Storage disks category" });
+                found.Add(new() { Name = "Acronis", Severity = "High", Message = "Native NVMe changes the disk ID and moves the drive under Storage disks, so existing Acronis backup jobs/chains lose the disk. Re-register the disk in Acronis after the swap (and after any revert)." });
 
             if (allServices.Any(s => RxMacrium.IsMatch(s)))
-                found.Add(new() { Name = "Macrium Reflect", Severity = "Medium", Message = "May need update for Storage disks compatibility" });
+                found.Add(new() { Name = "Macrium Reflect", Severity = "Medium", Message = "Native NVMe changes the disk ID; Macrium may see the drive as new and existing definitions/schedules may need updating. Re-point backup jobs after the swap." });
 
             if (allServices.Any(s => RxVirtualBox.IsMatch(s)))
                 found.Add(new() { Name = "VirtualBox", Severity = "Low", Message = "Storage filter drivers may conflict" });
@@ -801,7 +801,7 @@ public static class DriveService
                 found.Add(new() { Name = "Hyper-V/WSL2", Severity = "Medium", Message = "WSL2 disk I/O ~40% slower with native NVMe (no paravirt)" });
 
             if (allServices.Any(s => RxVeeam.IsMatch(s)))
-                found.Add(new() { Name = "Veeam", Severity = "High", Message = "Backup agent cannot detect drives under Storage disks" });
+                found.Add(new() { Name = "Veeam", Severity = "High", Message = "Native NVMe changes the disk ID and moves the drive under Storage disks, so the Veeam agent stops detecting it. Re-add the disk to the backup job after the swap (and after any revert)." });
 
             if (allServices.Any(s => RxUrBackup.IsMatch(s)))
                 found.Add(new() { Name = "UrBackup", Severity = "Medium", Message = "Check backup image-mount support after KB5083769 driver blocklist changes" });
