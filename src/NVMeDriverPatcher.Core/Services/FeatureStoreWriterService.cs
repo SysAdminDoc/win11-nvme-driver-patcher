@@ -35,6 +35,18 @@ public sealed record FeatureConfigState(
     public bool IsEnabled => Found && EnabledState == 2;
 }
 
+/// <summary>Lossless result used by the mutation ledger. QuerySucceeded distinguishes a genuine
+/// absent configuration from an unavailable native API, while CompactState + VariantPayload retain
+/// every field required to recreate a pre-existing configuration exactly.</summary>
+public sealed record ExactFeatureConfigState(
+    int FeatureId,
+    bool BootStore,
+    bool QuerySucceeded,
+    bool Found,
+    uint CompactState,
+    uint VariantPayload,
+    int NativeStatus);
+
 // Native feature-configuration access via the same ntdll APIs ViVeTool uses
 // (RtlQueryFeatureConfiguration / RtlSetFeatureConfigurations — see
 // thebookisclosed/ViVe NativeMethods.Ntdll.cs + NativeStructs.cs). This replaces the
@@ -135,6 +147,18 @@ public static class FeatureStoreWriterService
     public static FeatureConfigState QueryConfiguration(int featureId, bool bootStore)
     {
         var store = bootStore ? "Boot" : "Runtime";
+        var exact = QueryConfigurationExact(featureId, bootStore);
+        return exact.QuerySucceeded && exact.Found
+            ? new FeatureConfigState(
+                featureId, true,
+                DecodeEnabledState(exact.CompactState),
+                DecodePriority(exact.CompactState),
+                store)
+            : new FeatureConfigState(featureId, false, 0, 0, store);
+    }
+
+    public static ExactFeatureConfigState QueryConfigurationExact(int featureId, bool bootStore)
+    {
         try
         {
             ulong changeStamp = 0;
@@ -143,19 +167,16 @@ public static class FeatureStoreWriterService
                 bootStore ? ConfigurationType.Boot : ConfigurationType.Runtime,
                 ref changeStamp,
                 out var cfg);
-            if (status != StatusSuccess)
-                return new FeatureConfigState(featureId, false, 0, 0, store);
-            return new FeatureConfigState(
-                featureId, true,
-                DecodeEnabledState(cfg.CompactState),
-                DecodePriority(cfg.CompactState),
-                store);
+            return status == StatusSuccess
+                ? new ExactFeatureConfigState(
+                    featureId, bootStore, true, true, cfg.CompactState, cfg.VariantPayload, status)
+                // A completed native call with no matching record is a trustworthy absent state.
+                // Invocation failures are caught below and remain distinguishable.
+                : new ExactFeatureConfigState(featureId, bootStore, true, false, 0, 0, status);
         }
         catch
         {
-            // Export missing (very old Windows) or marshalling failure — treat as not found;
-            // callers fall back to the blob heuristic.
-            return new FeatureConfigState(featureId, false, 0, 0, store);
+            return new ExactFeatureConfigState(featureId, bootStore, false, false, 0, 0, int.MinValue);
         }
     }
 
@@ -259,7 +280,7 @@ public static class FeatureStoreWriterService
             return new FeatureStoreWriteResult
             {
                 Success = true,
-                Summary = $"Enabled feature ID(s) {string.Join(", ", fullyEnabled)} via native Rtl API (Runtime + Boot stores, priority User). Restart to take effect.",
+                Summary = $"Enabled feature ID(s) {string.Join(", ", fullyEnabled)} via native Rtl API (Runtime + Boot stores, priority User). Awaiting a durable reboot checkpoint.",
                 AppliedIds = fullyEnabled,
                 IdStatuses = statuses,
             };
@@ -357,6 +378,145 @@ public static class FeatureStoreWriterService
             return new FeatureStoreWriteResult { Success = true, Summary = "No FeatureStore fallback IDs are enabled — nothing to undo." };
 
         return ResetOverrides(enabled);
+    }
+
+    /// <summary>Restore the exact configurations captured before fallback mutation. Unlike
+    /// ResetOverrides, this preserves a pre-existing non-default configuration instead of assuming
+    /// the original state was absent.</summary>
+    public static IReadOnlyList<string> RestoreConfigurations(
+        IReadOnlyList<FeatureStoreConfigurationBaseline> baseline,
+        Action<string>? log = null)
+    {
+        if (baseline.Count == 0)
+            return new[] { "FeatureStore baseline is empty." };
+
+        var result = RunExclusive(() => RestoreConfigurationsCore(baseline));
+        if (!result.Success)
+            return new[] { result.Summary };
+
+        var differences = ProbeConfigurationDifferences(baseline);
+        foreach (var difference in differences)
+            log?.Invoke("  [FeatureStore] " + difference);
+        return differences;
+    }
+
+    private static FeatureStoreWriteResult RestoreConfigurationsCore(
+        IReadOnlyList<FeatureStoreConfigurationBaseline> baseline)
+    {
+        try
+        {
+            foreach (bool bootStore in new[] { false, true })
+            {
+                var entries = baseline.Where(entry => entry.BootStore == bootStore).ToArray();
+                if (entries.Length == 0)
+                    return new FeatureStoreWriteResult
+                    {
+                        Success = false,
+                        Summary = $"FeatureStore baseline is missing the {(bootStore ? "Boot" : "Runtime")} store."
+                    };
+
+                var updates = entries.Select(BuildRestoreUpdate).ToArray();
+                ulong changeStamp = 0;
+                int status = RtlSetFeatureConfigurations(
+                    ref changeStamp,
+                    bootStore ? ConfigurationType.Boot : ConfigurationType.Runtime,
+                    updates,
+                    (uint)updates.Length);
+                if (status != StatusSuccess)
+                {
+                    return new FeatureStoreWriteResult
+                    {
+                        Success = false,
+                        Summary = $"RtlSetFeatureConfigurations({(bootStore ? "Boot" : "Runtime")}) exact restore failed with NTSTATUS 0x{status:X8}."
+                    };
+                }
+            }
+
+            return new FeatureStoreWriteResult
+            {
+                Success = true,
+                Summary = "FeatureStore configurations restored to their exact pre-mutation state."
+            };
+        }
+        catch (Exception ex)
+        {
+            return new FeatureStoreWriteResult
+            {
+                Success = false,
+                Summary = $"Exact FeatureStore restore failed: {ex.GetType().Name}: {ex.Message}"
+            };
+        }
+    }
+
+    public static IReadOnlyList<string> ProbeConfigurationDifferences(
+        IReadOnlyList<FeatureStoreConfigurationBaseline> baseline)
+    {
+        var differences = new List<string>();
+        foreach (var expected in baseline)
+        {
+            var actual = QueryConfigurationExact(expected.FeatureId, expected.BootStore);
+            var store = expected.BootStore ? "Boot" : "Runtime";
+            if (!actual.QuerySucceeded)
+            {
+                differences.Add($"FeatureStore {store} ID {expected.FeatureId} is unverifiable.");
+                continue;
+            }
+            if (actual.Found != expected.Found ||
+                (expected.Found &&
+                 (actual.CompactState != expected.CompactState || actual.VariantPayload != expected.VariantPayload)))
+            {
+                differences.Add($"FeatureStore {store} ID {expected.FeatureId} differs from baseline.");
+            }
+        }
+        return differences;
+    }
+
+    private static RTL_FEATURE_CONFIGURATION_UPDATE BuildRestoreUpdate(
+        FeatureStoreConfigurationBaseline entry)
+    {
+        if (!entry.Found)
+        {
+            return new RTL_FEATURE_CONFIGURATION_UPDATE
+            {
+                FeatureId = unchecked((uint)entry.FeatureId),
+                Priority = 8,
+                Operation = 4
+            };
+        }
+
+        return new RTL_FEATURE_CONFIGURATION_UPDATE
+        {
+            FeatureId = unchecked((uint)entry.FeatureId),
+            Priority = entry.CompactState & 0xF,
+            EnabledState = (entry.CompactState >> 4) & 0x3,
+            EnabledStateOptions = (entry.CompactState >> 6) & 0x1,
+            Variant = (entry.CompactState >> 8) & 0x3F,
+            VariantPayloadKind = (entry.CompactState >> 14) & 0x3,
+            VariantPayload = entry.VariantPayload,
+            Operation = 1 | 2
+        };
+    }
+
+    internal static (
+        uint FeatureId,
+        uint Priority,
+        uint EnabledState,
+        uint EnabledStateOptions,
+        uint Variant,
+        uint VariantPayloadKind,
+        uint VariantPayload,
+        uint Operation) DescribeRestoreUpdate(FeatureStoreConfigurationBaseline entry)
+    {
+        var update = BuildRestoreUpdate(entry);
+        return (
+            update.FeatureId,
+            update.Priority,
+            update.EnabledState,
+            update.EnabledStateOptions,
+            update.Variant,
+            update.VariantPayloadKind,
+            update.VariantPayload,
+            update.Operation);
     }
 
     /// <summary>

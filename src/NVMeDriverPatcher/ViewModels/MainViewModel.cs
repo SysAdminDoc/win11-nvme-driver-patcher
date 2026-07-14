@@ -321,6 +321,12 @@ public partial class MainViewModel : ObservableObject
         }
         Log("Running pre-flight checks...");
 
+        var interruptedRecovery = MutationLedgerService.RecoverInterrupted(
+            Config.WorkingDir,
+            message => Log(message, "INFO"));
+        if (!interruptedRecovery.Success)
+            Log("[ERROR] Mutation recovery failed: " + interruptedRecovery.Summary, "ERROR");
+
         // Post-reboot verification: evaluate now so the log captures the state at startup,
         // but defer any dialog until AFTER preflight has rendered. A modal dialog popping up
         // over a half-rendered UI was jarring AND it blocked the main window from showing
@@ -343,6 +349,7 @@ public partial class MainViewModel : ObservableObject
                         ToastType.Success, Config.EnableToasts);
                     PatchVerificationService.Clear(Config, pendingVerification);
                     ConfigService.Save(Config);
+                    MutationLedgerService.MarkLatestVerified(Config.WorkingDir, message => Log(message, "INFO"));
                     pendingVerification = null;
                     break;
                 case VerificationOutcome.OverrideBlocked:
@@ -377,6 +384,7 @@ public partial class MainViewModel : ObservableObject
                     Log("Post-reboot verification: previous patch is no longer present.", "INFO");
                     PatchVerificationService.Clear(Config, pendingVerification);
                     ConfigService.Save(Config);
+                    MutationLedgerService.MarkLatestReverted(Config.WorkingDir, message => Log(message, "INFO"));
                     pendingVerification = null;
                     break;
                 case VerificationOutcome.AwaitingRestart:

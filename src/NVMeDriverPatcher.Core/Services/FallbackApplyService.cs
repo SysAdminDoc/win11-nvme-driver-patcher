@@ -7,6 +7,7 @@ public sealed class FallbackApplyResult
     public string Message { get; init; } = string.Empty;
     public IReadOnlyList<string> AppliedIds { get; init; } = Array.Empty<string>();
     public string IntegritySignal { get; init; } = "native";
+    public string? MutationOperationId { get; set; }
 }
 
 /// <summary>
@@ -19,16 +20,62 @@ public static class FallbackApplyService
     public const string NativeMethod = "native-featurestore";
     public const string ViVeToolMethod = "vivetool";
 
-    public static Task<FallbackApplyResult> ApplyAsync(
+    public static async Task<FallbackApplyResult> ApplyAsync(
         string workingDir,
         Action<string>? log = null,
-        CancellationToken cancellationToken = default) =>
-        ApplyAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var idSet = ViVeToolService.SelectFallbackSet();
+        var prepared = MutationLedgerService.PrepareFeatureStoreFallback(workingDir, idSet.Ids, log);
+        if (!prepared.Success || prepared.Ledger is null)
+        {
+            return new FallbackApplyResult
+            {
+                Success = false,
+                Message = "Fallback blocked before mutation: " + prepared.Summary
+            };
+        }
+
+        var result = await ApplyAsync(
             workingDir,
             log,
             cancellationToken,
             ids => FeatureStoreWriterService.WriteOverrides(ids),
-            ViVeToolService.ApplyFallbackAsync);
+            ViVeToolService.ApplyFallbackAsync).ConfigureAwait(false);
+        result.MutationOperationId = prepared.Ledger.OperationId;
+
+        if (!result.Success)
+        {
+            var restored = MutationLedgerService.RestoreOriginalState(workingDir, log);
+            if (!restored.Success)
+            {
+                return new FallbackApplyResult
+                {
+                    Success = false,
+                    Message = result.Message + " Exact baseline restore was incomplete: " + string.Join("; ", restored.Failures),
+                    IntegritySignal = result.IntegritySignal,
+                    MutationOperationId = result.MutationOperationId
+                };
+            }
+            return result;
+        }
+
+        if (!MutationLedgerService.MarkApplied(workingDir, result.MutationOperationId, log))
+        {
+            var restored = MutationLedgerService.RestoreOriginalState(workingDir, log);
+            return new FallbackApplyResult
+            {
+                Success = false,
+                Message = restored.Success
+                    ? "Fallback write landed, but its Applied phase was not durable; exact original state was restored."
+                    : "Fallback write landed, its Applied phase was not durable, and exact recovery was incomplete: " + string.Join("; ", restored.Failures),
+                IntegritySignal = result.IntegritySignal,
+                MutationOperationId = result.MutationOperationId
+            };
+        }
+
+        return result;
+    }
 
     internal static async Task<FallbackApplyResult> ApplyAsync(
         string workingDir,

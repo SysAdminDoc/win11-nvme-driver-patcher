@@ -5,6 +5,48 @@ namespace NVMeDriverPatcher.Tests;
 public sealed class FeatureStoreWriterServiceTests
 {
     [Fact]
+    public void ExactRestoreUpdate_RecreatesAllCompactStateFields()
+    {
+        const uint priority = 5;
+        const uint enabled = 1;
+        const uint wexp = 1;
+        const uint variant = 37;
+        const uint payloadKind = 2;
+        const uint payload = 0xAABBCCDD;
+        uint compact = priority | (enabled << 4) | (wexp << 6) | (variant << 8) | (payloadKind << 14);
+        var baseline = new FeatureStoreConfigurationBaseline
+        {
+            FeatureId = 60786016,
+            BootStore = true,
+            Found = true,
+            CompactState = compact,
+            VariantPayload = payload
+        };
+
+        var update = FeatureStoreWriterService.DescribeRestoreUpdate(baseline);
+
+        Assert.Equal(priority, update.Priority);
+        Assert.Equal(enabled, update.EnabledState);
+        Assert.Equal(wexp, update.EnabledStateOptions);
+        Assert.Equal(variant, update.Variant);
+        Assert.Equal(payloadKind, update.VariantPayloadKind);
+        Assert.Equal(payload, update.VariantPayload);
+        Assert.Equal(3u, update.Operation);
+    }
+
+    [Fact]
+    public void ExactRestoreUpdate_AbsentBaselineUsesResetSemantics()
+    {
+        var update = FeatureStoreWriterService.DescribeRestoreUpdate(new FeatureStoreConfigurationBaseline
+        {
+            FeatureId = 60786016,
+            Found = false
+        });
+
+        Assert.Equal(8u, update.Priority);
+        Assert.Equal(4u, update.Operation);
+    }
+    [Fact]
     public void IndexOfBytes_FindsNeedleInMiddle()
     {
         byte[] hay = { 1, 2, 3, 4, 5, 6, 7, 8 };

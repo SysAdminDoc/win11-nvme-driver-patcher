@@ -5,6 +5,14 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-06-30
 
 ### Fixed
+- **Crash-consistent mutation transaction** — registry, SafeBoot, and FeatureStore changes now start
+  with a machine-global-mutex ledger that captures the first clean baseline before any BitLocker or
+  registry mutation, writes through to disk, validates its staged JSON, and atomically replaces the
+  prior ledger. Reapply keeps that original baseline; interrupted `Prepared`/`Applied` operations
+  restore it on GUI/CLI startup, while `RebootPending` resumes verification. Partial failure,
+  checkpoint failure, fallback recovery, and uninstall restore pre-existing feature values and exact
+  FeatureStore configurations instead of blindly deleting/resetting them. GUI/CLI restart actions
+  are exposed only after both config and ledger reboot checkpoints are durable.
 - **Client build rules now fail closed outside sourced intervals** — pre-24H2 clients and broad
   26100 ranges no longer inherit a working registry/fallback path from Server documentation or an
   unrelated UBR cutoff. Only the directly evidenced 26100.8106 fallback and the existing

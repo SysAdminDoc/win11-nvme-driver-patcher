@@ -51,6 +51,18 @@ class Program
             EventLogRegistrationService.EnsureRegistered();
             EventLogService.Initialize(config.WriteEventLog);
 
+            // Recover any previous process that terminated after publishing Prepared/Applied but
+            // before the reboot checkpoint became durable. RebootPending operations are left intact
+            // for normal post-reboot verification.
+            var interruptedRecovery = MutationLedgerService.RecoverInterrupted(
+                config.WorkingDir,
+                message => Console.WriteLine(message));
+            if (!interruptedRecovery.Success)
+            {
+                Console.Error.WriteLine("Mutation recovery failed: " + interruptedRecovery.Summary);
+                return 5;
+            }
+
             bool MatchesAny(string a, params string[] forms) =>
                 forms.Any(f => a.Equals(f, StringComparison.OrdinalIgnoreCase));
 
@@ -1083,11 +1095,22 @@ class Program
             // Arm the post-patch watchdog so post-reboot event-log distress signals auto-revert
             // (if the user opted into auto-revert in config / GPO).
             EventLogWatchdogService.Arm(config);
-            checkpointSaved = ConfigService.Save(config);
+            checkpointSaved = ConfigService.Save(config) &&
+                MutationLedgerService.MarkRebootPending(
+                    config.WorkingDir,
+                    result.MutationOperationId,
+                    message => Console.WriteLine(message));
             if (!checkpointSaved)
+            {
+                var restored = MutationLedgerService.RestoreOriginalState(config.WorkingDir, message => Console.WriteLine(message));
+                PatchVerificationService.Clear(config, new VerificationReport { Outcome = VerificationOutcome.Reverted });
+                EventLogWatchdogService.Disarm(config);
+                ConfigService.Save(config);
                 Console.Error.WriteLine(
-                    "[WARNING] Patch applied but the verification checkpoint could not be saved. " +
-                    "Auto-restart is suppressed — restart manually and re-run 'status' after reboot.");
+                    restored.Success
+                        ? "[ERROR] Patch applied but the reboot checkpoint was not durable. Exact original state was restored; do not restart for this attempt."
+                        : "[ERROR] Patch applied, the reboot checkpoint was not durable, and exact rollback was incomplete. Do not restart; use the recovery kit.");
+            }
         }
 
         if (result.Success && result.NeedsRestart && !noRestart && checkpointSaved)
@@ -1118,7 +1141,7 @@ class Program
             }
         }
 
-        return result.Success ? 0 : 1;
+        return result.Success && checkpointSaved ? 0 : 1;
     }
 
     static int RemoveCommand(AppConfig config, bool noRestart)
@@ -1327,14 +1350,22 @@ class Program
         Console.WriteLine($"Method: {result.Method}");
         Console.WriteLine($"Integrity check: {result.IntegritySignal}");
         PatchVerificationService.MarkPending(config, isFallback: true);
-        if (!ConfigService.Save(config))
+        bool configCheckpointSaved = ConfigService.Save(config);
+        bool ledgerCheckpointSaved = configCheckpointSaved &&
+            MutationLedgerService.MarkRebootPending(
+                config.WorkingDir,
+                result.MutationOperationId,
+                message => Console.WriteLine(message));
+        if (!ledgerCheckpointSaved)
         {
-            // Checkpoint didn't persist — do not tell the user to reboot into a state the
-            // post-reboot auto-reset can no longer recognize.
+            var restored = MutationLedgerService.RestoreOriginalState(config.WorkingDir, message => Console.WriteLine(message));
+            PatchVerificationService.Clear(config, new VerificationReport { Outcome = VerificationOutcome.Reverted });
+            EventLogWatchdogService.Disarm(config);
+            ConfigService.Save(config);
             Console.Error.WriteLine();
-            Console.Error.WriteLine("ERROR: Fallback was written but its recovery checkpoint could not be saved.");
-            Console.Error.WriteLine("Do NOT restart yet. Fix the disk/permissions problem and re-run 'fallback' so the");
-            Console.Error.WriteLine("checkpoint persists and the app can safely auto-reset the fallback if it fails to bind.");
+            Console.Error.WriteLine(restored.Success
+                ? "ERROR: Fallback checkpoint was not durable. Exact original state was restored; do not restart for this attempt."
+                : "ERROR: Fallback checkpoint was not durable and exact rollback was incomplete. Do NOT restart; use the recovery kit.");
             return 1;
         }
         Console.WriteLine("Restart required. Run: shutdown /r /t 30");

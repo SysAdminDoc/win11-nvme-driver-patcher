@@ -172,18 +172,49 @@ public static class SafeBootStateService
 
     public static string JournalPath(string workingDir) => Path.Combine(workingDir, JournalFileName);
 
-    public static bool SaveJournal(string workingDir, SafeBootJournal journal, Action<string>? log = null)
+    public static bool SaveJournal(
+        string workingDir,
+        SafeBootJournal journal,
+        Action<string>? log = null,
+        bool preserveExistingBaseline = true)
     {
+        string? tmp = null;
         try
         {
             Directory.CreateDirectory(workingDir);
-            var tmp = JournalPath(workingDir) + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(journal, JsonOptions));
-            File.Move(tmp, JournalPath(workingDir), overwrite: true);
+            var target = JournalPath(workingDir);
+            if (preserveExistingBaseline && LoadJournal(workingDir) is not null)
+                return true;
+
+            tmp = target + "." + Environment.ProcessId + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            var json = JsonSerializer.Serialize(journal, JsonOptions);
+            using (var fs = new FileStream(
+                       tmp,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None,
+                       4096,
+                       FileOptions.WriteThrough))
+            using (var writer = new StreamWriter(fs, new System.Text.UTF8Encoding(false)))
+            {
+                writer.Write(json);
+                writer.Flush();
+                fs.Flush(flushToDisk: true);
+            }
+
+            var staged = JsonSerializer.Deserialize<SafeBootJournal>(File.ReadAllText(tmp));
+            if (staged is null || staged.Entries.Count != journal.Entries.Count)
+                throw new InvalidDataException("Staged SafeBoot journal validation failed.");
+
+            if (File.Exists(target))
+                File.Replace(tmp, target, target + ".bak", ignoreMetadataErrors: true);
+            else
+                File.Move(tmp, target);
             return true;
         }
         catch (Exception ex)
         {
+            try { if (tmp is not null && File.Exists(tmp)) File.Delete(tmp); } catch { }
             log?.Invoke($"  [SafeBoot] Could not persist SafeBoot journal: {ex.Message}");
             return false;
         }
