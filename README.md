@@ -35,19 +35,21 @@ use the x64 assets under emulation if you need the current native-NVMe enablemen
 irm https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMe_Driver_Patcher.ps1 -OutFile NVMe_Driver_Patcher.ps1; .\NVMe_Driver_Patcher.ps1
 ```
 
-> **Deprecated — limited to pre-March-2026 builds.** The script writes only the registry
-> override keys, which Microsoft neutered on newer builds: it reports success while the
-> driver never binds. It has none of the v4.4+ capabilities:
+> **Deprecated — read/recover-only on every build.** The script's unsafe registry-only apply
+> path has been retired because it could report success without a driver bind and bypassed the
+> maintained app's build policy and recovery ledger. `-Apply` now exits 5 before elevation or
+> any machine change and points to the current GUI/CLI. These capabilities remain:
 >
 > | Capability | Legacy script | GUI / CLI |
 > |---|---|---|
-> | Registry override patch + SafeBoot keys | ✅ | ✅ |
+> | Status, patch removal, diagnostics, verification/recovery exports | ✅ | ✅ |
+> | Apply/reinstall + SafeBoot provisioning | ❌ | ✅ |
 > | Native FeatureStore fallback for post-block builds (ViVeTool only after native failure) | ❌ | ✅ |
 > | Post-reboot bind verification (honest status) | ❌ | ✅ |
 > | Watchdog auto-revert, minidump triage, reliability correlation | ❌ | ✅ |
 > | Global-scope warning, dry-run preview, recovery USB builder | ❌ | ✅ |
 >
-> It remains in releases for air-gapped/legacy environments only.
+> It remains in releases for air-gapped status, removal, diagnostics, and recovery/export use.
 </details>
 
 ### Verify the download (recommended)
@@ -160,11 +162,11 @@ does not initialize application config, mutation recovery, policy, or Event Log 
 # Shows driver status, migration, compat warnings, laptop detection
 .\NVMe_Driver_Patcher.ps1 -Silent -Status
 
-# Apply the patch silently without restart prompt
+# Retired mutation probe: exits 5 before elevation and prints the maintained replacement
 .\NVMe_Driver_Patcher.ps1 -Silent -Apply -NoRestart
 
-# Apply with force (skip NVMe drive check and preflight)
-.\NVMe_Driver_Patcher.ps1 -Silent -Apply -Force
+# Apply with the maintained transactional CLI instead
+NVMeDriverPatcher.Cli.exe apply --safe
 
 # Remove the patch silently
 .\NVMe_Driver_Patcher.ps1 -Silent -Remove

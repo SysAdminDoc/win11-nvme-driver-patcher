@@ -18,6 +18,9 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = if ($RepoRoot) { Resolve-Path $RepoRoot } else { Resolve-Path (Join-Path $PSScriptRoot '..') }
 $Version = $Version.TrimStart('v')
 
+& (Join-Path $PSScriptRoot 'Validate-LegacyPowerShellBoundary.ps1') `
+    -ScriptPath (Join-Path $repoRoot 'NVMe_Driver_Patcher.ps1')
+
 $contract = Get-Content -Raw (Join-Path $repoRoot 'packaging/release-artifacts.json') | ConvertFrom-Json
 $failures = New-Object System.Collections.Generic.List[string]
 
