@@ -42,10 +42,18 @@
     <DropShadowEffect x:Key="ToolTipShadow" BlurRadius="10" ShadowDepth="1" Opacity="0.18" Direction="270" Color="#FF000000"/>
     <DropShadowEffect x:Key="PopupShadow" BlurRadius="18" ShadowDepth="4" Opacity="0.35" Direction="270" Color="#FF000000"/>
 
-    <Style x:Key="FocusHidden" TargetType="Control">
+    <Style x:Key="KeyboardFocusVisual" TargetType="Control">
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate/>
+                <ControlTemplate TargetType="Control">
+                    <Border Margin="-2"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource Focus}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            IsHitTestVisible="False"
+                            SnapsToDevicePixels="True"/>
+                </ControlTemplate>
             </Setter.Value>
         </Setter>
     </Style>
@@ -154,7 +162,7 @@
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -226,7 +234,7 @@
         <Setter Property="Background" Value="{DynamicResource Accent}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
         <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -273,7 +281,7 @@
         <Setter Property="Background" Value="{DynamicResource BgMedium}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
         <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -391,7 +399,7 @@
         <Setter Property="FontSize" Value="12.5"/>
         <Setter Property="Margin" Value="0,8,0,0"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
@@ -462,16 +470,25 @@
                 CornerRadius="4"
                 ClipToBounds="True">
             <Border x:Name="Slider"
-                    Width="120"
                     Height="6"
                     Tag="{DynamicResource MotionAnimationsEnabled}"
-                    HorizontalAlignment="Left"
                     Background="{TemplateBinding Foreground}"
-                    CornerRadius="4"
-                    RenderTransformOrigin="0.5,0.5">
-                <Border.RenderTransform>
-                    <TranslateTransform x:Name="SliderTranslate"/>
-                </Border.RenderTransform>
+                    CornerRadius="4">
+                <Border.OpacityMask>
+                    <!-- RelativeTransform units are fractions of the rendered track, so the
+                         sweep scales with every overlay width instead of assuming 600 pixels. -->
+                    <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5" SpreadMethod="Pad">
+                        <LinearGradientBrush.RelativeTransform>
+                            <TranslateTransform x:Name="SliderTranslate" X="-1"/>
+                        </LinearGradientBrush.RelativeTransform>
+                        <GradientStop Color="#00FFFFFF" Offset="0"/>
+                        <GradientStop Color="#00FFFFFF" Offset="0.34"/>
+                        <GradientStop Color="#FFFFFFFF" Offset="0.42"/>
+                        <GradientStop Color="#FFFFFFFF" Offset="0.58"/>
+                        <GradientStop Color="#00FFFFFF" Offset="0.66"/>
+                        <GradientStop Color="#00FFFFFF" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.OpacityMask>
             </Border>
         </Border>
         <ControlTemplate.Triggers>
@@ -485,8 +502,8 @@
                         <Storyboard RepeatBehavior="Forever">
                             <DoubleAnimation Storyboard.TargetName="SliderTranslate"
                                              Storyboard.TargetProperty="X"
-                                             From="-120"
-                                             To="600"
+                                             From="-1"
+                                             To="1"
                                              Duration="0:0:1.6"
                                              AutoReverse="False"/>
                         </Storyboard>
@@ -498,6 +515,9 @@
             </MultiDataTrigger>
             <DataTrigger Binding="{Binding Tag, ElementName=Slider}" Value="False">
                 <Setter TargetName="Slider" Property="HorizontalAlignment" Value="Center"/>
+                <Setter TargetName="Slider" Property="Width" Value="120"/>
+                <Setter TargetName="Slider" Property="Opacity" Value="0.85"/>
+                <Setter TargetName="Slider" Property="OpacityMask" Value="{x:Null}"/>
             </DataTrigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
@@ -616,7 +636,7 @@
         <Setter Property="Padding" Value="10,7"/>
         <Setter Property="FontSize" Value="12.5"/>
         <Setter Property="MinHeight" Value="36"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
@@ -651,7 +671,7 @@
         <Setter Property="Height" Value="32"/>
         <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
         <Setter Property="Background" Value="{DynamicResource BgLight}"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Slider">
@@ -722,7 +742,7 @@
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Padding" Value="10,7"/>
         <Setter Property="MinHeight" Value="30"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBoxItem">
@@ -761,7 +781,7 @@
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="MinHeight" Value="34"/>
         <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItem}"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBox">
@@ -892,7 +912,7 @@
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="Padding" Value="10,6"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TabItem">
@@ -1049,7 +1069,7 @@
         <Setter Property="FontSize" Value="12.5"/>
         <Setter Property="Margin" Value="0,8,0,0"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
@@ -1097,7 +1117,7 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="0"/>
         <Setter Property="FontSize" Value="13"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusHidden}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Expander">
@@ -1118,7 +1138,7 @@
                                           BorderThickness="0"
                                           Cursor="Hand"
                                           Padding="10,8"
-                                          FocusVisualStyle="{StaticResource FocusHidden}">
+                                          FocusVisualStyle="{StaticResource KeyboardFocusVisual}">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
                                         <Border x:Name="headerBorder"
