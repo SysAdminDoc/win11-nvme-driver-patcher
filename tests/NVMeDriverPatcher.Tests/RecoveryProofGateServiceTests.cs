@@ -3,8 +3,11 @@ using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.Tests;
 
-public sealed class RecoveryProofGateServiceTests
+public sealed class RecoveryProofGateServiceTests : IDisposable
 {
+    private readonly string _tempRoot = Path.Combine(
+        Path.GetTempPath(), $"NVMePatcher.RecoveryProof.{Guid.NewGuid():N}");
+
     [Fact]
     public void Evaluate_ReturnsExpectedItemCount()
     {
@@ -120,6 +123,36 @@ public sealed class RecoveryProofGateServiceTests
     }
 
     [Fact]
+    public void EvaluateBackupCapability_UsesExactNormalizedOperationDirectory()
+    {
+        var configured = Path.Combine(_tempRoot, "nested", "..", "custom-data");
+        var expected = Path.GetFullPath(configured);
+        var config = new AppConfig { WorkingDir = configured };
+
+        var item = RecoveryProofGateService.EvaluateBackupCapability(config);
+
+        Assert.True(item.Passed, item.Detail);
+        Assert.Contains(expected, item.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(expected));
+        Assert.Empty(Directory.GetFiles(expected, ".recovery-probe-*.tmp"));
+    }
+
+    [Fact]
+    public void EvaluateBackupCapability_CustomPathBlockedByFileFailsEvenWhenDefaultIsWritable()
+    {
+        Directory.CreateDirectory(_tempRoot);
+        var blockedPath = Path.Combine(_tempRoot, "occupied-by-file");
+        File.WriteAllText(blockedPath, "not a directory");
+        var config = new AppConfig { WorkingDir = blockedPath };
+
+        var item = RecoveryProofGateService.EvaluateBackupCapability(config);
+
+        Assert.False(item.Passed);
+        Assert.Contains("configured operation directory", item.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(AppConfig.GetWorkingDir(), item.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void EvaluateWinReInjectionPlan_PassesOnlyExecutablePlan()
     {
         var ready = WinReDriverInjectionService.BuildPlan(
@@ -180,5 +213,11 @@ public sealed class RecoveryProofGateServiceTests
     public void ExtractVolumeGuid_PullsGuidToken(string? deviceId, string? expected)
     {
         Assert.Equal(expected, RecoveryProofGateService.ExtractVolumeGuid(deviceId));
+    }
+
+    public void Dispose()
+    {
+        try { if (Directory.Exists(_tempRoot)) Directory.Delete(_tempRoot, recursive: true); }
+        catch { }
     }
 }

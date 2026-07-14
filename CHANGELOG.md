@@ -5,6 +5,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Recovery readiness now probes the pending operation's exact working directory** — an explicit
+  `AppConfig.WorkingDir` is normalized, created, durably write-tested, and cleaned using the same
+  fallback rule as patch install. A writable default directory can no longer mask an unwritable
+  custom backup target before storage mutation begins.
 - **Support bundles now contain a transactionally consistent SQLite snapshot** — export uses
   SQLite's Online Backup API instead of independently copying the live database, WAL, and SHM.
   Both the source view and standalone destination must pass `PRAGMA quick_check`; the ZIP receives

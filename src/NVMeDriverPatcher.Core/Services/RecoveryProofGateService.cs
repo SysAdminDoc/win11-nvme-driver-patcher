@@ -53,7 +53,7 @@ public static class RecoveryProofGateService
             });
         }
         report.Items.Add(EvaluateRecoveryKit(config));
-        report.Items.Add(EvaluateBackupCapability());
+        report.Items.Add(EvaluateBackupCapability(config));
         report.Items.Add(EvaluateSafeBootEntries());
         report.Items.Add(EvaluateRestorePointCapability());
 
@@ -106,35 +106,52 @@ public static class RecoveryProofGateService
         }
     }
 
-    private static RecoveryProofItem EvaluateBackupCapability()
+    internal static RecoveryProofItem EvaluateBackupCapability(AppConfig config)
     {
+        string? probePath = null;
         try
         {
-            var workDir = AppConfig.GetWorkingDir();
-            var backupDir = System.IO.Path.Combine(workDir, "backups");
-            bool hasDir = System.IO.Directory.Exists(backupDir) || System.IO.Directory.Exists(workDir);
-            bool canWrite = false;
-
-            if (hasDir)
+            // Match PatchService.Install exactly: an explicit per-operation directory wins;
+            // only an unset value falls back to the configured app data location.
+            var configured = string.IsNullOrWhiteSpace(config.WorkingDir)
+                ? AppConfig.GetWorkingDir()
+                : config.WorkingDir;
+            var workDir = Path.GetFullPath(configured);
+            Directory.CreateDirectory(workDir);
+            probePath = Path.Combine(workDir, $".recovery-probe-{Guid.NewGuid():N}.tmp");
+            using (var stream = new FileStream(
+                       probePath,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None,
+                       4096,
+                       FileOptions.WriteThrough))
             {
-                var testDir = System.IO.Directory.Exists(backupDir) ? backupDir : workDir;
-                var testFile = System.IO.Path.Combine(testDir, $".recovery-probe-{Guid.NewGuid():N}.tmp");
-                try
-                {
-                    System.IO.File.WriteAllText(testFile, "probe");
-                    System.IO.File.Delete(testFile);
-                    canWrite = true;
-                }
-                catch { }
+                stream.Write("recovery-probe"u8);
+                stream.Flush(flushToDisk: true);
             }
-
-            return canWrite
-                ? new() { Label = "Backup directory", Passed = true, Detail = "Writable — registry backup will succeed" }
-                : new() { Label = "Backup directory", Passed = false, Detail = "Cannot write to working directory — registry backup would fail" };
+            File.Delete(probePath);
+            probePath = null;
+            return new()
+            {
+                Label = "Backup directory",
+                Passed = true,
+                Detail = $"Writable operation directory verified at {workDir}"
+            };
         }
         catch (Exception ex)
         {
-            return new() { Label = "Backup directory", Passed = false, Detail = $"Check failed: {ex.Message}" };
+            return new()
+            {
+                Label = "Backup directory",
+                Passed = false,
+                Detail = $"Configured operation directory is not writable — registry backup would fail ({ex.GetType().Name})"
+            };
+        }
+        finally
+        {
+            try { if (!string.IsNullOrWhiteSpace(probePath) && File.Exists(probePath)) File.Delete(probePath); }
+            catch { }
         }
     }
 
