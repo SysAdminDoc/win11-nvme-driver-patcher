@@ -5,6 +5,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Keyboard focus and readiness progress now remain visible at every layout width** — every
+  custom control style falls back to a one-pixel keyboard focus adorner instead of an empty
+  template. The readiness overlay's indeterminate band now sweeps in relative track units rather
+  than resetting at a hard-coded 600 pixels, while reduced motion retains its stable indicator.
 - **Scripted update checks now report typed failure states** — `update-check` returns success only
   for a proved current/newer release response, names a missing GUI asset separately, and reports
   GitHub rate limits, HTTP failures, transport timeouts/errors, unsafe redirects, and malformed
