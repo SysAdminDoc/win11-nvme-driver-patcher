@@ -44,7 +44,7 @@ internal static class BrushResources
             ["InsetCardBrush"] = "#FF101318",
             ["DisabledSurfaceBrush"] = "#FF171B22",
             ["OverlayScrimBrush"] = "#CC0D0F13",
-            ["AccentLineBrush"] = "#FF3D4A58"
+            ["AccentLineBrush"] = "#992563EB"
         };
 
     private static readonly Dictionary<string, Brush> FallbackBrushCache = new(StringComparer.OrdinalIgnoreCase);

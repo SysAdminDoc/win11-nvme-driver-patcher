@@ -751,7 +751,7 @@ public partial class MainWindow : Window
             TelemetryPanelControl.Reset();
             TelemetryPanelControl.SetTelemetryStatus(
                 "Telemetry refresh failed. Check the activity log or try again after Windows finishes enumerating storage devices.",
-                "warning");
+                "danger");
         }
     }
 
@@ -857,7 +857,7 @@ public partial class MainWindow : Window
             System.Diagnostics.Debug.WriteLine($"[RefreshTelemetryDataAsync] {ex}");
             TelemetryPanelControl.SetTelemetryStatus(
                 $"Telemetry refresh failed for Disk {driveNumber}. Try again after Windows finishes enumerating the drive.",
-                "warning");
+                "danger");
         }
     }
 
