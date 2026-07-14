@@ -38,22 +38,6 @@ public sealed class PreflightRollbackFixtureTests
         Assert.False(check.Critical);
     }
 
-    [Theory]
-    [InlineData(true, true, false, PatchPreRegistryAbortReason.VeraCryptSystemEncryption)]
-    [InlineData(false, true, false, PatchPreRegistryAbortReason.BitLockerSuspensionFailed)]
-    [InlineData(false, true, true, PatchPreRegistryAbortReason.None)]
-    [InlineData(false, false, false, PatchPreRegistryAbortReason.None)]
-    public void PreRegistryAbortFixture_ClassifiesVeraCryptAndBitLockerBeforeWrites(
-        bool veraCryptDetected,
-        bool bitLockerEnabled,
-        bool bitLockerSuspended,
-        PatchPreRegistryAbortReason expected)
-    {
-        Assert.Equal(
-            expected,
-            PatchService.ClassifyPreRegistryAbort(veraCryptDetected, bitLockerEnabled, bitLockerSuspended));
-    }
-
     [Fact]
     public void RollbackFixture_IncompleteRollbackRequiresManualRecoveryWarning()
     {

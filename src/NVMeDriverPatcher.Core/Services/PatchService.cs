@@ -32,28 +32,41 @@ public class PatchOperationResult
     public List<string> Residue { get; set; } = new();
 }
 
-public enum PatchPreRegistryAbortReason
-{
-    None,
-    VeraCryptSystemEncryption,
-    BitLockerSuspensionFailed
-}
-
 public static class PatchService
 {
     public static PatchOperationResult Install(
         AppConfig config,
-        bool bitLockerEnabled,
-        bool veraCryptDetected,
         NativeNVMeStatus? nativeStatus,
         BypassIOResult? bypassStatus,
         Action<string>? log = null,
-        Action<int, string>? progress = null)
+        Action<int, string>? progress = null,
+        bool allowUnsupportedBuild = false)
     {
         var result = new PatchOperationResult();
         string workingDir = string.IsNullOrWhiteSpace(config.WorkingDir)
             ? AppConfig.GetWorkingDir()
             : config.WorkingDir;
+
+        var buildPolicy = BuildActionPolicyService.EvaluateCurrent(workingDir);
+        if (!buildPolicy.MutationAllowed && !allowUnsupportedBuild)
+        {
+            log?.Invoke("[ERROR] BLOCKED by build policy: " + buildPolicy.Reason);
+            FinalizeResult(result, nativeStatus, bypassStatus, progress);
+            return result;
+        }
+
+        // Fresh, authoritative probe at the mutation boundary. Caller-supplied booleans and an
+        // earlier GUI/CLI preflight are display hints only; they cannot authorize a boot change.
+        var criticalProbes = CriticalEnvironmentProbeService.EvaluateRegistryPatch();
+        if (!criticalProbes.AllPassed)
+        {
+            foreach (var probe in criticalProbes.Items.Where(item => item.BlocksMutation))
+                log?.Invoke($"[ERROR] BLOCKED [{probe.Id}/{probe.Verdict}/{probe.ReasonCode}]: {probe.Detail}");
+            EventLogService.Write("Patch aborted: critical environment proof failed", EventLogEntryType.Error, 3002);
+            FinalizeResult(result, nativeStatus, bypassStatus, progress);
+            return result;
+        }
+
         result.BeforeSnapshot = RegistryService.GetPatchSnapshot(nativeStatus, bypassStatus);
         try { DataService.SaveSnapshot(result.BeforeSnapshot, "Before patch install", isPrePatch: true); } catch { }
         try { DataService.SaveBypassIoSnapshot(BypassIoInspectorService.Inspect(), "Before patch install", isPrePatch: true); } catch { }
@@ -62,34 +75,6 @@ public static class PatchService
         log?.Invoke("STARTING PATCH INSTALLATION");
         log?.Invoke("========================================");
         EventLogService.Write("NVMe Driver Patch installation started");
-
-        // Hard belt-and-suspenders: never let the GUI call past us if the system encryption check
-        // detects VeraCrypt. The viewmodel should already block this, but we also re-check here
-        // so the CLI / scripted entry points cannot bypass it.
-        if (veraCryptDetected)
-        {
-            log?.Invoke("[ERROR] BLOCKED: VeraCrypt system encryption detected. Native NVMe path breaks VeraCrypt boot.");
-            EventLogService.Write("Patch aborted: VeraCrypt system encryption detected", EventLogEntryType.Error, 3002);
-            FinalizeResult(result, nativeStatus, bypassStatus, progress);
-            return result;
-        }
-
-        // Defense-in-depth admin check. If the manifest somehow failed to elevate (very rare,
-        // but seen in reduced-privilege side-loading scenarios) we'd otherwise hit a string of
-        // SecurityException entries while writing each registry value.
-        try
-        {
-            using var id = System.Security.Principal.WindowsIdentity.GetCurrent();
-            var principal = new System.Security.Principal.WindowsPrincipal(id);
-            if (!principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator))
-            {
-                log?.Invoke("[ERROR] BLOCKED: Administrator privileges are required to patch the registry.");
-                EventLogService.Write("Patch aborted: not running as Administrator", EventLogEntryType.Error, 3002);
-                FinalizeResult(result, nativeStatus, bypassStatus, progress);
-                return result;
-            }
-        }
-        catch { /* Rights probe failure shouldn't block — we'll see it at the registry write level */ }
 
         var appliedKeys = new List<(string Type, string ID)>();
         int successCount = 0;
@@ -167,8 +152,6 @@ public static class PatchService
             }
             if (bitLockerPreparation.Proof.Volume.IsEncrypted)
                 log?.Invoke("[SUCCESS] " + bitLockerPreparation.Summary);
-            else if (bitLockerEnabled)
-                log?.Invoke("[WARNING] Preflight reported BitLocker active, but the authoritative WMI proof reports no encrypted system volume.");
 
             // Protected NVMe DATA volumes without auto-unlock re-lock after the reboot. Suspend them
             // too (best-effort — access loss, not a boot brick, so a failure warns rather than aborts).
@@ -518,20 +501,6 @@ public static class PatchService
             // UI progress callbacks are best-effort. They should never change whether a
             // registry operation succeeds, nor mask rollback/finalization work.
         }
-    }
-
-    internal static PatchPreRegistryAbortReason ClassifyPreRegistryAbort(
-        bool veraCryptDetected,
-        bool bitLockerEnabled,
-        bool bitLockerSuspended)
-    {
-        if (veraCryptDetected)
-            return PatchPreRegistryAbortReason.VeraCryptSystemEncryption;
-
-        if (bitLockerEnabled && !bitLockerSuspended)
-            return PatchPreRegistryAbortReason.BitLockerSuspensionFailed;
-
-        return PatchPreRegistryAbortReason.None;
     }
 
     internal static bool RequiresManualRecoveryWarning(PatchOperationResult result) =>

@@ -84,7 +84,12 @@ public static class DryRunService
         if (preflight is not null)
         {
             // Replay what the UI would show but without the live UI-only bits.
-            if (preflight.VeraCryptDetected) report.PreflightBlockers.Add("VeraCrypt system encryption present — patch is blocked.");
+            foreach (var probe in preflight.CriticalProbes.Items.Where(item => item.BlocksMutation))
+                report.PreflightBlockers.Add(
+                    $"{probe.Label}: {probe.Verdict} [{probe.ReasonCode}] — {probe.Detail}");
+            if (preflight.VeraCryptDetected &&
+                preflight.CriticalProbes.Items.All(item => item.Id != "VeraCrypt"))
+                report.PreflightBlockers.Add("VeraCrypt system encryption present — patch is blocked.");
             if (preflight.BitLockerEnabled) report.PreflightWarnings.Add("BitLocker will be suspended for one reboot cycle.");
             if (preflight.IsLaptop) report.PreflightWarnings.Add("Laptop detected — APST power-management regression (~15% battery).");
             foreach (var sw in preflight.IncompatibleSoftware)

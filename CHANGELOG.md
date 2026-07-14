@@ -5,6 +5,15 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Boot-critical probes are typed and fail closed** — administrator, VeraCrypt, Intel RST/VMD,
+  BitLocker, and SafeBoot checks now return `Pass | Fail | Unknown` with a stable reason code,
+  native error, timestamp, and concrete evidence. Access denied, provider timeout, unsupported API,
+  absent driver, confirmed-disabled driver, and confirmed-present blocker are no longer collapsed
+  into “not detected.” `Fail` and `Unknown` now block registry apply, native FeatureStore, and
+  ViVeTool fallback at the Core mutation boundary and cannot be bypassed by generic `--force`.
+  The new `preflight --json` contract uses exit 0/1/2 for pass/blocked/unknown; diagnostics carries
+  the same evidence. The experimental `featurestore --write-native` path now uses the common
+  mutation ledger, BitLocker proof, and reboot checkpoint instead of writing FeatureStore directly.
 - **BitLocker mutation gate now proves recovery and suspension** — encrypted OS volumes must expose
   at least one numerical recovery-password protector before apply or FeatureStore fallback. The gate
   surfaces only protector GUIDs, refreshes their AD DS and/or Microsoft Entra backup when the device

@@ -57,7 +57,7 @@ public static class DriveService
     private static readonly Regex RxAcronis    = new(@"acronis|AcronisAgent",          RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex RxMacrium    = new(@"macrium|ReflectService",         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex RxVirtualBox = new(@"VBox",                           RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex RxIntelRst   = new(@"iaStorAC|iaStorE|iaLPSS",        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxIntelRst   = new(@"iaStorAC|iaStorAVC|iaStorE|iaStorVD", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex RxIntelVmd   = new(@"^vmd$|vmd_bus",                  RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex RxHyperV     = new(@"^vmms$|^LxssManager$",           RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex RxVeeam      = new(@"VeeamAgent|VeeamEndpoint",       RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -618,24 +618,6 @@ public static class DriveService
         return result;
     }
 
-    public static bool TestBitLockerEnabled()
-    {
-        try
-        {
-            var systemDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? "C:";
-            using var search = new ManagementObjectSearcher(@"root\cimv2\Security\MicrosoftVolumeEncryption",
-                "SELECT DriveLetter, ProtectionStatus FROM Win32_EncryptableVolume");
-            foreach (var vol in Enumerate(search))
-            {
-                if (vol["DriveLetter"]?.ToString() == systemDrive &&
-                    AsInt(vol["ProtectionStatus"]) == 1)
-                    return true;
-            }
-        }
-        catch { }
-        return false;
-    }
-
     /// <summary>A BitLocker-encryptable fixed volume and the facts that decide whether the NVMe
     /// driver swap will leave it locked after the reboot.</summary>
     public sealed record BitLockerVolume(string DriveLetter, bool IsSystemDrive, bool ProtectionOn, bool AutoUnlockEnabled);
@@ -683,33 +665,6 @@ public static class DriveService
         }
         catch { }
         return list;
-    }
-
-    public static bool TestVeraCryptSystemEncryption()
-    {
-        try
-        {
-            using var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64);
-            using var key = hklm.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\veracrypt");
-            if (key is not null)
-            {
-                var start = key.GetValue("Start");
-                if (start is int s && s == 0) return true; // Boot-start driver
-            }
-
-            // Path.Combine treats "C:" as a drive-relative spec — must append a separator
-            // or we end up testing "C:EFI\VeraCrypt", which silently never exists.
-            var systemDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? "C:";
-            if (!systemDrive.EndsWith(System.IO.Path.DirectorySeparatorChar) &&
-                !systemDrive.EndsWith(System.IO.Path.AltDirectorySeparatorChar))
-            {
-                systemDrive += System.IO.Path.DirectorySeparatorChar;
-            }
-            var efiPath = Path.Combine(systemDrive, "EFI", "VeraCrypt");
-            if (Directory.Exists(efiPath)) return true;
-        }
-        catch { }
-        return false;
     }
 
     // SMBIOS chassis types that indicate a laptop/portable: Portable(8), Laptop(9), Notebook(10),

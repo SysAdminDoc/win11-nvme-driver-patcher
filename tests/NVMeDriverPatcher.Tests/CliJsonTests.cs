@@ -104,6 +104,37 @@ public sealed class CliJsonTests
     }
 
     [Fact]
+    public void CriticalProbes_FieldNamesAndReasonCodesAreStable()
+    {
+        var report = new CriticalProbeReport { Scope = MutationProbeScope.RegistryPatch };
+        report.Items.Add(new CriticalProbeResult
+        {
+            Id = "IntelStorage",
+            Label = "Intel RST/VMD",
+            Verdict = CriticalProbeVerdict.Unknown,
+            ReasonCode = CriticalProbeReasonCode.Timeout,
+            Detail = "query timed out",
+            NativeError = "WMI=Timedout; HRESULT=0x80041069",
+            Evidence = ["exception=ManagementException"],
+            ObservedAtUtc = new DateTimeOffset(2026, 7, 14, 12, 0, 0, TimeSpan.Zero)
+        });
+
+        var data = Parse("preflight", CliJson.BuildCriticalProbes(report)).GetProperty("data");
+
+        Assert.Equal("RegistryPatch", data.GetProperty("scope").GetString());
+        Assert.False(data.GetProperty("allPassed").GetBoolean());
+        Assert.True(data.GetProperty("hasUnknown").GetBoolean());
+        Assert.Equal(2, data.GetProperty("exitCode").GetInt32());
+        var item = data.GetProperty("items")[0];
+        Assert.Equal("IntelStorage", item.GetProperty("id").GetString());
+        Assert.Equal("Unknown", item.GetProperty("verdict").GetString());
+        Assert.Equal("Timeout", item.GetProperty("reasonCode").GetString());
+        Assert.Equal("WMI=Timedout; HRESULT=0x80041069", item.GetProperty("nativeError").GetString());
+        Assert.Equal("exception=ManagementException", item.GetProperty("evidence")[0].GetString());
+        Assert.Equal("2026-07-14T12:00:00+00:00", item.GetProperty("observedAtUtc").GetString());
+    }
+
+    [Fact]
     public void BypassIo_FieldNamesAreStable()
     {
         var result = new BypassIOResult

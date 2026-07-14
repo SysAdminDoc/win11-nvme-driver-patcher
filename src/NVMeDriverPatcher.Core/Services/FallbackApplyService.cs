@@ -20,11 +20,49 @@ public static class FallbackApplyService
     public const string NativeMethod = "native-featurestore";
     public const string ViVeToolMethod = "vivetool";
 
-    public static async Task<FallbackApplyResult> ApplyAsync(
+    public static Task<FallbackApplyResult> ApplyAsync(
         string workingDir,
         Action<string>? log = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool allowUnsupportedBuild = false) =>
+        ApplyTransactionalAsync(workingDir, allowViVeToolFallback: true, allowUnsupportedBuild, log, cancellationToken);
+
+    public static Task<FallbackApplyResult> ApplyNativeOnlyAsync(
+        string workingDir,
+        Action<string>? log = null,
+        CancellationToken cancellationToken = default,
+        bool allowUnsupportedBuild = false) =>
+        ApplyTransactionalAsync(workingDir, allowViVeToolFallback: false, allowUnsupportedBuild, log, cancellationToken);
+
+    private static async Task<FallbackApplyResult> ApplyTransactionalAsync(
+        string workingDir,
+        bool allowViVeToolFallback,
+        bool allowUnsupportedBuild,
+        Action<string>? log,
+        CancellationToken cancellationToken)
     {
+        var buildPolicy = BuildActionPolicyService.EvaluateCurrent(workingDir);
+        if (!buildPolicy.MutationAllowed && !allowUnsupportedBuild)
+        {
+            return new FallbackApplyResult
+            {
+                Success = false,
+                Message = "Fallback blocked by build policy: " + buildPolicy.Reason
+            };
+        }
+
+        var criticalProbes = CriticalEnvironmentProbeService.EvaluateFeatureStoreFallback();
+        if (!criticalProbes.AllPassed)
+        {
+            foreach (var probe in criticalProbes.Items.Where(item => item.BlocksMutation))
+                log?.Invoke($"[ERROR] BLOCKED [{probe.Id}/{probe.Verdict}/{probe.ReasonCode}]: {probe.Detail}");
+            return new FallbackApplyResult
+            {
+                Success = false,
+                Message = criticalProbes.Summary
+            };
+        }
+
         var idSet = ViVeToolService.SelectFallbackSet();
         var prepared = MutationLedgerService.PrepareFeatureStoreFallback(workingDir, idSet.Ids, log);
         if (!prepared.Success || prepared.Ledger is null)
@@ -64,7 +102,8 @@ public static class FallbackApplyService
                 log,
                 cancellationToken,
                 ids => FeatureStoreWriterService.WriteOverrides(ids),
-                ViVeToolService.ApplyFallbackAsync).ConfigureAwait(false);
+                ViVeToolService.ApplyFallbackAsync,
+                allowViVeToolFallback).ConfigureAwait(false);
         }
         catch
         {
@@ -113,7 +152,8 @@ public static class FallbackApplyService
         Action<string>? log,
         CancellationToken cancellationToken,
         Func<IEnumerable<int>, FeatureStoreWriteResult> nativeWriter,
-        Func<string, Action<string>?, CancellationToken, Task<ViVeToolService.ViVeToolResult>> viveToolFallback)
+        Func<string, Action<string>?, CancellationToken, Task<ViVeToolService.ViVeToolResult>> viveToolFallback,
+        bool allowViVeToolFallback = true)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -152,6 +192,15 @@ public static class FallbackApplyService
         }
 
         log?.Invoke($"Native FeatureStore fallback failed: {native.Summary}");
+        if (!allowViVeToolFallback)
+        {
+            return new FallbackApplyResult
+            {
+                Success = false,
+                Message = "Native FeatureStore write failed verification: " + native.Summary,
+                IntegritySignal = "native"
+            };
+        }
         log?.Invoke("Trying ViVeTool as the secondary fallback path; this may download the official GitHub release.");
         cancellationToken.ThrowIfCancellationRequested();
 

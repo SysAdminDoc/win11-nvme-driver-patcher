@@ -5,6 +5,27 @@ namespace NVMeDriverPatcher.Tests;
 
 public sealed class PreflightServiceTests
 {
+    [Fact]
+    public void ToPreflightCheck_UnknownIsCriticalFailureWithReasonCode()
+    {
+        var probe = new CriticalProbeResult
+        {
+            Id = "VeraCrypt",
+            Label = "VeraCrypt system encryption",
+            Verdict = CriticalProbeVerdict.Unknown,
+            ReasonCode = CriticalProbeReasonCode.AccessDenied,
+            Detail = "could not read service state",
+            ObservedAtUtc = DateTimeOffset.UtcNow
+        };
+
+        var check = PreflightService.ToPreflightCheck(probe);
+
+        Assert.Equal(CheckStatus.Fail, check.Status);
+        Assert.True(check.Critical);
+        Assert.Contains("UNKNOWN [AccessDenied]", check.Message);
+        Assert.False(PreflightService.AllCriticalPassed(new() { ["VeraCrypt"] = check }));
+    }
+
     // --- Pending-reboot classification ---
 
     [Fact]

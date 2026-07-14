@@ -83,6 +83,25 @@ public static class CliJson
             : null,
     };
 
+    public static CriticalProbeReportJson BuildCriticalProbes(CriticalProbeReport report) => new()
+    {
+        Scope = report.Scope.ToString(),
+        AllPassed = report.AllPassed,
+        HasUnknown = report.HasUnknown,
+        ExitCode = report.ExitCode,
+        Items = report.Items.Select(item => new CriticalProbeJson
+        {
+            Id = item.Id,
+            Label = item.Label,
+            Verdict = item.Verdict.ToString(),
+            ReasonCode = item.ReasonCode.ToString(),
+            Detail = item.Detail,
+            NativeError = item.NativeError,
+            Evidence = item.Evidence.ToList(),
+            ObservedAtUtc = item.ObservedAtUtc,
+        }).ToList(),
+    };
+
     public static BypassIoJson BuildBypassIo(BypassIOResult result) => new()
     {
         Supported = result.Supported,
@@ -251,6 +270,27 @@ public sealed class RecoveryProofItemJson
     public string Label { get; set; } = string.Empty;
     public bool Passed { get; set; }
     public string Detail { get; set; } = string.Empty;
+}
+
+public sealed class CriticalProbeReportJson
+{
+    public string Scope { get; set; } = string.Empty;
+    public bool AllPassed { get; set; }
+    public bool HasUnknown { get; set; }
+    public int ExitCode { get; set; }
+    public List<CriticalProbeJson> Items { get; set; } = new();
+}
+
+public sealed class CriticalProbeJson
+{
+    public string Id { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public string Verdict { get; set; } = string.Empty;
+    public string ReasonCode { get; set; } = string.Empty;
+    public string Detail { get; set; } = string.Empty;
+    public string? NativeError { get; set; }
+    public List<string> Evidence { get; set; } = new();
+    public DateTimeOffset ObservedAtUtc { get; set; }
 }
 
 public sealed class BypassIoJson
