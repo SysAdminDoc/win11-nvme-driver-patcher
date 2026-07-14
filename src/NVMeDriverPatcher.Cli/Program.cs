@@ -1099,10 +1099,16 @@ class Program
                 // command if shutdown.exe refuses (rare — we already hold Administrator).
                 Console.WriteLine(
                     $"[UNATTENDED] Scheduling auto-restart in {config.RestartDelay}s...");
-                if (!PatchService.InitiateRestart(config.RestartDelay, msg => Console.WriteLine(msg)))
+                var restart = PatchService.InitiateRestartDetailed(config.RestartDelay, msg => Console.WriteLine(msg));
+                if (restart == PatchService.RestartInitiation.Failed)
                 {
                     Console.Error.WriteLine(
                         $"[WARNING] Auto-restart could not be scheduled. Run 'shutdown /r /t {config.RestartDelay}' manually.");
+                }
+                else if (restart == PatchService.RestartInitiation.Unconfirmed)
+                {
+                    Console.Error.WriteLine(
+                        $"[WARNING] Restart status UNCONFIRMED — verify the machine reboots; if not, run 'shutdown /r /t {config.RestartDelay}' manually.");
                 }
             }
             else

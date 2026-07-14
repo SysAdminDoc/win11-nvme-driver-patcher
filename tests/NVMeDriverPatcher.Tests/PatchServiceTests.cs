@@ -6,6 +6,16 @@ namespace NVMeDriverPatcher.Tests;
 
 public sealed class PatchServiceTests
 {
+    [Theory]
+    [InlineData(false, false, 0, PatchService.RestartInitiation.Failed)]   // shutdown.exe never started
+    [InlineData(true, false, 0, PatchService.RestartInitiation.Unconfirmed)] // timed out — likely enqueued, unproven
+    [InlineData(true, true, 0, PatchService.RestartInitiation.Scheduled)]   // clean exit 0
+    [InlineData(true, true, 1, PatchService.RestartInitiation.Failed)]      // exited non-zero
+    public void ClassifyRestart_MapsProcessOutcomeToHonestState(bool started, bool exited, int code, PatchService.RestartInitiation expected)
+    {
+        Assert.Equal(expected, PatchService.ClassifyRestart(started, exited, code));
+    }
+
     [Fact]
     public void ProbeRemovalResidue_ReadsEveryStore_WithoutThrowing_AndReturnsWellFormedEntries()
     {

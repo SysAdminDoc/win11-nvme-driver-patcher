@@ -974,7 +974,25 @@ public static class PatchService
         return safeDesc.Length > 200 ? safeDesc[..200] : safeDesc;
     }
 
-    public static bool InitiateRestart(int delaySeconds, Action<string>? log = null)
+    /// <summary>Outcome of a restart request. Unconfirmed = shutdown.exe didn't return in time; the
+    /// reboot is PROBABLY enqueued but we can't prove it, so callers should say so rather than claim
+    /// success (important for the unattended CLI flow that otherwise suppresses the manual hint).</summary>
+    public enum RestartInitiation { Scheduled, Unconfirmed, Failed }
+
+    internal static RestartInitiation ClassifyRestart(bool processStarted, bool exitedWithinTimeout, int exitCode)
+    {
+        if (!processStarted) return RestartInitiation.Failed;
+        if (!exitedWithinTimeout) return RestartInitiation.Unconfirmed;
+        return exitCode == 0 ? RestartInitiation.Scheduled : RestartInitiation.Failed;
+    }
+
+    // Back-compat bool wrapper: interactive GUI callers keep treating an unconfirmed timeout as
+    // "proceeding" (true), since shutdown.exe's own countdown UI is already up. Only a hard Failed
+    // is false. The unattended CLI path uses InitiateRestartDetailed for the honest distinction.
+    public static bool InitiateRestart(int delaySeconds, Action<string>? log = null) =>
+        InitiateRestartDetailed(delaySeconds, log) != RestartInitiation.Failed;
+
+    public static RestartInitiation InitiateRestartDetailed(int delaySeconds, Action<string>? log = null)
     {
         delaySeconds = Math.Clamp(delaySeconds, 0, 3600);
         try
@@ -997,7 +1015,7 @@ public static class PatchService
             if (proc is null)
             {
                 log?.Invoke("[ERROR] Could not start shutdown.exe to schedule restart.");
-                return false;
+                return RestartInitiation.Failed;
             }
             // shutdown.exe normally exits immediately after queuing the restart. Drain its output
             // streams so we never deadlock waiting for them to close.
@@ -1006,23 +1024,22 @@ public static class PatchService
             if (!proc.WaitForExit(5000))
             {
                 // Don't kill it — if shutdown.exe is taking >5s, the request is almost certainly
-                // already enqueued. Killing it would only abort the restart we just asked for.
-                return true;
+                // already enqueued. Killing it would only abort the restart we just asked for. But
+                // we can't PROVE it was enqueued, so report Unconfirmed rather than success.
+                log?.Invoke("[WARN] Restart status UNCONFIRMED — shutdown.exe has not returned. The reboot is likely enqueued; if the system does not restart, run 'shutdown /r' manually.");
+                return ClassifyRestart(processStarted: true, exitedWithinTimeout: false, exitCode: 0);
             }
             try { stdoutTask.GetAwaiter().GetResult(); } catch { }
             string err = string.Empty;
             try { err = stderrTask.GetAwaiter().GetResult().Trim(); } catch { }
             if (proc.ExitCode != 0)
-            {
                 log?.Invoke($"[ERROR] shutdown.exe exit {proc.ExitCode}: {err}");
-                return false;
-            }
-            return true;
+            return ClassifyRestart(processStarted: true, exitedWithinTimeout: true, proc.ExitCode);
         }
         catch (Exception ex)
         {
             log?.Invoke($"[ERROR] Restart could not be scheduled: {ex.Message}");
-            return false;
+            return RestartInitiation.Failed;
         }
     }
 
