@@ -29,6 +29,10 @@ public class AppDbContext : DbContext
         }.ToString();
 
         optionsBuilder.UseSqlite(connStr);
+
+        // Harden EVERY connection this context opens (sync + async), not just EnsureCreated's.
+        // The interceptor fails closed if defensive mode can't be enabled.
+        optionsBuilder.AddInterceptors(SqliteDefensiveConnectionInterceptor.Instance);
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -56,27 +60,17 @@ public class AppDbContext : DbContext
         });
     }
 
-    private const int SQLITE_DBCONFIG_DEFENSIVE = 1010;
-
-    private static void EnableDefensiveMode(AppDbContext db)
-    {
-        var conn = (SqliteConnection)db.Database.GetDbConnection();
-        if (conn.State != System.Data.ConnectionState.Open) conn.Open();
-        SQLitePCL.raw.sqlite3_db_config(conn.Handle, SQLITE_DBCONFIG_DEFENSIVE, 1, out _);
-    }
-
     public static void EnsureCreated()
     {
         using var db = new AppDbContext();
         db.Database.EnsureCreated();
-        // WAL improves concurrency between read pollers and writes; busy_timeout backs the
-        // SQLite engine's own retry loop in case a brief writer blocks a reader.
+        // Defensive mode, trusted_schema=OFF and cell_size_check=ON are now applied to every
+        // connection by SqliteDefensiveConnectionInterceptor. Here we only set the persistent,
+        // DB-level init PRAGMAs: WAL improves concurrency between read pollers and writes;
+        // busy_timeout backs SQLite's own retry loop when a brief writer blocks a reader.
         try { db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;"); } catch { }
         try { db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=5000;"); } catch { }
         try { db.Database.ExecuteSqlRaw("PRAGMA synchronous=NORMAL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("PRAGMA trusted_schema=OFF;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("PRAGMA cell_size_check=ON;"); } catch { }
-        try { EnableDefensiveMode(db); } catch { }
         try { db.Database.ExecuteSqlRaw("PRAGMA quick_check;"); } catch { }
     }
 }
