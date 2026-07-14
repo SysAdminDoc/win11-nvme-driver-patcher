@@ -4,6 +4,17 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 
 ## [Unreleased] — 2026-06-30
 
+### Fixed
+- **Durable fallback recovery checkpoint** — `PendingFallbackApplied` is now persisted in
+  `config.json` (load + save + schema), so the post-reboot auto-reset survives the apply→reboot→
+  fresh-launch boundary it was designed for. `PatchVerificationService.Evaluate` is now a pure read;
+  the FeatureStore reset moved into a one-shot `FallbackRecoveryCoordinator` invoked only at GUI
+  startup and the CLI boot task — never from the tray tick or dashboard/telemetry render, which
+  previously could silently mutate machine-global FeatureStore state. `ConfigService.Save` now
+  returns success, and the GUI/CLI fallback and apply flows refuse to restart after a checkpoint
+  save fails (rebooting into an untracked fallback is unrecoverable). The coordinator resets once,
+  clears and persists on success, and retains the checkpoint for retry on failure.
+
 ### Added
 - **Build-rule action policy gate** — a single disposition (`BuildActionPolicyService`) now governs
   whether a build may be mutated. Builds with no known binding path (`none-known`), official opt-in,

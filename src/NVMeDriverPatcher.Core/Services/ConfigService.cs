@@ -91,6 +91,10 @@ public static class ConfigService
             config.LastVerificationScriptPath = ExistingFile(saved.LastVerificationScriptPath);
             config.PendingVerificationSince = saved.PendingVerificationSince;
             config.PendingVerificationProfile = saved.PendingVerificationProfile;
+            // Load-bearing recovery checkpoint: it distinguishes a fallback (FeatureStore) patch
+            // from a registry-only one, and the post-reboot auto-reset keys off it. It MUST survive
+            // the exact process boundary (apply → reboot → fresh launch) it was designed for.
+            config.PendingFallbackApplied = saved.PendingFallbackApplied;
             config.LastVerifiedProfile = saved.LastVerifiedProfile;
             config.LastVerificationResult = saved.LastVerificationResult;
         }
@@ -199,10 +203,15 @@ public static class ConfigService
             : null;
     }
 
-    public static void Save(AppConfig config)
+    /// <summary>
+    /// Persists config atomically. Returns true only when the durable write actually landed, so
+    /// safety-critical callers (fallback apply → restart) can refuse to reboot after an undurable
+    /// checkpoint instead of trusting a fire-and-forget void.
+    /// </summary>
+    public static bool Save(AppConfig config)
     {
         if (string.IsNullOrEmpty(config.ConfigFile))
-            return;
+            return false;
 
         var tempFile = config.ConfigFile + ".tmp";
         Exception? lastException = null;
@@ -238,6 +247,7 @@ public static class ConfigService
                     config.LastVerificationScriptPath,
                     config.PendingVerificationSince,
                     config.PendingVerificationProfile,
+                    config.PendingFallbackApplied,
                     config.LastVerifiedProfile,
                     config.LastVerificationResult
                 };
@@ -254,7 +264,7 @@ public static class ConfigService
                     fs.Flush(flushToDisk: true);
                 }
                 File.Move(tempFile, config.ConfigFile, overwrite: true);
-                return;
+                return true;
             }
             catch (IOException ex)
             {
@@ -289,6 +299,8 @@ public static class ConfigService
                 3010);
         }
         catch { }
+
+        return false;
     }
 
     internal sealed class LenientPatchProfileJsonConverter : JsonConverter<PatchProfile>

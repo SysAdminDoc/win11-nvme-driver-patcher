@@ -169,23 +169,10 @@ public static class PatchVerificationService
         report.Summary = summary;
         report.Detail = AppendBuildRuleDetail(detail, WindowsBuildRulesService.MatchCurrent());
 
-        if (config.PendingFallbackApplied && ShouldAutoResetFallback(outcome, config))
-        {
-            try
-            {
-                var resetResult = FeatureStoreWriterService.ResetAppliedFallback();
-                report.Detail += Environment.NewLine + Environment.NewLine +
-                    (resetResult.Success
-                        ? "Auto-reset: FeatureStore fallback IDs cleared because binding failed or watchdog severity crossed the revert threshold. " + resetResult.Summary
-                        : "Auto-reset attempted but failed: " + resetResult.Summary);
-            }
-            catch (Exception ex)
-            {
-                report.Detail += Environment.NewLine + Environment.NewLine +
-                    "Auto-reset of FeatureStore fallback IDs failed: " + ex.Message;
-            }
-        }
-
+        // NOTE: Evaluate is a PURE READ. The fallback FeatureStore reset used to run here, which
+        // meant any polling caller (tray tick, dashboard/telemetry render) could silently mutate
+        // machine-global FeatureStore state. Recovery now lives in FallbackRecoveryCoordinator,
+        // invoked once per startup from the GUI and the CLI boot task only.
         return report;
     }
 
