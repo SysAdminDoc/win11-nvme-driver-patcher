@@ -137,7 +137,7 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 - **Per-drive scope** -- exclude specific NVMe drives from the swap by serial or model pattern (e.g. keep a DirectStorage gaming drive on `stornvme.sys` while the OS drive moves to `nvmedisk.sys`).
 - **Dry-run preview** (`--dry-run` / "Preview Changes") -- prints every registry write the patch would perform, without touching the registry.
 - **ETW storage trace** (`etw`) -- wraps `wpr.exe` for 60-second pre/post captures; ETL files land in `%ProgramData%\NVMePatcher\etl\`.
-- **WinPE recovery USB builder** (`winpe`) -- detects the Windows ADK + WinPE add-on and produces a bootable tree/ISO with a verified Recovery Kit, a custom `startnet.cmd`, and a final SHA-256 inventory of the complete media tree.
+- **Controller-complete WinPE recovery USB builder** (`winpe`) -- detects the Windows ADK + WinPE add-on, inventories every present hardware-backed storage controller, exports each bound OEM package once, injects signed packages into `boot.wim`, and retains the same INFs for manual `drvload`. The published tree/ISO includes a verified Recovery Kit, controller coverage report, custom `startnet.cmd`, and final SHA-256 inventory. `winpe-freshness` verifies that media and reports stale when the app, Recovery Kit, rollback script, WinRE image, or controller INF/version has changed.
 - **Opt-in compatibility telemetry** -- build an anonymized `{controller, firmware, OS build, profile, verification, watchdog, reliability delta}` JSON and optionally `POST` it to a user-configured HTTPS endpoint. No serials, machine names, drive letters, or user names.
 - **Driver Verifier harness** (`verifier-on` / `-off` / `-status`) -- dev/tester-mode wrapper around `verifier.exe` for kernel-level stress checks on the NVMe stack.
 - **GPO / ADMX templates** (`packaging/admx/`) -- pin Safe/Full profile, IncludeServerKey, SkipWarnings, watchdog behavior, and telemetry across a fleet via `HKLM\SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher`. Policy overrides local config.
@@ -175,7 +175,7 @@ does not initialize application config, mutation recovery, policy, or Event Log 
 .\NVMe_Driver_Patcher.ps1 -ExportRecoveryKit
 ```
 
-### Extended CLI (C# binary — 59 commands)
+### Extended CLI (C# binary — 60 commands)
 
 Run `NVMeDriverPatcher.Cli help` for the full grouped command reference.
 
@@ -189,6 +189,7 @@ NVMeDriverPatcher.Cli remove                               # Undo the patch
 # Recovery
 NVMeDriverPatcher.Cli recovery-kit                         # Generate WinRE recovery kit
 NVMeDriverPatcher.Cli verify-payload --input=<dir-or-zip>  # Verify the complete generated payload
+NVMeDriverPatcher.Cli winpe-freshness [--input=<tree>]     # Media integrity/freshness (exit: 0 fresh, 1 stale/missing, 2 unknown)
 NVMeDriverPatcher.Cli recovery-proof [--json]              # Prove recovery infrastructure and BitLocker protector state
 NVMeDriverPatcher.Cli upgrade-safeboot                     # Add KB5079391 SafeBoot entries
 

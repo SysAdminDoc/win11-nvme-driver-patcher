@@ -16,6 +16,7 @@
     "PatchProfile":                    { "type": "string", "enum": ["Safe", "Full"], "default": "Safe" },
     "ConfigVersion":                   { "type": "integer", "minimum": 1, "default": 3 },
     "LastRecoveryKitPath":             { "type": ["string", "null"] },
+    "LastWinPEMediaPath":              { "type": ["string", "null"] },
     "LastDiagnosticsPath":             { "type": ["string", "null"] },
     "LastSupportBundlePath":           { "type": ["string", "null"] },
     "LastVerificationScriptPath":      { "type": ["string", "null"] },

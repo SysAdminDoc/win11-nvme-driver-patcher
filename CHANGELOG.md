@@ -5,6 +5,14 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **WinPE media now carries every live boot-storage controller it can require** — the builder
+  inventories present hardware-backed SCSI/HDC controllers, treats inbox INFs as covered, exports
+  each bound OEM package once with PnPUtil, injects the signed INF into `boot.wim` in one
+  discard-on-failure DISM transaction, and retains the package plus a fail-closed manual `drvload`
+  loader. Publication is staged so an incomplete rebuild cannot replace known-good media. A
+  validated controller report records inbox/injected/missing state, app and rollback versions,
+  Recovery Kit manifest, WinRE WIM, and controller INF/version fingerprints; `winpe-freshness`
+  verifies the media manifest and reports source drift with deterministic 0/1/2 exit codes.
 - **Generated recovery and deployment payloads are now self-verifying** — Recovery Kit, WinPE
   media, support-bundle ZIPs, and the release-built Intune source bundle publish
   `ARTIFACT-MANIFEST.json` last with schema/tool version and per-file role, length, and SHA-256.

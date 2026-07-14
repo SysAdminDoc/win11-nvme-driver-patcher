@@ -58,6 +58,8 @@ public static class CliCommandRegistry
             "Verify a generated directory or ZIP against ARTIFACT-MANIFEST.json (--input=<path>)"),
         new("kit-freshness", ["recovery-kit-freshness"], CommandGroup.Recovery,
             "Check recovery kit age and freshness status"),
+        new("winpe-freshness", ["winpe-status"], CommandGroup.Recovery,
+            "Verify saved WinPE media and compare its app, recovery, WinRE, and controller sources (--input=<tree-or-media>)"),
         new("upgrade-safeboot", ["safeboot-upgrade"], CommandGroup.Recovery,
             "Add KB5079391 service-name SafeBoot entries missing from pre-v4.6.1 patches"),
         new("fallback", ["vivetool-fallback", "apply-fallback"], CommandGroup.Recovery,

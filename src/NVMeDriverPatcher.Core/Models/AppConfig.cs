@@ -145,6 +145,7 @@ public class AppConfig
     public int ConfigVersion { get; set; } = Services.ConfigMigrationService.CurrentSchemaVersion;
     public string? LastRun { get; set; }
     public string? LastRecoveryKitPath { get; set; }
+    public string? LastWinPEMediaPath { get; set; }
     public string? LastDiagnosticsPath { get; set; }
     public string? LastSupportBundlePath { get; set; }
     public string? LastVerificationScriptPath { get; set; }
