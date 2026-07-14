@@ -14,7 +14,7 @@ namespace NVMeDriverPatcher.Views;
 
 public partial class MainWindow : Window
 {
-    private const double CompactLayoutThreshold = 1100;
+    private const double CompactLayoutThreshold = 1200;
     private const int DwmwaUseImmersiveDarkMode = 20;
     private const int DwmwaCaptionColor = 35;
     private const int DwmwaTextColor = 36;
@@ -433,6 +433,20 @@ public partial class MainWindow : Window
 
         if (compact)
         {
+            WorkspacePrimaryRow.Height = new GridLength(1, GridUnitType.Star);
+            WorkspaceActivityRow.Height = new GridLength(220);
+            ActivityRailSpacerColumn.Width = new GridLength(0);
+            ActivityRailColumn.Width = new GridLength(0);
+            Grid.SetRow(WorkspaceTabs, 0);
+            Grid.SetColumn(WorkspaceTabs, 0);
+            Grid.SetRowSpan(WorkspaceTabs, 1);
+            Grid.SetColumnSpan(WorkspaceTabs, 3);
+            Grid.SetRow(ActivityRail, 1);
+            Grid.SetColumn(ActivityRail, 0);
+            Grid.SetRowSpan(ActivityRail, 1);
+            Grid.SetColumnSpan(ActivityRail, 3);
+            ActivityRail.Margin = new Thickness(0, 10, 0, 0);
+
             Grid.SetRow(ReadinessCard, 0);
             Grid.SetColumn(ReadinessCard, 0);
             Grid.SetColumnSpan(ReadinessCard, 3);
@@ -455,6 +469,20 @@ public partial class MainWindow : Window
         }
         else
         {
+            WorkspacePrimaryRow.Height = GridLength.Auto;
+            WorkspaceActivityRow.Height = new GridLength(1, GridUnitType.Star);
+            ActivityRailSpacerColumn.Width = new GridLength(10);
+            ActivityRailColumn.Width = new GridLength(400);
+            Grid.SetRow(WorkspaceTabs, 0);
+            Grid.SetColumn(WorkspaceTabs, 0);
+            Grid.SetRowSpan(WorkspaceTabs, 2);
+            Grid.SetColumnSpan(WorkspaceTabs, 1);
+            Grid.SetRow(ActivityRail, 0);
+            Grid.SetColumn(ActivityRail, 2);
+            Grid.SetRowSpan(ActivityRail, 2);
+            Grid.SetColumnSpan(ActivityRail, 1);
+            ActivityRail.Margin = new Thickness(0);
+
             Grid.SetRow(ReadinessCard, 0);
             Grid.SetColumn(ReadinessCard, 0);
             Grid.SetColumnSpan(ReadinessCard, 1);

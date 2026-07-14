@@ -6,6 +6,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
+using System.Windows.Media.Imaging;
 using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 using NVMeDriverPatcher.ViewModels;
@@ -29,7 +30,7 @@ public sealed class AccessibilitySmokeTests
                 AssertThemeResources(app.Resources, mode);
             }
 
-            ThemeService.ApplyMode(AppThemeMode.HighContrast);
+            ThemeService.ApplyMode(AppThemeMode.Dark);
             var window = new MainWindow();
             try
             {
@@ -40,9 +41,12 @@ public sealed class AccessibilitySmokeTests
                 vm.HasRecoveryKit = true;
                 vm.HasVerificationScript = true;
                 vm.HasDiagnosticsReport = true;
+                vm.IsLoading = false;
 
-                window.ApplyTemplate();
-                window.UpdateLayout();
+                var root = Assert.IsType<Grid>(window.Content);
+                root.Measure(new Size(1360, 980));
+                root.Arrange(new Rect(0, 0, 1360, 980));
+                root.UpdateLayout();
 
                 AssertEnabledFocusTarget(window, "Refresh readiness checks");
                 AssertEnabledFocusTarget(window, "Apply patch");
@@ -55,6 +59,7 @@ public sealed class AccessibilitySmokeTests
 
                 AssertNamedControl(window, "Details tabs");
                 AssertNamedControl(window, "Workspace tabs");
+                AssertNamedControl(window, "Primary navigation");
                 AssertNamedControl(window, "Readiness refresh overlay");
 
                 AssertFocusOrder(window, "Apply patch", "Remove patch");
@@ -62,6 +67,32 @@ public sealed class AccessibilitySmokeTests
                 AssertFocusOrder(window, "Review verification script", "Generate verification script");
                 AssertFocusOrder(window, "Review diagnostics report", "Export diagnostics report", "Export support bundle zip");
                 AssertDialogChromeIsNamed();
+
+                var navigation = Assert.IsType<ListBox>(window.FindName("PrimaryNavigation"));
+                var hero = Assert.IsType<Border>(window.FindName("CommandDeck"));
+                var workspace = Assert.IsType<TabControl>(window.FindName("WorkspaceTabs"));
+                Assert.Equal(0, workspace.SelectedIndex);
+                Assert.True(navigation.ActualWidth >= 170, $"Navigation width was {navigation.ActualWidth}.");
+                Assert.True(hero.ActualWidth >= 700, $"Hero width was {hero.ActualWidth}.");
+                Assert.True(hero.ActualHeight >= 250, $"Hero height was {hero.ActualHeight}.");
+                Assert.True(workspace.ActualWidth >= 500, $"Workspace width was {workspace.ActualWidth}.");
+
+                vm.IsLoading = false;
+                root.UpdateLayout();
+                var snapshotPath = Environment.GetEnvironmentVariable("NVME_UI_SNAPSHOT_PATH");
+                if (!string.IsNullOrWhiteSpace(snapshotPath))
+                    SavePng(root, snapshotPath);
+
+                var updateAdaptiveLayout = typeof(MainWindow).GetMethod(
+                    "UpdateAdaptiveLayout",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(updateAdaptiveLayout);
+                updateAdaptiveLayout.Invoke(window, null);
+                var activityRail = Assert.IsType<Border>(window.FindName("ActivityRail"));
+                Assert.Equal(1, Grid.GetRow(activityRail));
+                Assert.Equal(0, Grid.GetColumn(activityRail));
+                Assert.Equal(1, Grid.GetRowSpan(activityRail));
+                Assert.Equal(3, Grid.GetColumnSpan(activityRail));
             }
             finally
             {
@@ -146,6 +177,23 @@ public sealed class AccessibilitySmokeTests
         where T : DependencyObject
     {
         return Descendants(root).OfType<T>().ToArray();
+    }
+
+    private static void SavePng(FrameworkElement root, string path)
+    {
+        var bitmap = new RenderTargetBitmap(
+            Math.Max(1, (int)Math.Ceiling(root.ActualWidth)),
+            Math.Max(1, (int)Math.Ceiling(root.ActualHeight)),
+            96,
+            96,
+            PixelFormats.Pbgra32);
+        bitmap.Render(root);
+
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var stream = File.Create(path);
+        encoder.Save(stream);
     }
 
     private static IReadOnlyList<DependencyObject> Descendants(DependencyObject root)
