@@ -15,11 +15,14 @@ public class AutoUpdateResult
     public bool ContentVerified { get; set; }
     /// <summary>Name of the verification signal that ran: "sha256", "authenticode", or "none".</summary>
     public string VerificationMethod { get; set; } = "none";
+    /// <summary>Digest embedded into the post-exit swap command for a second verification.</summary>
+    public string? ExpectedSha256 { get; set; }
 }
 
-// Downloads a GitHub release asset into a staging folder beside the running exe, verifies
-// the allowlisted download host + SHA-256 sidecar, and emits a swap script. The swap itself
-// happens after the running exe exits — the CLI prints the PowerShell one-liner to the user.
+// Downloads a GitHub release asset into an Administrators/SYSTEM-only ProgramData folder,
+// verifies the allowlisted download host + SHA-256 sidecar, and emits a swap script. The swap
+// itself happens after the running exe exits, so that script re-hashes before copying and again
+// before launching the installed target.
 //
 // Heavy lifting (host allowlist, redirect handling, .part staging, size caps, SHA-256 +
 // Authenticode verification, atomic promote) lives in VerifiedDownloader. This service stays
@@ -56,7 +59,6 @@ public static class AutoUpdaterService
     public static async Task<AutoUpdateResult> StageUpdateAsync(
         string browserDownloadUrl,
         string targetAssetName,
-        string stagingDir,
         CancellationToken cancellationToken = default)
     {
         var result = new AutoUpdateResult();
@@ -78,7 +80,13 @@ public static class AutoUpdaterService
 
         try
         {
-            Directory.CreateDirectory(stagingDir);
+            var stagingAccess = PrivilegedStateSecurityService.EnsureForUpdates();
+            if (!stagingAccess.Success)
+            {
+                result.Summary = "Protected update staging is unavailable: " + stagingAccess.Summary;
+                return result;
+            }
+            var stagingDir = stagingAccess.Directory;
             var stagedPath = Path.Combine(stagingDir, targetAssetName);
 
             var policy = new VerifiedDownloader.DownloadPolicy
@@ -105,9 +113,38 @@ public static class AutoUpdaterService
                 return result;
             }
 
+            if (download.Signal != VerifiedDownloader.IntegritySignal.Sha256Sidecar ||
+                string.IsNullOrWhiteSpace(download.VerifiedSha256))
+            {
+                TryDelete(download.Path);
+                result.Summary = "Update staging did not retain a sidecar-verified SHA-256; refusing to emit a swap command.";
+                return result;
+            }
+
+            var protectedFile = PrivilegedStateSecurityService.ProtectCriticalFile(
+                download.Path!, StateDirectoryRole.Privileged);
+            if (!protectedFile.Success)
+            {
+                TryDelete(download.Path);
+                result.Summary = "Staged update metadata is not trusted: " + protectedFile.Summary;
+                return result;
+            }
+
+            // Re-read only after the file has an admin-only DACL and trusted reparse/hard-link
+            // metadata. This must still match the digest VerifiedDownloader compared to the
+            // release sidecar; otherwise no post-exit command is exposed.
+            var protectedHash = await ComputeSha256Async(download.Path!, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(protectedHash, download.VerifiedSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                TryDelete(download.Path);
+                result.Summary = "Staged update changed while its protected metadata was established; aborting.";
+                return result;
+            }
+
             result.Success = true;
             result.StagedPath = download.Path;
             result.ContentVerified = download.Signal != VerifiedDownloader.IntegritySignal.None;
+            result.ExpectedSha256 = protectedHash;
             result.VerificationMethod = download.Signal switch
             {
                 VerifiedDownloader.IntegritySignal.Sha256Sidecar => "sha256",
@@ -116,9 +153,9 @@ public static class AutoUpdaterService
             };
 
             var currentExe = Environment.ProcessPath ?? "NVMeDriverPatcher.exe";
-            result.RestartCommand = BuildRestartCommand(download.Path!, currentExe);
+            result.RestartCommand = BuildRestartCommand(download.Path!, currentExe, protectedHash);
             result.Summary =
-                $"Update staged ({result.VerificationMethod} verified). Run the printed RestartCommand in a separate PowerShell window, then exit the app.";
+                $"Update staged in protected ProgramData storage ({result.VerificationMethod} verified). Run the printed RestartCommand in a separate PowerShell window, then exit the app; it re-verifies SHA-256 before copy and launch.";
         }
         catch (Exception ex)
         {
@@ -141,16 +178,28 @@ public static class AutoUpdaterService
     internal static bool VerifyAuthenticode(string path) =>
         VerifiedDownloader.VerifyAuthenticode(path);
 
-    internal static string BuildRestartCommand(string stagedPath, string currentExe)
+    internal static string BuildRestartCommand(string stagedPath, string currentExe, string expectedSha256)
     {
         // PowerShell single-quoted strings treat '' as a literal apostrophe. Escape any
         // apostrophes in the paths so a pathological install path cannot break the command.
         var staged = stagedPath.Replace("'", "''");
         var current = currentExe.Replace("'", "''");
+        var expected = ExtractSha256(expectedSha256)
+            ?? throw new ArgumentException("A 64-character SHA-256 is required.", nameof(expectedSha256));
         return
-            $"Start-Sleep -Seconds 2; " +
+            $"$expected='{expected}'; Start-Sleep -Seconds 2; " +
+            $"$actual=(Get-FileHash -LiteralPath '{staged}' -Algorithm SHA256).Hash.ToLowerInvariant(); " +
+            "if ($actual -ne $expected) { throw 'Staged update SHA-256 changed; refusing replacement.' }; " +
             $"Copy-Item -LiteralPath '{staged}' -Destination '{current}' -Force; " +
+            $"$installed=(Get-FileHash -LiteralPath '{current}' -Algorithm SHA256).Hash.ToLowerInvariant(); " +
+            "if ($installed -ne $expected) { throw 'Installed update SHA-256 does not match; refusing launch.' }; " +
             $"Start-Process -FilePath '{current}'";
+    }
+
+    private static void TryDelete(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        try { File.Delete(path); } catch { }
     }
 
     // The only asset name the auto-updater may stage. Releases also upload CLI, tray,
