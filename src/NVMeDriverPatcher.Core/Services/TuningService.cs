@@ -82,8 +82,25 @@ public static class TuningService
     /// <param name="profile">The profile to apply.</param>
     /// <param name="log">Optional logging callback.</param>
     /// <returns>True if all values were written successfully.</returns>
+    /// <summary>True when nvmedisk.sys is the bound driver — StorNVMe tuning cannot affect it.
+    /// Isolated + swallowing so a WMI hiccup never blocks legacy-stack tuning (fail-open to allow).</summary>
+    internal static bool IsNativeNvmeBound()
+    {
+        try { return DriveService.TestNativeNVMeActive()?.IsActive == true; }
+        catch { return false; }
+    }
+
     public static bool ApplyProfile(TuningProfile profile, Action<string>? log = null)
     {
+        // These parameters live under the legacy stornvme service key. Once the patch is active and
+        // nvmedisk.sys is bound, writing them changes nothing on the running stack — so refuse rather
+        // than report a success that can't take effect. The user can tune after reverting to stornvme.
+        if (IsNativeNvmeBound())
+        {
+            log?.Invoke("[BLOCKED] StorNVMe tuning targets the legacy stornvme.sys stack, but nvmedisk.sys is currently bound (native NVMe active).");
+            log?.Invoke("          These parameters would have NO effect on the active driver. Remove the patch first to tune the legacy stack.");
+            return false;
+        }
         try
         {
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
