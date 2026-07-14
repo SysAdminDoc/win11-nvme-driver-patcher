@@ -28,13 +28,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
   Acceptance: Importing the generated backup after a patch removes every app-added override/SafeBoot key and restores prior values; a test asserts the emitted `.reg` deletes keys that were absent pre-patch; recovery messaging accurately describes what the backup restores.
   Complexity: M
 
-- [ ] P2 — Refresh windows_build_rules.json and compat.json against 2026 sources
-  Why: Static safety data drifts against a fast-moving target — the exact registry-override block build (reported `26100.8106`) is modeled fuzzily, the Samsung 990 Pro firmware entry conflicts with community reports (`4B2QJXD7` bad / `6B2QJXD7` fixed), and new HMB firmware advisories (WD SN5000 2TB fix `291020WD`, SN770 2TB) aren't captured.
-  Evidence: `src/NVMeDriverPatcher.Core/windows_build_rules.json`; `src/NVMeDriverPatcher.Core/compat.json:7-28`; RESEARCH.md Open Questions; heise/SanDisk KB 51469; Samsung EU community 12822796.
-  Touches: `windows_build_rules.json`, `compat.json`, provenance `sourceUrl`/`lastReviewed` fields, schema/provenance tests.
-  Acceptance: Block/known-working build numbers carry precise UBRs with sources; the 990 Pro entry is reconciled to the confirmed bad/fixed revisions (or explicitly marked needs-validation per the open question); WD SN5000 2TB and SN770 2TB HMB entries exist with fix firmware; provenance tests stay green.
-  Complexity: S
-
 ### P3
 
 - [ ] P3 — Gate the StorNVMe tuning surface on the currently-bound driver

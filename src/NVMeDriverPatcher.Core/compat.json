@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updated": "2026-06-27",
+  "updated": "2026-07-14",
   "note": "Curated from community BSOD threads, vendor advisories, and storage forums. 'level' applies to Native NVMe (nvmedisk.sys) operation. Patterns: controller substring (case-insensitive), firmware exact (case-insensitive) or '*' wildcard. Prefix with '=' for exact controller match. Unknown entries are treated as 'proceed with caution' in the UI.",
   "entries": [
     {
@@ -16,9 +16,9 @@
       "controller": "Samsung SSD 990 PRO",
       "firmware": "7B2QJXD7",
       "level": "Caution",
-      "note": "Community reports isolate 990 Pro 2TB random-write degradation after 7B2QJXD7. Benchmark before/after and update firmware if Samsung publishes a replacement.",
+      "note": "Community reports isolate 990 Pro 2TB random-write degradation after 7B2QJXD7. Benchmark before/after and update firmware if Samsung publishes a replacement. NEEDS VALIDATION: separate community sources instead name 4B2QJXD7 as a disappearing-drive/BSOD revision fixed by 6B2QJXD7 — the exact bad/fixed revisions for the native-stack case are unconfirmed against a first-party Samsung advisory.",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-27",
+      "lastReviewed": "2026-07-14",
       "sourceUrl": "https://forums.anandtech.com/threads/samsung-990-pro-2tb-performance-degradation-after-7b2qjxd7-firmware-upgrade-capacity-specific-bug.2632571/"
     },
     {

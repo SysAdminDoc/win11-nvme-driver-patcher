@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updated": "2026-06-10",
+  "updated": "2026-07-14",
   "note": "Per-build expected enablement behavior for Microsoft's native NVMe driver on Windows client. First matching rule wins (rules are ordered most-specific first). 'expectedPath' values: registry-override | vivetool-fallback | none-known | official-optin. Microsoft changes this behavior out-of-band — update this file (an admin-edited copy in %ProgramData%\\NVMePatcher takes precedence over the bundled one).",
   "rules": [
     {
@@ -14,7 +14,7 @@
       "summary": "Windows Server 2025: native NVMe is an official, supported opt-in feature (GA after the October 2025 cumulative). Use Microsoft's documented enablement, not client-style overrides.",
       "sourceUrl": "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353",
       "confidence": "verified",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-07-14"
     },
     {
       "id": "26300-feature-flags-page",
@@ -27,7 +27,7 @@
       "summary": "Build 26300+ ships a native 'Feature flags' page (Settings > Windows Update > Windows Insider Program). Check there first — Microsoft may expose native NVMe as an official toggle, which is preferable to these overrides. The GenNvmeDisk compatible ID is still removed on these trains, so the registry and ViVeTool routes do not bind the driver; treat this tool as verify/monitor/rollback until an official toggle appears.",
       "sourceUrl": "https://www.elevenforum.com/t/windows-11-25h2-nvmedisk-sys-driver-support.46678/",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-14"
+      "lastReviewed": "2026-07-14"
     },
     {
       "id": "post-26200-trains-bind-blocked",
@@ -40,7 +40,7 @@
       "summary": "Insider trains newer than 26200 (26H1 28020/28120 and later) inherit the GenNvmeDisk compatible-ID removal — no working enablement path is known. Wait for Microsoft's official client rollout.",
       "sourceUrl": "https://github.com/thebookisclosed/ViVe/issues/164",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-07-14"
     },
     {
       "id": "26200-bind-blocked",
@@ -53,7 +53,7 @@
       "summary": "Builds 26200.8524+ (and newer Insider trains): stornvme no longer exposes the GenNvmeDisk compatible ID, so nvmedisk.inf cannot match — registry AND ViVeTool routes both enable flags that have no effect. No working enablement path is known; wait for Microsoft's official client rollout.",
       "sourceUrl": "https://github.com/thebookisclosed/ViVe/issues/164",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-07-14"
     },
     {
       "id": "25h2-vivetool-new-ids",
@@ -67,7 +67,7 @@
       "summary": "25H2 (26200.x before .8524): the registry override is neutered; the FeatureStore fallback works with the newer ID set (55369237 + 48433719 + 49453572 — 60786016 reportedly no longer exists on these builds).",
       "sourceUrl": "https://www.elevenforum.com/t/windows-11-25h2-nvmedisk-sys-driver-support.46678/",
       "confidence": "community-reported",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-07-14"
     },
     {
       "id": "24h2-post-block",
@@ -78,10 +78,10 @@
       "maxUbr": 999999,
       "expectedPath": "vivetool-fallback",
       "fallbackSet": "post-block-2026-03",
-      "summary": "24H2 with Feb/Mar 2026+ servicing: Microsoft neutered the FeatureManagement\\Overrides registry route (keys write successfully but the driver never binds). The FeatureStore fallback (60786016 + 48433719) still works.",
+      "summary": "24H2 with Feb/Mar 2026+ servicing: Microsoft neutered the FeatureManagement\\Overrides registry route (keys write successfully but the driver never binds; the hard block was reported on Insider build 26100.8106, publicized ~2026-03-24). The FeatureStore fallback (60786016 + 48433719) still works. Some branches still bound the registry route (Canary 29553.1000, 28020.1362) — trust live status output over this static table.",
       "sourceUrl": "https://www.tomshardware.com/software/windows/microsoft-blocks-the-registry-hack-trick-that-unlocked-native-nvme-performance-on-windows-11",
       "confidence": "verified",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-07-14"
     },
     {
       "id": "24h2-pre-block",
@@ -94,7 +94,7 @@
       "summary": "24H2 before the Feb/Mar 2026 servicing block: the registry override route works as originally documented.",
       "sourceUrl": "https://www.tomshardware.com/pc-components/ssds/windows-11s-secret-nvme-performance-switch",
       "confidence": "verified",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-07-14"
     },
     {
       "id": "pre-24h2",
@@ -107,7 +107,7 @@
       "summary": "Pre-24H2 builds: the native NVMe components may be missing or incomplete; the registry route writes but the driver frequently is not present. 24H2+ is recommended.",
       "sourceUrl": "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353",
       "confidence": "verified",
-      "lastReviewed": "2026-06-10"
+      "lastReviewed": "2026-07-14"
     }
   ]
 }
