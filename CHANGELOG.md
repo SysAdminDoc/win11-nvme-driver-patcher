@@ -56,6 +56,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   save fails (rebooting into an untracked fallback is unrecoverable). The coordinator resets once,
   clears and persists on success, and retains the checkpoint for retry on failure.
 
+### Changed
+- **Refreshed build-rule and firmware compat data (2026-07-14 review)** — `windows_build_rules.json`
+  review dates updated after a full 2026 ecosystem re-review (un-stalling the new build-policy gate),
+  the post-block rule now records the precise reported block build (Insider 26100.8106, ~2026-03-24)
+  and branch-specific still-binding builds. The Samsung 990 Pro `7B2QJXD7` compat entry is flagged
+  NEEDS VALIDATION against the conflicting `4B2QJXD7`-bad / `6B2QJXD7`-fixed community reports.
+
 ### Added
 - **Build-rule action policy gate** — a single disposition (`BuildActionPolicyService`) now governs
   whether a build may be mutated. Builds with no known binding path (`none-known`), official opt-in,
