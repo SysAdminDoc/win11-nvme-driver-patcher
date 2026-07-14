@@ -56,6 +56,29 @@ public static class AutoBenchmarkService
         File.Move(tmp, path, overwrite: true);
     }
 
+    public static BenchmarkBaseline? LoadBaselineFromPath(string path)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+            var json = File.ReadAllText(path);
+            return string.IsNullOrWhiteSpace(json) ? null : JsonSerializer.Deserialize<BenchmarkBaseline>(json);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>Project a recorded benchmark result into the baseline shape so it can be the
+    /// "current" side of a regression comparison.</summary>
+    public static BenchmarkBaseline FromResult(BenchmarkResult result) => new()
+    {
+        CreatedAt = string.IsNullOrWhiteSpace(result.Timestamp) ? DateTime.UtcNow.ToString("o") : result.Timestamp,
+        ReadIops = result.Read?.IOPS ?? 0,
+        WriteIops = result.Write?.IOPS ?? 0,
+        ReadLatencyMs = result.Read?.AvgLatencyMs ?? 0,
+        WriteLatencyMs = result.Write?.AvgLatencyMs ?? 0,
+        Notes = result.Label ?? string.Empty
+    };
+
     public static RegressionVerdict Compare(BenchmarkBaseline baseline, BenchmarkBaseline current, double thresholdPercent)
     {
         double readDelta = PercentDelta(baseline.ReadIops, current.ReadIops);

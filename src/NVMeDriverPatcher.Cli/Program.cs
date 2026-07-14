@@ -96,6 +96,9 @@ class Program
             string? importPath = args.Select(a => (a ?? string.Empty))
                                  .FirstOrDefault(a => a.StartsWith("--import=", StringComparison.OrdinalIgnoreCase))?
                                  .Substring("--import=".Length);
+            string? currentBenchmarkPath = args.Select(a => (a ?? string.Empty))
+                                 .FirstOrDefault(a => a.StartsWith("--current=", StringComparison.OrdinalIgnoreCase))?
+                                 .Substring("--current=".Length);
             string? sourceArg = args.Select(a => (a ?? string.Empty))
                                  .FirstOrDefault(a => a.StartsWith("--source=", StringComparison.OrdinalIgnoreCase))?
                                  .Substring("--source=".Length);
@@ -144,7 +147,7 @@ class Program
                 "config-import" => ConfigImportCommand(config, importPath),
                 "tuning-export" => TuningExportCommand(exportPath),
                 "tuning-import" => TuningImportCommand(importPath),
-                "compare-benchmarks" => CompareBenchmarksCommand(config, thresholdArg),
+                "compare-benchmarks" => CompareBenchmarksCommand(config, thresholdArg, currentBenchmarkPath),
                 "compat-checksum" => CompatChecksumCommand(config),
                 "verify-backup" => VerifyBackupCommand(config, importPath),
                 "register-tasks" => RegisterTasksCommand(),
@@ -491,7 +494,7 @@ class Program
         return ok ? 0 : 1;
     }
 
-    static int CompareBenchmarksCommand(AppConfig config, int threshold)
+    static int CompareBenchmarksCommand(AppConfig config, int threshold, string? currentPath)
     {
         var baseline = AutoBenchmarkService.LoadBaseline(config);
         if (baseline is null)
@@ -499,8 +502,35 @@ class Program
             Console.Error.WriteLine("No baseline present. Run a benchmark first.");
             return 1;
         }
-        // No current benchmark supplied — treat the baseline as both sides and exit 0.
-        var verdict = AutoBenchmarkService.Compare(baseline, baseline, threshold);
+
+        // Compare against a real "current" benchmark: an explicit --current=<path>, else the most
+        // recent recorded benchmark in history. Comparing the baseline to itself (the old behavior)
+        // could never detect a regression.
+        BenchmarkBaseline? current;
+        if (!string.IsNullOrWhiteSpace(currentPath))
+        {
+            current = AutoBenchmarkService.LoadBaselineFromPath(currentPath);
+            if (current is null)
+            {
+                Console.Error.WriteLine($"Could not read a benchmark from --current={currentPath}.");
+                return 3;
+            }
+        }
+        else
+        {
+            var latest = BenchmarkService.GetHistory(config.WorkingDir)
+                .OrderByDescending(h => h.Timestamp, StringComparer.Ordinal)
+                .FirstOrDefault();
+            current = latest is null ? null : AutoBenchmarkService.FromResult(latest);
+        }
+
+        if (current is null)
+        {
+            Console.Error.WriteLine("No current benchmark to compare. Run a benchmark after applying the patch, or pass --current=<path>.");
+            return 1;
+        }
+
+        var verdict = AutoBenchmarkService.Compare(baseline, current, threshold);
         Console.WriteLine(verdict.Summary);
         return verdict.Regressed ? 1 : 0;
     }
