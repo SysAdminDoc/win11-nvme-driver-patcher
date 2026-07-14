@@ -329,6 +329,11 @@ public partial class MainViewModel : ObservableObject
         try
         {
             pendingVerification = PatchVerificationService.Evaluate(Config);
+            // One-shot fallback recovery (was previously a side effect of Evaluate). Runs here at
+            // GUI startup only — never from the tray tick or dashboard render.
+            var recovery = FallbackRecoveryCoordinator.RunOnce(Config, pendingVerification, m => Log(m, "INFO"));
+            if (recovery.Attempted)
+                Log($"Fallback recovery: {recovery.Summary}", recovery.Success ? "SUCCESS" : "WARNING");
             switch (pendingVerification.Outcome)
             {
                 case VerificationOutcome.Confirmed:

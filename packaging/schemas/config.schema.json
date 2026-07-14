@@ -21,6 +21,7 @@
     "LastVerificationScriptPath":      { "type": ["string", "null"] },
     "PendingVerificationSince":        { "type": ["string", "null"], "format": "date-time" },
     "PendingVerificationProfile":      { "type": ["string", "null"], "enum": ["Safe", "Full", null] },
+    "PendingFallbackApplied":          { "type": "boolean", "default": false },
     "LastVerifiedProfile":             { "type": ["string", "null"] },
     "LastVerificationResult":          { "type": ["string", "null"] },
     "LastRun":                         { "type": ["string", "null"], "format": "date-time" }

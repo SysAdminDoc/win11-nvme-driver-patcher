@@ -480,7 +480,18 @@ public partial class MainViewModel
                 "Fallback feature IDs written. Restart to activate the native NVMe driver.",
                 ToastType.Success, Config.EnableToasts);
             PatchVerificationService.MarkPending(Config, isFallback: true);
-            ConfigService.Save(Config);
+            if (!ConfigService.Save(Config))
+            {
+                // The fallback checkpoint (PendingFallbackApplied) did not persist. Rebooting now
+                // would strand FeatureStore IDs the post-reboot auto-reset can no longer recognize,
+                // so refuse the restart and tell the user to retry.
+                Log("[ERROR] Fallback checkpoint could not be saved — refusing to restart to avoid an unrecoverable state.", "ERROR");
+                InfoDialog?.Invoke("Checkpoint Not Saved",
+                    "The fallback was written to Windows, but its recovery checkpoint could not be saved to disk. " +
+                    "Do NOT restart yet — resolve the disk/permissions issue and retry so the app can safely track and auto-reset the fallback.",
+                    DialogIcon.Error);
+                return;
+            }
 
             var restartMsg =
                 $"Fallback wrote feature IDs {string.Join(" and ", result.AppliedIds)} via {result.Method}.\n\n" +

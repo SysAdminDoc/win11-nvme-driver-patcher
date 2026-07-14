@@ -286,6 +286,11 @@ class Program
     {
         var outcome = AutoRevertService.MaybeRun(config, msg => Console.WriteLine(msg));
         Console.WriteLine(outcome.Summary);
+        // Same boot-task surface handles the one-shot FeatureStore fallback reset (moved out of the
+        // now-pure PatchVerificationService.Evaluate so dashboard/telemetry render can't trigger it).
+        var recovery = FallbackRecoveryCoordinator.RunOnce(config, msg => Console.WriteLine(msg));
+        if (recovery.Attempted)
+            Console.WriteLine($"Fallback recovery: {recovery.Summary}");
         return outcome.Executed && !outcome.Success ? 1 : 0;
     }
 
@@ -1040,16 +1045,21 @@ class Program
             preflight.BypassIOStatus,
             msg => Console.WriteLine(msg));
 
+        bool checkpointSaved = true;
         if (result.Success)
         {
             PatchVerificationService.MarkPending(config);
             // Arm the post-patch watchdog so post-reboot event-log distress signals auto-revert
             // (if the user opted into auto-revert in config / GPO).
             EventLogWatchdogService.Arm(config);
-            ConfigService.Save(config);
+            checkpointSaved = ConfigService.Save(config);
+            if (!checkpointSaved)
+                Console.Error.WriteLine(
+                    "[WARNING] Patch applied but the verification checkpoint could not be saved. " +
+                    "Auto-restart is suppressed — restart manually and re-run 'status' after reboot.");
         }
 
-        if (result.Success && result.NeedsRestart && !noRestart)
+        if (result.Success && result.NeedsRestart && !noRestart && checkpointSaved)
         {
             if (autoRestart)
             {
@@ -1271,7 +1281,16 @@ class Program
         Console.WriteLine($"Method: {result.Method}");
         Console.WriteLine($"Integrity check: {result.IntegritySignal}");
         PatchVerificationService.MarkPending(config, isFallback: true);
-        ConfigService.Save(config);
+        if (!ConfigService.Save(config))
+        {
+            // Checkpoint didn't persist — do not tell the user to reboot into a state the
+            // post-reboot auto-reset can no longer recognize.
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("ERROR: Fallback was written but its recovery checkpoint could not be saved.");
+            Console.Error.WriteLine("Do NOT restart yet. Fix the disk/permissions problem and re-run 'fallback' so the");
+            Console.Error.WriteLine("checkpoint persists and the app can safely auto-reset the fallback if it fails to bind.");
+            return 1;
+        }
         Console.WriteLine("Restart required. Run: shutdown /r /t 30");
         return 0;
     }
