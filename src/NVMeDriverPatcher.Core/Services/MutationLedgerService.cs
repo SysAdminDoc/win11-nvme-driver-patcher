@@ -263,6 +263,80 @@ public static class MutationLedgerService
         Action<string>? log = null) =>
         MarkPhase(workingDir, operationId, MutationOperationPhase.Verified, log);
 
+    /// <summary>
+    /// Finalizes a prepared fallback that never acquired the FeatureStore mutation lock. The
+    /// no-touch fact is persisted before protector recovery so interrupted startup recovery will
+    /// never overwrite state owned by the process that retained that lock.
+    /// </summary>
+    public static MutationRestoreResult AbortFeatureStoreBeforeMutation(
+        string workingDir,
+        string? operationId,
+        Action<string>? log = null) =>
+        AbortFeatureStoreBeforeMutation(
+            workingDir,
+            operationId,
+            () => BitLockerRecoveryService.ResumeSystemVolume(log),
+            log);
+
+    internal static MutationRestoreResult AbortFeatureStoreBeforeMutation(
+        string workingDir,
+        string? operationId,
+        Func<BitLockerNativeResult> resumeBitLocker,
+        Action<string>? log = null)
+    {
+        using var lease = AcquireMutex();
+        if (!lease.Held)
+            return new(false, new[] { "Mutation ledger is busy." });
+
+        var ledger = LoadUnsafe(workingDir);
+        if (ledger is null ||
+            ledger.Kind != MutationOperationKind.FeatureStoreFallback ||
+            ledger.Phase != MutationOperationPhase.Prepared ||
+            string.IsNullOrWhiteSpace(operationId) ||
+            !string.Equals(ledger.OperationId, operationId, StringComparison.OrdinalIgnoreCase))
+        {
+            return new(false, new[] { "Prepared FeatureStore operation identity does not match the durable ledger." });
+        }
+
+        ledger.FeatureStoreTouched = false;
+        ledger.UpdatedUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+        if (!SaveUnsafe(workingDir, ledger, out var noTouchError))
+        {
+            return new(false, new[]
+            {
+                "Could not durably record that FeatureStore was untouched: " + noTouchError
+            });
+        }
+
+        if (ledger.BitLockerSuspensionPlanned)
+        {
+            var resumed = resumeBitLocker();
+            if (!resumed.Success)
+            {
+                return new(false, new[]
+                {
+                    "FeatureStore was untouched, but BitLocker protection resume failed: " + resumed.Summary
+                });
+            }
+            ledger.BitLockerSuspensionPlanned = false;
+        }
+
+        ledger.Phase = MutationOperationPhase.Verified;
+        ledger.OwnerProcessId = 0;
+        ledger.OwnerProcessStartedUtc = string.Empty;
+        ledger.UpdatedUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+        if (!SaveUnsafe(workingDir, ledger, out var terminalError))
+        {
+            return new(false, new[]
+            {
+                "No protected state was changed, but terminal ledger finalization failed: " + terminalError
+            });
+        }
+
+        log?.Invoke("[LEDGER] Busy FeatureStore fallback ended without mutation; protection state is verified and the ledger is terminal.");
+        return MutationRestoreResult.Succeeded;
+    }
+
     public static bool MarkLatestVerified(string workingDir, Action<string>? log = null) =>
         MarkPhase(workingDir, operationId: null, MutationOperationPhase.Verified, log);
 
@@ -527,27 +601,38 @@ public static class MutationLedgerService
     {
         var entries = new List<FeatureStoreConfigurationBaseline>();
         bool complete = true;
-        foreach (var id in FeatureStoreWriterService.PostBlockFeatureIds)
+        var locked = FeatureStoreWriterService.RunExclusive(() =>
         {
-            foreach (bool bootStore in new[] { false, true })
+            foreach (var id in FeatureStoreWriterService.PostBlockFeatureIds)
             {
-                var state = FeatureStoreWriterService.QueryConfigurationExact(id, bootStore);
-                if (!state.QuerySucceeded)
+                foreach (bool bootStore in new[] { false, true })
                 {
-                    complete = false;
-                    continue;
+                    var state = FeatureStoreWriterService.QueryConfigurationExact(id, bootStore);
+                    if (!state.QuerySucceeded)
+                    {
+                        complete = false;
+                        continue;
+                    }
+                    entries.Add(new FeatureStoreConfigurationBaseline
+                    {
+                        FeatureId = id,
+                        BootStore = bootStore,
+                        Found = state.Found,
+                        CompactState = state.CompactState,
+                        VariantPayload = state.VariantPayload
+                    });
                 }
-                entries.Add(new FeatureStoreConfigurationBaseline
-                {
-                    FeatureId = id,
-                    BootStore = bootStore,
-                    Found = state.Found,
-                    CompactState = state.CompactState,
-                    VariantPayload = state.VariantPayload
-                });
             }
-        }
-        return (entries, complete && entries.Count == FeatureStoreWriterService.PostBlockFeatureIds.Length * 2);
+            return new FeatureStoreWriteResult
+            {
+                Success = complete,
+                Summary = complete
+                    ? "FeatureStore baseline captured under the machine-global lock."
+                    : "FeatureStore baseline was not fully queryable."
+            };
+        });
+        return (entries, locked.Success && complete &&
+            entries.Count == FeatureStoreWriterService.PostBlockFeatureIds.Length * 2);
     }
 
     private static void RestoreRegistryValues(

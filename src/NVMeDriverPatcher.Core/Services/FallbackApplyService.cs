@@ -3,6 +3,7 @@ namespace NVMeDriverPatcher.Services;
 public sealed class FallbackApplyResult
 {
     public bool Success { get; init; }
+    public bool Busy { get; init; }
     public string Method { get; init; } = string.Empty;
     public string Message { get; init; } = string.Empty;
     public IReadOnlyList<string> AppliedIds { get; init; } = Array.Empty<string>();
@@ -114,6 +115,27 @@ public static class FallbackApplyService
         }
         result.MutationOperationId = prepared.Ledger.OperationId;
 
+        if (result.Busy)
+        {
+            var aborted = MutationLedgerService.AbortFeatureStoreBeforeMutation(
+                workingDir,
+                result.MutationOperationId,
+                log);
+            if (!aborted.Success)
+            {
+                return new FallbackApplyResult
+                {
+                    Success = false,
+                    Busy = true,
+                    Message = result.Message + " The no-mutation transaction could not be finalized safely: " +
+                        string.Join("; ", aborted.Failures),
+                    IntegritySignal = result.IntegritySignal,
+                    MutationOperationId = result.MutationOperationId
+                };
+            }
+            return result;
+        }
+
         if (!result.Success)
         {
             var restored = MutationLedgerService.RestoreOriginalState(workingDir, log);
@@ -192,6 +214,16 @@ public static class FallbackApplyService
         }
 
         log?.Invoke($"Native FeatureStore fallback failed: {native.Summary}");
+        if (native.Busy)
+        {
+            return new FallbackApplyResult
+            {
+                Success = false,
+                Busy = true,
+                Message = "FeatureStore is busy; no native or ViVeTool mutation was attempted. " + native.Summary,
+                IntegritySignal = "native"
+            };
+        }
         if (!allowViVeToolFallback)
         {
             return new FallbackApplyResult

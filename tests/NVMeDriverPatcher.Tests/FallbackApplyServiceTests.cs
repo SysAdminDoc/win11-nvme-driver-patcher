@@ -5,6 +5,32 @@ namespace NVMeDriverPatcher.Tests;
 public sealed class FallbackApplyServiceTests
 {
     [Fact]
+    public async Task ApplyAsync_FeatureStoreBusyNeverInvokesViVeTool()
+    {
+        var viveCalls = 0;
+        var result = await FallbackApplyService.ApplyAsync(
+            "C:\\temp\\nvme",
+            _ => { },
+            CancellationToken.None,
+            _ => new FeatureStoreWriteResult
+            {
+                Success = false,
+                Busy = true,
+                Summary = "lock timeout"
+            },
+            (_, _, _) =>
+            {
+                viveCalls++;
+                return Task.FromResult(new ViVeToolService.ViVeToolResult { Success = true });
+            });
+
+        Assert.False(result.Success);
+        Assert.True(result.Busy);
+        Assert.Equal(0, viveCalls);
+        Assert.Contains("no native or ViVeTool mutation was attempted", result.Message);
+    }
+
+    [Fact]
     public async Task ApplyAsync_NativeOnlyFailureNeverInvokesViVeTool()
     {
         int viveCalls = 0;
