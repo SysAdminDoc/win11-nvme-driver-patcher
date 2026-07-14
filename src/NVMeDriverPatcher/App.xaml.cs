@@ -32,6 +32,7 @@ public partial class App : Application
         {
             ThemeService.ApplySystemTheme();
         }
+        MotionPreferenceService.Initialize();
 
         bool createdNew = true;
         try
@@ -145,6 +146,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        try { MotionPreferenceService.Dispose(); } catch { }
         try { Services.ToastService.DisposeAll(); } catch { }
         try
         {

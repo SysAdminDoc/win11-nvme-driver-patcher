@@ -127,6 +127,7 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 
 **UI/UX**
 - **WPF dark theme** -- zinc-950 palette with blue accent, custom title bar, drop shadow
+- **Live reduced-motion support** -- honors Windows client-area animation settings without a restart, replacing repeating and transitional motion with stable status states
 - **Resizable window** with grip handle, clamped to work area (no off-screen at high DPI)
 - **Toast notifications** -- Windows balloon tips for patch results
 - **Activity log** with right-click context menu (Copy Selection, Select All, Copy All, Clear)
