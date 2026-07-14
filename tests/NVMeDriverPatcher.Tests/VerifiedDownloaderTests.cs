@@ -128,6 +128,7 @@ public sealed class VerifiedDownloaderTests
 
             Assert.True(result.Success, result.Summary);
             Assert.Equal(VerifiedDownloader.IntegritySignal.Sha256Sidecar, result.Signal);
+            Assert.Equal(hash, result.VerifiedSha256);
             Assert.Equal(payload, File.ReadAllBytes(destination));
 
             Assert.Contains(originalSidecar.AbsoluteUri, handler.Requests);
@@ -169,6 +170,7 @@ public sealed class VerifiedDownloaderTests
 
             Assert.True(result.Success, result.Summary);
             Assert.Equal(VerifiedDownloader.IntegritySignal.Sha256Sidecar, result.Signal);
+            Assert.Equal(hash, result.VerifiedSha256);
             Assert.Contains(originalSidecar.AbsoluteUri, handler.Requests);
             Assert.Contains(finalSidecar.AbsoluteUri, handler.Requests);
         }

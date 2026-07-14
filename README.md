@@ -69,8 +69,10 @@ if ($expected -eq $actual) { "OK: $file" } else { "MISMATCH: expected $expected,
 The GUI's in-app auto-updater (**Help → Check for updates**) performs the same
 SHA-256 sidecar check automatically at the original GitHub release asset URL
 before falling back to any redirected CDN URL. It refuses to stage any binary
-that either fails the hash or has no sidecar / Authenticode signature available
-— this is load-bearing supply-chain defense, not just UI polish.
+that either fails the hash or has no release sidecar (an arbitrary valid Authenticode signer is not accepted)
+— this is load-bearing supply-chain defense, not just UI polish. Staged executables live in an
+Administrators/SYSTEM-only ProgramData directory; the post-exit replacement command re-checks
+the release SHA-256 immediately before copy and verifies the installed target again before launch.
 
 ## What Does This Do?
 

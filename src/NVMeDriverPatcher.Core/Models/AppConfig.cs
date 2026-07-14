@@ -115,6 +115,7 @@ public class AppConfig
     public const string WorkingDirFolderName = "NVMePatcher";
     public const string PrivilegedStateFolderName = "State";
     public const string WatchdogStateFolderName = "Watchdog";
+    public const string UpdateStagingFolderName = "Updates";
     private const string TempFallbackFolderName = "NVMePatcher_Backups";
 
     public static IReadOnlyList<string> FeatureIDs { get; } = ["735209102", "1853569164", "156965516"];
@@ -307,6 +308,18 @@ public class AppConfig
         return IsRuntimeWorkingDirectory(candidate)
             ? Path.Combine(shared, WatchdogStateFolderName)
             : Path.GetFullPath(candidate);
+    }
+
+    /// <summary>
+    /// Resolve self-update payloads below the protected ProgramData root. Unlike diagnostics and
+    /// ordinary config, executable staging must never follow portable/TEMP/current-directory
+    /// fallback because the elevated swap runs after the original verifier exits.
+    /// </summary>
+    public static string GetUpdateStagingDirectory(string? programData = null)
+    {
+        var shared = GetSharedWorkingDirPath(programData)
+            ?? throw new IOException("The shared ProgramData update staging path is unavailable.");
+        return Path.Combine(shared, UpdateStagingFolderName);
     }
 
     internal static bool IsRuntimeWorkingDirectory(string? path)

@@ -101,6 +101,30 @@ public static class PrivilegedStateSecurityService
         return ValidateDirectory(directory, StateDirectoryRole.Watchdog);
     }
 
+    public static StateDirectorySecurityResult EnsureForUpdates()
+    {
+        string directory;
+        try { directory = AppConfig.GetUpdateStagingDirectory(); }
+        catch (Exception ex)
+        {
+            return StateDirectorySecurityResult.Failed(
+                string.Empty, $"Update staging path resolution failed: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        var prepared = EnsureRuntimeTree();
+        if (!prepared.Success)
+            return prepared;
+        try
+        {
+            return PrepareChild(directory, StateDirectoryRole.Privileged);
+        }
+        catch (Exception ex)
+        {
+            return StateDirectorySecurityResult.Failed(
+                directory, $"Could not establish protected update staging: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
     public static StateDirectorySecurityResult EnsureRuntimeTree()
     {
         var root = AppConfig.GetSharedWorkingDirPath();

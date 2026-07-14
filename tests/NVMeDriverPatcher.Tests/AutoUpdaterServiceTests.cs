@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.Tests;
@@ -12,8 +13,7 @@ public sealed class AutoUpdaterServiceTests
     {
         var result = await AutoUpdaterService.StageUpdateAsync(
             "http://github.com/foo/bar/releases/download/asset.exe",
-            "asset.exe",
-            Path.GetTempPath());
+            "asset.exe");
         Assert.False(result.Success);
         Assert.Contains("https", result.Summary);
     }
@@ -23,8 +23,7 @@ public sealed class AutoUpdaterServiceTests
     {
         var result = await AutoUpdaterService.StageUpdateAsync(
             "https://evil.example.com/foo.exe",
-            "asset.exe",
-            Path.GetTempPath());
+            "asset.exe");
         Assert.False(result.Success);
         Assert.Contains("not in the allowlist", result.Summary);
     }
@@ -34,8 +33,7 @@ public sealed class AutoUpdaterServiceTests
     {
         var result = await AutoUpdaterService.StageUpdateAsync(
             "https://github.com/foo/bar/releases/download/asset.exe",
-            "..\\evil.exe",
-            Path.GetTempPath());
+            "..\\evil.exe");
         Assert.False(result.Success);
         Assert.Contains("invalid", result.Summary);
     }
@@ -45,8 +43,7 @@ public sealed class AutoUpdaterServiceTests
     {
         var result = await AutoUpdaterService.StageUpdateAsync(
             "not a url at all",
-            "asset.exe",
-            Path.GetTempPath());
+            "asset.exe");
         Assert.False(result.Success);
     }
 
@@ -96,12 +93,65 @@ public sealed class AutoUpdaterServiceTests
         // so a directory like `C:\Users\O'Brien\…` doesn't break the command line.
         var cmd = AutoUpdaterService.BuildRestartCommand(
             @"C:\Users\O'Brien\staged.exe",
-            @"C:\Program Files\App's\current.exe");
+            @"C:\Program Files\App's\current.exe",
+            new string('a', 64));
 
         Assert.Contains(@"'C:\Users\O''Brien\staged.exe'", cmd);
         Assert.Contains(@"'C:\Program Files\App''s\current.exe'", cmd);
         Assert.Contains("-LiteralPath", cmd);
         Assert.DoesNotContain("\"", cmd); // Never emit double quotes — they can re-break inside the single-quoted context.
+        Assert.Equal(2, CountOccurrences(cmd, "Get-FileHash"));
+        Assert.True(cmd.IndexOf("Get-FileHash", StringComparison.Ordinal) <
+                    cmd.IndexOf("Copy-Item", StringComparison.Ordinal));
+        Assert.True(cmd.LastIndexOf("Get-FileHash", StringComparison.Ordinal) <
+                    cmd.IndexOf("Start-Process", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BuildRestartCommand_RejectsInvalidExpectedDigest()
+    {
+        Assert.Throws<ArgumentException>(() => AutoUpdaterService.BuildRestartCommand(
+            @"C:\staged.exe", @"C:\current.exe", "not-a-hash"));
+    }
+
+    [Fact]
+    public void RestartCommand_TamperedStageFailsBeforeCopyOrLaunch()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"NVMePatcher.UpdaterSwap.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        var staged = Path.Combine(dir, "staged.exe");
+        var target = Path.Combine(dir, "target.exe");
+        File.WriteAllText(staged, "tampered payload");
+        try
+        {
+            var command = AutoUpdaterService.BuildRestartCommand(staged, target, new string('0', 64));
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo("powershell.exe")
+                {
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            process.StartInfo.ArgumentList.Add("-NoProfile");
+            process.StartInfo.ArgumentList.Add("-Command");
+            process.StartInfo.ArgumentList.Add(command);
+
+            process.Start();
+            var stdout = process.StandardOutput.ReadToEnd();
+            var stderr = process.StandardError.ReadToEnd();
+            Assert.True(process.WaitForExit(10_000), "Generated updater command timed out.");
+
+            Assert.NotEqual(0, process.ExitCode);
+            Assert.Contains("SHA-256 changed", stdout + stderr, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(target));
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
     }
 
     [Fact]
@@ -175,4 +225,7 @@ public sealed class AutoUpdaterServiceTests
         Assert.Equal("https://example/gui", url);
         Assert.Equal("NVMeDriverPatcher.exe", name);
     }
+
+    private static int CountOccurrences(string value, string token) =>
+        (value.Length - value.Replace(token, string.Empty, StringComparison.Ordinal).Length) / token.Length;
 }

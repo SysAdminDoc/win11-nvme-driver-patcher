@@ -26,6 +26,16 @@ public sealed class WorkingDirResolutionTests : IDisposable
     }
 
     [Fact]
+    public void UpdateStaging_AlwaysUsesSharedProgramDataChild()
+    {
+        var resolved = AppConfig.GetUpdateStagingDirectory(Path.Combine(_root, "ProgramData"));
+
+        Assert.Equal(
+            Path.Combine(_root, "ProgramData", AppConfig.WorkingDirFolderName, AppConfig.UpdateStagingFolderName),
+            resolved);
+    }
+
+    [Fact]
     public void MigrateLegacyWorkingDirIfNeeded_CopiesSharedStateFilesWithoutOverwriting()
     {
         var legacy = Path.Combine(_root, "Legacy");

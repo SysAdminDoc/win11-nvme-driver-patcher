@@ -5,6 +5,12 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Self-update replacement now closes the post-verification swap window** — update executables
+  stage only under an Administrators/SYSTEM-only ProgramData child with protected DACL,
+  reparse-point, and hard-link validation. The release-sidecar digest is retained after download,
+  rechecked once protection is established, embedded in the post-exit command, checked immediately
+  before `Copy-Item`, and checked again on the installed target before launch. A tamper test proves
+  a changed stage exits nonzero without copying or starting anything.
 - **The deprecated PowerShell artifact is now permanently read/recover-only** — `-Apply` exits 5
   before elevation, configuration, preflight, or UI startup with the exact maintained GUI/CLI
   handoff. The legacy GUI cannot enable/reinstall, and the old registry write implementation was

@@ -56,6 +56,8 @@ public static class VerifiedDownloader
         public bool Success { get; init; }
         public string? Path { get; init; }
         public IntegritySignal Signal { get; init; }
+        /// <summary>The sidecar-matched lowercase SHA-256, when SHA-256 verification ran.</summary>
+        public string? VerifiedSha256 { get; init; }
         public string Summary { get; init; } = string.Empty;
         public Exception? Error { get; init; }
     }
@@ -109,6 +111,7 @@ public static class VerifiedDownloader
             // to be Authenticode-signed); Authenticode is a last-resort fallback; neither ==
             // weak trust, which we accept only when policy explicitly allows it.
             var signal = IntegritySignal.None;
+            string? verifiedSha256 = null;
             var sidecarHash = await TryFetchPreferredSidecarHashAsync(
                 client, initialUri, finalUri, policy.AllowedHosts, cancellationToken).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(sidecarHash))
@@ -120,6 +123,7 @@ public static class VerifiedDownloader
                     return Failure($"SHA-256 mismatch — aborting. Expected {sidecarHash}, got {actual}.");
                 }
                 signal = IntegritySignal.Sha256Sidecar;
+                verifiedSha256 = actual;
             }
             else if (policy.AllowAuthenticodeFallback && VerifyAuthenticode(partPath))
             {
@@ -141,6 +145,7 @@ public static class VerifiedDownloader
                 Success = true,
                 Path = destinationPath,
                 Signal = signal,
+                VerifiedSha256 = verifiedSha256,
                 Summary = signal switch
                 {
                     IntegritySignal.Sha256Sidecar => "Downloaded and verified via SHA-256 sidecar.",
