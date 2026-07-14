@@ -5,6 +5,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Windows reduced-motion preferences now apply live across the WPF shell** — disabling
+  client-area animations stops the repeating indeterminate sweep, removes ComboBox slide motion,
+  and replaces tab/expander transitions with immediate stable states. Re-enabling the preference
+  restores the existing motion without restarting the app; CLI diagnostics use the same Windows
+  setting with the legacy registry value only as a fallback.
 - **Self-update replacement now closes the post-verification swap window** — update executables
   stage only under an Administrators/SYSTEM-only ProgramData child with protected DACL,
   reparse-point, and hard-link validation. The release-sidecar digest is retained after download,

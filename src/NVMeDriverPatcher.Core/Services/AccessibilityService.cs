@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using System.Runtime.InteropServices;
 
 namespace NVMeDriverPatcher.Services;
 
@@ -11,12 +12,12 @@ public class AccessibilitySnapshot
     public string Summary { get; set; } = string.Empty;
 }
 
-// Detects OS-level accessibility settings the WPF UI should respect. We don't enforce —
-// only surface — so the ViewModel can log when the user is likely running with HighContrast
-// on (our dark theme may not meet WCAG 2.2 AA contrast pairs) or an accessible text scale.
-// Keeping the scope narrow so this doesn't drift into a full i18n/a11y effort.
+// Detects OS-level accessibility settings for CLI/diagnostic reporting. The WPF client enforces
+// the live client-area animation preference through MotionPreferenceService.
 public static class AccessibilityService
 {
+    private const uint SpiGetClientAreaAnimation = 0x1042;
+
     public static AccessibilitySnapshot Probe()
     {
         var snap = new AccessibilitySnapshot();
@@ -48,14 +49,16 @@ public static class AccessibilityService
         }
         catch { }
 
+        bool? clientAreaAnimations = TryGetClientAreaAnimation();
+        string? minAnimate = null;
         try
         {
             using var hkcu = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default);
             using var anim = hkcu.OpenSubKey(@"Control Panel\Desktop\WindowMetrics");
-            // MinAnimate = 0 means "reduced motion preference" on Windows.
-            if (anim?.GetValue("MinAnimate") is string a && a == "0") snap.ReducedMotion = true;
+            minAnimate = anim?.GetValue("MinAnimate")?.ToString();
         }
         catch { }
+        snap.ReducedMotion = ResolveReducedMotion(clientAreaAnimations, minAnimate);
 
         var flagsSummary = new List<string>();
         if (snap.HighContrastActive) flagsSummary.Add("HighContrast");
@@ -67,4 +70,28 @@ public static class AccessibilityService
             : "Detected: " + string.Join(", ", flagsSummary);
         return snap;
     }
+
+    internal static bool ResolveReducedMotion(bool? clientAreaAnimationsEnabled, string? minAnimate) =>
+        clientAreaAnimationsEnabled.HasValue
+            ? !clientAreaAnimationsEnabled.Value
+            : string.Equals(minAnimate?.Trim(), "0", StringComparison.Ordinal);
+
+    private static bool? TryGetClientAreaAnimation()
+    {
+        try
+        {
+            return SystemParametersInfo(SpiGetClientAreaAnimation, 0, out int enabled, 0)
+                ? enabled != 0
+                : null;
+        }
+        catch { return null; }
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SystemParametersInfo(
+        uint uiAction,
+        uint uiParam,
+        out int pvParam,
+        uint fWinIni);
 }

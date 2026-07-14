@@ -464,6 +464,7 @@
             <Border x:Name="Slider"
                     Width="120"
                     Height="6"
+                    Tag="{DynamicResource MotionAnimationsEnabled}"
                     HorizontalAlignment="Left"
                     Background="{TemplateBinding Foreground}"
                     CornerRadius="4"
@@ -474,9 +475,13 @@
             </Border>
         </Border>
         <ControlTemplate.Triggers>
-            <Trigger Property="IsVisible" Value="True">
-                <Trigger.EnterActions>
-                    <BeginStoryboard>
+            <MultiDataTrigger>
+                <MultiDataTrigger.Conditions>
+                    <Condition Binding="{Binding IsVisible, RelativeSource={RelativeSource TemplatedParent}}" Value="True"/>
+                    <Condition Binding="{Binding Tag, ElementName=Slider}" Value="True"/>
+                </MultiDataTrigger.Conditions>
+                <MultiDataTrigger.EnterActions>
+                    <BeginStoryboard x:Name="IndeterminateMotionStoryboard">
                         <Storyboard RepeatBehavior="Forever">
                             <DoubleAnimation Storyboard.TargetName="SliderTranslate"
                                              Storyboard.TargetProperty="X"
@@ -486,8 +491,14 @@
                                              AutoReverse="False"/>
                         </Storyboard>
                     </BeginStoryboard>
-                </Trigger.EnterActions>
-            </Trigger>
+                </MultiDataTrigger.EnterActions>
+                <MultiDataTrigger.ExitActions>
+                    <StopStoryboard BeginStoryboardName="IndeterminateMotionStoryboard"/>
+                </MultiDataTrigger.ExitActions>
+            </MultiDataTrigger>
+            <DataTrigger Binding="{Binding Tag, ElementName=Slider}" Value="False">
+                <Setter TargetName="Slider" Property="HorizontalAlignment" Value="Center"/>
+            </DataTrigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
 
@@ -815,7 +826,7 @@
                                AllowsTransparency="True"
                                Focusable="False"
                                IsOpen="{TemplateBinding IsDropDownOpen}"
-                               PopupAnimation="Slide">
+                               PopupAnimation="{DynamicResource MotionPopupAnimation}">
                             <Border Margin="0,4,0,0"
                                     MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
                                     MaxHeight="{TemplateBinding MaxDropDownHeight}"
@@ -896,6 +907,7 @@
                             <Border x:Name="indicator"
                                     Height="2"
                                     Margin="6,0,6,0"
+                                    Tag="{DynamicResource MotionAnimationsEnabled}"
                                     VerticalAlignment="Bottom"
                                     Background="{DynamicResource Accent}"
                                     CornerRadius="0"
@@ -909,27 +921,38 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsSelected" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
-                            <Trigger.EnterActions>
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="indicator"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="1"
-                                                         Duration="0:0:0.18"/>
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </Trigger.EnterActions>
-                            <Trigger.ExitActions>
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="indicator"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0"
-                                                         Duration="0:0:0.12"/>
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </Trigger.ExitActions>
+                            <Setter TargetName="indicator" Property="Opacity" Value="1"/>
                         </Trigger>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource TemplatedParent}}" Value="True"/>
+                                <Condition Binding="{Binding Tag, ElementName=indicator}" Value="True"/>
+                            </MultiDataTrigger.Conditions>
+                            <MultiDataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="indicator"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         From="0"
+                                                         To="1"
+                                                         Duration="0:0:0.18"
+                                                         FillBehavior="Stop"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </MultiDataTrigger.EnterActions>
+                            <MultiDataTrigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="indicator"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         From="1"
+                                                         To="0"
+                                                         Duration="0:0:0.12"
+                                                         FillBehavior="Stop"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </MultiDataTrigger.ExitActions>
+                        </MultiDataTrigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
                             <Setter TargetName="border" Property="Background" Value="{DynamicResource BgMedium}"/>
@@ -1124,6 +1147,7 @@
                                                       StrokeStartLineCap="Round"
                                                       StrokeEndLineCap="Round"
                                                       StrokeLineJoin="Round"
+                                                      Tag="{DynamicResource MotionAnimationsEnabled}"
                                                       RenderTransformOrigin="0.5,0.5">
                                                     <Path.RenderTransform>
                                                         <RotateTransform x:Name="chevronRotate" Angle="0"/>
@@ -1142,7 +1166,13 @@
                                             </Trigger>
                                             <Trigger Property="IsChecked" Value="True">
                                                 <Setter TargetName="chevron" Property="Stroke" Value="{DynamicResource Accent}"/>
-                                                <Trigger.EnterActions>
+                                            </Trigger>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}}" Value="True"/>
+                                                    <Condition Binding="{Binding Tag, ElementName=chevron}" Value="True"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <MultiDataTrigger.EnterActions>
                                                     <BeginStoryboard>
                                                         <Storyboard>
                                                             <DoubleAnimation Storyboard.TargetName="chevronRotate"
@@ -1151,8 +1181,8 @@
                                                                              Duration="0:0:0.18"/>
                                                         </Storyboard>
                                                     </BeginStoryboard>
-                                                </Trigger.EnterActions>
-                                                <Trigger.ExitActions>
+                                                </MultiDataTrigger.EnterActions>
+                                                <MultiDataTrigger.ExitActions>
                                                     <BeginStoryboard>
                                                         <Storyboard>
                                                             <DoubleAnimation Storyboard.TargetName="chevronRotate"
@@ -1161,8 +1191,19 @@
                                                                              Duration="0:0:0.18"/>
                                                         </Storyboard>
                                                     </BeginStoryboard>
-                                                </Trigger.ExitActions>
-                                            </Trigger>
+                                                </MultiDataTrigger.ExitActions>
+                                            </MultiDataTrigger>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}}" Value="True"/>
+                                                    <Condition Binding="{Binding Tag, ElementName=chevron}" Value="False"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter TargetName="chevron" Property="RenderTransform">
+                                                    <Setter.Value>
+                                                        <RotateTransform Angle="180"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </MultiDataTrigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </ToggleButton.Template>
