@@ -70,6 +70,13 @@ public static partial class HotSwapService
         Action<string>? log)
     {
         var result = new HotSwapResult { Outcome = HotSwapOutcome.Blocked };
+        var recoverySafety = RecoverySafetyGateService.Snapshot();
+        if (!recoverySafety.MutationAllowed)
+        {
+            result.ErrorMessage = "BLOCKED by unresolved startup recovery: " + recoverySafety.Summary;
+            log?.Invoke("[ERROR] " + result.ErrorMessage);
+            return result;
+        }
         if (drive is null)
             return Fail("BLOCKED: No drive specified for hot-swap.");
         if (!CanHotSwap(drive))

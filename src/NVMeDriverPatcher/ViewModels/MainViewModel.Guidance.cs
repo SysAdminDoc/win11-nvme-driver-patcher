@@ -150,6 +150,18 @@ public partial class MainViewModel
             return;
         }
 
+        if (!_mutationAllowedByRecovery)
+        {
+            ActionReadinessText = "New driver mutations are disabled because startup recovery is unresolved. Remove/recovery and diagnostics remain available.";
+            ActionReadinessColor = "Red";
+            ApplyButtonTooltipText = MutationBlockedReason;
+            var recoveryStatus = knownStatus ?? RegistryService.GetPatchStatus();
+            RemoveButtonTooltipText = recoveryStatus.Applied || recoveryStatus.Partial
+                ? "Remove remains available to recover the staged or partial registry state."
+                : RemoveUnavailableText;
+            return;
+        }
+
         var status = knownStatus ?? RegistryService.GetPatchStatus();
         int plannedComponentCount = GetPlannedComponentCount();
 

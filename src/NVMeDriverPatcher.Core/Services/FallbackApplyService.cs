@@ -42,6 +42,16 @@ public static class FallbackApplyService
         Action<string>? log,
         CancellationToken cancellationToken)
     {
+        var recoverySafety = RecoverySafetyGateService.Snapshot();
+        if (!recoverySafety.MutationAllowed)
+        {
+            return new FallbackApplyResult
+            {
+                Success = false,
+                Message = "Fallback blocked by unresolved startup recovery: " + recoverySafety.Summary
+            };
+        }
+
         var buildPolicy = BuildActionPolicyService.EvaluateCurrent(workingDir);
         if (!buildPolicy.MutationAllowed && !allowUnsupportedBuild)
         {

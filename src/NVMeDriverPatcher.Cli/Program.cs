@@ -9,6 +9,7 @@ class Program
     {
         try
         {
+            RecoverySafetyGateService.Reset();
             if (args is null || args.Length == 0)
             {
                 PrintUsage();
@@ -78,6 +79,7 @@ class Program
                 message => Console.WriteLine(message));
             if (!interruptedRecovery.Success)
             {
+                RecoverySafetyGateService.ObserveInterruptedRecovery(interruptedRecovery);
                 Console.Error.WriteLine("Mutation recovery failed: " + interruptedRecovery.Summary);
                 return 5;
             }
@@ -364,6 +366,7 @@ class Program
     static int WatchdogAutoRevertCommand(AppConfig config)
     {
         var outcome = AutoRevertService.MaybeRun(config, msg => Console.WriteLine(msg));
+        RecoverySafetyGateService.ObserveAutoRevert(outcome);
         Console.WriteLine(outcome.Summary);
         // Same boot-task surface handles the one-shot FeatureStore fallback reset (moved out of the
         // now-pure PatchVerificationService.Evaluate so dashboard/telemetry render can't trigger it).
