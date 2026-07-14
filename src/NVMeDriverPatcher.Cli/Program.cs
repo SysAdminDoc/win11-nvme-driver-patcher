@@ -46,6 +46,12 @@ class Program
                     a.Equals("--json", StringComparison.OrdinalIgnoreCase));
                 return VerifyPayloadCommand(payloadPath, payloadJson);
             }
+            // Release discovery is also read-only and does not need shared configuration or an
+            // elevated recovery boundary. Keeping the DLL-hosted command outside the admin gate
+            // makes it usable by unattended inventory scripts; the published EXE retains its
+            // product-wide requireAdministrator manifest.
+            if (command == "update-check")
+                return UpdateCheckCommand().GetAwaiter().GetResult();
             if (!PreflightService.IsRunningAsAdmin())
             {
                 Console.Error.WriteLine("Administrator privileges are required for NVMe Driver Patcher CLI operations.");
@@ -788,15 +794,29 @@ class Program
 
     static async Task<int> UpdateCheckCommand()
     {
-        var (url, name, tag) = await AutoUpdaterService.FetchLatestAssetAsync(AppConfig.GitHubApiReleasesUrl);
-        if (url is null || name is null)
+        var result = await AutoUpdaterService.FetchLatestAssetAsync(AppConfig.GitHubApiReleasesUrl);
+
+        if (result.Status is ReleaseAssetFetchStatus.Available or ReleaseAssetFetchStatus.NoSuitableAsset &&
+            UpdateService.TryParseComparableVersion(result.Tag, out var latest) &&
+            UpdateService.TryParseComparableVersion(AppConfig.AppVersion, out var current) &&
+            latest <= current)
         {
-            Console.WriteLine("No suitable release asset found.");
+            Console.WriteLine($"No update available. Current: {AppConfig.AppVersion}; latest: {result.Tag}.");
+            return 0;
+        }
+
+        if (!result.IsAvailable)
+        {
+            var prefix = result.Status == ReleaseAssetFetchStatus.NoSuitableAsset
+                ? "Update is available but cannot be installed"
+                : "Update check failed";
+            Console.Error.WriteLine($"{prefix} ({result.Status}): {result.Summary}");
             return 1;
         }
-        Console.WriteLine($"Latest release: {tag}");
-        Console.WriteLine($"Asset: {name}");
-        Console.WriteLine($"URL: {url}");
+
+        Console.WriteLine($"Update available: {result.Tag}");
+        Console.WriteLine($"Asset: {result.Name}");
+        Console.WriteLine($"URL: {result.Url}");
         return 0;
     }
 

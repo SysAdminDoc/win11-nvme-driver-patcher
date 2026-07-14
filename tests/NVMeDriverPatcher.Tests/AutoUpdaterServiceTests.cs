@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.Tests;
@@ -224,6 +225,94 @@ public sealed class AutoUpdaterServiceTests
         });
         Assert.Equal("https://example/gui", url);
         Assert.Equal("NVMeDriverPatcher.exe", name);
+    }
+
+    [Fact]
+    public async Task FetchLatestAsset_ClassifiesRateLimitSeparately()
+    {
+        using var client = ClientReturning(HttpStatusCode.Forbidden, "{}");
+
+        var result = await AutoUpdaterService.FetchLatestAssetAsync(
+            "https://api.github.com/repos/example/project/releases/latest",
+            client);
+
+        Assert.Equal(ReleaseAssetFetchStatus.RateLimited, result.Status);
+        Assert.Equal(403, result.HttpStatusCode);
+        Assert.Contains("rate limit", result.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FetchLatestAsset_ClassifiesMalformedJsonSeparately()
+    {
+        using var client = ClientReturning(HttpStatusCode.OK, "{not-json");
+
+        var result = await AutoUpdaterService.FetchLatestAssetAsync(
+            "https://api.github.com/repos/example/project/releases/latest",
+            client);
+
+        Assert.Equal(ReleaseAssetFetchStatus.InvalidResponse, result.Status);
+        Assert.Contains("invalid JSON", result.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FetchLatestAsset_ClassifiesTransportFailureSeparately()
+    {
+        using var client = new HttpClient(new StubHttpMessageHandler(
+            _ => throw new HttpRequestException("offline")));
+
+        var result = await AutoUpdaterService.FetchLatestAssetAsync(
+            "https://api.github.com/repos/example/project/releases/latest",
+            client);
+
+        Assert.Equal(ReleaseAssetFetchStatus.NetworkError, result.Status);
+        Assert.Contains("offline", result.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FetchLatestAsset_ReportsValidReleaseWithoutGuiAsset()
+    {
+        using var client = ClientReturning(
+            HttpStatusCode.OK,
+            """{"tag_name":"v5.1.0","assets":[{"name":"NVMeDriverPatcher.Cli.exe","browser_download_url":"https://github.com/example/cli"}]}""");
+
+        var result = await AutoUpdaterService.FetchLatestAssetAsync(
+            "https://api.github.com/repos/example/project/releases/latest",
+            client);
+
+        Assert.Equal(ReleaseAssetFetchStatus.NoSuitableAsset, result.Status);
+        Assert.Equal("v5.1.0", result.Tag);
+    }
+
+    [Fact]
+    public async Task FetchLatestAsset_ReturnsExactGuiAsset()
+    {
+        const string url = "https://github.com/example/gui";
+        using var client = ClientReturning(
+            HttpStatusCode.OK,
+            $$"""{"tag_name":"v5.1.0","assets":[{"name":"NVMeDriverPatcher.exe","browser_download_url":"{{url}}"}]}""");
+
+        var result = await AutoUpdaterService.FetchLatestAssetAsync(
+            "https://api.github.com/repos/example/project/releases/latest",
+            client);
+
+        Assert.True(result.IsAvailable);
+        Assert.Equal(ReleaseAssetFetchStatus.Available, result.Status);
+        Assert.Equal("v5.1.0", result.Tag);
+        Assert.Equal(AutoUpdaterService.GuiAssetName, result.Name);
+        Assert.Equal(url, result.Url);
+    }
+
+    private static HttpClient ClientReturning(HttpStatusCode statusCode, string content) =>
+        new(new StubHttpMessageHandler(
+            _ => new HttpResponseMessage(statusCode) { Content = new StringContent(content) }));
+
+    private sealed class StubHttpMessageHandler(
+        Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(responder(request));
     }
 
     private static int CountOccurrences(string value, string token) =>

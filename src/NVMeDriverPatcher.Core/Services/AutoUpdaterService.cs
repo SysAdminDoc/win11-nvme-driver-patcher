@@ -19,6 +19,30 @@ public class AutoUpdateResult
     public string? ExpectedSha256 { get; set; }
 }
 
+public enum ReleaseAssetFetchStatus
+{
+    Available,
+    NoSuitableAsset,
+    InvalidRequest,
+    UnsafeRedirect,
+    RedirectLimitExceeded,
+    RateLimited,
+    HttpError,
+    NetworkError,
+    InvalidResponse
+}
+
+public sealed class ReleaseAssetFetchResult
+{
+    public ReleaseAssetFetchStatus Status { get; init; }
+    public string Summary { get; init; } = string.Empty;
+    public string? Url { get; init; }
+    public string? Name { get; init; }
+    public string? Tag { get; init; }
+    public int? HttpStatusCode { get; init; }
+    public bool IsAvailable => Status == ReleaseAssetFetchStatus.Available;
+}
+
 // Downloads a GitHub release asset into an Administrators/SYSTEM-only ProgramData folder,
 // verifies the allowlisted download host + SHA-256 sidecar, and emits a swap script. The swap
 // itself happens after the running exe exits, so that script re-hashes before copying and again
@@ -223,17 +247,23 @@ public static class AutoUpdaterService
     }
 
     /// <summary>
-    /// Convenience: query GitHub for the latest release and pick the exact GUI asset
-    /// (<see cref="GuiAssetName"/>). Returns null on any failure or when the release has
-    /// no GUI payload — caller shows a "update check failed / no update asset" notice.
+    /// Query GitHub for the latest release and pick the exact GUI asset
+    /// (<see cref="GuiAssetName"/>). Operational, response, and valid-no-asset outcomes remain
+    /// distinct so automation never reports an offline or rate-limited check as up to date.
     /// </summary>
-    public static async Task<(string? Url, string? Name, string? Tag)> FetchLatestAssetAsync(
-        string apiReleasesUrl, CancellationToken cancellationToken = default)
+    public static Task<ReleaseAssetFetchResult> FetchLatestAssetAsync(
+        string apiReleasesUrl, CancellationToken cancellationToken = default) =>
+        FetchLatestAssetAsync(apiReleasesUrl, Http, cancellationToken);
+
+    internal static async Task<ReleaseAssetFetchResult> FetchLatestAssetAsync(
+        string apiReleasesUrl,
+        HttpClient client,
+        CancellationToken cancellationToken = default)
     {
         try
         {
             if (!Uri.TryCreate(apiReleasesUrl, UriKind.Absolute, out var uri))
-                return (null, null, null);
+                return Failure(ReleaseAssetFetchStatus.InvalidRequest, "Release API URL is not an absolute URI.");
 
             // The shared Http handler has AllowAutoRedirect=false (required for
             // VerifiedDownloader's per-hop allowlist enforcement on the download path). The
@@ -245,38 +275,119 @@ public static class AutoUpdaterService
             for (int hops = 0; hops < 5; hops++)
             {
                 if (!AllowedHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase))
-                    return (null, null, null);
+                    return Failure(
+                        ReleaseAssetFetchStatus.UnsafeRedirect,
+                        $"Release API host '{uri.Host}' is not allowlisted.");
 
                 using var req = new HttpRequestMessage(HttpMethod.Get, uri);
                 req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-                using var resp = await Http.SendAsync(req, cancellationToken).ConfigureAwait(false);
+                using var resp = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
 
                 var status = (int)resp.StatusCode;
                 if (status is >= 300 and <= 399)
                 {
                     var location = resp.Headers.Location;
-                    if (location is null) return (null, null, null);
-                    uri = location.IsAbsoluteUri ? location : new Uri(uri, location);
+                    if (location is null)
+                        return Failure(
+                            ReleaseAssetFetchStatus.InvalidResponse,
+                            $"Release API redirect HTTP {status} omitted Location.",
+                            status);
+                    try { uri = location.IsAbsoluteUri ? location : new Uri(uri, location); }
+                    catch (UriFormatException)
+                    {
+                        return Failure(
+                            ReleaseAssetFetchStatus.InvalidResponse,
+                            $"Release API redirect HTTP {status} supplied an invalid Location.",
+                            status);
+                    }
                     continue;
                 }
 
-                if (!resp.IsSuccessStatusCode) return (null, null, null);
+                if (status is 403 or 429)
+                    return Failure(
+                        ReleaseAssetFetchStatus.RateLimited,
+                        $"GitHub release API rate limit returned HTTP {status}.",
+                        status);
+                if (!resp.IsSuccessStatusCode)
+                    return Failure(
+                        ReleaseAssetFetchStatus.HttpError,
+                        $"GitHub release API returned HTTP {status}.",
+                        status);
+
                 var json = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 using var doc = JsonDocument.Parse(json);
-                var tag = doc.RootElement.TryGetProperty("tag_name", out var tn) ? tn.GetString() : null;
-                if (!doc.RootElement.TryGetProperty("assets", out var assets)) return (null, null, tag);
+                if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                    return Failure(ReleaseAssetFetchStatus.InvalidResponse, "Release API response root is not an object.");
+
+                var tag = doc.RootElement.TryGetProperty("tag_name", out var tn) &&
+                          tn.ValueKind == JsonValueKind.String
+                    ? tn.GetString()
+                    : null;
+                if (string.IsNullOrWhiteSpace(tag))
+                    return Failure(ReleaseAssetFetchStatus.InvalidResponse, "Release API response omitted tag_name.");
+                if (!doc.RootElement.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
+                    return Failure(ReleaseAssetFetchStatus.InvalidResponse, "Release API response omitted the assets array.");
+
                 var candidates = new List<(string? Name, string? Url)>();
                 foreach (var asset in assets.EnumerateArray())
                 {
-                    var name = asset.TryGetProperty("name", out var n) ? n.GetString() : null;
-                    var url = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
+                    if (asset.ValueKind != JsonValueKind.Object)
+                        return Failure(ReleaseAssetFetchStatus.InvalidResponse, "Release API assets contained a non-object entry.");
+                    var name = asset.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String
+                        ? n.GetString()
+                        : null;
+                    var url = asset.TryGetProperty("browser_download_url", out var u) &&
+                              u.ValueKind == JsonValueKind.String
+                        ? u.GetString()
+                        : null;
                     candidates.Add((name, url));
                 }
                 var (selUrl, selName) = SelectGuiAsset(candidates);
-                return (selUrl, selName, tag);
+                if (string.IsNullOrWhiteSpace(selUrl) || string.IsNullOrWhiteSpace(selName))
+                {
+                    return new ReleaseAssetFetchResult
+                    {
+                        Status = ReleaseAssetFetchStatus.NoSuitableAsset,
+                        Summary = $"Release {tag} does not contain {GuiAssetName}.",
+                        Tag = tag
+                    };
+                }
+
+                return new ReleaseAssetFetchResult
+                {
+                    Status = ReleaseAssetFetchStatus.Available,
+                    Summary = $"Release {tag} contains {selName}.",
+                    Url = selUrl,
+                    Name = selName,
+                    Tag = tag
+                };
             }
-            return (null, null, null);
+            return Failure(
+                ReleaseAssetFetchStatus.RedirectLimitExceeded,
+                "Release API exceeded the five-redirect limit.");
         }
-        catch { return (null, null, null); }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Failure(ReleaseAssetFetchStatus.NetworkError, "Release API request timed out.");
+        }
+        catch (HttpRequestException ex)
+        {
+            return Failure(ReleaseAssetFetchStatus.NetworkError, $"Release API request failed: {ex.Message}");
+        }
+        catch (JsonException ex)
+        {
+            return Failure(ReleaseAssetFetchStatus.InvalidResponse, $"Release API returned invalid JSON: {ex.Message}");
+        }
     }
+
+    private static ReleaseAssetFetchResult Failure(
+        ReleaseAssetFetchStatus status,
+        string summary,
+        int? httpStatusCode = null) =>
+        new()
+        {
+            Status = status,
+            Summary = summary,
+            HttpStatusCode = httpStatusCode
+        };
 }

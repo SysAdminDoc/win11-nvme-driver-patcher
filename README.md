@@ -157,8 +157,9 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 
 ## CLI Usage
 
-CLI operations use the product-wide Administrator manifest. `verify-payload` is read-only and
-does not initialize application config, mutation recovery, policy, or Event Log state.
+CLI operations use the product-wide Administrator manifest. DLL-hosted `verify-payload` and
+`update-check` are read-only and do not initialize application config, mutation recovery, policy,
+or Event Log state.
 
 ```powershell
 # Check patch status (exit code: 0=applied, 1=not applied, 2=partial)
@@ -222,6 +223,7 @@ NVMeDriverPatcher.Cli firmware                             # Compat.json entries
 NVMeDriverPatcher.Cli compare-benchmarks --threshold=15    # Before/after benchmark diff
 
 # Fleet & Admin
+NVMeDriverPatcher.Cli update-check                         # Newer/current vs typed network/API failure
 NVMeDriverPatcher.Cli telemetry --endpoint=<url>           # Submit anonymized compat report
 NVMeDriverPatcher.Cli dashboard                            # Generate HTML dashboard
 NVMeDriverPatcher.Cli winpe --output=E:\                   # WinPE recovery USB
