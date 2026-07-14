@@ -1,11 +1,13 @@
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using NVMeDriverPatcher.Data;
 
 namespace NVMeDriverPatcher.Tests;
 
 public sealed class SqliteVersionTests
 {
     [Fact]
-    public void BundledSqlite_IsAtLeast_3_50_2()
+    public void BundledSqlite_IsAtLeast_3_53_3()
     {
         using var conn = new SqliteConnection("Data Source=:memory:");
         conn.Open();
@@ -13,7 +15,9 @@ public sealed class SqliteVersionTests
         cmd.CommandText = "SELECT sqlite_version()";
         var raw = (string)cmd.ExecuteScalar()!;
         var v = Version.Parse(raw);
-        Assert.True(v >= new Version(3, 50, 2), $"Bundled SQLite {raw} is older than 3.50.2 (CVE-2025-6965).");
+        // Floor is 3.53.3 (SourceGear.sqlite3 direct pin): fixes CVE-2026-11822 and the 3.53.2
+        // FTS5 shadow-table CVEs. A native downgrade below this must fail the suite.
+        Assert.True(v >= new Version(3, 53, 3), $"Bundled SQLite {raw} is older than 3.53.3 (CVE-2026-11822 / FTS5 CVEs).");
     }
 
     [Fact]
@@ -110,6 +114,91 @@ public sealed class SqliteVersionTests
         var result = (string)cmd.ExecuteScalar()!;
         Assert.Equal("ok", result);
     }
+
+    [Fact]
+    public void Interceptor_HardensEveryConnection_SyncOpen()
+    {
+        using var conn = OpenInterceptedConnection(async: false);
+        AssertHardened(conn);
+    }
+
+    [Fact]
+    public async Task Interceptor_HardensEveryConnection_AsyncOpen()
+    {
+        var conn = await OpenInterceptedConnectionAsync();
+        try { AssertHardened(conn); }
+        finally { conn.Dispose(); }
+    }
+
+    [Fact]
+    public void Interceptor_FailsClosed_WhenDefensiveConfigRejected()
+    {
+        // The interceptor must throw (not serve queries) if the native db_config call is rejected
+        // or reports the flag was not applied. Tested via the extracted decision helper so we never
+        // invoke the native API on a broken handle (which would be undefined behavior).
+        Assert.Throws<InvalidOperationException>(() =>
+            SqliteDefensiveConnectionInterceptor.ThrowIfDefensiveNotApplied(rc: 1, applied: 0));
+        Assert.Throws<InvalidOperationException>(() =>
+            SqliteDefensiveConnectionInterceptor.ThrowIfDefensiveNotApplied(rc: 0, applied: 0));
+        // OK path does not throw.
+        SqliteDefensiveConnectionInterceptor.ThrowIfDefensiveNotApplied(rc: 0, applied: 1);
+    }
+
+    private static SqliteConnection OpenInterceptedConnection(bool async)
+    {
+        // A shared-cache in-memory DB backed by its own connection, opened THROUGH EF so the
+        // interceptor fires (opening the raw DbConnection directly would bypass it).
+        var conn = new SqliteConnection("Data Source=:memory:");
+        var options = new DbContextOptionsBuilder<TestContext>()
+            .UseSqlite(conn)
+            .AddInterceptors(SqliteDefensiveConnectionInterceptor.Instance)
+            .Options;
+        var ctx = new TestContext(options);
+        ctx.Database.OpenConnection();
+        return conn;
+    }
+
+    private static async Task<SqliteConnection> OpenInterceptedConnectionAsync()
+    {
+        var conn = new SqliteConnection("Data Source=:memory:");
+        var options = new DbContextOptionsBuilder<TestContext>()
+            .UseSqlite(conn)
+            .AddInterceptors(SqliteDefensiveConnectionInterceptor.Instance)
+            .Options;
+        var ctx = new TestContext(options);
+        await ctx.Database.OpenConnectionAsync();
+        return conn;
+    }
+
+    private static void AssertHardened(SqliteConnection conn)
+    {
+        Assert.Equal(System.Data.ConnectionState.Open, conn.State);
+
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA trusted_schema;";
+            Assert.Equal(0L, Convert.ToInt64(cmd.ExecuteScalar()));
+        }
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA cell_size_check;";
+            Assert.Equal(1L, Convert.ToInt64(cmd.ExecuteScalar()));
+        }
+
+        // Defensive mode has no read-back pragma; prove it by the blocked shadow-table write.
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "CREATE VIRTUAL TABLE ftschk USING fts5(content);";
+            cmd.ExecuteNonQuery();
+        }
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "INSERT INTO ftschk_content(id, c0) VALUES(1, 'x');";
+            Assert.ThrowsAny<Exception>(() => cmd.ExecuteNonQuery());
+        }
+    }
+
+    private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options);
 
     private static void Exec(SQLitePCL.sqlite3 db, string sql)
     {

@@ -4,6 +4,16 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 
 ## [Unreleased] — 2026-06-30
 
+### Security
+- **SQLite native library raised to 3.53.3** — pinned `SourceGear.sqlite3` 3.53.3 (SQLite 3.53.3)
+  directly so every published RID (win-x64, win-arm64) ships the fixed native library, closing
+  CVE-2026-11822 and the 3.53.2 FTS5 shadow-table CVEs at the source instead of relying only on
+  defensive-mode mitigation. `SqliteVersionTests` floor raised to ≥ 3.53.3.
+- **Defensive mode on every EF connection** — new `SqliteDefensiveConnectionInterceptor` applies
+  `SQLITE_DBCONFIG_DEFENSIVE`, `trusted_schema=OFF`, and `cell_size_check=ON` on every connection
+  EF opens (sync and async), not just the `EnsureCreated()` one. It fails closed: if defensive mode
+  can't be enabled, the connection open throws rather than serving queries unhardened.
+
 ### Fixed
 - **Clock-stable provenance tests** — `DataFileProvenanceService.Inspect` now takes an injectable
   `nowUtc` clock so freshness fixtures pass on any calendar date instead of aging past the 30-day

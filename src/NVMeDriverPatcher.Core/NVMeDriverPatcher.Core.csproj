@@ -35,6 +35,13 @@
          (Fts5_IsNotAvailable test proves this), and defensive mode is enabled on
          every DB connection, so the FTS5/shadow-table attack surface is absent. -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <!-- bundle_e_sqlite3 3.0.3 transitively resolves the native provider SourceGear.sqlite3
+         3.50.4.5 (SQLite 3.50.4). Pin the provider DIRECTLY to 3.53.3 (SQLite 3.53.3) so every
+         published RID (win-x64, win-arm64) ships the fixed native library — this closes
+         CVE-2026-11822 and the 3.53.2 FTS5 shadow-table CVEs at the source rather than relying
+         only on defensive-mode mitigation. SqliteVersionTests pins the runtime floor to >= 3.53.3
+         so a native downgrade fails the suite. Keep this ahead of the bundle's own resolution. -->
+    <PackageReference Include="SourceGear.sqlite3" Version="3.53.3" />
     <PackageReference Include="System.Management" Version="10.0.9" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.9" />
   </ItemGroup>
