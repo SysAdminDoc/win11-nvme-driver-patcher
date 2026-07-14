@@ -83,7 +83,7 @@
                                                 Margin="0,0,7,0"
                                                 VerticalAlignment="Center"
                                                 Background="{Binding StatusColor, Converter={StaticResource StrToBrush}}"
-                                                CornerRadius="1"/>
+                                                CornerRadius="0"/>
                                         <TextBlock Text="{Binding StatusText}"
                                                    VerticalAlignment="Center"
                                                    Foreground="{DynamicResource TextSecondary}"
@@ -202,7 +202,7 @@
                                                        Foreground="{DynamicResource TextSecondary}"
                                                        FontSize="12"
                                                        TextWrapping="Wrap"/>
-                                            <TextBlock Text="This is verify / monitor / rollback territory. The CLI's interactive --force-unsupported-build is the only override."
+                                            <TextBlock Text="On this build you can still verify, monitor, and roll back. Forcing the patch anyway requires the command-line tool's --force-unsupported-build option."
                                                        Margin="0,6,0,0"
                                                        Foreground="{DynamicResource TextSecondary}"
                                                        FontSize="12"
@@ -854,7 +854,7 @@
                                                                         Margin="0,0,8,0"
                                                                         VerticalAlignment="Center"
                                                                         Background="{Binding Color, Converter={StaticResource StrToBrush}}"
-                                                                        CornerRadius="1"/>
+                                                                        CornerRadius="0"/>
                                                                 <TextBlock Text="{Binding Label}"
                                                                            Foreground="{DynamicResource TextSecondary}"
                                                                            FontSize="12"
@@ -941,7 +941,7 @@
                                                             <Border Width="4"
                                                                     Height="30"
                                                                     Background="{Binding ToneColor, Converter={StaticResource StrToBrush}}"
-                                                                    CornerRadius="1"
+                                                                    CornerRadius="0"
                                                                     Opacity="0.72"
                                                                     VerticalAlignment="Top"/>
 
@@ -1010,7 +1010,8 @@
                                                 <CheckBox Content="Include Microsoft Server 2025 compatibility key"
                                                           Style="{StaticResource DarkCheckBox}"
                                                           IsChecked="{Binding IncludeServerKey}"/>
-                                                <CheckBox Content="Reduce confirmation warnings (expert mode)"
+                                                <CheckBox Content="Skip confirmation prompts (advanced)"
+                                                          ToolTip="Applies and removes the patch without the safety confirmation dialogs. Only enable if you understand the risks."
                                                           Style="{StaticResource DarkCheckBox}"
                                                           IsChecked="{Binding SkipWarnings}"/>
 
@@ -1164,7 +1165,7 @@
                                                                                 Margin="0,0,10,0"
                                                                                 VerticalAlignment="Center"
                                                                                 Background="{Binding DotColor, Converter={StaticResource StrToBrush}}"
-                                                                                CornerRadius="1"/>
+                                                                                CornerRadius="0"/>
                                                                         <TextBlock Text="{Binding Name}"
                                                                                    Foreground="{DynamicResource TextPrimary}"
                                                                                    FontSize="13"
@@ -1204,7 +1205,7 @@
                                                                             Background="{DynamicResource SurfaceInset}"
                                                                             BorderBrush="{Binding BusPillFg, Converter={StaticResource StrToBrush}}"
                                                                             BorderThickness="1"
-                                                                            CornerRadius="3">
+                                                                            CornerRadius="4">
                                                                         <TextBlock Text="{Binding BusType}"
                                                                                    Foreground="{Binding BusPillFg, Converter={StaticResource StrToBrush}}"
                                                                                    FontSize="10.5"
@@ -1216,7 +1217,7 @@
                                                                             Background="{DynamicResource YellowBg}"
                                                                             BorderBrush="{DynamicResource Yellow}"
                                                                             BorderThickness="1"
-                                                                            CornerRadius="3"
+                                                                            CornerRadius="4"
                                                                             Visibility="{Binding IsBoot, Converter={StaticResource BoolVis}}">
                                                                         <TextBlock Text="Boot"
                                                                                    Foreground="{DynamicResource Yellow}"
@@ -1229,7 +1230,7 @@
                                                                             Background="{DynamicResource SurfaceInset}"
                                                                             BorderBrush="{Binding DriverBadgeFg, Converter={StaticResource StrToBrush}}"
                                                                             BorderThickness="1"
-                                                                            CornerRadius="3"
+                                                                            CornerRadius="4"
                                                                             Visibility="{Binding ShowDriverBadge, Converter={StaticResource BoolVis}}">
                                                                         <TextBlock Text="{Binding DriverBadgeText}"
                                                                                    Foreground="{Binding DriverBadgeFg, Converter={StaticResource StrToBrush}}"
@@ -1249,7 +1250,7 @@
                                 <Border Style="{StaticResource SurfaceCard}">
                                     <StackPanel>
                                         <TextBlock Text="Technical details" Style="{StaticResource SectionEyebrow}"/>
-                                        <TextBlock Text="Expand the exact keys only when you want to inspect the change set behind the patch."
+                                        <TextBlock Text="Expand to inspect the exact registry keys this patch changes."
                                                    Margin="0,8,0,0"
                                                    Style="{StaticResource BodyCopy}"/>
 
@@ -1295,7 +1296,7 @@
                                                                                 Margin="0,0,10,0"
                                                                                 VerticalAlignment="Center"
                                                                                 Background="{Binding DotColor, Converter={StaticResource StrToBrush}}"
-                                                                                CornerRadius="1"/>
+                                                                                CornerRadius="0"/>
                                                                         <TextBlock Grid.Column="1"
                                                                                    Text="{Binding Id}"
                                                                                    Foreground="{DynamicResource TextPrimary}"
@@ -1361,7 +1362,7 @@
                                                                                 Margin="0,0,10,0"
                                                                                 VerticalAlignment="Center"
                                                                                 Background="{Binding DotColor, Converter={StaticResource StrToBrush}}"
-                                                                                CornerRadius="1"/>
+                                                                                CornerRadius="0"/>
                                                                         <TextBlock Grid.Column="1"
                                                                                    Text="{Binding Id}"
                                                                                    Foreground="{DynamicResource TextPrimary}"
@@ -1480,9 +1481,9 @@
                                                             BorderThickness="1"
                                                             CornerRadius="10">
                                                         <Grid Width="28" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                            <Border Width="5" Height="10" Background="{DynamicResource Accent}" CornerRadius="2" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
-                                                            <Border Width="5" Height="18" Margin="12,0,0,0" Background="{DynamicResource Accent}" CornerRadius="2" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
-                                                            <Border Width="5" Height="14" Background="{DynamicResource Accent}" CornerRadius="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+                                                            <Border Width="5" Height="10" Background="{DynamicResource Accent}" CornerRadius="0" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+                                                            <Border Width="5" Height="18" Margin="12,0,0,0" Background="{DynamicResource Accent}" CornerRadius="0" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+                                                            <Border Width="5" Height="14" Background="{DynamicResource Accent}" CornerRadius="0" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
                                                         </Grid>
                                                     </Border>
                                                     <TextBlock Margin="0,14,0,0"
@@ -1655,7 +1656,7 @@
                                                         <Border Width="3"
                                                                 Height="36"
                                                                 Background="{Binding PreparationStageColor, Converter={StaticResource StrToBrush}}"
-                                                                CornerRadius="1"
+                                                                CornerRadius="0"
                                                                 Opacity="0.76"
                                                                 VerticalAlignment="Top"/>
                                                         <StackPanel Grid.Column="1" Margin="10,0,0,0">
@@ -1682,7 +1683,7 @@
                                                         <Border Width="3"
                                                                 Height="36"
                                                                 Background="{Binding RestartStageColor, Converter={StaticResource StrToBrush}}"
-                                                                CornerRadius="1"
+                                                                CornerRadius="0"
                                                                 Opacity="0.76"
                                                                 VerticalAlignment="Top"/>
                                                         <StackPanel Grid.Column="1" Margin="10,0,0,0">
@@ -1709,7 +1710,7 @@
                                                         <Border Width="3"
                                                                 Height="36"
                                                                 Background="{Binding ValidationStageColor, Converter={StaticResource StrToBrush}}"
-                                                                CornerRadius="1"
+                                                                CornerRadius="0"
                                                                 Opacity="0.76"
                                                                 VerticalAlignment="Top"/>
                                                         <StackPanel Grid.Column="1" Margin="10,0,0,0">
@@ -2319,7 +2320,7 @@
                                                         Background="{DynamicResource BgMedium}"
                                                         BorderBrush="{DynamicResource Border}"
                                                         BorderThickness="1"
-                                                        CornerRadius="5">
+                                                        CornerRadius="4">
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Text="{Binding LogEntryCount}"
                                                                    Foreground="{DynamicResource TextPrimary}"
@@ -2336,7 +2337,7 @@
                                                         Background="{DynamicResource BgMedium}"
                                                         BorderBrush="{DynamicResource Border}"
                                                         BorderThickness="1"
-                                                        CornerRadius="5">
+                                                        CornerRadius="4">
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Text="{Binding LogWarningCount}"
                                                                    Foreground="{DynamicResource Yellow}"
@@ -2353,7 +2354,7 @@
                                                         Background="{DynamicResource BgMedium}"
                                                         BorderBrush="{DynamicResource Border}"
                                                         BorderThickness="1"
-                                                        CornerRadius="5">
+                                                        CornerRadius="4">
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Text="{Binding LogErrorCount}"
                                                                    Foreground="{DynamicResource Red}"
@@ -2369,7 +2370,7 @@
                                                         Height="18"
                                                         Margin="8,2,2,0"
                                                         Background="{Binding ActivityTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                        CornerRadius="1"/>
+                                                        CornerRadius="0"/>
                                             </StackPanel>
                                         </Grid>
 
@@ -2609,15 +2610,15 @@
 
                                 <UniformGrid Margin="0,12,0,0" Columns="3">
                                     <StackPanel Orientation="Horizontal" Margin="0,0,14,0">
-                                        <Border Width="3" Height="14" Margin="0,1,8,0" Background="{DynamicResource Accent}" CornerRadius="1"/>
+                                        <Border Width="3" Height="14" Margin="0,1,8,0" Background="{DynamicResource Accent}" CornerRadius="0"/>
                                         <TextBlock Text="Build and driver" Style="{StaticResource BodyCopy}"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,14,0">
-                                        <Border Width="3" Height="14" Margin="0,1,8,0" Background="{DynamicResource Accent}" CornerRadius="1"/>
+                                        <Border Width="3" Height="14" Margin="0,1,8,0" Background="{DynamicResource Accent}" CornerRadius="0"/>
                                         <TextBlock Text="Drive inventory" Style="{StaticResource BodyCopy}"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal">
-                                        <Border Width="3" Height="14" Margin="0,1,8,0" Background="{DynamicResource Accent}" CornerRadius="1"/>
+                                        <Border Width="3" Height="14" Margin="0,1,8,0" Background="{DynamicResource Accent}" CornerRadius="0"/>
                                         <TextBlock Text="Rollback safety" Style="{StaticResource BodyCopy}"/>
                                     </StackPanel>
                                 </UniformGrid>
