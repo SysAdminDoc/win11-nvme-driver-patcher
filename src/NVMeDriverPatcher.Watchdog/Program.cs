@@ -64,7 +64,10 @@ internal static class Program
         string exe = Environment.ProcessPath ?? "NVMeDriverPatcher.Watchdog.exe";
         if (install)
         {
-            int rc = RunSc("create", ServiceName, "binpath=", $"\"{exe}\"", "start=", "auto",
+            // Pass the exe path RAW: ProcessStartInfo.ArgumentList quotes each token itself, so
+            // manually wrapping it in quotes would be double-escaped (\"C:\path\") and register a
+            // broken ImagePath for any install dir with spaces (e.g. Program Files).
+            int rc = RunSc("create", ServiceName, "binpath=", exe, "start=", "auto",
                 "obj=", "NT AUTHORITY\\LocalService", "DisplayName=", "NVMe Driver Patcher Watchdog");
             if (rc != 0) return rc;
 
