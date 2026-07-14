@@ -32,14 +32,15 @@ public sealed class TrustLedgerAndAdvisoryTests : IDisposable
     [Fact]
     public void BuildTrustLedger_HashesCachedViVeTool()
     {
-        var toolsDir = Path.Combine(_tempRoot, "tools");
-        Directory.CreateDirectory(toolsDir);
-        File.WriteAllBytes(Path.Combine(toolsDir, "ViVeTool.exe"), new byte[] { 1, 2, 3, 4 });
+        var payloadDir = ViVeToolService.PayloadDir(_tempRoot);
+        Directory.CreateDirectory(payloadDir);
+        File.WriteAllBytes(ViVeToolService.CachedExePath(_tempRoot), new byte[] { 1, 2, 3, 4 });
 
         var ledger = DiagnosticsService.BuildTrustLedger(_tempRoot);
         // SHA-256 of 01 02 03 04
         Assert.Contains("9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a", ledger);
         Assert.Contains("4 bytes", ledger);
+        Assert.Contains("FAILED complete manifest validation", ledger);
     }
 
     [Fact]

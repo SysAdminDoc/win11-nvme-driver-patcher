@@ -16,6 +16,8 @@
     <None Include="windows_build_rules.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <EmbeddedResource Include="vivetool_trusted_releases.json"
+                      LogicalName="NVMeDriverPatcher.vivetool_trusted_releases.json" />
     <!-- Ship the ADMX/ADML templates beside every executable that references Core so
          `policy-install` works from GUI, CLI, and portable publish folders. -->
     <None Include="..\..\packaging\admx\NVMeDriverPatcher.admx" Link="admx\NVMeDriverPatcher.admx">

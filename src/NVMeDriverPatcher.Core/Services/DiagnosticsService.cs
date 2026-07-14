@@ -18,10 +18,10 @@ public static class DiagnosticsService
     // Backtracking guard: cap per-call regex time so a pathological diagnostic line
     // (e.g. a stack trace without newlines) cannot stall the export thread.
     private static readonly TimeSpan RedactTimeout = TimeSpan.FromSeconds(2);
-    private static readonly Regex RxRedactComputerName = new(@"^Computer Name:\s*.*$",                RegexOptions.Multiline | RegexOptions.Compiled, RedactTimeout);
-    private static readonly Regex RxRedactUser         = new(@"^User:\s*.*$",                         RegexOptions.Multiline | RegexOptions.Compiled, RedactTimeout);
-    private static readonly Regex RxRedactPnpId        = new(@"^(\s*PNP ID:\s*).*$",                  RegexOptions.Multiline | RegexOptions.Compiled, RedactTimeout);
-    private static readonly Regex RxRedactUserPath     = new(@"\b([A-Za-z]:\\Users\\)([^\\\r\n]+)",   RegexOptions.IgnoreCase | RegexOptions.Compiled, RedactTimeout);
+    private static readonly Regex RxRedactComputerName = new(@"^Computer Name:\s*.*$", RegexOptions.Multiline | RegexOptions.Compiled, RedactTimeout);
+    private static readonly Regex RxRedactUser = new(@"^User:\s*.*$", RegexOptions.Multiline | RegexOptions.Compiled, RedactTimeout);
+    private static readonly Regex RxRedactPnpId = new(@"^(\s*PNP ID:\s*).*$", RegexOptions.Multiline | RegexOptions.Compiled, RedactTimeout);
+    private static readonly Regex RxRedactUserPath = new(@"\b([A-Za-z]:\\Users\\)([^\\\r\n]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled, RedactTimeout);
 
     public static async Task<string?> ExportAsync(
         string workingDir,
@@ -238,6 +238,9 @@ public static class DiagnosticsService
                 var fileVer = System.Diagnostics.FileVersionInfo.GetVersionInfo(viveExe).FileVersion ?? "?";
                 sb.AppendLine($"  ViVeTool cache:     {viveExe} ({fi.Length} bytes, v{fileVer})");
                 sb.AppendLine($"  ViVeTool SHA-256:   {hash}");
+                sb.AppendLine($"  ViVeTool auth:      {(ViVeToolService.IsInstalled(workingDir)
+                    ? "manifest-sha256 (complete payload)"
+                    : "FAILED complete manifest validation")}");
             }
             else
             {

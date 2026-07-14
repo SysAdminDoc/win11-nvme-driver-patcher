@@ -5,6 +5,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Complete ViVeTool payload authentication** — the elevated fallback now accepts only the
+  embedded v0.3.4 x64/ARM64 release manifests, with exact archive size/SHA-256, exact root-level
+  member path/size/hash inventory, and PE architecture. Missing, extra, nested, duplicated,
+  modified, symlinked, or wrong-architecture content fails before extraction/promotion; the
+  isolated cached directory is atomically replaced and the full payload is authenticated again
+  after promotion and before every execution. This also fixes ARM64 fallback installation, which
+  previously checked the published ARM64 executable against an x64-only hash allowlist.
 - **Boot-critical probes are typed and fail closed** — administrator, VeraCrypt, Intel RST/VMD,
   BitLocker, and SafeBoot checks now return `Pass | Fail | Unknown` with a stable reason code,
   native error, timestamp, and concrete evidence. Access denied, provider timeout, unsupported API,
