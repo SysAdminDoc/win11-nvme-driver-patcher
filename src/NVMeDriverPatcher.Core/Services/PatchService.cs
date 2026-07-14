@@ -167,6 +167,17 @@ public static class PatchService
                 }
             }
 
+            // Capture the exact prior state of every SafeBoot key BEFORE we touch them, so removal
+            // can restore byte-for-byte and delete only what we create. Critically, on builds where
+            // Windows already ships these keys (issue #13, a named "NvmeDisk" value) this journal is
+            // what stops uninstall from erasing OS-owned state. Never changes ACLs.
+            try
+            {
+                var journal = SafeBootStateService.CaptureJournal(new RealSafeBootRegistry(), DateTime.UtcNow.ToString("o"));
+                SafeBootStateService.SaveJournal(workingDir, journal, log);
+            }
+            catch (Exception ex) { log?.Invoke($"  [WARN] SafeBoot journal capture failed: {ex.Message}"); }
+
             // SafeBoot Minimal — track in appliedKeys ONLY after we've confirmed the write took.
             // If CreateSubKey succeeds but SetValue fails, the empty subkey is still present and
             // must still be tracked for rollback so we don't leak it. We register it pre-SetValue
@@ -305,7 +316,7 @@ public static class PatchService
                 log?.Invoke("[WARNING] Rolling back partial installation...");
                 ReportProgress(progress, 96, "Rolling back...");
 
-                bool rollbackFullyReversed = Rollback(hklm, appliedKeys, log);
+                bool rollbackFullyReversed = Rollback(hklm, appliedKeys, workingDir, log);
                 result.WasRolledBack = true;
                 result.RollbackFullyReversed = rollbackFullyReversed;
 
@@ -520,92 +531,41 @@ public static class PatchService
                 try { overrides.Flush(); } catch { }
             }
 
-            ReportProgress(progress, 60, "Removing SafeBoot keys...");
+            ReportProgress(progress, 60, "Restoring SafeBoot keys...");
 
-            // SafeBoot Minimal
-            try
+            // Restore SafeBoot keys to their pre-apply state from the journal captured at install.
+            // This deletes ONLY keys/values the app created and preserves any OS-owned state (e.g.
+            // a pre-existing GUID key carrying a "NvmeDisk" value — issue #13). Never changes ACLs.
+            var safeBootJournal = SafeBootStateService.LoadJournal(workingDir);
+            if (safeBootJournal is not null)
             {
-                using var safeMinParent = hklm.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal", writable: true);
-                if (safeMinParent is not null)
+                var restoreFailures = SafeBootStateService.RestoreFromJournal(new RealSafeBootRegistry(), safeBootJournal, log);
+                if (restoreFailures.Count == 0)
                 {
-                    // Pre-check: only count as "removed" when the subkey actually existed.
-                    bool existed;
-                    using (var probe = safeMinParent.OpenSubKey(AppConfig.SafeBootGuid))
-                        existed = probe is not null;
-                    try
-                    {
-                        safeMinParent.DeleteSubKeyTree(AppConfig.SafeBootGuid, false);
-                        if (existed)
-                        {
-                            log?.Invoke("  [REMOVED] SafeBoot Minimal");
-                            removedCount++;
-                        }
-                        else
-                        {
-                            log?.Invoke("  [ABSENT] SafeBoot Minimal");
-                        }
-                    }
-                    catch { log?.Invoke("  [ABSENT] SafeBoot Minimal"); }
+                    // Count the keys we actually created (and therefore removed) toward removedCount
+                    // so NeedsRestart/messaging stay meaningful.
+                    removedCount += safeBootJournal.Entries.Count(e =>
+                        !e.Existed &&
+                        (e.Path == AppConfig.SafeBootMinimalPath || e.Path == AppConfig.SafeBootNetworkPath));
+                }
+                else
+                {
+                    foreach (var f in restoreFailures)
+                        log?.Invoke($"  [FAIL] SafeBoot restore incomplete: {f}");
+                    // Leave the journal in place so a re-run can retry the restore.
                 }
             }
-            catch (Exception ex) { log?.Invoke($"  [FAIL] SafeBoot Minimal: {ex.Message}"); }
-
-            // SafeBoot Network
-            try
+            else
             {
-                using var safeNetParent = hklm.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\SafeBoot\Network", writable: true);
-                if (safeNetParent is not null)
-                {
-                    bool existed;
-                    using (var probe = safeNetParent.OpenSubKey(AppConfig.SafeBootGuid))
-                        existed = probe is not null;
-                    try
-                    {
-                        safeNetParent.DeleteSubKeyTree(AppConfig.SafeBootGuid, false);
-                        if (existed)
-                        {
-                            log?.Invoke("  [REMOVED] SafeBoot Network");
-                            removedCount++;
-                        }
-                        else
-                        {
-                            log?.Invoke("  [ABSENT] SafeBoot Network");
-                        }
-                    }
-                    catch { log?.Invoke("  [ABSENT] SafeBoot Network"); }
-                }
+                // No journal (patch predates journalling): fall back to a SAFE delete that removes
+                // the app's GUID key ONLY when it has no OS-owned named values. Never blow away a
+                // key that Windows populated (issue #13).
+                RemoveOwnedSafeBootKey(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal", AppConfig.SafeBootGuid, "SafeBoot Minimal", ref removedCount, log);
+                RemoveOwnedSafeBootKey(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network", AppConfig.SafeBootGuid, "SafeBoot Network", ref removedCount, log);
+                int svc = 0;
+                RemoveOwnedSafeBootKey(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal", AppConfig.SafeBootServiceName, "SafeBoot Minimal (service name)", ref svc, log);
+                RemoveOwnedSafeBootKey(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network", AppConfig.SafeBootServiceName, "SafeBoot Network (service name)", ref svc, log);
             }
-            catch (Exception ex) { log?.Invoke($"  [FAIL] SafeBoot Network: {ex.Message}"); }
-
-            // Also remove supplemental service-name SafeBoot entries written for 25H2 compat.
-            // Best-effort — not counted in removedCount, never fail the uninstall.
-            try
-            {
-                using var safeMinParent = hklm.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal", writable: true);
-                if (safeMinParent is not null)
-                {
-                    bool existed;
-                    using (var probe = safeMinParent.OpenSubKey(AppConfig.SafeBootServiceName))
-                        existed = probe is not null;
-                    safeMinParent.DeleteSubKeyTree(AppConfig.SafeBootServiceName, throwOnMissingSubKey: false);
-                    if (existed) log?.Invoke("  [REMOVED] SafeBoot Minimal (service name)");
-                }
-            }
-            catch { }
-
-            try
-            {
-                using var safeNetParent = hklm.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\SafeBoot\Network", writable: true);
-                if (safeNetParent is not null)
-                {
-                    bool existed;
-                    using (var probe = safeNetParent.OpenSubKey(AppConfig.SafeBootServiceName))
-                        existed = probe is not null;
-                    safeNetParent.DeleteSubKeyTree(AppConfig.SafeBootServiceName, throwOnMissingSubKey: false);
-                    if (existed) log?.Invoke("  [REMOVED] SafeBoot Network (service name)");
-                }
-            }
-            catch { }
 
             // Undo the native FeatureStore / ViVeTool fallback enablement too. The registry
             // override deletions above do NOT touch the FeatureStore configuration the fallback
@@ -632,9 +592,14 @@ public static class PatchService
             // Success is possible ONLY when nothing this app is responsible for remains.
             ReportProgress(progress, 90, "Validating removal (residue probe)...");
             result.AppliedCount = removedCount;
-            result.Residue = ProbeRemovalResidue(hklm, log);
+            result.Residue = ProbeRemovalResidue(hklm, workingDir, log);
             result.Success = result.Residue.Count == 0;
             result.NeedsRestart = removedCount > 0 || result.NeedsRestart;
+
+            // Only discard the SafeBoot journal once removal is verified clean — the residue probe
+            // above needs it to tell app-added state from pre-existing OS/user state.
+            if (result.Success)
+                SafeBootStateService.DeleteJournal(workingDir);
 
             log?.Invoke("========================================");
             if (result.Success)
@@ -684,7 +649,7 @@ public static class PatchService
     // Re-reads every store this app is responsible for and returns a human-readable list of
     // anything still present. An empty list is the ONLY basis for reporting a successful removal.
     // Fails closed: if a store cannot be read to confirm it is clean, that counts as residue.
-    internal static List<string> ProbeRemovalResidue(RegistryKey hklm, Action<string>? log)
+    internal static List<string> ProbeRemovalResidue(RegistryKey hklm, string? workingDir, Action<string>? log)
     {
         var residue = new List<string>();
 
@@ -710,9 +675,10 @@ public static class PatchService
             residue.Add($"Feature overrides key unverifiable ({ex.GetType().Name})");
         }
 
-        // 2) The app-owned SafeBoot GUID keys (Minimal + Network).
-        residue.AddRange(ProbeSafeBootGuidResidue(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal", "SafeBoot Minimal"));
-        residue.AddRange(ProbeSafeBootGuidResidue(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network", "SafeBoot Network"));
+        // 2) SafeBoot: residue is ONLY the app's own default value still present. A preserved
+        // OS-owned key (issue #13) or a correctly-restored pre-existing default are NOT residue —
+        // the journal captured at apply distinguishes "our value" from state already there.
+        residue.AddRange(ProbeSafeBootResidue(workingDir));
 
         // 3) FeatureStore / ViVeTool fallback IDs. A registry-only install has none and this is a
         // clean no-op; a fallback install must have had them reset above.
@@ -730,21 +696,72 @@ public static class PatchService
         return residue;
     }
 
-    private static List<string> ProbeSafeBootGuidResidue(RegistryKey hklm, string parentPath, string label)
+    // Legacy fallback for patches applied before SafeBoot journalling. Deletes the app's subkey
+    // ONLY when it has no OS-owned named values (issue #13): a key Windows populated with a
+    // "NvmeDisk" value must never be blown away by our uninstall.
+    private static void RemoveOwnedSafeBootKey(RegistryKey hklm, string parentPath, string leaf, string label, ref int removedCount, Action<string>? log)
     {
-        var found = new List<string>();
         try
         {
-            using var parent = hklm.OpenSubKey(parentPath, writable: false);
-            if (parent is null)
-                return found;
-            using var guid = parent.OpenSubKey(AppConfig.SafeBootGuid);
-            if (guid is not null)
-                found.Add($"{label} {AppConfig.SafeBootGuid}");
+            using var parent = hklm.OpenSubKey(parentPath, writable: true);
+            if (parent is null) return;
+
+            bool existed;
+            bool hasForeignValues = false;
+            using (var probe = parent.OpenSubKey(leaf))
+            {
+                existed = probe is not null;
+                if (probe is not null)
+                    hasForeignValues = probe.GetValueNames().Any(n => n.Length > 0);
+            }
+
+            if (!existed)
+            {
+                log?.Invoke($"  [ABSENT] {label}");
+                return;
+            }
+            if (hasForeignValues)
+            {
+                // OS owns this key — remove only our default value, keep the key + foreign values.
+                using var key = parent.OpenSubKey(leaf, writable: true);
+                try { key?.DeleteValue("", throwOnMissingValue: false); } catch { }
+                log?.Invoke($"  [PRESERVED] {label} — OS-owned values kept; removed only the app default value");
+                removedCount++;
+                return;
+            }
+            parent.DeleteSubKeyTree(leaf, throwOnMissingSubKey: false);
+            log?.Invoke($"  [REMOVED] {label}");
+            removedCount++;
         }
-        catch (Exception ex)
+        catch (Exception ex) { log?.Invoke($"  [FAIL] {label}: {ex.Message}"); }
+    }
+
+    private static List<string> ProbeSafeBootResidue(string? workingDir)
+    {
+        var found = new List<string>();
+        var reg = new RealSafeBootRegistry();
+        var journal = string.IsNullOrWhiteSpace(workingDir) ? null : SafeBootStateService.LoadJournal(workingDir);
+
+        foreach (var path in new[] { AppConfig.SafeBootMinimalPath, AppConfig.SafeBootNetworkPath })
         {
-            found.Add($"{label} {AppConfig.SafeBootGuid} unverifiable ({ex.GetType().Name})");
+            var snap = reg.Read(path);
+            if (snap.AccessDenied)
+            {
+                found.Add($"{path} unverifiable (access denied)");
+                continue;
+            }
+            var current = snap.DefaultValue;
+            bool ourValuePresent = current is not null &&
+                string.Equals(current, AppConfig.SafeBootValue, StringComparison.OrdinalIgnoreCase);
+            if (!ourValuePresent) continue;
+
+            // Our value is present. If the pre-apply journal shows the SAME default was already
+            // there, it is pre-existing OS/user state we correctly restored — not residue.
+            var prior = journal?.Entries.FirstOrDefault(e => e.Path == path)?.ToSnapshot();
+            bool priorHadOurValue = prior is not null && prior.Existed &&
+                string.Equals(prior.DefaultValue, AppConfig.SafeBootValue, StringComparison.OrdinalIgnoreCase);
+            if (!priorHadOurValue)
+                found.Add($"SafeBoot default value at {path}");
         }
         return found;
     }
@@ -753,7 +770,7 @@ public static class PatchService
     // dangerous state — the user thinks the system is back to pre-patch but some keys are
     // still present. Callers MUST act on the false return by warning the user and pointing
     // them at the recovery kit / restore point.
-    private static bool Rollback(RegistryKey hklm, List<(string Type, string ID)> appliedKeys, Action<string>? log)
+    private static bool Rollback(RegistryKey hklm, List<(string Type, string ID)> appliedKeys, string workingDir, Action<string>? log)
     {
         // Open the overrides key once so we don't keep re-acquiring a writable handle (and so a
         // single Flush() at the end is cheap and authoritative).
@@ -799,35 +816,35 @@ public static class PatchService
                 }
                 else if (type == "SafeBoot")
                 {
-                    string parentPath = id == "Minimal"
-                        ? @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal"
-                        : @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network";
-                    using var parent = hklm.OpenSubKey(parentPath, writable: true);
-                    if (parent is null)
+                    // Restore to the pre-apply state captured in the journal — NEVER blindly delete
+                    // the GUID subtree, which on issue-#13 builds would erase the OS-owned key.
+                    string path = id == "Minimal" ? AppConfig.SafeBootMinimalPath : AppConfig.SafeBootNetworkPath;
+                    var reg = new RealSafeBootRegistry();
+                    var priorEntry = SafeBootStateService.LoadJournal(workingDir)?.Entries
+                        .FirstOrDefault(e => e.Path == path);
+
+                    try
                     {
-                        log?.Invoke($"  [ROLLBACK SKIP] SafeBoot {id} — parent key unavailable");
-                        // Can't verify; err on the side of reporting failure so the caller warns.
-                        allReversed = false;
-                        continue;
-                    }
-                    try { parent.DeleteSubKeyTree(AppConfig.SafeBootGuid, throwOnMissingSubKey: false); }
-                    catch (System.Security.SecurityException)
-                    {
-                        log?.Invoke($"  [ROLLBACK FAIL] SafeBoot {id} — permission denied");
-                        allReversed = false;
-                        continue;
-                    }
-                    // Verify the subkey is really gone.
-                    using (var probe = parent.OpenSubKey(AppConfig.SafeBootGuid))
-                    {
-                        if (probe is not null)
+                        if (priorEntry is not null)
                         {
-                            log?.Invoke($"  [ROLLBACK FAIL] SafeBoot {id} subkey still present after delete");
-                            allReversed = false;
-                            continue;
+                            reg.ApplyRestore(path, SafeBootStateService.PlanRestore(priorEntry.ToSnapshot()));
+                            log?.Invoke($"  [ROLLBACK] SafeBoot {id} restored to pre-apply state");
+                        }
+                        else
+                        {
+                            // No journal — safe delete that preserves any OS-owned named values.
+                            string parentPath = id == "Minimal"
+                                ? @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal"
+                                : @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network";
+                            int dummy = 0;
+                            RemoveOwnedSafeBootKey(hklm, parentPath, AppConfig.SafeBootGuid, $"SafeBoot {id}", ref dummy, log);
                         }
                     }
-                    log?.Invoke($"  [ROLLBACK] SafeBoot {id}");
+                    catch (Exception ex)
+                    {
+                        log?.Invoke($"  [ROLLBACK FAIL] SafeBoot {id}: {ex.Message}");
+                        allReversed = false;
+                    }
                 }
             }
             catch (Exception ex)
