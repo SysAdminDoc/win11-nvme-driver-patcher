@@ -55,10 +55,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   over-promised). It now emits deletion directives (`"<id>"=-`, `[-HKLM\...SafeBoot GUID]`) for
   feature values and SafeBoot keys that were absent before the patch, while still restoring prior
   values and never scheduling deletion of a pre-existing SafeBoot key that may hold OS-owned state.
-- **FeatureStore writes serialized across processes** — `FeatureStoreWriterService` used a
-  process-local semaphore, but `RtlSetFeatureConfigurations` mutates machine-global state; an
-  elevated CLI write and GUI fallback could interleave their two-phase (Runtime→Boot) writes. They
-  now serialize on a `Global\` named mutex so concurrent writers can't stomp each other's overrides.
+- **FeatureStore transactions now fail closed on contention** — all fallback writes, resets,
+  exact-baseline capture, and restore verification serialize on the machine-global mutex. A timeout
+  returns a typed busy result before any protected read/write and never falls through to ViVeTool;
+  its ledger records that FeatureStore was untouched before resuming app-owned BitLocker suspension,
+  so recovery cannot overwrite the other process's in-flight state.
 - **Watchdog manual `/install` registers a correct ImagePath** — the service-install path passed the
   exe wrapped in manual quotes through `ProcessStartInfo.ArgumentList`, which double-escaped them and
   registered a broken `ImagePath` for any spaced install dir (e.g. Program Files). The raw path is
@@ -73,10 +74,12 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   warns for any non-auto-unlock data volume, and apply suspends those volumes for one reboot cycle
   (best-effort — a data volume re-locking is recoverable with the key, so a failure warns instead of
   aborting like the system-drive path).
-- **Concurrency-safe config writes** — `ConfigService.Save` now uses a per-process-unique temp file
-  and a machine-global mutex (`Global\NVMeDriverPatcher.ConfigSave`) so simultaneous saves from the
-  GUI, CLI, Tray, and Watchdog can no longer clobber each other's half-written temp or silently drop
-  a settings/state write.
+- **Configuration is fail-closed and last-known-good recoverable** — load/save now return typed
+  busy/failure status without accessing protected files after mutex timeout. Saves validate and
+  disk-flush a unique staging file, atomically publish it, and retain a validated `config.json.bak`;
+  load validates the primary then backup, self-heals from the backup, and preserves every invalid
+  primary/backup as `.corrupt` evidence before using safe defaults. Concurrent-writer, torn-file,
+  and lock-timeout tests cover the recovery contract.
 - **`compare-benchmarks` can actually detect a regression** — the CLI compared the baseline to
   itself (always exit 0). It now compares the baseline against a real current benchmark (the most
   recent recorded run, or an explicit `--current=<path>`) and exits non-zero on a real regression

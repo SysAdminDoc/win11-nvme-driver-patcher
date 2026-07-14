@@ -217,6 +217,78 @@ public sealed class MutationLedgerServiceTests
         }
     }
 
+    [Fact]
+    public void AbortFeatureStoreBeforeMutation_PersistsNoTouchBeforeResumingProtection()
+    {
+        var dir = TempDir();
+        try
+        {
+            var ledger = CreateLedger("busy", MutationOperationPhase.Prepared);
+            ledger.Kind = MutationOperationKind.FeatureStoreFallback;
+            ledger.FeatureStoreTouched = true;
+            ledger.BitLockerSuspensionPlanned = true;
+            Assert.True(MutationLedgerService.SaveForTest(dir, ledger, null, out var error), error);
+            var resumeCalls = 0;
+
+            var result = MutationLedgerService.AbortFeatureStoreBeforeMutation(
+                dir,
+                ledger.OperationId,
+                () =>
+                {
+                    resumeCalls++;
+                    var durable = MutationLedgerService.Load(dir);
+                    Assert.NotNull(durable);
+                    Assert.False(durable!.FeatureStoreTouched);
+                    Assert.Equal(MutationOperationPhase.Prepared, durable.Phase);
+                    return new BitLockerNativeResult(true, "resumed");
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal(1, resumeCalls);
+            var terminal = MutationLedgerService.Load(dir);
+            Assert.NotNull(terminal);
+            Assert.Equal(MutationOperationPhase.Verified, terminal!.Phase);
+            Assert.False(terminal.FeatureStoreTouched);
+            Assert.False(terminal.BitLockerSuspensionPlanned);
+            Assert.Equal(0, terminal.OwnerProcessId);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void AbortFeatureStoreBeforeMutation_ResumeFailureLeavesRecoverablePreparedLedger()
+    {
+        var dir = TempDir();
+        try
+        {
+            var ledger = CreateLedger("resume-failed", MutationOperationPhase.Prepared);
+            ledger.Kind = MutationOperationKind.FeatureStoreFallback;
+            ledger.FeatureStoreTouched = true;
+            ledger.BitLockerSuspensionPlanned = true;
+            Assert.True(MutationLedgerService.SaveForTest(dir, ledger, null, out var error), error);
+
+            var result = MutationLedgerService.AbortFeatureStoreBeforeMutation(
+                dir,
+                ledger.OperationId,
+                () => new BitLockerNativeResult(false, "provider unavailable"));
+
+            Assert.False(result.Success);
+            Assert.Contains("resume failed", result.Failures.Single(), StringComparison.OrdinalIgnoreCase);
+            var recoverable = MutationLedgerService.Load(dir);
+            Assert.NotNull(recoverable);
+            Assert.Equal(MutationOperationPhase.Prepared, recoverable!.Phase);
+            Assert.False(recoverable.FeatureStoreTouched);
+            Assert.True(recoverable.BitLockerSuspensionPlanned);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
+
     private static MutationOperationLedger CreateLedger(string operationId, MutationOperationPhase phase) => new()
     {
         OperationId = operationId,

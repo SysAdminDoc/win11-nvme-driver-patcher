@@ -5,6 +5,47 @@ namespace NVMeDriverPatcher.Tests;
 public sealed class FeatureStoreWriterServiceTests
 {
     [Fact]
+    public async Task RunExclusive_LockTimeoutReturnsBusyWithoutInvokingProtectedAction()
+    {
+        var mutexName = $@"Local\NVMeDriverPatcher.FeatureStore.Tests.{Guid.NewGuid():N}";
+        using var acquired = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var holder = Task.Run(() =>
+        {
+            using var mutex = new Mutex(false, mutexName);
+            mutex.WaitOne();
+            acquired.Set();
+            release.Wait();
+            mutex.ReleaseMutex();
+        });
+        Assert.True(acquired.Wait(TimeSpan.FromSeconds(5)));
+
+        try
+        {
+            var actionInvoked = false;
+            var result = FeatureStoreWriterService.RunExclusive(
+                () =>
+                {
+                    actionInvoked = true;
+                    return new FeatureStoreWriteResult { Success = true };
+                },
+                TimeSpan.FromMilliseconds(50),
+                mutexName);
+
+            Assert.False(actionInvoked);
+            Assert.False(result.Success);
+            Assert.True(result.Busy);
+            Assert.Equal(FeatureStoreWriteStatus.Busy, result.Status);
+            Assert.Contains("no protected state was read or written", result.Summary);
+        }
+        finally
+        {
+            release.Set();
+            await holder.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+    }
+
+    [Fact]
     public void ExactRestoreUpdate_RecreatesAllCompactStateFields()
     {
         const uint priority = 5;

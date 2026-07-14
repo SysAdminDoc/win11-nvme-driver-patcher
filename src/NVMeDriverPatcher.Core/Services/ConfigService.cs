@@ -6,13 +6,15 @@ using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
 
-public static class ConfigService
+public static partial class ConfigService
 {
     private const string LegacyMigrationMarker = "localappdata_migrated.flag";
 
     private static readonly string[] LegacyMigrationFiles =
     [
         "config.json",
+        "config.json.bak",
+        "config.json.corrupt",
         "mutation_ledger.json",
         "mutation_ledger.json.bak",
         "safeboot_journal.json",
@@ -46,76 +48,6 @@ public static class ConfigService
         }
     };
 
-    public static AppConfig Load()
-    {
-        var config = new AppConfig
-        {
-            WorkingDir = AppConfig.GetWorkingDir()
-        };
-        if (AppConfig.IsSharedProgramDataWorkingDir(config.WorkingDir))
-            MigrateLegacyWorkingDirIfNeeded(config.WorkingDir, AppConfig.GetLegacyUserWorkingDirPath());
-
-        config.ConfigFile = Path.Combine(config.WorkingDir, "config.json");
-
-        if (!File.Exists(config.ConfigFile)) return config;
-
-        try
-        {
-            var json = File.ReadAllText(config.ConfigFile);
-            if (string.IsNullOrWhiteSpace(json)) return config;
-
-            var saved = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions);
-            if (saved is null) return config;
-
-            config.AutoSaveLog = saved.AutoSaveLog;
-            config.EnableToasts = saved.EnableToasts;
-            config.WriteEventLog = saved.WriteEventLog;
-            config.RestartDelay = saved.RestartDelay;       // setter clamps 0..3600
-            config.IncludeServerKey = saved.IncludeServerKey;
-            config.SkipWarnings = saved.SkipWarnings;
-            config.ThemeMode = Enum.IsDefined(typeof(AppThemeMode), saved.ThemeMode)
-                ? saved.ThemeMode
-                : AppThemeMode.System;
-            // Unknown or out-of-range enum -> keep the default (Safe). Same defensive
-            // stance we take for RestartDelay via the clamp setter.
-            config.PatchProfile = Enum.IsDefined(typeof(PatchProfile), saved.PatchProfile)
-                ? saved.PatchProfile
-                : PatchProfile.Safe;
-            // Future migrations can branch on ConfigVersion; for now just carry it forward
-            // unless the saved file predates the field (deserializes to 0).
-            config.ConfigVersion = saved.ConfigVersion == 0
-                ? ConfigMigrationService.CurrentSchemaVersion
-                : saved.ConfigVersion;
-            config.LastRun = saved.LastRun;
-            // Drop stale recovery/diagnostics paths whose targets no longer exist —
-            // otherwise the workspace shows a "ready" status pointing at missing files.
-            config.LastRecoveryKitPath = ExistingDir(saved.LastRecoveryKitPath);
-            config.LastDiagnosticsPath = ExistingFileWithExtension(saved.LastDiagnosticsPath, ".txt");
-            config.LastSupportBundlePath = ExistingFileWithExtension(saved.LastSupportBundlePath, ".zip");
-            config.LastVerificationScriptPath = ExistingFile(saved.LastVerificationScriptPath);
-            config.PendingVerificationSince = saved.PendingVerificationSince;
-            config.PendingVerificationProfile = saved.PendingVerificationProfile;
-            // Load-bearing recovery checkpoint: it distinguishes a fallback (FeatureStore) patch
-            // from a registry-only one, and the post-reboot auto-reset keys off it. It MUST survive
-            // the exact process boundary (apply → reboot → fresh launch) it was designed for.
-            config.PendingFallbackApplied = saved.PendingFallbackApplied;
-            config.LastVerifiedProfile = saved.LastVerifiedProfile;
-            config.LastVerificationResult = saved.LastVerificationResult;
-        }
-        catch
-        {
-            // Corrupt config: rename so the next save starts fresh and the user can recover values.
-            try
-            {
-                var corrupt = config.ConfigFile + ".corrupt";
-                if (File.Exists(corrupt)) File.Delete(corrupt);
-                File.Move(config.ConfigFile, corrupt);
-            }
-            catch { /* Best-effort */ }
-        }
-
-        return config;
-    }
 
     internal static int MigrateLegacyWorkingDirIfNeeded(string targetDir, string? legacyDir)
     {
@@ -207,129 +139,6 @@ public static class ConfigService
             : null;
     }
 
-    /// <summary>
-    /// Persists config atomically. Returns true only when the durable write actually landed, so
-    /// safety-critical callers (fallback apply → restart) can refuse to reboot after an undurable
-    /// checkpoint instead of trusting a fire-and-forget void.
-    /// </summary>
-    public static bool Save(AppConfig config)
-    {
-        if (string.IsNullOrEmpty(config.ConfigFile))
-            return false;
-
-        // config.json lives in shared %ProgramData% and is written by GUI, CLI, Tray, and Watchdog.
-        // A fixed-name temp file made concurrent saves race (one writer's Create/Move clobbering
-        // another's half-written temp). Use a per-process-unique temp name AND serialize the whole
-        // read-modify-write across processes with a machine-global mutex so a settings/state write
-        // is never silently lost.
-        var tempFile = $"{config.ConfigFile}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
-        Exception? lastException = null;
-
-        System.Threading.Mutex? mutex = null;
-        bool mutexHeld = false;
-        try
-        {
-            mutex = new System.Threading.Mutex(initiallyOwned: false, @"Global\NVMeDriverPatcher.ConfigSave");
-            try { mutexHeld = mutex.WaitOne(TimeSpan.FromSeconds(10)); }
-            catch (AbandonedMutexException) { mutexHeld = true; } // prior owner crashed — we own it now
-        }
-        catch { /* mutex unavailable (rare) — proceed best-effort with the unique temp name */ }
-
-        try
-        {
-
-        // Retry up to 5 times with a short backoff. The common transient failure is an AV
-        // scanner holding an exclusive handle on the target during File.Move — that usually
-        // clears within a few hundred milliseconds. A persistent IOException is a real
-        // problem worth logging, not silently swallowing.
-        for (int attempt = 0; attempt < 5; attempt++)
-        {
-            try
-            {
-                // Make sure the working folder still exists — the user could have deleted it.
-                var dir = Path.GetDirectoryName(config.ConfigFile);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-
-                var toSave = new
-                {
-                    config.AutoSaveLog,
-                    config.EnableToasts,
-                    config.WriteEventLog,
-                    config.RestartDelay,
-                    config.IncludeServerKey,
-                    config.SkipWarnings,
-                    config.ThemeMode,
-                    config.PatchProfile,
-                    config.ConfigVersion,
-                    config.LastRun,
-                    config.LastRecoveryKitPath,
-                    config.LastDiagnosticsPath,
-                    config.LastSupportBundlePath,
-                    config.LastVerificationScriptPath,
-                    config.PendingVerificationSince,
-                    config.PendingVerificationProfile,
-                    config.PendingFallbackApplied,
-                    config.LastVerifiedProfile,
-                    config.LastVerificationResult
-                };
-                var json = JsonSerializer.Serialize(toSave, JsonOptions);
-
-                // Atomic write: write+flush to a temp file, then rename. The Flush(true) is
-                // what makes this crash-safe — without it, File.WriteAllText returns before
-                // the data hits the disk and a hard reset can leave a zero-byte config behind.
-                using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
-                using (var sw = new StreamWriter(fs, new System.Text.UTF8Encoding(false)))
-                {
-                    sw.Write(json);
-                    sw.Flush();
-                    fs.Flush(flushToDisk: true);
-                }
-                File.Move(tempFile, config.ConfigFile, overwrite: true);
-                return true;
-            }
-            catch (IOException ex)
-            {
-                lastException = ex;
-                // Antivirus / file-explorer locks are transient — brief backoff and retry.
-                try { System.Threading.Thread.Sleep(100); } catch { }
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                lastException = ex;
-                try { System.Threading.Thread.Sleep(100); } catch { }
-            }
-            catch (Exception ex)
-            {
-                // Non-IO failures (serialization, invalid config) won't improve with retry.
-                lastException = ex;
-                break;
-            }
-        }
-
-        // Clean up any stale temp file so the workspace doesn't accumulate .tmp files.
-        try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
-
-        // Surface the failure to the Application event log so users / support can see that
-        // a save actually failed instead of wondering why their settings disappeared. Guarded
-        // so a misconfigured event source can't cascade into an exception here.
-        try
-        {
-            EventLogService.Write(
-                $"Failed to save config.json after 5 attempts: {lastException?.GetType().Name}: {lastException?.Message}",
-                System.Diagnostics.EventLogEntryType.Warning,
-                3010);
-        }
-        catch { }
-
-        return false;
-        }
-        finally
-        {
-            if (mutexHeld) { try { mutex?.ReleaseMutex(); } catch { } }
-            mutex?.Dispose();
-        }
-    }
 
     internal sealed class LenientPatchProfileJsonConverter : JsonConverter<PatchProfile>
     {

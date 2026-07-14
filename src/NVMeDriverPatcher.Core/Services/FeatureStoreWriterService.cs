@@ -8,12 +8,25 @@ namespace NVMeDriverPatcher.Services;
 public class FeatureStoreWriteResult
 {
     public bool Success { get; set; }
+    /// <summary>True when no protected FeatureStore read or write ran because another process
+    /// retained the machine-global mutation lock through the timeout.</summary>
+    public bool Busy { get; set; }
+    public FeatureStoreWriteStatus Status => Success
+        ? FeatureStoreWriteStatus.Succeeded
+        : Busy ? FeatureStoreWriteStatus.Busy : FeatureStoreWriteStatus.Failed;
     public string Summary { get; set; } = string.Empty;
     public int[] AppliedIds { get; set; } = Array.Empty<int>();
 
     /// <summary>Per-ID Runtime/Boot verification, so callers can render exactly which store
     /// a partial write landed in. Empty until a write is verified.</summary>
     public IReadOnlyList<FeatureStoreIdStatus> IdStatuses { get; set; } = Array.Empty<FeatureStoreIdStatus>();
+}
+
+public enum FeatureStoreWriteStatus
+{
+    Failed,
+    Busy,
+    Succeeded
 }
 
 /// <summary>Post-write verification of one feature ID across both configuration stores.
@@ -67,21 +80,50 @@ public static class FeatureStoreWriterService
     // lock was insufficient: an elevated CLI write and an elevated GUI fallback could interleave
     // their two-phase (Runtime then Boot) writes and stomp each other's overrides. Serialize across
     // processes with a named mutex.
-    private const string WriteMutexName = @"Global\NVMeDriverPatcher.FeatureStoreWrite";
+    internal const string WriteMutexName = @"Global\NVMeDriverPatcher.FeatureStoreWrite";
 
-    private static FeatureStoreWriteResult RunExclusive(Func<FeatureStoreWriteResult> action)
+    internal static FeatureStoreWriteResult RunExclusive(
+        Func<FeatureStoreWriteResult> action,
+        TimeSpan? timeout = null,
+        string? mutexName = null)
     {
-        using var mutex = new System.Threading.Mutex(initiallyOwned: false, WriteMutexName);
-        bool held = false;
+        ArgumentNullException.ThrowIfNull(action);
+        System.Threading.Mutex? mutex;
         try
         {
-            try { held = mutex.WaitOne(TimeSpan.FromSeconds(30)); }
-            catch (System.Threading.AbandonedMutexException) { held = true; } // prior owner crashed mid-write
-            return action();
+            mutex = new System.Threading.Mutex(initiallyOwned: false, mutexName ?? WriteMutexName);
         }
-        finally
+        catch (Exception ex)
         {
-            if (held) { try { mutex.ReleaseMutex(); } catch { } }
+            return new FeatureStoreWriteResult
+            {
+                Success = false,
+                Summary = $"FeatureStore mutation lock is unavailable: {ex.GetType().Name}: {ex.Message}"
+            };
+        }
+
+        using (mutex)
+        {
+            bool held = false;
+            try
+            {
+                try { held = mutex.WaitOne(timeout ?? TimeSpan.FromSeconds(30)); }
+                catch (System.Threading.AbandonedMutexException) { held = true; } // prior owner crashed mid-write
+                if (!held)
+                {
+                    return new FeatureStoreWriteResult
+                    {
+                        Success = false,
+                        Busy = true,
+                        Summary = "FeatureStore is busy in another process; no protected state was read or written. Retry after the current operation finishes."
+                    };
+                }
+                return action();
+            }
+            finally
+            {
+                if (held) { try { mutex.ReleaseMutex(); } catch { } }
+            }
         }
     }
 
@@ -357,6 +399,9 @@ public static class FeatureStoreWriterService
     /// clean no-op; a fallback install gets its FeatureStore overrides cleared and verified.
     /// </summary>
     public static FeatureStoreWriteResult ResetAppliedFallback()
+        => RunExclusive(ResetAppliedFallbackCore);
+
+    private static FeatureStoreWriteResult ResetAppliedFallbackCore()
     {
         int[] enabled;
         try
@@ -377,7 +422,7 @@ public static class FeatureStoreWriterService
         if (enabled.Length == 0)
             return new FeatureStoreWriteResult { Success = true, Summary = "No FeatureStore fallback IDs are enabled — nothing to undo." };
 
-        return ResetOverrides(enabled);
+        return ResetOverridesCore(enabled);
     }
 
     /// <summary>Restore the exact configurations captured before fallback mutation. Unlike
@@ -390,11 +435,25 @@ public static class FeatureStoreWriterService
         if (baseline.Count == 0)
             return new[] { "FeatureStore baseline is empty." };
 
-        var result = RunExclusive(() => RestoreConfigurationsCore(baseline));
-        if (!result.Success)
-            return new[] { result.Summary };
+        IReadOnlyList<string> differences = Array.Empty<string>();
+        var result = RunExclusive(() =>
+        {
+            var restored = RestoreConfigurationsCore(baseline);
+            if (!restored.Success)
+                return restored;
 
-        var differences = ProbeConfigurationDifferences(baseline);
+            differences = ProbeConfigurationDifferences(baseline);
+            return differences.Count == 0
+                ? restored
+                : new FeatureStoreWriteResult
+                {
+                    Success = false,
+                    Summary = "FeatureStore exact restore did not verify: " + string.Join("; ", differences)
+                };
+        });
+        if (!result.Success)
+            return differences.Count == 0 ? new[] { result.Summary } : differences;
+
         foreach (var difference in differences)
             log?.Invoke("  [FeatureStore] " + difference);
         return differences;
