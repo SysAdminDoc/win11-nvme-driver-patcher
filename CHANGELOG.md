@@ -70,6 +70,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   values that clashed with the cool app canvas; they also stay correct across theme switches.
 - **Clearer microcopy** — reworded the unsupported-build notice, the "skip confirmation prompts
   (advanced)" setting (with a risk tooltip), and the registry-details hint to be calmer and less jargon-y.
+- **Telemetry error vs. degraded states are distinguished** — genuine telemetry refresh failures now
+  use the red "danger" tone (was yellow "warning"), so "it broke" reads differently from "no data yet."
+- **Corrected an off-palette chart fallback color** — `BrushResources`'s `AccentLineBrush` last-resort
+  fallback matched the real theme token (was a different color).
 - **MSI installer content fixed (issue #12)** — the license/info page now uses a real product
   `License.rtf` (purpose, risk, recovery, MIT license) instead of WiX's default sample text, product
   strings live in a `packaging/wix/en-US.wxl` contract wired into the build, and the WiX README no
