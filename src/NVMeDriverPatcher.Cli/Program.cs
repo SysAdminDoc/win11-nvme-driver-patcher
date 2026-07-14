@@ -55,6 +55,10 @@ class Program
 
             bool force = args.Any(a => a is not null && MatchesAny(a, "--force", "-f"));
             bool noRestart = args.Any(a => a is not null && MatchesAny(a, "--no-restart"));
+            // Generic --force overrides preflight/recovery gates but NOT the build-rule action
+            // policy. Overriding a build with no known binding path requires this explicit,
+            // interactive-only flag, and it can never auto-restart.
+            bool forceUnsupportedBuild = args.Any(a => a is not null && MatchesAny(a, "--force-unsupported-build"));
             bool includeServerKeyOverride = args.Any(a => a is not null && MatchesAny(a, "--include-server-key"));
             bool excludeServerKeyOverride = args.Any(a => a is not null && MatchesAny(a, "--no-server-key"));
             bool safeMode = args.Any(a => a is not null && MatchesAny(a, "--safe", "--safe-mode"));
@@ -106,13 +110,13 @@ class Program
             return command switch
             {
                 "status" => StatusCommand(json),
-                "apply" or "install" => dryRun ? DryRunCommand(config) : ApplyCommand(config, force, noRestart, unattended),
+                "apply" or "install" => dryRun ? DryRunCommand(config) : ApplyCommand(config, force, noRestart, unattended, forceUnsupportedBuild),
                 "remove" or "uninstall" => RemoveCommand(config, noRestart),
                 "disable-for-update" or "disable-for-firmware" => DisableForUpdateCommand(config, noRestart),
                 "re-enable-after-update" or "reenable-after-update" => ReEnableAfterUpdateCommand(config, force, noRestart, unattended),
                 "diagnostics" or "export-diagnostics" => DiagnosticsCommand(config),
                 "bundle" or "export-bundle" or "support-bundle" => SupportBundleCommand(config),
-                "fallback" or "vivetool-fallback" or "apply-fallback" => FallbackCommand(config),
+                "fallback" or "vivetool-fallback" or "apply-fallback" => FallbackCommand(config, forceUnsupportedBuild),
                 "recovery-kit" or "export-recovery-kit" => RecoveryKitCommand(config),
                 "verify" => VerifyCommand(config),
                 "recovery-proof" => RecoveryProofCommand(config, json),
@@ -270,12 +274,12 @@ class Program
         return 0;
     }
 
-    static int ApplyCommand(AppConfig config, bool force, bool noRestart, bool unattended)
+    static int ApplyCommand(AppConfig config, bool force, bool noRestart, bool unattended, bool forceUnsupportedBuild = false)
     {
         // v4.5: unattended mode = silent apply + auto-reboot (if --no-restart is not also set).
         // Unattended implies SkipWarnings for the run.
         if (unattended) config.SkipWarnings = true;
-        return ApplyCommandInner(config, force, noRestart, autoRestart: unattended && !noRestart);
+        return ApplyCommandInner(config, force, noRestart, autoRestart: unattended && !noRestart, forceUnsupportedBuild);
     }
 
     static int WatchdogAutoRevertCommand(AppConfig config)
@@ -649,6 +653,10 @@ class Program
 
     static int DryRunCommand(AppConfig config)
     {
+        // Preview never mutates, so it is always allowed — but state the disposition honestly so a
+        // user previewing a build with no known path isn't misled into thinking apply would work.
+        var policy = BuildActionPolicyService.EvaluateCurrent(config.WorkingDir);
+        Console.WriteLine($"Build policy: {(policy.MutationAllowed ? "apply allowed" : "verify/rollback only")} — {policy.Reason}");
         var preflight = PreflightService.RunAll();
         var report = DryRunService.PlanInstall(config, preflight);
         Console.WriteLine();
@@ -971,8 +979,31 @@ class Program
         return status.Applied ? 0 : status.Partial ? 2 : 1;
     }
 
-    static int ApplyCommandInner(AppConfig config, bool force, bool noRestart, bool autoRestart)
+    static int ApplyCommandInner(AppConfig config, bool force, bool noRestart, bool autoRestart, bool forceUnsupportedBuild = false)
     {
+        // Build-rule action policy is evaluated FIRST and is NOT bypassed by generic --force.
+        // Mutating a build with no known binding path can only be done with the explicit,
+        // interactive-only --force-unsupported-build flag, which also forbids auto-restart.
+        var policy = BuildActionPolicyService.EvaluateCurrent(config.WorkingDir);
+        if (!policy.MutationAllowed)
+        {
+            Console.Error.WriteLine($"BUILD POLICY: {policy.Reason}");
+            if (!forceUnsupportedBuild)
+            {
+                Console.Error.WriteLine("Apply is refused on this build. This is verify/monitor/rollback territory.");
+                Console.Error.WriteLine("Generic --force does NOT override this. If you understand the risk and are at an");
+                Console.Error.WriteLine("interactive console, re-run with --force-unsupported-build (auto-restart is disabled).");
+                return 1;
+            }
+            if (autoRestart)
+            {
+                Console.Error.WriteLine("--force-unsupported-build cannot be combined with unattended auto-restart. Aborting.");
+                return 3;
+            }
+            noRestart = true; // never auto-restart into an unproven build
+            Console.WriteLine("--force-unsupported-build specified: proceeding without a known binding path; restart is manual.");
+        }
+
         var preflight = PreflightService.RunAll(msg => Console.WriteLine(msg));
 
         if (preflight.VeraCryptDetected)
@@ -1193,8 +1224,22 @@ class Program
         return 1;
     }
 
-    static int FallbackCommand(AppConfig config)
+    static int FallbackCommand(AppConfig config, bool forceUnsupportedBuild = false)
     {
+        // Same build-rule action policy as apply: the FeatureStore fallback is still a mutation.
+        var policy = BuildActionPolicyService.EvaluateCurrent(config.WorkingDir);
+        if (!policy.MutationAllowed)
+        {
+            Console.Error.WriteLine($"BUILD POLICY: {policy.Reason}");
+            if (!forceUnsupportedBuild)
+            {
+                Console.Error.WriteLine("Fallback is refused on this build. Generic --force does NOT override this;");
+                Console.Error.WriteLine("re-run with --force-unsupported-build from an interactive console to proceed anyway.");
+                return 1;
+            }
+            Console.WriteLine("--force-unsupported-build specified: writing fallback IDs without a known binding path.");
+        }
+
         var proof = RecoveryProofGateService.Evaluate(config);
         if (!proof.AllPassed)
         {

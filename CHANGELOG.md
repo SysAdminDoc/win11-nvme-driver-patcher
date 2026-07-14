@@ -4,6 +4,15 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 
 ## [Unreleased] — 2026-06-30
 
+### Added
+- **Build-rule action policy gate** — a single disposition (`BuildActionPolicyService`) now governs
+  whether a build may be mutated. Builds with no known binding path (`none-known`), official opt-in,
+  no matching rule, an invalid/empty ruleset, or a **stale** rule (last reviewed > 30 days) are
+  verify/monitor/rollback-only. GUI Apply/Fallback are disabled with the matched reason shown on the
+  readiness card; the CLI `apply`/`fallback` exit non-zero and generic `--force` does NOT bypass the
+  gate. A new interactive-only `--force-unsupported-build` flag is the sole override and can never
+  auto-restart. `dry-run` prints the disposition without mutating.
+
 ### Security
 - **SQLite native library raised to 3.53.3** — pinned `SourceGear.sqlite3` 3.53.3 (SQLite 3.53.3)
   directly so every published RID (win-x64, win-arm64) ships the fixed native library, closing
