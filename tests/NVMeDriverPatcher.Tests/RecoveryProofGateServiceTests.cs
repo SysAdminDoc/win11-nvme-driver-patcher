@@ -10,7 +10,7 @@ public sealed class RecoveryProofGateServiceTests
     {
         var config = new AppConfig();
         var report = RecoveryProofGateService.Evaluate(config);
-        Assert.Equal(4, report.TotalCount);
+        Assert.Equal(5, report.TotalCount);
     }
 
     [Fact]
@@ -95,6 +95,28 @@ public sealed class RecoveryProofGateServiceTests
         Assert.NotNull(item);
         Assert.Equal("SafeBoot entries", item.Label);
         Assert.False(string.IsNullOrWhiteSpace(item.Detail));
+    }
+
+    [Fact]
+    public void EvaluateBitLockerRecovery_UsesAuthoritativeProofVerdict()
+    {
+        var blockedProof = new BitLockerRecoveryProof(
+            new BitLockerVolumeEvidence
+            {
+                ProbeSucceeded = true,
+                SystemVolumePresent = true,
+                MountPoint = "C:",
+                ConversionStatus = 1,
+                ProtectionStatus = 1,
+                RecoveryProtectorIds = []
+            },
+            new DirectoryJoinEvidence(true, DirectoryJoinKind.None));
+
+        var item = RecoveryProofGateService.EvaluateBitLockerRecovery(blockedProof);
+
+        Assert.False(item.Passed);
+        Assert.Equal("BitLocker recovery", item.Label);
+        Assert.Contains("no numerical-password", item.Detail, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

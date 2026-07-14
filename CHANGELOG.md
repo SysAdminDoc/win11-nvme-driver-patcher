@@ -2,9 +2,17 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
-## [Unreleased] — 2026-06-30
+## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **BitLocker mutation gate now proves recovery and suspension** — encrypted OS volumes must expose
+  at least one numerical recovery-password protector before apply or FeatureStore fallback. The gate
+  surfaces only protector GUIDs, refreshes their AD DS and/or Microsoft Entra backup when the device
+  is joined, persists suspension intent in the crash-consistent ledger, and uses
+  `Win32_EncryptableVolume` to verify `ProtectionStatus=0` plus `SuspendCount=1` before any storage
+  mutation. Unknown probes, unstable conversion, missing protectors, backup failures, or unverified
+  suspension now fail closed across GUI, CLI, and fallback; diagnostics and `recovery-proof --json`
+  expose the same evidence without reading or logging recovery-password material.
 - **Crash-consistent mutation transaction** — registry, SafeBoot, and FeatureStore changes now start
   with a machine-global-mutex ledger that captures the first clean baseline before any BitLocker or
   registry mutation, writes through to disk, validates its staged JSON, and atomically replaces the

@@ -457,7 +457,8 @@ public partial class MainViewModel : ObservableObject
                     if (leftMap[i] == "VeraCrypt" && _preflight.VeraCryptDetected)
                         vm.Tooltip = "VeraCrypt system encryption breaks nvmedisk.sys boot entirely.\nThis is a hard block that cannot be overridden.";
                     else if (leftMap[i] == "BitLocker" && _preflight.BitLockerEnabled)
-                        vm.Tooltip = "BitLocker will be automatically suspended for one reboot\nto prevent recovery key prompts.";
+                        vm.Tooltip = (_preflight.BitLockerRecovery?.Detail ?? check.Message) +
+                                     "\nThe protector ID is safe to match against escrow records; recovery key material is never displayed.";
                     else if (leftMap[i] == "LaptopPower" && _preflight.IsLaptop)
                         vm.Tooltip = "Native NVMe breaks APST power management.\nExpect ~15% battery life reduction and higher idle SSD temps.";
                     else if (leftMap[i] == "WindowsVersion" && _preflight.BuildDetails is not null)
@@ -1047,8 +1048,9 @@ public partial class MainViewModel : ObservableObject
         {
             AttentionNotes.Add(new AttentionNoteVM
             {
-                Title = "BitLocker will be suspended for one reboot",
-                Detail = "That avoids an unexpected recovery-key prompt during the migration, then Windows resumes normal protection after restart.",
+                Title = "BitLocker recovery is proved before suspension",
+                Detail = (_preflight.BitLockerRecovery?.Detail ?? "A numerical recovery-password protector must be present.") +
+                         " The apply transaction then verifies a one-reboot suspension through WMI before changing the storage path.",
                 ToneColor = "Yellow"
             });
         }
@@ -1185,7 +1187,8 @@ public partial class MainViewModel : ObservableObject
         if (title == "Apply Patch" && !_preflight!.HasNVMeDrives)
             warnings.Add("No NVMe drives were found. SATA and USB storage are unaffected by this patch.");
         if (_preflight!.BitLockerEnabled)
-            notes.Add("BitLocker will be suspended for one reboot to avoid a recovery-key prompt, then re-enabled automatically.");
+            notes.Add((_preflight.BitLockerRecovery?.Detail ?? "A numerical recovery-password protector was detected.") +
+                      " BitLocker will be suspended and authoritatively verified for exactly one reboot before registry mutation.");
 
         // Critical-severity items (Intel RST, Intel VMD) go into blockers so they render
         // visually distinct from notes. The Compatibility check is already marked critical:true

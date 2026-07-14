@@ -11,6 +11,7 @@ public class PreflightResult
     public List<SystemDrive> CachedDrives { get; set; } = [];
     public bool HasNVMeDrives { get; set; }
     public bool BitLockerEnabled { get; set; }
+    public BitLockerRecoveryProof? BitLockerRecovery { get; set; }
     public bool VeraCryptDetected { get; set; }
     public bool IsLaptop { get; set; }
     public List<IncompatibleSoftwareInfo> IncompatibleSoftware { get; set; } = [];
@@ -165,10 +166,13 @@ public static class PreflightService
         log?.Invoke("  [3/11] Checking BitLocker...");
         try
         {
-            result.BitLockerEnabled = DriveService.TestBitLockerEnabled();
-            checks["BitLocker"] = result.BitLockerEnabled
-                ? new(CheckStatus.Warning, "Encryption active")
-                : new(CheckStatus.Pass, "Not detected");
+            result.BitLockerRecovery = BitLockerRecoveryService.InspectSystemVolume();
+            result.BitLockerEnabled = result.BitLockerRecovery.Volume.IsEncrypted;
+            checks["BitLocker"] = !result.BitLockerRecovery.ReadyForMutation
+                ? new(CheckStatus.Fail, result.BitLockerRecovery.Detail, true)
+                : result.BitLockerEnabled
+                    ? new(CheckStatus.Warning, result.BitLockerRecovery.Detail, true)
+                    : new(CheckStatus.Pass, result.BitLockerRecovery.Detail, true);
 
             // The swap changes the driver stack for ALL NVMe controllers, not just the OS volume.
             // A BitLocker-protected NON-system volume WITHOUT auto-unlock re-locks after the reboot.
@@ -180,7 +184,7 @@ public static class PreflightService
         catch (Exception ex)
         {
             log?.Invoke($"    [ERROR] BitLocker check failed: {ex.Message}");
-            checks["BitLocker"] = new(CheckStatus.Warning, "Unable to verify");
+            checks["BitLocker"] = new(CheckStatus.Fail, "Unable to verify BitLocker recoverability", true);
         }
 
         // 4. VeraCrypt
