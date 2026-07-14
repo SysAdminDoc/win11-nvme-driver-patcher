@@ -315,6 +315,11 @@ public static class DiagnosticsService
         }
         catch { sb.AppendLine("  Enablement rule:    (unavailable)"); }
 
+        var recoverySafety = RecoverySafetyGateService.Snapshot();
+        sb.AppendLine($"  Recovery safety:    {(recoverySafety.MutationAllowed ? "resolved" : "BLOCKED")}");
+        foreach (var failure in recoverySafety.Failures)
+            sb.AppendLine($"    {failure.Source}: {failure.Summary} ({failure.DetectedAtUtc:O})");
+
         try
         {
             sb.AppendLine("  Data files:");
@@ -558,6 +563,13 @@ public static class DiagnosticsService
         sb.AppendLine($"Recovery Protector IDs: {(bitLockerProof.Volume.RecoveryProtectorIds.Count > 0 ? string.Join(", ", bitLockerProof.Volume.RecoveryProtectorIds) : "None")}");
         sb.AppendLine($"Directory Join: {bitLockerProof.DirectoryJoin.Kind}");
         sb.AppendLine($"Detail: {bitLockerProof.Detail}");
+
+        var recoverySafety = RecoverySafetyGateService.Snapshot();
+        sb.AppendLine().AppendLine("STARTUP RECOVERY SAFETY").AppendLine("-----------------------");
+        sb.AppendLine($"Mutation Allowed: {(recoverySafety.MutationAllowed ? "Yes" : "No")}");
+        sb.AppendLine($"Summary: {recoverySafety.Summary}");
+        foreach (var failure in recoverySafety.Failures)
+            sb.AppendLine($"  [{failure.DetectedAtUtc:O}] {failure.Source}: {failure.Summary}");
 
         var criticalProbes = preflight?.CriticalProbes is { Items.Count: > 0 } fromPreflightProbes
             ? fromPreflightProbes

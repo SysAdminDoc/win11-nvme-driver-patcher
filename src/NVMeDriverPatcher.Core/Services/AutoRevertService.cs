@@ -6,6 +6,8 @@ public class AutoRevertOutcome
 {
     public bool Executed { get; set; }
     public bool Success { get; set; }
+    /// <summary>True when recovery was attempted or evaluated but did not finish cleanly.</summary>
+    public bool Failed { get; set; }
     public string Summary { get; set; } = string.Empty;
     public WatchdogReport? TriggeringReport { get; set; }
 }
@@ -52,6 +54,7 @@ public static class AutoRevertService
             var bypassStatus = DriveService.GetBypassIOStatus();
             var result = PatchService.Uninstall(config, nativeStatus, bypassStatus, log);
             outcome.Success = result.Success;
+            outcome.Failed = !result.Success;
             outcome.Summary = result.Success
                 ? $"Auto-revert completed ({result.AppliedCount} component(s) removed). Restart to finalize."
                 : "Auto-revert failed to complete. Use the Recovery Kit from WinRE.";
@@ -62,17 +65,26 @@ public static class AutoRevertService
                 if (!disarm.Success)
                 {
                     outcome.Success = false;
+                    outcome.Failed = true;
                     outcome.Summary = $"Auto-revert removed the patch, but could not persist the watchdog disarm checkpoint ({disarm.Summary}). Restart and verify recovery state manually.";
                     EventLogService.Write(outcome.Summary,
                         System.Diagnostics.EventLogEntryType.Error, 3011);
                     return outcome;
                 }
                 config.LastVerificationResult = "AutoReverted";
-                ConfigService.Save(config);
+                if (!ConfigService.Save(config))
+                {
+                    outcome.Success = false;
+                    outcome.Failed = true;
+                    outcome.Summary = "Auto-revert removed the patch, but the recovery checkpoint could not be saved. Restart and verify recovery state manually.";
+                    EventLogService.Write(outcome.Summary,
+                        System.Diagnostics.EventLogEntryType.Error, 3011);
+                }
             }
         }
         catch (Exception ex) when (!IsFatal(ex))
         {
+            outcome.Failed = true;
             outcome.Summary = $"Auto-revert aborted: {ex.GetType().Name}: {ex.Message}";
         }
         return outcome;

@@ -41,6 +41,9 @@ public partial class MainViewModel
                 return;
             }
 
+            if (!EnsureRecoverySafetyAllowsMutation("Apply Patch"))
+                return;
+
             if (_preflight.VeraCryptDetected)
             {
                 Log("[ERROR] BLOCKED: VeraCrypt system encryption detected", "ERROR");
@@ -102,7 +105,7 @@ public partial class MainViewModel
             UpdateOverviewSummary();
             UpdateOperationalHistory();
             ButtonsEnabled = true;
-            ApplyEnabled = PreflightService.AllCriticalPassed(_preflight.Checks) && !_preflight.VeraCryptDetected && _mutationAllowedByBuild;
+            RefreshMutationActionAvailability();
 
             if (result.Success)
             {
@@ -445,6 +448,9 @@ public partial class MainViewModel
     [RelayCommand]
     private void UpgradeSafeBootEntries()
     {
+        if (!EnsureRecoverySafetyAllowsMutation("SafeBoot upgrade"))
+            return;
+
         try
         {
             Log("Upgrading SafeBoot entries (KB5079391 service-name fix)...");
@@ -483,6 +489,9 @@ public partial class MainViewModel
         ButtonsEnabled = false;
         try
         {
+            if (!EnsureRecoverySafetyAllowsMutation("FeatureStore fallback"))
+                return;
+
             // The FeatureStore fallback is still a mutation — gate it on the same build policy.
             if (!_mutationAllowedByBuild)
             {

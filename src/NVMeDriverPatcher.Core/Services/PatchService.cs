@@ -34,6 +34,61 @@ public class PatchOperationResult
 
 public static class PatchService
 {
+    internal static IReadOnlyList<DurableRegistryMutation> BuildRequiredRegistryMutations(
+        PatchProfile profile,
+        bool includeServer)
+    {
+        var mutations = new List<DurableRegistryMutation>();
+        var featureIds = new List<string>(AppConfig.GetFeatureIDsForProfile(profile));
+        if (includeServer)
+            featureIds.Add(AppConfig.ServerFeatureID);
+
+        foreach (var id in featureIds)
+        {
+            var friendlyName = AppConfig.FeatureNames.TryGetValue(id, out var name)
+                ? name
+                : "Feature Flag";
+            mutations.Add(new DurableRegistryMutation(
+                AppConfig.RegistrySubKey,
+                id,
+                1,
+                RegistryValueKind.DWord,
+                $"{id} - {friendlyName}",
+                CountsTowardPatchTotal: true));
+        }
+
+        mutations.Add(new DurableRegistryMutation(
+            AppConfig.SafeBootMinimalPath,
+            string.Empty,
+            AppConfig.SafeBootValue,
+            RegistryValueKind.String,
+            "SafeBoot Minimal Support",
+            CountsTowardPatchTotal: true));
+        mutations.Add(new DurableRegistryMutation(
+            AppConfig.SafeBootNetworkPath,
+            string.Empty,
+            AppConfig.SafeBootValue,
+            RegistryValueKind.String,
+            "SafeBoot Network Support",
+            CountsTowardPatchTotal: true));
+        mutations.Add(new DurableRegistryMutation(
+            AppConfig.SafeBootMinimalServicePath,
+            string.Empty,
+            AppConfig.SafeBootServiceValue,
+            RegistryValueKind.String,
+            "SafeBoot Minimal (service name) - 25H2 compatibility",
+            CountsTowardPatchTotal: false));
+        mutations.Add(new DurableRegistryMutation(
+            AppConfig.SafeBootNetworkServicePath,
+            string.Empty,
+            AppConfig.SafeBootServiceValue,
+            RegistryValueKind.String,
+            "SafeBoot Network (service name) - 25H2 compatibility",
+            CountsTowardPatchTotal: false));
+
+        return mutations;
+    }
+
     public static PatchOperationResult Install(
         AppConfig config,
         NativeNVMeStatus? nativeStatus,
@@ -46,6 +101,14 @@ public static class PatchService
         string workingDir = string.IsNullOrWhiteSpace(config.WorkingDir)
             ? AppConfig.GetWorkingDir()
             : config.WorkingDir;
+
+        var recoverySafety = RecoverySafetyGateService.Snapshot();
+        if (!recoverySafety.MutationAllowed)
+        {
+            log?.Invoke("[ERROR] BLOCKED by unresolved startup recovery: " + recoverySafety.Summary);
+            ReportProgress(progress, 0, string.Empty);
+            return result;
+        }
 
         var buildPolicy = BuildActionPolicyService.EvaluateCurrent(workingDir);
         if (!buildPolicy.MutationAllowed && !allowUnsupportedBuild)
@@ -76,7 +139,6 @@ public static class PatchService
         log?.Invoke("========================================");
         EventLogService.Write("NVMe Driver Patch installation started");
 
-        var appliedKeys = new List<(string Type, string ID)>();
         int successCount = 0;
 
         // Profile-driven key set. Safe = primary flag only (community-recommended default —
@@ -168,156 +230,17 @@ public static class PatchService
             log?.Invoke($"Step 2/3: Applying {effectiveTotal} registry components...");
             ReportProgress(progress, 60, "Applying registry changes...");
 
-            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-
-            // Ensure path exists
-            using var overrides = hklm.CreateSubKey(AppConfig.RegistrySubKey);
-            if (overrides is null)
-            {
-                throw new IOException("Failed to create registry path.");
-            }
-
-            foreach (var id in featureIDsToApply)
-            {
-                string friendlyName = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn : "Feature Flag";
-                try
-                {
-                    mutationMayHaveLanded = true;
-                    overrides.SetValue(id, 1, RegistryValueKind.DWord);
-                    appliedKeys.Add(("Feature", id));
-                    var verify = overrides.GetValue(id);
-                    if (verify is int v && v == 1)
-                    {
-                        log?.Invoke($"  [OK] {id} - {friendlyName}");
-                        successCount++;
-                    }
-                    else
-                    {
-                        log?.Invoke($"  [FAIL] {id} - {friendlyName} (write verify failed)");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    log?.Invoke($"  [FAIL] {id} - {ex.Message}");
-                }
-            }
-
-            // SafeBoot Minimal — track in appliedKeys ONLY after we've confirmed the write took.
-            // If CreateSubKey succeeds but SetValue fails, the empty subkey is still present and
-            // must still be tracked for rollback so we don't leak it. We register it pre-SetValue
-            // for that reason.
-            try
-            {
-                bool safeMinKeyCreated = false;
-                using (var safeMin = hklm.CreateSubKey(AppConfig.SafeBootMinimalPath))
-                {
-                    if (safeMin is not null)
-                    {
-                        safeMinKeyCreated = true;
-                        appliedKeys.Add(("SafeBoot", "Minimal"));
-                        safeMin.SetValue("", AppConfig.SafeBootValue);
-                        var val = safeMin.GetValue("") as string;
-                        if (val == AppConfig.SafeBootValue)
-                        {
-                            log?.Invoke("  [OK] SafeBoot Minimal Support");
-                            successCount++;
-                        }
-                        else
-                        {
-                            log?.Invoke("  [FAIL] SafeBoot Minimal Support (write verify failed)");
-                        }
-                        try { safeMin.Flush(); } catch { }
-                    }
-                    else
-                    {
-                        log?.Invoke("  [FAIL] SafeBoot Minimal Support (CreateSubKey returned null)");
-                    }
-                }
-                if (!safeMinKeyCreated)
-                {
-                    // CreateSubKey didn't actually land — don't pretend we need to roll it back.
-                }
-            }
-            catch (Exception ex)
-            {
-                log?.Invoke($"  [FAIL] SafeBoot Minimal: {ex.Message}");
-                // If we made it past CreateSubKey before throwing, the subkey may still exist;
-                // ensure rollback is registered so it doesn't leak.
-                try { using var probe = hklm.OpenSubKey(AppConfig.SafeBootMinimalPath); if (probe is not null && !appliedKeys.Contains(("SafeBoot", "Minimal"))) appliedKeys.Add(("SafeBoot", "Minimal")); } catch { }
-            }
-
-            // SafeBoot Network — same pattern.
-            try
-            {
-                bool safeNetKeyCreated = false;
-                using (var safeNet = hklm.CreateSubKey(AppConfig.SafeBootNetworkPath))
-                {
-                    if (safeNet is not null)
-                    {
-                        safeNetKeyCreated = true;
-                        appliedKeys.Add(("SafeBoot", "Network"));
-                        safeNet.SetValue("", AppConfig.SafeBootValue);
-                        var val = safeNet.GetValue("") as string;
-                        if (val == AppConfig.SafeBootValue)
-                        {
-                            log?.Invoke("  [OK] SafeBoot Network Support");
-                            successCount++;
-                        }
-                        else
-                        {
-                            log?.Invoke("  [FAIL] SafeBoot Network Support (write verify failed)");
-                        }
-                        try { safeNet.Flush(); } catch { }
-                    }
-                    else
-                    {
-                        log?.Invoke("  [FAIL] SafeBoot Network Support (CreateSubKey returned null)");
-                    }
-                }
-                if (!safeNetKeyCreated)
-                {
-                    // See note above.
-                }
-            }
-            catch (Exception ex)
-            {
-                log?.Invoke($"  [FAIL] SafeBoot Network: {ex.Message}");
-                try { using var probe = hklm.OpenSubKey(AppConfig.SafeBootNetworkPath); if (probe is not null && !appliedKeys.Contains(("SafeBoot", "Network"))) appliedKeys.Add(("SafeBoot", "Network")); } catch { }
-            }
-
-            // Supplemental service-name SafeBoot entries for Windows 25H2 compatibility.
-            // KB5079391 (March 2026) tightened how Safe Mode resolves storage drivers — the
-            // GUID-class approach above is sufficient on 24H2 and earlier, but 25H2 now
-            // requires the canonical service-name entry used by storport/stornvme/storahci.
-            // These are BEST-EFFORT: they do NOT count toward successCount/effectiveTotal
-            // and are NOT tracked in appliedKeys. A failure here is logged but never causes
-            // the patch to fail or roll back on pre-25H2 machines.
-            try
-            {
-                using var svcMin = hklm.CreateSubKey(AppConfig.SafeBootMinimalServicePath);
-                if (svcMin is not null)
-                {
-                    svcMin.SetValue("", AppConfig.SafeBootServiceValue);
-                    try { svcMin.Flush(); } catch { }
-                    log?.Invoke("  [OK] SafeBoot Minimal (service name) -- 25H2 compat");
-                }
-            }
-            catch (Exception ex) { log?.Invoke($"  [WARN] SafeBoot Minimal service entry: {ex.Message}"); }
-
-            try
-            {
-                using var svcNet = hklm.CreateSubKey(AppConfig.SafeBootNetworkServicePath);
-                if (svcNet is not null)
-                {
-                    svcNet.SetValue("", AppConfig.SafeBootServiceValue);
-                    try { svcNet.Flush(); } catch { }
-                    log?.Invoke("  [OK] SafeBoot Network (service name) -- 25H2 compat");
-                }
-            }
-            catch (Exception ex) { log?.Invoke($"  [WARN] SafeBoot Network service entry: {ex.Message}"); }
-
-            // Flush registry to disk so a hard power cycle before reboot doesn't lose the writes.
-            try { overrides.Flush(); } catch { }
+            var registryPlatform = new WindowsDurableRegistryPlatform();
+            // SetValue may land even when Flush or a fresh read fails, so any failed batch
+            // routes through the exact-baseline ledger restore before MarkApplied is reachable.
+            mutationMayHaveLanded = true;
+            var registryBatch = DurableRegistryCommitService.CommitAll(
+                BuildRequiredRegistryMutations(profile, includeServer),
+                registryPlatform,
+                log);
+            successCount = registryBatch.CountedCommitted;
+            if (!registryBatch.Success)
+                throw new IOException(registryBatch.Summary);
 
             // Step 3: Validate
             ReportProgress(progress, 95, "Validating...");

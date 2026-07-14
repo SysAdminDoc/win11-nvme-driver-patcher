@@ -42,13 +42,17 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _updateTooltip = "";
     [ObservableProperty] private bool _buttonsEnabled;
     [ObservableProperty] private bool _applyEnabled;
-    // Empty when the current build has a known binding path; otherwise the build-policy reason
-    // shown on the readiness card and used to keep Apply/Fallback disabled.
+    // Empty when all mutation policies pass; otherwise the exact build/recovery reason shown on
+    // the readiness card and used to keep Apply/Fallback/SafeBoot upgrade disabled.
     [ObservableProperty] private string _mutationBlockedReason = "";
-    // Drives the readiness-card notice visibility (true when this build has no known binding path).
+    [ObservableProperty] private string _mutationBlockedGuidance = "";
+    [ObservableProperty] private bool _mutationCommandsEnabled;
+    // Retained binding name; true for either a build-policy or startup-recovery block.
     [ObservableProperty] private bool _buildPolicyBlocked;
-    // Cached disposition from the last preflight so both ApplyEnabled set-sites agree.
+    // Cached dispositions from the last preflight/startup recovery so every mutation surface agrees.
     private bool _mutationAllowedByBuild;
+    private bool _mutationAllowedByRecovery = true;
+    private string _buildMutationBlockedReason = "";
     [ObservableProperty] private bool _removeEnabled;
     [ObservableProperty] private string _applyButtonText = "Apply Patch";
     [ObservableProperty] private int _progressValue;
@@ -331,7 +335,11 @@ public partial class MainViewModel : ObservableObject
             Config.WorkingDir,
             message => Log(message, "INFO"));
         if (!interruptedRecovery.Success)
+        {
+            RecoverySafetyGateService.ObserveInterruptedRecovery(interruptedRecovery);
             Log("[ERROR] Mutation recovery failed: " + interruptedRecovery.Summary, "ERROR");
+            RefreshMutationSafetyState();
+        }
 
         // Post-reboot verification: evaluate now so the log captures the state at startup,
         // but defer any dialog until AFTER preflight has rendered. A modal dialog popping up
@@ -345,7 +353,14 @@ public partial class MainViewModel : ObservableObject
             // GUI startup only — never from the tray tick or dashboard render.
             var recovery = FallbackRecoveryCoordinator.RunOnce(Config, pendingVerification, m => Log(m, "INFO"));
             if (recovery.Attempted)
+            {
                 Log($"Fallback recovery: {recovery.Summary}", recovery.Success ? "SUCCESS" : "WARNING");
+                if (!recovery.Success)
+                {
+                    RecoverySafetyGateService.ReportFailure("FeatureStore fallback recovery", recovery.Summary);
+                    RefreshMutationSafetyState();
+                }
+            }
             switch (pendingVerification.Outcome)
             {
                 case VerificationOutcome.Confirmed:
@@ -567,14 +582,8 @@ public partial class MainViewModel : ObservableObject
             // reason is surfaced on the readiness card.
             var buildPolicy = BuildActionPolicyService.EvaluateCurrent(Config.WorkingDir);
             _mutationAllowedByBuild = buildPolicy.MutationAllowed;
-            MutationBlockedReason = buildPolicy.MutationAllowed ? "" : buildPolicy.Reason;
-            BuildPolicyBlocked = !buildPolicy.MutationAllowed;
-            // Official enablement makes "apply" pointless (the keys would change nothing
-            // the OS hasn't already done) — keep the button disabled in that state.
-            ApplyEnabled = PreflightService.AllCriticalPassed(_preflight.Checks)
-                && !_preflight.VeraCryptDetected
-                && _enablementSource != EnablementSource.Official
-                && _mutationAllowedByBuild;
+            _buildMutationBlockedReason = buildPolicy.MutationAllowed ? "" : buildPolicy.Reason;
+            RefreshMutationSafetyState();
             });
         }
         catch (Exception ex)
@@ -628,6 +637,49 @@ public partial class MainViewModel : ObservableObject
             }
             catch { /* Dispatcher gone during shutdown */ }
         }
+    }
+
+    private void RefreshMutationSafetyState()
+    {
+        var recovery = RecoverySafetyGateService.Snapshot();
+        _mutationAllowedByRecovery = recovery.MutationAllowed;
+
+        var reasons = new List<string>();
+        if (!_mutationAllowedByRecovery)
+            reasons.Add(recovery.Summary);
+        if (!_mutationAllowedByBuild && !string.IsNullOrWhiteSpace(_buildMutationBlockedReason))
+            reasons.Add(_buildMutationBlockedReason);
+
+        MutationBlockedReason = string.Join("\n\n", reasons);
+        BuildPolicyBlocked = reasons.Count > 0;
+        MutationBlockedGuidance = !_mutationAllowedByRecovery
+            ? "Removal, recovery exports, logs, diagnostics, and verification remain available. Resolve recovery, then restart the app to re-prove a clean startup state."
+            : "On this build you can still verify, monitor, and roll back. Forcing the patch requires the command-line tool's --force-unsupported-build option.";
+        RefreshMutationActionAvailability();
+    }
+
+    private void RefreshMutationActionAvailability()
+    {
+        MutationCommandsEnabled = ButtonsEnabled && _mutationAllowedByBuild && _mutationAllowedByRecovery;
+        ApplyEnabled = MutationCommandsEnabled
+            && _preflight is not null
+            && PreflightService.AllCriticalPassed(_preflight.Checks)
+            && !_preflight.VeraCryptDetected
+            && _enablementSource != EnablementSource.Official;
+    }
+
+    private bool EnsureRecoverySafetyAllowsMutation(string action)
+    {
+        RefreshMutationSafetyState();
+        if (_mutationAllowedByRecovery)
+            return true;
+
+        Log($"[ERROR] {action} BLOCKED by unresolved startup recovery: {MutationBlockedReason}", "ERROR");
+        InfoDialog?.Invoke(
+            "Startup Recovery Unresolved",
+            MutationBlockedReason + "\n\n" + MutationBlockedGuidance,
+            DialogIcon.Error);
+        return false;
     }
 
     // Populates the "update available" badge + toast. Extracted so the initial preflight

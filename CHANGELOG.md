@@ -5,6 +5,18 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Startup recovery now fails closed across GUI, CLI, and Core mutation services** — a failed
+  interrupted-ledger restore, FeatureStore recovery, or watchdog auto-revert is retained as a
+  process-wide critical state. Apply/reinstall, fallback, SafeBoot upgrade, and hot-swap remain
+  disabled at both UI and service boundaries, while removal, recovery exports, verification, and
+  diagnostics stay available. Auto-revert partial/aborted outcomes are labeled as failures, and
+  diagnostics/support bundles include every exact recovery failure.
+- **Registry apply now requires durable evidence for every critical value** — each feature override,
+  GUID SafeBoot value, and 25H2 service-name SafeBoot value must complete a write, a successful
+  `RegistryKey.Flush()`, and readback through a newly opened HKLM64 handle before the mutation
+  ledger can advance to Applied or expose a restart. A write, flush, reopen, or value mismatch
+  reports the exact path/value and restores the ledger baseline; fault injection covers every
+  write position in all patch profiles.
 - **Privileged persisted state now has an explicit Windows trust boundary** — boot-critical
   mutation ledgers, SafeBoot journals, and administrator build-rule overrides resolve to
   `%ProgramData%\NVMePatcher\State` even when portable or fallback data storage is active. The

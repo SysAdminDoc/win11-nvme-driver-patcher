@@ -80,6 +80,10 @@ public static class SafeBootUpgradeService
     /// </summary>
     public static (bool Success, string Message) UpgradeEntries(Action<string>? log = null)
     {
+        var recoverySafety = RecoverySafetyGateService.Snapshot();
+        if (!recoverySafety.MutationAllowed)
+            return (false, "SafeBoot upgrade blocked by unresolved startup recovery: " + recoverySafety.Summary);
+
         try
         {
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);

@@ -23,6 +23,7 @@ public partial class App : Application
         DispatcherUnhandledException += App_DispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += AppDomain_UnhandledException;
         TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
+        Services.RecoverySafetyGateService.Reset();
         try
         {
             ThemeService.ApplyMode(ConfigService.Load().ThemeMode);
@@ -104,21 +105,28 @@ public partial class App : Application
             if (policyWatchdogSave is { Success: false })
                 WriteCrashEntry("WatchdogPolicy", new IOException(policyWatchdogSave.Summary));
             var outcome = Services.AutoRevertService.MaybeRun(arConfig, m => WriteCrashEntry("AutoRevert", new InvalidOperationException(m)));
-            if (outcome.Executed)
+            Services.RecoverySafetyGateService.ObserveAutoRevert(outcome);
+            if (outcome.Executed || outcome.Failed)
             {
-                // We can't unilaterally reboot — surface a one-shot notice and let the user
-                // restart when convenient. The watchdog has already been disarmed.
                 try
                 {
                     TryShowThemedMessage(
-                        "Auto-revert executed",
-                        outcome.Summary + "\n\nA restart is required to return to the legacy NVMe driver.",
-                        DialogIcon.Warning);
+                        outcome.Success ? "Auto-revert completed" : "Auto-revert failed",
+                        outcome.Success
+                            ? outcome.Summary + "\n\nA restart is required to return to the legacy NVMe driver."
+                            : outcome.Summary + "\n\nNew mutation actions are disabled. Remove/recovery and diagnostics remain available; do not restart until the recovery state is understood.",
+                        outcome.Success ? DialogIcon.Warning : DialogIcon.Error);
                 }
                 catch { }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Services.RecoverySafetyGateService.ReportFailure(
+                "Watchdog auto-revert",
+                $"Startup recovery threw {ex.GetType().Name}: {ex.Message}");
+            WriteCrashEntry("AutoRevertStartup", ex);
+        }
 
         // If GetWorkingDir() had to fall back off ProgramData, stamp a crash-log entry so
         // we have a breadcrumb if the app is writing to an unexpected directory.

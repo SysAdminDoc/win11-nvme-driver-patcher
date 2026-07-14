@@ -191,9 +191,9 @@
                                             BorderThickness="1"
                                             CornerRadius="8"
                                             Visibility="{Binding BuildPolicyBlocked, Converter={StaticResource BoolVis}}"
-                                            AutomationProperties.Name="Unsupported build notice">
+                                            AutomationProperties.Name="Mutation safety notice">
                                         <StackPanel>
-                                            <TextBlock Text="Apply disabled on this Windows build"
+                                            <TextBlock Text="Mutation actions disabled"
                                                        Foreground="{DynamicResource Yellow}"
                                                        FontSize="13"
                                                        FontWeight="SemiBold"/>
@@ -202,7 +202,7 @@
                                                        Foreground="{DynamicResource TextSecondary}"
                                                        FontSize="12"
                                                        TextWrapping="Wrap"/>
-                                            <TextBlock Text="On this build you can still verify, monitor, and roll back. Forcing the patch anyway requires the command-line tool's --force-unsupported-build option."
+                                            <TextBlock Text="{Binding MutationBlockedGuidance}"
                                                        Margin="0,6,0,0"
                                                        Foreground="{DynamicResource TextSecondary}"
                                                        FontSize="12"
@@ -239,7 +239,7 @@
                                                     VerticalAlignment="Center"
                                                     Style="{StaticResource SecondaryButton}"
                                                     ToolTip="Writes build-specific FeatureStore IDs through the native Rtl API first. Downloads ViVeTool only if native both-store verification fails. Requires a restart."
-                                                    IsEnabled="{Binding ButtonsEnabled}"
+                                                    IsEnabled="{Binding MutationCommandsEnabled}"
                                                     Command="{Binding ApplyViVeToolFallbackCommand}"/>
                                         </Grid>
                                     </Border>
@@ -275,7 +275,7 @@
                                                     Style="{StaticResource SecondaryButton}"
                                                     ToolTip="Writes the SafeBoot\Minimal\nvmedisk and SafeBoot\Network\nvmedisk service-name entries. Idempotent — changes nothing else."
                                                     AutomationProperties.Name="Upgrade SafeBoot entries"
-                                                    IsEnabled="{Binding ButtonsEnabled}"
+                                                    IsEnabled="{Binding MutationCommandsEnabled}"
                                                     Command="{Binding UpgradeSafeBootEntriesCommand}"/>
                                         </Grid>
                                     </Border>
