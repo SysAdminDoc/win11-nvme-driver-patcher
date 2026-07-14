@@ -18,7 +18,9 @@ Produces a per-machine MSI installer for NVMe Driver Patcher with four features:
   ```
 
   `policy-install` copies the bundled `admx\` templates beside the exe; pass `--source=<dir>` to point at a different template set. Both commands need an elevated shell. Central Store deployment makes the templates available to every Group Policy editor in the domain; local install only affects the current machine.
-- **WatchdogService** — opt-in (Level 2, NOT installed by default): drops `NVMeDriverPatcher.Watchdog.exe` and registers/starts the `NVMeDriverPatcherWatchdog` LocalSystem service; removed cleanly on uninstall. Select via the installer feature tree or `msiexec /i NVMeDriverPatcher.msi ADDLOCAL=WatchdogService`
+- **WatchdogService** — opt-in (Level 2, NOT installed by default): drops `NVMeDriverPatcher.Watchdog.exe` and registers/starts the `NVMeDriverPatcherWatchdog` service as **NT AUTHORITY\LocalService** (least privilege — matches the wxs `ServiceInstall` Account); removed cleanly on uninstall. Select via the installer feature tree or `msiexec /i NVMeDriverPatcher.msi ADDLOCAL=WatchdogService`
+
+The installer's license/info page and product-facing strings come from `packaging\wix\License.rtf` (no placeholder text — issue #12) and the `packaging\wix\en-US.wxl` string contract.
 
 ## Prereqs
 
@@ -52,10 +54,11 @@ dotnet publish src\NVMeDriverPatcher.Watchdog\NVMeDriverPatcher.Watchdog.csproj 
 # 2. Copy the app icon next to the published exes (wxs references it there)
 Copy-Item src\NVMeDriverPatcher\nvme.ico build\publish\icon.ico -Force
 
-# 3. Build the MSI
+# 3. Build the MSI (‑loc supplies the en-US string contract; License.rtf resolves beside the wxs)
 wix build packaging\wix\NVMeDriverPatcher.wxs `
   -d PublishDir="$(Resolve-Path build\publish)" `
   -d ProjectRoot="$(Resolve-Path .)" `
+  -loc packaging\wix\en-US.wxl `
   -ext WixToolset.UI.wixext `
   -ext WixToolset.Util.wixext `
   -out build\NVMeDriverPatcher-<version>.msi
@@ -63,7 +66,5 @@ wix build packaging\wix\NVMeDriverPatcher.wxs `
 
 ## Signing
 
-```powershell
-# After building, sign with an EV cert (SmartScreen friendly) or a standard OV cert.
-signtool sign /sha1 <cert thumbprint> /tr http://timestamp.sectigo.com /td sha256 /fd sha256 build\NVMeDriverPatcher-<version>.msi
-```
+Not applicable — this project ships **unsigned**. Do not code-sign the MSI or its payload. If
+SmartScreen warns, choose "More info → Run anyway"; installation does not require a signature.

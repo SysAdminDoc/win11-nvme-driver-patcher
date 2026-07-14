@@ -62,6 +62,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   clears and persists on success, and retains the checkpoint for retry on failure.
 
 ### Changed
+- **MSI installer content fixed (issue #12)** — the license/info page now uses a real product
+  `License.rtf` (purpose, risk, recovery, MIT license) instead of WiX's default sample text, product
+  strings live in a `packaging/wix/en-US.wxl` contract wired into the build, and the WiX README no
+  longer misstates the watchdog account (it runs as NT AUTHORITY\LocalService) or reference code
+  signing. A new test rejects placeholder text, version drift, and service-account drift.
 - **Refreshed build-rule and firmware compat data (2026-07-14 review)** — `windows_build_rules.json`
   review dates updated after a full 2026 ecosystem re-review (un-stalling the new build-policy gate),
   the post-block rule now records the precise reported block build (Insider 26100.8106, ~2026-03-24)
