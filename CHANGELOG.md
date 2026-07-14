@@ -5,6 +5,14 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-06-30
 
 ### Fixed
+- **Concurrency-safe config writes** — `ConfigService.Save` now uses a per-process-unique temp file
+  and a machine-global mutex (`Global\NVMeDriverPatcher.ConfigSave`) so simultaneous saves from the
+  GUI, CLI, Tray, and Watchdog can no longer clobber each other's half-written temp or silently drop
+  a settings/state write.
+- **`compare-benchmarks` can actually detect a regression** — the CLI compared the baseline to
+  itself (always exit 0). It now compares the baseline against a real current benchmark (the most
+  recent recorded run, or an explicit `--current=<path>`) and exits non-zero on a real regression
+  beyond the threshold; it reports clearly when no current benchmark exists.
 - **SafeBoot state is now a reversible transaction (issue #13)** — apply captures a durable journal
   (`safeboot_journal.json`) of every SafeBoot key's exact prior state before writing; removal and
   partial-install rollback restore that state byte-for-byte, deleting the GUID key only when the app
