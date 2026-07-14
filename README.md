@@ -114,6 +114,7 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 - **Recovery Kit generation** -- creates .reg + .bat files for offline WinRE recovery (auto-detects WinRE, loads offline registry hive)
 
 **Diagnostics & Benchmarking**
+- **Automated verification** -- 1,000+ discovered test cases cover mutation safety, recovery, packaging, CLI, accessibility, and update integrity; release validation derives the live count from the test project
 - **Built-in DiskSpd benchmark** -- 4K random read/write test targeting NVMe drive with before/after comparison (auto-downloads [Microsoft DiskSpd](https://github.com/microsoft/diskspd))
 - **11 async preflight checks** run in a background thread without freezing the GUI
 - **NVMe health badges** -- temperature, wear %, firmware, power-on hours, media errors (hover for SMART details)
