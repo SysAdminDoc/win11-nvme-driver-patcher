@@ -88,7 +88,11 @@ public static class AutoUpdaterService
                 MaxBytes = 262_144_000,   // 250 MB — above this is out of scope
                 MaxRedirects = 6,
                 RequireIntegrity = true,             // never stage an unverified exe
-                AllowAuthenticodeFallback = true
+                // Authenticode fallback verifies signature VALIDITY, not signer IDENTITY, so it would
+                // accept any validly-signed binary at the asset URL. This project ships UNSIGNED and
+                // every release carries a SHA-256 sidecar, so require the sidecar and disable the
+                // fallback rather than accept an unpinned signer for the in-place self-replace.
+                AllowAuthenticodeFallback = false
             };
 
             var download = await VerifiedDownloader
