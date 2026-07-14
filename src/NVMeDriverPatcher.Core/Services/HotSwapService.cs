@@ -1,24 +1,22 @@
 using System.Diagnostics;
 using System.Management;
-using System.Runtime.InteropServices;
-using NVMeDriverPatcher.Interop;
 using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
 
 // ============================================================================
 // HIGH RISK: This service performs live driver hot-swap on NVMe devices.
-// It dismounts volumes and re-enumerates device nodes, which can cause data loss
+// It dismounts volumes and restarts controller device state, which can cause data loss
 // if used on a boot device or if volumes have open file handles.
 // This should ONLY be used on non-boot NVMe drives with no actively-used volumes.
 // ============================================================================
 
 /// <summary>
 /// Service for live NVMe driver hot-swap without requiring a full system reboot.
-/// Only operates on non-boot NVMe drives. Dismounts volumes, re-enumerates the
-/// device node, and waits for the device to return with the new driver stack.
+/// Only operates on non-boot NVMe drives. The transaction implementation lives in
+/// HotSwapTransactionService.cs; this partial contains Windows volume primitives.
 /// </summary>
-public static class HotSwapService
+public static partial class HotSwapService
 {
     /// <summary>
     /// Determines whether the given drive can be safely hot-swapped.
@@ -36,343 +34,14 @@ public static class HotSwapService
     }
 
     /// <summary>
-    /// Performs a live driver hot-swap on a non-boot NVMe drive.
-    /// Sequence: verify non-boot -> dismount volumes -> re-enumerate device node -> wait for return.
-    /// If the device does not return within the timeout, attempts rollback.
-    /// </summary>
-    /// <param name="drive">Target non-boot NVMe drive.</param>
-    /// <param name="log">Optional logging callback for status updates.</param>
-    /// <returns>A result indicating success or failure with details.</returns>
-    // HIGH RISK: This operation can cause data loss. Only call after explicit user confirmation.
-    public static async Task<HotSwapResult> SwapAsync(SystemDrive? drive, Action<string>? log = null)
-    {
-        var result = new HotSwapResult();
-
-        // ================================================================
-        // Step 1: Safety verification
-        // ================================================================
-        if (drive is null)
-        {
-            result.ErrorMessage = "BLOCKED: No drive specified for hot-swap.";
-            log?.Invoke($"[ERROR] {result.ErrorMessage}");
-            return result;
-        }
-
-        if (!CanHotSwap(drive))
-        {
-            result.ErrorMessage = drive.IsBoot
-                ? "BLOCKED: Cannot hot-swap the boot device. A full reboot is required."
-                : "BLOCKED: Drive is not eligible for hot-swap (not NVMe or missing PNP ID).";
-            log?.Invoke($"[ERROR] {result.ErrorMessage}");
-            return result;
-        }
-
-        log?.Invoke("========================================");
-        log?.Invoke($"HOT-SWAP: Drive {drive.Number} - {drive.Name}");
-        log?.Invoke("========================================");
-        log?.Invoke("[WARNING] HIGH RISK OPERATION - Ensure no files are open on this drive");
-
-        return await Task.Run(() =>
-        {
-            // Captured BEFORE dismount so we can restore letters deterministically after the
-            // device returns. `mountvol X: /P` removes the mount point; Windows auto-mount
-            // MAY restore the letter but it's not guaranteed — especially on systems where
-            // the NoAutoMount policy is set (common on servers). Re-attaching by the volume's
-            // GUID is the only robust path back.
-            List<MountedVolume> volumesCaptured = [];
-            List<MountedVolume> volumesToRestore = [];
-
-            void TrackRemountOutcome(RemountSummary remount)
-            {
-                result.FailedRemountLetters = remount.Failed;
-                if (remount.Failed.Count == 0)
-                {
-                    volumesToRestore.Clear();
-                    return;
-                }
-
-                var failed = remount.Failed.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                volumesToRestore = volumesToRestore
-                    .Where(v => failed.Contains(v.Letter))
-                    .ToList();
-            }
-
-            void RestoreCapturedVolumes(string reason)
-            {
-                if (volumesToRestore.Count == 0)
-                    return;
-
-                log?.Invoke($"Attempting to restore drive letters after {reason}...");
-                var remount = RemountVolumes(volumesToRestore, log);
-                TrackRemountOutcome(remount);
-                if (remount.Failed.Count == 0)
-                    log?.Invoke("  [OK] All previously dismounted volumes were reattached");
-                else
-                {
-                    log?.Invoke("[WARNING] Some volumes could not be reattached automatically:");
-                    foreach (var letter in remount.Failed)
-                        log?.Invoke($"  - {letter} (use Disk Management -> Online to restore manually)");
-                }
-            }
-
-            try
-            {
-                // ================================================================
-                // Step 2: Get volume mount points for this physical drive
-                // ================================================================
-                log?.Invoke("Step 1/4: Identifying mounted volumes...");
-                var volumeCapture = GetVolumesForDrive(drive.Number);
-                if (!volumeCapture.Succeeded)
-                {
-                    result.ErrorMessage = "ABORTED: Could not enumerate mounted volumes for this drive. Close Disk Management/storage tools and retry.";
-                    if (!string.IsNullOrWhiteSpace(volumeCapture.ErrorMessage))
-                        result.ErrorMessage += $" Details: {volumeCapture.ErrorMessage}";
-                    log?.Invoke($"[ERROR] {result.ErrorMessage}");
-                    return result;
-                }
-                volumesCaptured = volumeCapture.Volumes;
-
-                if (volumesCaptured.Count > 0)
-                {
-                    log?.Invoke($"  Found {volumesCaptured.Count} volume(s): {string.Join(", ", volumesCaptured.Select(v => v.Letter))}");
-
-                    // Flag BitLocker-protected volumes that won't auto-unlock after remount.
-                    // The hot-swap doesn't lose data, but the drive comes back LOCKED and the
-                    // user will need the recovery key or password to access it again. Surfacing
-                    // this up front lets the user back out BEFORE we dismount rather than
-                    // discover it post-swap.
-                    var lockedAfterSwap = DescribeBitLockerRisk(volumesCaptured);
-                    if (lockedAfterSwap.Count > 0)
-                    {
-                        result.BitLockerLockedLetters = lockedAfterSwap;
-                        log?.Invoke("[WARNING] BitLocker-protected volume(s) detected:");
-                        foreach (var letter in lockedAfterSwap)
-                            log?.Invoke($"  - {letter} will require BitLocker unlock after the hot-swap");
-                        log?.Invoke("[WARNING] Have the recovery key or password ready before continuing.");
-                    }
-                }
-                else
-                {
-                    log?.Invoke("  No mounted volumes found (raw/unpartitioned drive)");
-                }
-
-                // ================================================================
-                // Step 3: Flush + Dismount volumes
-                // ================================================================
-                if (volumesCaptured.Count > 0)
-                {
-                    foreach (var vol in volumesCaptured)
-                    {
-                        try
-                        {
-                            using var handle = NativeMethods.CreateFile(
-                                $@"\\.\{char.ToUpperInvariant(vol.Letter[0])}:",
-                                NativeMethods.GENERIC_WRITE,
-                                NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE,
-                                IntPtr.Zero, NativeMethods.OPEN_EXISTING,
-                                NativeMethods.FILE_ATTRIBUTE_NORMAL, IntPtr.Zero);
-                            if (handle is not null && !handle.IsInvalid)
-                            {
-                                NativeMethods.FlushFileBuffers(handle);
-                                log?.Invoke($"  [OK] Flushed filesystem cache for {vol.Letter}");
-                            }
-                        }
-                        catch { log?.Invoke($"  [WARN] Could not flush {vol.Letter} — proceeding anyway"); }
-                    }
-
-                    log?.Invoke("Step 2/4: Dismounting volumes...");
-                    bool allDismounted = true;
-                    foreach (var vol in volumesCaptured)
-                    {
-                        if (DismountVolume(vol.Letter))
-                        {
-                            volumesToRestore.Add(vol);
-                            log?.Invoke($"  [OK] Dismounted {vol.Letter}");
-                        }
-                        else
-                        {
-                            log?.Invoke($"  [FAIL] Could not dismount {vol.Letter} - open handles present");
-                            allDismounted = false;
-                        }
-                    }
-                    if (!allDismounted)
-                    {
-                        // Best-effort restore of any volumes we already dismounted so the user
-                        // isn't left in a worse state than they started.
-                        RestoreCapturedVolumes("partial dismount failure");
-                        result.ErrorMessage = "ABORTED: One or more volumes could not be dismounted. Close all files on this drive and retry.";
-                        log?.Invoke($"[ERROR] {result.ErrorMessage}");
-                        return result;
-                    }
-                }
-                else
-                {
-                    log?.Invoke("Step 2/4: No volumes to dismount (skipped)");
-                }
-
-                // ================================================================
-                // Step 4: Re-enumerate device node to trigger driver reload
-                // ================================================================
-                log?.Invoke("Step 3/4: Re-enumerating device node...");
-
-                string pnpId = drive.PNPDeviceID;
-                uint cmResult = NativeMethods.CM_Locate_DevNode(
-                    out uint devInst,
-                    pnpId,
-                    NativeMethods.CM_LOCATE_DEVNODE_NORMAL);
-
-                if (cmResult != NativeMethods.CR_SUCCESS)
-                {
-                    // Try parent device (NVMe controller rather than disk)
-                    string? parentPnpId = GetParentDeviceId(pnpId);
-                    if (parentPnpId is not null)
-                    {
-                        log?.Invoke($"  Disk node not found, trying parent controller: {parentPnpId}");
-                        cmResult = NativeMethods.CM_Locate_DevNode(
-                            out devInst,
-                            parentPnpId,
-                            NativeMethods.CM_LOCATE_DEVNODE_NORMAL);
-                    }
-                }
-
-                if (cmResult != NativeMethods.CR_SUCCESS)
-                {
-                    result.ErrorMessage = $"Failed to locate device node (CM error: 0x{cmResult:X8})";
-                    log?.Invoke($"  [ERROR] {result.ErrorMessage}");
-                    RestoreCapturedVolumes("device-node lookup failure");
-                    return result;
-                }
-
-                cmResult = NativeMethods.CM_Reenumerate_DevNode(
-                    devInst,
-                    NativeMethods.CM_REENUMERATE_SYNCHRONOUS);
-
-                if (cmResult != NativeMethods.CR_SUCCESS)
-                {
-                    result.ErrorMessage = $"Device re-enumeration failed (CM error: 0x{cmResult:X8})";
-                    log?.Invoke($"  [ERROR] {result.ErrorMessage}");
-                    RestoreCapturedVolumes("device re-enumeration failure");
-                    return result;
-                }
-
-                log?.Invoke("  [OK] Device node re-enumeration initiated");
-
-                // ================================================================
-                // Step 5: Wait for device to return (up to 10 seconds)
-                // ================================================================
-                log?.Invoke("Step 4/4: Waiting for device to return...");
-                bool deviceReturned = false;
-
-                for (int i = 0; i < 20; i++) // 20 x 500ms = 10 seconds
-                {
-                    Thread.Sleep(500);
-
-                    if (IsDrivePresent(drive.Number))
-                    {
-                        deviceReturned = true;
-                        log?.Invoke($"  [OK] Drive {drive.Number} returned after {(i + 1) * 500}ms");
-                        break;
-                    }
-
-                    if (i % 4 == 3) // Log every 2 seconds
-                        log?.Invoke($"  Waiting... ({(i + 1) * 500}ms elapsed)");
-                }
-
-                if (deviceReturned)
-                {
-                    result.Success = true;
-                    result.DeviceReturned = true;
-
-                    // Explicitly reattach any letters we dismounted. Rely on the captured
-                    // (letter, volume GUID) pairing rather than trusting auto-mount, which
-                    // can be disabled system-wide (SAN hosts, servers, hardened workstations).
-                    if (volumesToRestore.Count > 0)
-                    {
-                        // Partitions don't always materialize on the moment CM_Reenumerate_DevNode
-                        // returns — give the storage stack a brief window to rediscover them.
-                        // Without this delay, mountvol can race and fail with "volume not found".
-                        Thread.Sleep(1500);
-                        var remount = RemountVolumes(volumesToRestore, log);
-                        TrackRemountOutcome(remount);
-                        if (remount.Failed.Count > 0)
-                        {
-                            log?.Invoke("[WARNING] Some volumes could not be reattached automatically:");
-                            foreach (var letter in remount.Failed)
-                                log?.Invoke($"  - {letter} (use Disk Management -> Online to restore manually)");
-                        }
-                    }
-
-                    log?.Invoke("========================================");
-                    log?.Invoke("[SUCCESS] Hot-swap complete. Drive is back online with updated driver stack.");
-                    EventLogService.Write($"NVMe hot-swap completed for Drive {drive.Number} ({drive.Name})");
-                }
-                else
-                {
-                    // ================================================================
-                    // Rollback: Device did not return in time
-                    // ================================================================
-                    log?.Invoke("[WARNING] Device did not return within 10 seconds");
-                    log?.Invoke("Attempting recovery re-enumeration...");
-
-                    // Try one more re-enumeration
-                    cmResult = NativeMethods.CM_Locate_DevNode(
-                        out devInst,
-                        pnpId,
-                        NativeMethods.CM_LOCATE_DEVNODE_NORMAL);
-
-                    if (cmResult == NativeMethods.CR_SUCCESS)
-                    {
-                        NativeMethods.CM_Reenumerate_DevNode(devInst, NativeMethods.CM_REENUMERATE_NORMAL);
-                        Thread.Sleep(3000);
-
-                        if (IsDrivePresent(drive.Number))
-                        {
-                            result.Success = true;
-                            result.DeviceReturned = true;
-                            result.RequiredRetry = true;
-                            log?.Invoke("[OK] Device returned after recovery re-enumeration");
-                            if (volumesCaptured.Count > 0)
-                            {
-                                Thread.Sleep(1500);
-                                RestoreCapturedVolumes("recovery re-enumeration");
-                            }
-                        }
-                    }
-
-                    if (!result.DeviceReturned)
-                    {
-                        result.ErrorMessage = "Device did not return after hot-swap. A reboot may be required to restore the drive.";
-                        log?.Invoke($"[ERROR] {result.ErrorMessage}");
-                        RestoreCapturedVolumes("device-return timeout");
-                        EventLogService.Write(
-                            $"NVMe hot-swap FAILED for Drive {drive.Number} ({drive.Name}) - device did not return",
-                            EventLogEntryType.Error, 3002);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                result.ErrorMessage = $"Hot-swap failed with exception: {ex.Message}";
-                log?.Invoke($"[ERROR] {result.ErrorMessage}");
-                RestoreCapturedVolumes("hot-swap exception");
-                EventLogService.Write(
-                    $"NVMe hot-swap exception for Drive {drive.Number}: {ex.Message}",
-                    EventLogEntryType.Error, 3003);
-            }
-
-            return result;
-        });
-    }
-
-    /// <summary>
     /// Record of a single mounted volume captured before dismount. The drive letter is what
     /// the user sees; the volume GUID path (e.g. <c>\\?\Volume{GUID}\</c>) is what survives
-    /// re-enumeration and is the stable key we hand to <c>mountvol</c> when restoring the
+    /// controller state changes and is the stable key we hand to <c>mountvol</c> when restoring the
     /// letter afterwards.
     /// </summary>
-    private sealed record MountedVolume(string Letter, string VolumeGuidPath);
+    internal sealed record MountedVolume(string Letter, string VolumeGuidPath);
 
-    private sealed class VolumeCaptureResult
+    internal sealed class VolumeCaptureResult
     {
         public bool Succeeded { get; init; }
         public string? ErrorMessage { get; init; }
@@ -389,7 +58,7 @@ public static class HotSwapService
 
     /// <summary>
     /// Enumerates each partitioned volume on the given physical drive and captures both the
-    /// drive letter and the volume GUID path. The GUID path is stable across re-enumeration
+    /// drive letter and the volume GUID path. The GUID path is stable across controller restart
     /// and is what we use to reattach the letter after the hot-swap.
     /// </summary>
     private static VolumeCaptureResult GetVolumesForDrive(int driveNumber)
@@ -805,49 +474,6 @@ public static class HotSwapService
         }
     }
 
-    /// <summary>
-    /// Attempts to find the parent device ID (NVMe controller) for a disk PNP device ID.
-    /// </summary>
-    private static string? GetParentDeviceId(string pnpDeviceId)
-    {
-        if (string.IsNullOrEmpty(pnpDeviceId)) return null;
-        try
-        {
-            string escaped = EscapeWmiSingleQuotes(pnpDeviceId);
-
-            // PNP device IDs for NVMe disks are typically under their controller
-            // e.g., SCSI\DISK&VEN_NVME&PROD_... -> parent is the NVMe controller.
-            using var search = new ManagementObjectSearcher(
-                $"SELECT DeviceID FROM Win32_PnPEntity WHERE DeviceID='{escaped}'");
-
-            using var devices = WmiQueryHelper.ExecuteWithTimeout(search);
-            foreach (var rawDev in devices)
-            {
-                if (rawDev is not ManagementObject dev) continue;
-                using (dev)
-                {
-                    using var parentSearch = new ManagementObjectSearcher(
-                        $"ASSOCIATORS OF {{Win32_PnPEntity.DeviceID='{escaped}'}} WHERE AssocClass=CIM_BusController");
-
-                    using var parents = WmiQueryHelper.ExecuteWithTimeout(parentSearch);
-                    foreach (var rawParent in parents)
-                    {
-                        if (rawParent is not ManagementObject parent) continue;
-                        using (parent)
-                        {
-                            var id = parent["DeviceID"]?.ToString();
-                            if (!string.IsNullOrEmpty(id)) return id;
-                        }
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // Best effort
-        }
-        return null;
-    }
 }
 
 /// <summary>
@@ -855,14 +481,41 @@ public static class HotSwapService
 /// </summary>
 public class HotSwapResult
 {
+    /// <summary>Typed final state. Only <see cref="HotSwapOutcome.Succeeded"/> is safe to treat as complete.</summary>
+    public HotSwapOutcome Outcome { get; set; } = HotSwapOutcome.Blocked;
+
     /// <summary>Whether the hot-swap completed successfully.</summary>
     public bool Success { get; set; }
 
-    /// <summary>Whether the device returned after re-enumeration.</summary>
+    /// <summary>Whether the physical disk returned after the controller state change.</summary>
     public bool DeviceReturned { get; set; }
 
     /// <summary>Whether a retry was needed to bring the device back.</summary>
     public bool RequiredRetry { get; set; }
+
+    /// <summary>Whether SetupAPI or incomplete post-state proof requires a machine restart.</summary>
+    public bool RebootRequired { get; set; }
+
+    /// <summary>Native Win32/CONFIGRET error associated with the failed transition, when available.</summary>
+    public int NativeError { get; set; }
+
+    /// <summary>The exact parent controller device instance targeted by SetupAPI.</summary>
+    public string ControllerDeviceId { get; set; } = string.Empty;
+
+    /// <summary>Driver and service proof captured after the property state change.</summary>
+    public bool DriverProofVerified { get; set; }
+    public string ActiveDriver { get; set; } = string.Empty;
+    public string DriverService { get; set; } = string.Empty;
+    public string DriverServiceState { get; set; } = string.Empty;
+
+    /// <summary>Original mounted letters captured before any flush or dismount.</summary>
+    public List<string> CapturedVolumeLetters { get; set; } = [];
+
+    /// <summary>True only when every dismounted volume GUID is verified on its original letter.</summary>
+    public bool VolumeRestoreVerified { get; set; }
+
+    /// <summary>Explicit operator recovery instruction for partial or failed transitions.</summary>
+    public string RecoveryAction { get; set; } = string.Empty;
 
     /// <summary>Error message if the operation failed.</summary>
     public string? ErrorMessage { get; set; }
