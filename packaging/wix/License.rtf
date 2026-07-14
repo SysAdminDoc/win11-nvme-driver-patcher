@@ -1,0 +1,22 @@
+{\rtf1\ansi\ansicpg1252\deff0\nouicompat{\fonttbl{\f0\fnil\fcharset0 Segoe UI;}}
+\viewkind4\uc1
+\f0\fs22\b NVMe Driver Patcher\b0\par
+\par
+\b What this installs\b0\par
+This package installs the NVMe Driver Patcher GUI and CLI, the non-admin status tray agent, Group Policy (ADMX) templates, and an optional real-time Watchdog service that runs as NT AUTHORITY\\LocalService. The tool enables, verifies, and reverses Microsoft's experimental Windows Server 2025 Native NVMe driver (nvmedisk.sys) on Windows 11 by writing FeatureManagement override and SafeBoot registry keys.\par
+\par
+\b Risk\b0\par
+This modifies system registry settings to enable an experimental, unsupported feature. It includes safety measures (VeraCrypt hard block, automatic BitLocker suspension, a system restore point, registry backups with deletion directives, rollback on partial failure, and a WinRE recovery kit), but you use it at your own risk. The native NVMe driver is only officially supported on Windows Server 2025. Always have a current backup before making system changes.\par
+\par
+\b Recovery\b0\par
+After a successful patch the app generates a WinRE-compatible Recovery Kit; copy it to a USB drive before rebooting. If the system will not boot, use the kit (or the pre-patch registry backup) from Windows Recovery to remove the patch, or wait for Windows to auto-revert after repeated failed boots.\par
+\par
+\b License (MIT)\b0\par
+Copyright (c) SysAdminDoc\par
+\par
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\par
+\par
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\par
+\par
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\par
+}

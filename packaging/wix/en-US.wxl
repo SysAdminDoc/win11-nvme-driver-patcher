@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  en-US string contract for the NVMe Driver Patcher MSI. Pass to the build with
+  `wix build ... -loc packaging\wix\en-US.wxl`. Product-facing installer copy lives here so it is
+  reviewed in one place and can be checked for sample/boilerplate text and version drift.
+-->
+<WixLocalization Culture="en-US" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="ProductName" Value="NVMe Driver Patcher" />
+  <String Id="Manufacturer" Value="SysAdminDoc" />
+  <String Id="ProductPurpose" Value="Enables, verifies, and reverses Microsoft's experimental Windows Server 2025 Native NVMe driver (nvmedisk.sys) on Windows 11 via FeatureManagement override and SafeBoot registry keys." />
+  <String Id="ProductRisk" Value="Modifies system registry settings to enable an experimental, unsupported feature. Safety measures are included, but use at your own risk and keep a current backup." />
+  <String Id="ProductRecovery" Value="Generates a WinRE recovery kit after patching; copy it to USB before rebooting. Remove the patch from Windows Recovery if the system will not boot." />
+  <String Id="WatchdogServiceDescription" Value="Subscribes to the System event log and feeds the NVMe Driver Patcher watchdog state in real time. Runs as NT AUTHORITY\LocalService." />
+  <String Id="DowngradeError" Value="A newer version of NVMe Driver Patcher is already installed." />
+</WixLocalization>

@@ -14,12 +14,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ### P2
 
-- [ ] P2 — Replace MSI placeholder copy and add an installer-content contract
-  Why: the shipping MSI displays lorem ipsum, and its README misstates the watchdog service account, eroding trust before an elevated system change.
-  Evidence: GitHub issue #12; `packaging/wix/NVMeDriverPatcher.wxs:14-55`; `packaging/wix/README.md:21`; WiX `WixUI_InstallDir` and localization guidance.
-  Touches: `packaging/wix/NVMeDriverPatcher.wxs`, an installer `.wxl` localization asset, `packaging/wix/README.md`, packaging/release contract tests.
-  Acceptance: A built MSI shows product-specific purpose, risk, and recovery copy with no placeholder text; all strings come from the en-US localization contract; automated inspection rejects lorem ipsum/version/service-account drift; documentation says LocalService and matches the MSI service table.
-  Complexity: S
 
 ### P3
 

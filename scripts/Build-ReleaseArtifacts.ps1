@@ -107,6 +107,8 @@ if (-not $SkipMsi) {
         "PublishDir=$input",
         '-d',
         "ProjectRoot=$repoRoot",
+        '-loc',
+        (Join-Path $repoRoot 'packaging/wix/en-US.wxl'),
         '-ext',
         'WixToolset.UI.wixext',
         '-ext',

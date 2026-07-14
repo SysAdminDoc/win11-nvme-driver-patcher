@@ -53,6 +53,9 @@
       <ui:WixUI Id="WixUI_InstallDir" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui" />
     </UI>
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <!-- Issue #12: WixUI_InstallDir shows a license page. Point it at our real product license/info
+         RTF (product purpose, risk, recovery, MIT license) instead of WiX's default sample text. -->
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
 
     <CustomAction Id="GrantWatchdogSystemLogRead"
                   FileRef="WatchdogExeFile"
