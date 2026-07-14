@@ -5,6 +5,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Recovery subprocess parsing and capture are now deterministic** — the WinRE probe accepts only
+  the GUID on reagentc's BCD identifier row, so an earlier unrelated recovery GUID cannot select
+  the wrong boot entry. Successful DISM/WinPE commands now drain both redirected output streams
+  before their process resources and cancellation scope are released.
 - **Windows reduced-motion preferences now apply live across the WPF shell** — disabling
   client-area animations stops the repeating indeterminate sweep, removes ComboBox slide motion,
   and replaces tab/expander transitions with immediate stable states. Re-enabling the preference
