@@ -44,6 +44,43 @@ public sealed class ViVeToolServiceTests : IDisposable
         Assert.Equal(payloadDir, root);
     }
 
+    // --- Pinned-hash supply-chain control (elevated execution) ---
+
+    [Fact]
+    public void ComputeSha256_MatchesKnownVector()
+    {
+        var f = Path.Combine(_tempRoot, "vec.bin");
+        File.WriteAllText(f, "abc");
+        // SHA-256("abc")
+        Assert.Equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            ViVeToolService.ComputeSha256(f));
+    }
+
+    [Fact]
+    public void IsPinnedExecutable_RejectsUnknownHash()
+    {
+        var f = Path.Combine(_tempRoot, "ViVeTool.exe");
+        File.WriteAllText(f, "not the real vivetool");
+        Assert.False(ViVeToolService.IsPinnedExecutable(f));
+    }
+
+    [Fact]
+    public void IsPinnedExecutable_RejectsMissingFile()
+    {
+        Assert.False(ViVeToolService.IsPinnedExecutable(Path.Combine(_tempRoot, "nope.exe")));
+    }
+
+    [Fact]
+    public void IsInstalled_RejectsLargeButUnpinnedCachedExe()
+    {
+        // A big cached file that is NOT a pinned build must NOT be treated as installed, so the
+        // fallback re-downloads a verified copy instead of dead-ending at execution.
+        var tools = ViVeToolService.ToolsDir(_tempRoot);
+        Directory.CreateDirectory(tools);
+        File.WriteAllBytes(ViVeToolService.CachedExePath(_tempRoot), new byte[64 * 1024]);
+        Assert.False(ViVeToolService.IsInstalled(_tempRoot));
+    }
+
     // --- Architecture-aware release asset selection (ViVe v0.3.4+ split-arch zips) ---
 
     private static readonly ViVeToolService.ReleaseAssetCandidate[] SplitArchAssets =

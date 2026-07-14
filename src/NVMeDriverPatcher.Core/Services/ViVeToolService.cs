@@ -68,6 +68,31 @@ public static class ViVeToolService
     public static string ToolsDir(string workingDir) => Path.Combine(workingDir, "tools");
     public static string CachedExePath(string workingDir) => Path.Combine(ToolsDir(workingDir), "ViVeTool.exe");
 
+    // Repo-pinned SHA-256 allowlist of known-good ViVeTool.exe builds. ViVeTool ships no upstream
+    // .sha256 sidecar and we execute it ELEVATED, so this pin is the load-bearing supply-chain
+    // control: a compromised release, repo transfer, or same-sized MITM payload cannot be run.
+    // Fail-closed — an exe whose hash is not in this set is refused (extract AND execute). To adopt
+    // a new ViVeTool release, download its zip, hash the extracted ViVeTool.exe, and add it here.
+    //   v0.3.4 (IntelAmd + SnapdragonArm64 ship the same ViVeTool.exe):
+    private static readonly HashSet<string> PinnedExeSha256 = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "d3b69c982622a26ad0b37c65b8f006b5139e50aeb45fda68734a33ca28706dea", // v0.3.4
+    };
+
+    internal static string ComputeSha256(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        return Convert.ToHexString(sha.ComputeHash(stream)).ToLowerInvariant();
+    }
+
+    /// <summary>True when the file's SHA-256 is in the repo-pinned known-good allowlist.</summary>
+    internal static bool IsPinnedExecutable(string exePath)
+    {
+        try { return File.Exists(exePath) && PinnedExeSha256.Contains(ComputeSha256(exePath)); }
+        catch { return false; }
+    }
+
     internal readonly record struct ReleaseAssetCandidate(string Name, string? Url, long? Size);
 
     /// <summary>
@@ -113,7 +138,10 @@ public static class ViVeToolService
     }
 
     // A 0-byte cache file from a previously-failed extraction would silently fool IsInstalled
-    // into reporting success. Require a non-trivial file size before we trust the cached copy.
+    // into reporting success. Require a non-trivial file size AND a pinned known-good hash before
+    // we trust the cached copy — otherwise a stale/tampered cache would block re-download and then
+    // be refused at execution, dead-ending the fallback. A non-pinned cache is treated as "not
+    // installed" so EnsureInstalledAsync re-downloads a verified build.
     public static bool IsInstalled(string workingDir)
     {
         try
@@ -121,7 +149,8 @@ public static class ViVeToolService
             var path = CachedExePath(workingDir);
             if (!File.Exists(path)) return false;
             var fi = new FileInfo(path);
-            return fi.Length >= MinAssetBytes;
+            if (fi.Length < MinAssetBytes) return false;
+            return IsPinnedExecutable(path);
         }
         catch { return false; }
     }
@@ -347,6 +376,20 @@ public static class ViVeToolService
                 return result;
             }
 
+            // Verify the extracted ViVeTool.exe against the repo-pinned SHA-256 allowlist BEFORE it
+            // is promoted into tools/ or ever executed. This is the load-bearing check: we run this
+            // binary elevated, so an unrecognized hash (tamper, new/unknown release) is refused.
+            var stagedExe = Path.Combine(payloadRoot, "ViVeTool.exe");
+            if (!IsPinnedExecutable(stagedExe))
+            {
+                result.Message =
+                    $"Refusing ViVeTool {(tagName ?? "latest")}: extracted ViVeTool.exe SHA-256 " +
+                    $"({(File.Exists(stagedExe) ? ComputeSha256(stagedExe) : "missing")}) is not in the pinned known-good allowlist. " +
+                    "This blocks executing an unverified elevated binary. If this is a legitimate new release, add its hash to ViVeToolService.PinnedExeSha256.";
+                log?.Invoke("[SECURITY] " + result.Message);
+                return result;
+            }
+
             // Promote every staged file into the final tools/ folder. ViVeTool.exe expects its
             // sibling DLLs alongside it; we preserve the layout the archive shipped with.
             foreach (var src in Directory.EnumerateFiles(payloadRoot, "*", SearchOption.AllDirectories))
@@ -467,6 +510,13 @@ public static class ViVeToolService
 
     private static async Task<bool> RunViVeToolAsync(string exePath, string[] args, Action<string>? log)
     {
+        // Re-verify the pinned hash at the moment of execution — this also covers a CACHED exe from
+        // a previous run and closes any window between staging and launch.
+        if (!IsPinnedExecutable(exePath))
+        {
+            log?.Invoke($"[SECURITY] Refusing to execute ViVeTool: {exePath} does not match the pinned known-good SHA-256 allowlist.");
+            return false;
+        }
         try
         {
             // ArgumentList handles per-argument quoting so we can't smuggle separators by

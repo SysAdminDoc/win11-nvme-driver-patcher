@@ -48,6 +48,12 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   auto-restart. `dry-run` prints the disposition without mutating.
 
 ### Security
+- **Pinned-hash verification for the ViVeTool fallback binary** — ViVeTool ships no upstream
+  `.sha256` sidecar yet the app runs it elevated. `ViVeToolService` now verifies the extracted (and
+  cached) `ViVeTool.exe` against a repo-pinned SHA-256 allowlist before it is promoted or executed,
+  and re-checks at the moment of launch. An unrecognized hash (tamper, MITM, or an unknown new
+  release) is refused with a named security error and the fallback fails closed; a non-pinned cached
+  copy is treated as not-installed so a verified build is re-downloaded. Pinned: ViVeTool v0.3.4.
 - **SQLite native library raised to 3.53.3** — pinned `SourceGear.sqlite3` 3.53.3 (SQLite 3.53.3)
   directly so every published RID (win-x64, win-arm64) ships the fixed native library, closing
   CVE-2026-11822 and the 3.53.2 FTS5 shadow-table CVEs at the source instead of relying only on
