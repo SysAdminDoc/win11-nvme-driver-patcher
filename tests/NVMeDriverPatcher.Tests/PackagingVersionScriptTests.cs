@@ -137,8 +137,13 @@ public sealed class PackagingVersionScriptTests
             Write(root, "packaging/powershell/NVMeDriverPatcher.psd1", $"@{{ ModuleVersion = '{version}' }}");
             Write(root, "packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml", $"""
                 PackageVersion: {version}
-                InstallerUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v{version}/NVMeDriverPatcher.exe
                 """);
+            Write(root, "packaging/winget/SysAdminDoc.NVMeDriverPatcher.installer.yaml", $"""
+                PackageVersion: {version}
+                InstallerUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v{version}/NVMeDriverPatcher.exe
+                InstallerUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v{version}/NVMeDriverPatcher-win-arm64.exe
+                """);
+            Write(root, "packaging/winget/SysAdminDoc.NVMeDriverPatcher.locale.en-US.yaml", $"PackageVersion: {version}");
             Write(root, "packaging/wix/NVMeDriverPatcher.wxs", $"""<Package Version="{version}.0" />""");
             Write(root, "packaging/intune/Detect-NVMeDriverPatcher.ps1", $"$minVersion = [Version]'{version}'");
             Write(root, "packaging/intune/README.md", packagingMarkdown);

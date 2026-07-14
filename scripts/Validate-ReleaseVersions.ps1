@@ -43,15 +43,36 @@ if ($psd1 -match "ModuleVersion\s*=\s*'([^']+)'") {
     Check "packaging/powershell/NVMeDriverPatcher.psd1 ModuleVersion" $Matches[1] $canonical
 } else { $failures.Add("psd1: ModuleVersion line not found") }
 
-# 2. winget manifest — PackageVersion and the tag segment of InstallerUrl
-$wingetPath = Join-Path $repoRoot 'packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml'
-$winget = Get-Content -Raw $wingetPath
-if ($winget -match "PackageVersion:\s*(\S+)") {
-    Check "winget PackageVersion" $Matches[1] $canonical
-} else { $failures.Add("winget: PackageVersion line not found") }
-if ($winget -match "InstallerUrl:\s*\S*/download/v([0-9][^/]*)/") {
-    Check "winget InstallerUrl tag segment" $Matches[1] $canonical
-} else { $failures.Add("winget: InstallerUrl tag segment not found") }
+# 2. winget multi-file manifest — every file version and every architecture URL tag.
+$wingetRoot = Join-Path $repoRoot 'packaging/winget'
+$wingetFiles = @(
+    'SysAdminDoc.NVMeDriverPatcher.yaml',
+    'SysAdminDoc.NVMeDriverPatcher.installer.yaml',
+    'SysAdminDoc.NVMeDriverPatcher.locale.en-US.yaml'
+)
+foreach ($wingetFile in $wingetFiles) {
+    $wingetPath = Join-Path $wingetRoot $wingetFile
+    if (-not (Test-Path -LiteralPath $wingetPath)) {
+        $failures.Add("winget: required multi-file manifest is missing: $wingetFile")
+        continue
+    }
+    $wingetText = Get-Content -Raw $wingetPath
+    if ($wingetText -match "PackageVersion:\s*(\S+)") {
+        Check "winget $wingetFile PackageVersion" $Matches[1] $canonical
+    } else { $failures.Add("winget $wingetFile`: PackageVersion line not found") }
+}
+$wingetInstallerPath = Join-Path $wingetRoot 'SysAdminDoc.NVMeDriverPatcher.installer.yaml'
+if (Test-Path -LiteralPath $wingetInstallerPath) {
+    $wingetInstaller = Get-Content -Raw $wingetInstallerPath
+    $urlMatches = [regex]::Matches($wingetInstaller, "InstallerUrl:\s*\S*/download/v([0-9][^/]*)/")
+    if ($urlMatches.Count -ne 2) {
+        $failures.Add("winget installer manifest: expected two architecture URLs, found $($urlMatches.Count)")
+    } else {
+        foreach ($urlMatch in $urlMatches) {
+            Check "winget InstallerUrl tag segment" $urlMatch.Groups[1].Value $canonical
+        }
+    }
+}
 
 # 3. WiX MSI package version (4-part)
 $wxsPath = Join-Path $repoRoot 'packaging/wix/NVMeDriverPatcher.wxs'
