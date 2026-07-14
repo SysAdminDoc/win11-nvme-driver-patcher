@@ -83,23 +83,25 @@ independently, so an EOSSys.sys blocker is separate from the storage-driver choi
         ["vivetool"] = @"
 Microsoft silently neutered the FeatureManagement override path on early 2026 Insider
 builds. The fallback writes build-specific feature IDs to FeatureStore instead, using
-the native Rtl API first and ViVeTool only if native both-store verification fails:
-24H2 post-block builds use 60786016 + 48433719, while 25H2 26200 builds below
-UBR 8524 use 55369237 + 48433719 + 49453572. Build 26200.8524+, 26201-26299,
-and 26300+ have no known registry or fallback route that binds GenNvmeDisk; treat
-this tool as verify/monitor/rollback-only there. `featurestore` probes whether the
-fallback has been applied; `fallback` applies the native-first path.
+the native Rtl API first and ViVeTool only if native both-store verification fails.
+The directly evidenced 24H2 build 26100.8106 uses 60786016 + 48433719; adjacent 26100
+UBRs are NOT inferred from that single report. 25H2 26200 builds below UBR 8524 use
+55369237 + 48433719 + 49453572. Other 26100 builds, build 26200.8524+, 26201-26299,
+and 26300+ have no sourced registry or fallback route that binds GenNvmeDisk; treat
+them as verify/monitor/rollback-only. `featurestore` probes whether a fallback has been
+applied; `fallback` applies the native-first path only when the build rule permits it.
 ",
         ["buildrules"] = @"
 The app and CLI load windows_build_rules.json at runtime before recommending an enablement
 path. Current client buckets:
 
-* 24H2 26100.0-26100.3774: registry override route on known builds.
-* 24H2 26100.3775+: FeatureManagement keys may write but not bind; use fallback and verify.
+* 24H2 26100.8106: exact community-evidenced FeatureStore fallback interval.
+* Other 24H2 26100/26101-26199 builds: verify/monitor/rollback only; no exact sourced path.
 * 25H2 26200.0-26200.8523: registry override is blocked; use the 25H2 FeatureStore fallback.
 * 25H2 26200.8524+ and 26201-26299: verify/monitor/rollback only; no known bind path.
 * 26300+: check Settings > Windows Update > Windows Insider Program > Feature flags first;
   registry and fallback routes are not expected to bind.
+* Pre-24H2 client builds: verify/monitor/rollback only; no sourced working interval.
 
 Server 2025 has a separate official opt-in path. Run `status` or preflight on the target
 machine and prefer that result over static docs if Microsoft changes build behavior.

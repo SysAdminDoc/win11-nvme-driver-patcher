@@ -235,11 +235,10 @@ NVMeDriverPatcher.Cli config-import --import=<path>        # Import config bundl
 |--------------------|-------|---------|
 | 25H2 pre-26200.8524 | 26200.0-26200.8523 | Registry override is blocked; the build-specific FeatureStore fallback is the expected path. |
 | 25H2 26200.8524+ | 26200.8524+ | Verify / monitor / rollback only. No known registry or fallback route binds `GenNvmeDisk` on this branch. |
-| 24H2 pre-block | 26100.0-26100.3774 | Registry override route works on known builds. |
-| 24H2 post-block | 26100.3775+ | Registry keys can write but may not bind; use the fallback path and verify after reboot. |
+| 24H2 evidenced fallback | 26100.8106 | Exact community-evidenced FeatureStore fallback interval; adjacent UBRs are not inferred. |
+| Other 24H2 builds | 26100.x / 26101-26199 | Verify / monitor / rollback only until the exact build and UBR have a sourced working path. |
 | 26300+ Insider | 26300+ | Check the native Settings Feature flags page first; registry and fallback routes are not expected to bind. |
-| 23H2 | 22631 | Partial -- feature flags may write but the driver may not activate. |
-| 22H2 / 21H2 | 22621 / 22000 | Not recommended or unsupported; the native driver may be absent or incomplete. |
+| Pre-24H2 client | 26099 and below | Verify / monitor / rollback only; no sourced working enablement interval. |
 
 > The app and CLI use `src/NVMeDriverPatcher.Core/windows_build_rules.json` at runtime. Trust `status`
 > and preflight output over this static table when Microsoft changes Insider or cumulative-update behavior.

@@ -93,29 +93,29 @@ public sealed class BuildActionPolicyServiceTests
     // --- Integration against the real bundled windows_build_rules.json ---
 
     [Theory]
-    [InlineData(26200, 8737)] // issue #13 build — matches 26200-bind-blocked (none-known)
-    [InlineData(26300, 8772)] // matches 26300-feature-flags-page (none-known)
-    public void BundledRules_ClassifyBlockedClientBuilds_AsVerifyRollbackOnly(int build, int ubr)
+    [InlineData(26099, 999999, "pre-24h2", "none-known", false)]
+    [InlineData(26100, 8105, "24h2-client-unverified", "none-known", false)]
+    [InlineData(26100, 8106, "24h2-26100-8106-fallback", "vivetool-fallback", true)]
+    [InlineData(26100, 8107, "24h2-client-unverified", "none-known", false)]
+    [InlineData(26199, 999999, "24h2-client-unverified", "none-known", false)]
+    [InlineData(26200, 0, "25h2-vivetool-new-ids", "vivetool-fallback", true)]
+    [InlineData(26200, 8523, "25h2-vivetool-new-ids", "vivetool-fallback", true)]
+    [InlineData(26200, 8524, "26200-bind-blocked", "none-known", false)]
+    [InlineData(26200, 8737, "26200-bind-blocked", "none-known", false)]
+    [InlineData(26201, 0, "post-26200-trains-bind-blocked", "none-known", false)]
+    [InlineData(26300, 8772, "26300-feature-flags-page", "none-known", false)]
+    public void BundledRules_EnforceEvidenceConservativeClientBoundaries(
+        int build, int ubr, string expectedId, string expectedPath, bool mutationAllowed)
     {
         var ruleset = WindowsBuildRulesService.LoadRuleset(AppContext.BaseDirectory);
         Assert.NotEmpty(ruleset.Rules);
         var rule = WindowsBuildRulesService.Match(ruleset, build, ubr, isServer: false);
         Assert.NotNull(rule);
-        Assert.Equal("none-known", rule!.ExpectedPath);
+        Assert.Equal(expectedId, rule!.Id);
+        Assert.Equal(expectedPath, rule.ExpectedPath);
 
         // Use a clock near the rules' review dates so this asserts the path classification, not staleness.
         var policy = BuildActionPolicyService.Evaluate(ruleset, rule, new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc));
-        Assert.False(policy.MutationAllowed);
-    }
-
-    [Fact]
-    public void BundledRules_24H2PreBlock_AllowsMutation_WhenFresh()
-    {
-        var ruleset = WindowsBuildRulesService.LoadRuleset(AppContext.BaseDirectory);
-        var rule = WindowsBuildRulesService.Match(ruleset, 26100, 1000, isServer: false);
-        Assert.NotNull(rule);
-        Assert.Equal("registry-override", rule!.ExpectedPath);
-        var policy = BuildActionPolicyService.Evaluate(ruleset, rule, new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc));
-        Assert.True(policy.MutationAllowed);
+        Assert.Equal(mutationAllowed, policy.MutationAllowed);
     }
 }

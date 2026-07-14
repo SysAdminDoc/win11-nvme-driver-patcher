@@ -29,8 +29,9 @@ public sealed class WindowsBuildRulesServiceTests
     [InlineData(26300, 8155, false, "26300-feature-flags-page")]       // native Feature flags page boundary
     [InlineData(28020, 1, false, "26300-feature-flags-page")]          // newer trains (>=26300) have the page too
     [InlineData(26200, 8246, false, "25h2-vivetool-new-ids")]
-    [InlineData(26100, 8246, false, "24h2-post-block")]
-    [InlineData(26100, 2000, false, "24h2-pre-block")]
+    [InlineData(26100, 8106, false, "24h2-26100-8106-fallback")]
+    [InlineData(26100, 8246, false, "24h2-client-unverified")]
+    [InlineData(26100, 2000, false, "24h2-client-unverified")]
     [InlineData(22631, 4000, false, "pre-24h2")]
     public void Match_BundledRules_RouteKnownBuildsCorrectly(int build, int ubr, bool server, string expectedId)
     {
