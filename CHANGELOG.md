@@ -5,6 +5,18 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-06-30
 
 ### Fixed
+- **FeatureStore writes serialized across processes** — `FeatureStoreWriterService` used a
+  process-local semaphore, but `RtlSetFeatureConfigurations` mutates machine-global state; an
+  elevated CLI write and GUI fallback could interleave their two-phase (Runtime→Boot) writes. They
+  now serialize on a `Global\` named mutex so concurrent writers can't stomp each other's overrides.
+- **Watchdog manual `/install` registers a correct ImagePath** — the service-install path passed the
+  exe wrapped in manual quotes through `ProcessStartInfo.ArgumentList`, which double-escaped them and
+  registered a broken `ImagePath` for any spaced install dir (e.g. Program Files). The raw path is
+  now passed so `ArgumentList` quotes it once. (The MSI route was already correct.)
+- **Honest unattended restart status** — `InitiateRestart` reported a 5s `shutdown.exe` timeout as
+  success, so an unattended apply that failed to enqueue a reboot looked identical to one that did.
+  It now distinguishes Scheduled / Unconfirmed / Failed; the unattended CLI prints a distinct
+  "restart UNCONFIRMED — verify/reboot manually" warning instead of claiming success.
 - **BitLocker data volumes are protected too** — the swap affects all NVMe controllers, but only the
   OS volume's protectors were suspended, so a BitLocker-protected non-system NVMe volume without
   auto-unlock re-locked after reboot unwarned. Preflight now enumerates protected fixed volumes and
@@ -54,6 +66,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   auto-restart. `dry-run` prints the disposition without mutating.
 
 ### Security
+- **Updater no longer accepts an unpinned Authenticode signer** — the self-updater's Authenticode
+  fallback verified signature validity, not signer identity, so any validly-signed binary at the
+  asset URL could be staged for the in-place self-replace. Since releases ship unsigned with a
+  SHA-256 sidecar, the fallback is disabled and the updater requires the matching sidecar.
 - **Pinned-hash verification for the ViVeTool fallback binary** — ViVeTool ships no upstream
   `.sha256` sidecar yet the app runs it elevated. `ViVeToolService` now verifies the extracted (and
   cached) `ViVeTool.exe` against a repo-pinned SHA-256 allowlist before it is promoted or executed,
