@@ -3,13 +3,13 @@
     NVMe Driver Patcher for Windows 11 — LEGACY SCRIPT (DEPRECATED)
 
 .DESCRIPTION
-    DEPRECATED: this script writes only the FeatureManagement\Overrides registry keys,
-    which Microsoft neutered on Windows 11 builds released after March 2026 — on those
-    builds the script reports success while the native driver never binds. It cannot use
-    the ViVeTool fallback, verify driver binding after reboot, auto-revert on instability,
-    or scope per-drive. Use the maintained GUI (NVMeDriverPatcher.exe) or CLI
-    (NVMeDriverPatcher.Cli.exe) from the same GitHub release instead. This script remains
-    published for air-gapped/legacy (pre-March-2026 build) environments only.
+    DEPRECATED, READ/RECOVER-ONLY: this script no longer enables or hot-swaps the native
+    NVMe driver on any Windows build. Its old registry-only apply path could report success
+    after Microsoft stopped honoring those overrides and lacked the maintained app's build
+    policy, recovery ledger, durable writes, and FeatureStore fallback. Use the maintained
+    GUI (NVMeDriverPatcher.exe) or CLI (NVMeDriverPatcher.Cli.exe) from the same release for
+    apply/reinstall. Status, removal, diagnostics, verification-script, and recovery-kit
+    export remain available here.
 
     Enterprise-grade GUI tool to enable the experimental Server 2025 NVMe driver in Windows 11.
 
@@ -41,7 +41,7 @@
     Run in silent mode (no GUI). Requires -Apply, -Remove, or -Status.
 
 .PARAMETER Apply
-    Apply the NVMe driver patch.
+    Retired. Always exits 5 without changing the machine and prints the maintained GUI/CLI command.
 
 .PARAMETER Remove
     Remove the NVMe driver patch.
@@ -53,7 +53,7 @@
     Do not prompt for restart after changes.
 
 .PARAMETER Force
-    Skip confirmation dialogs (use with caution).
+    Skip eligible legacy confirmation/check paths. It cannot re-enable the retired apply path.
 
 .PARAMETER ExportDiagnostics
     Export a full system diagnostics report and exit.
@@ -70,7 +70,8 @@
 
 .EXAMPLE
     .\NVMe_Driver_Patcher.ps1 -Silent -Apply -NoRestart
-    Silently applies the patch without restart prompt.
+    Exits 5 without mutation and directs the caller to NVMeDriverPatcher.exe or
+    NVMeDriverPatcher.Cli.exe apply --safe.
 
 .EXAMPLE
     .\NVMe_Driver_Patcher.ps1 -Silent -Status
@@ -241,6 +242,7 @@
     2 - Partial (for -Status) / No NVMe drives
     3 - Invalid parameters
     4 - Elevation required
+    5 - Mutation retired; use the maintained GUI or CLI
 
 .LINK
     https://learn.microsoft.com/en-us/windows-server/storage/
@@ -278,6 +280,16 @@ param(
     [Parameter(ParameterSetName = 'Export')]
     [switch]$ExportRecoveryKit
 )
+
+# This guard deliberately runs before privilege elevation, assembly loading, configuration,
+# preflight, or any UI construction. Automation that still passes -Apply gets a deterministic
+# nonzero result and cannot surface UAC or reach the retired registry-only implementation.
+$script:MutationRetiredExitCode = 5
+$script:MutationRetiredGuidance = "MUTATION RETIRED: NVMe_Driver_Patcher.ps1 no longer applies, reinstalls, or hot-swaps the native NVMe driver. Use NVMeDriverPatcher.exe or run 'NVMeDriverPatcher.Cli.exe apply --safe' from the same release. This script remains available for -Status, -Remove, -ExportDiagnostics, -GenerateVerifyScript, and -ExportRecoveryKit."
+if ($Apply) {
+    [Console]::Error.WriteLine($script:MutationRetiredGuidance)
+    exit $script:MutationRetiredExitCode
+}
 
 # ===========================================================================
 # SECTION 1: INITIALIZATION & PRIVILEGE ELEVATION
@@ -2367,7 +2379,7 @@ function Test-PatchStatus {
 function Set-ButtonsEnabled {
     param([bool]$Enabled)
     if ($script:ui) {
-        if ($script:ui['BtnApply']) { $script:ui['BtnApply'].IsEnabled = $Enabled }
+        if ($script:ui['BtnApply']) { $script:ui['BtnApply'].IsEnabled = $false }
         if ($script:ui['BtnRemove']) { $script:ui['BtnRemove'].IsEnabled = $Enabled }
         if ($script:ui['BtnBackup']) { $script:ui['BtnBackup'].IsEnabled = $Enabled }
         if ($script:ui['BtnBenchmark']) { $script:ui['BtnBenchmark'].IsEnabled = $Enabled }
@@ -2651,6 +2663,11 @@ function Update-StatusDisplay {
         if ($script:ui['BtnApply']) { $script:ui['BtnApply'].Content = "APPLY PATCH" }
         if ($script:ui['BtnRemove']) { $script:ui['BtnRemove'].IsEnabled = $false }
     }
+    if ($script:ui['BtnApply']) {
+        $script:ui['BtnApply'].Content = "MUTATION RETIRED"
+        $script:ui['BtnApply'].IsEnabled = $false
+        $script:ui['BtnApply'].ToolTip = $script:MutationRetiredGuidance
+    }
 }
 
 # ===========================================================================
@@ -2809,220 +2826,6 @@ function New-SafeRestorePoint {
 
         Update-Progress -Value 0 -Status ""
         return $script:Config.ForceMode
-    }
-}
-
-function Install-NVMePatch {
-    Write-Log "========================================" -Level "INFO"
-    Write-Log "STARTING PATCH INSTALLATION" -Level "INFO"
-    Write-Log "========================================" -Level "INFO"
-    Write-AppEventLog -Message "NVMe Driver Patch installation started" -EntryType "Information" -EventId 1000
-    $script:BeforeSnapshot = Get-PatchSnapshot
-
-    if (-not $script:Config.SilentMode) {
-        Set-ButtonsEnabled -Enabled $false
-    }
-
-    $successCount = 0
-    $appliedKeys = [System.Collections.ArrayList]::new()
-
-    $effectiveTotal = $script:Config.TotalComponents
-    $featureIDsToApply = [System.Collections.ArrayList]@($script:Config.FeatureIDs)
-    if ($script:Config.IncludeServerKey) {
-        [void]$featureIDsToApply.Add($script:Config.ServerFeatureID)
-        $effectiveTotal = $script:Config.TotalComponents + 1
-        Write-Log "Including optional Microsoft Server 2025 key (1176759950)" -Level "INFO"
-    }
-
-    try {
-        # Step 0: Suspend BitLocker if active
-        if ($script:BitLockerEnabled) {
-            Write-Log "Suspending BitLocker for one reboot cycle..." -Level "INFO"
-            try {
-                Suspend-BitLocker -MountPoint "$env:SystemDrive" -RebootCount 1 -ErrorAction Stop
-                Write-Log "BitLocker suspended - will auto-resume after reboot" -Level "SUCCESS"
-            }
-            catch {
-                Write-Log "Could not suspend BitLocker: $($_.Exception.Message)" -Level "WARNING"
-                Write-Log "Have your BitLocker recovery key ready before rebooting" -Level "WARNING"
-            }
-        }
-
-        # Step 1: Backup
-        Write-Log "Step 1/3: Creating system backup..."
-        $restoreOK = New-SafeRestorePoint -Description "Pre-NVMe-Driver-Patch"
-        if (-not $restoreOK) {
-            Write-Log "Installation cancelled" -Level "WARNING"
-            return $false
-        }
-
-        # Step 2: Apply registry components
-        Write-Log "Step 2/3: Applying $effectiveTotal registry components..."
-        Update-Progress -Value 60 -Status "Applying registry changes..."
-
-        if (-not (Test-Path $script:Config.RegistryPath)) {
-            Write-Log "Creating registry path: Overrides" -Level "INFO"
-            New-Item -Path $script:Config.RegistryPath -Force | Out-Null
-        }
-
-        foreach ($id in $featureIDsToApply) {
-            $friendlyName = if ($script:Config.FeatureNames.ContainsKey($id)) { $script:Config.FeatureNames[$id] } else { "Feature Flag" }
-            try {
-                New-ItemProperty -Path $script:Config.RegistryPath -Name $id -Value 1 -PropertyType DWORD -Force | Out-Null
-                $verify = Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue
-                if ($verify.$id -eq 1) {
-                    Write-Log "  [OK] $id - $friendlyName" -Level "SUCCESS"
-                    $successCount++
-                    [void]$appliedKeys.Add(@{ Type = "Feature"; ID = $id })
-                }
-                else {
-                    Write-Log "  [FAIL] $id - $friendlyName" -Level "ERROR"
-                }
-            }
-            catch {
-                Write-Log "  [FAIL] $id - $($_.Exception.Message)" -Level "ERROR"
-            }
-        }
-
-        # SafeBoot Minimal
-        try {
-            if (-not (Test-Path -LiteralPath $script:Config.SafeBootMinimal)) {
-                New-Item -LiteralPath $script:Config.SafeBootMinimal -Force | Out-Null
-            }
-            Set-ItemProperty -LiteralPath $script:Config.SafeBootMinimal -Name "(Default)" -Value $script:Config.SafeBootValue -Force
-            $val = Get-ItemProperty -LiteralPath $script:Config.SafeBootMinimal -Name "(Default)" -ErrorAction SilentlyContinue
-            if ($val."(Default)" -eq $script:Config.SafeBootValue) {
-                Write-Log "  [OK] SafeBoot Minimal Support" -Level "SUCCESS"
-                $successCount++
-                [void]$appliedKeys.Add(@{ Type = "SafeBoot"; ID = "Minimal" })
-            }
-            else {
-                Write-Log "  [FAIL] SafeBoot Minimal Support" -Level "ERROR"
-            }
-        }
-        catch {
-            Write-Log "  [FAIL] SafeBoot Minimal: $($_.Exception.Message)" -Level "ERROR"
-        }
-
-        # SafeBoot Network
-        try {
-            if (-not (Test-Path -LiteralPath $script:Config.SafeBootNetwork)) {
-                New-Item -LiteralPath $script:Config.SafeBootNetwork -Force | Out-Null
-            }
-            Set-ItemProperty -LiteralPath $script:Config.SafeBootNetwork -Name "(Default)" -Value $script:Config.SafeBootValue -Force
-            $val = Get-ItemProperty -LiteralPath $script:Config.SafeBootNetwork -Name "(Default)" -ErrorAction SilentlyContinue
-            if ($val."(Default)" -eq $script:Config.SafeBootValue) {
-                Write-Log "  [OK] SafeBoot Network Support" -Level "SUCCESS"
-                $successCount++
-                [void]$appliedKeys.Add(@{ Type = "SafeBoot"; ID = "Network" })
-            }
-            else {
-                Write-Log "  [FAIL] SafeBoot Network Support" -Level "ERROR"
-            }
-        }
-        catch {
-            Write-Log "  [FAIL] SafeBoot Network: $($_.Exception.Message)" -Level "ERROR"
-        }
-
-        # Step 3: Validate
-        Update-Progress -Value 95 -Status "Validating..."
-        Write-Log "Step 3/3: Validating installation..."
-        Write-Log "========================================" -Level "INFO"
-
-        if ($successCount -eq $effectiveTotal) {
-            Write-Log "Patch Status: SUCCESS - Applied $successCount/$effectiveTotal components" -Level "SUCCESS"
-            Write-Log "Please RESTART your computer to apply changes" -Level "WARNING"
-            Write-Log "After reboot: Drives should appear under 'Storage disks' using nvmedisk.sys" -Level "INFO"
-
-            if ($script:BypassIOStatus -and -not $script:BypassIOStatus.Supported) {
-                Write-Log "NOTE: BypassIO/DirectStorage not supported with Native NVMe - gaming impact possible" -Level "WARNING"
-            }
-
-            Write-AppEventLog -Message "NVMe Driver Patch applied successfully ($successCount/$effectiveTotal components)" -EntryType "Information" -EventId 1001
-            Show-ToastNotification -Title "NVMe Patch Applied" -Message "All $effectiveTotal components applied successfully. Restart required." -Type "Success"
-
-            $verifyScript = New-VerificationScript
-            if ($verifyScript) { Write-Log "Verification script created: $verifyScript" -Level "INFO" }
-
-            # Auto-generate recovery kit in working directory
-            $autoKitDir = Join-Path $script:Config.WorkingDir "NVMe_Recovery_Kit"
-            try {
-                Export-RecoveryKit -OutputDir $script:Config.WorkingDir | Out-Null
-                Write-Log "Recovery kit auto-saved to: $autoKitDir" -Level "INFO"
-                Write-Log "Copy to USB for offline recovery if needed" -Level "INFO"
-            }
-            catch { <# Recovery kit generation best-effort #> }
-
-            Update-Progress -Value 100 -Status "Complete!"
-            Update-Progress -Value 0 -Status ""
-
-            if (-not $script:Config.NoRestart -and -not $script:Config.SilentMode) {
-                $restartMsg = "Patch applied successfully ($successCount/$effectiveTotal components).`n`n"
-                $restartMsg += "Restart your computer now to enable the new NVMe driver?`n`n"
-                $restartMsg += "(System will restart in $($script:Config.RestartDelay) seconds if you click Yes)`n`n"
-                $restartMsg += "After reboot:`n"
-                $restartMsg += "- Drives will move from 'Disk drives' to 'Storage disks'`n"
-                $restartMsg += "- Driver changes from stornvme.sys to nvmedisk.sys`n"
-                $restartMsg += "- A verification script has been created to confirm`n"
-                $restartMsg += "- A recovery kit has been saved (copy to USB for safety)"
-
-                $result = Show-ConfirmDialog -Title "Installation Complete" -Message $restartMsg
-                if ($result) {
-                    Write-Log "Initiating system restart in $($script:Config.RestartDelay) seconds..."
-                    Start-Process "shutdown.exe" -ArgumentList "/r /t $($script:Config.RestartDelay) /c `"NVMe Driver Patch - Restarting in $($script:Config.RestartDelay) seconds. Save your work!`""
-                }
-            }
-            return $true
-        }
-        else {
-            Write-Log "Patch Status: PARTIAL - Applied $successCount/$effectiveTotal components" -Level "WARNING"
-
-            Write-Log "Rolling back partial installation to prevent inconsistent state..." -Level "WARNING"
-            Update-Progress -Value 96 -Status "Rolling back..."
-
-            foreach ($applied in $appliedKeys) {
-                try {
-                    if ($applied.Type -eq "Feature") {
-                        Remove-ItemProperty -Path $script:Config.RegistryPath -Name $applied.ID -Force -ErrorAction Stop
-                        $friendlyName = if ($script:Config.FeatureNames.ContainsKey($applied.ID)) { $script:Config.FeatureNames[$applied.ID] } else { "Feature Flag" }
-                        Write-Log "  [ROLLBACK] $($applied.ID) - $friendlyName" -Level "INFO"
-                    }
-                    elseif ($applied.Type -eq "SafeBoot") {
-                        $path = if ($applied.ID -eq "Minimal") { $script:Config.SafeBootMinimal } else { $script:Config.SafeBootNetwork }
-                        Remove-Item -LiteralPath $path -Force -ErrorAction Stop
-                        Write-Log "  [ROLLBACK] SafeBoot $($applied.ID)" -Level "INFO"
-                    }
-                }
-                catch {
-                    Write-Log "  [ROLLBACK FAIL] $($applied.Type) $($applied.ID): $($_.Exception.Message)" -Level "ERROR"
-                }
-            }
-
-            Write-Log "Rollback complete - system returned to pre-patch state" -Level "WARNING"
-            Write-AppEventLog -Message "NVMe Driver Patch rolled back after partial failure ($successCount/$effectiveTotal components)" -EntryType "Warning" -EventId 2001
-            Show-ToastNotification -Title "NVMe Patch Failed" -Message "Only $successCount of $effectiveTotal components applied. Changes rolled back." -Type "Warning"
-            Update-Progress -Value 0 -Status ""
-            return $false
-        }
-    }
-    catch {
-        Write-Log "INSTALLATION FAILED: $($_.Exception.Message)" -Level "ERROR"
-        Write-AppEventLog -Message "NVMe Driver Patch installation failed: $($_.Exception.Message)" -EntryType "Error" -EventId 3001
-        Update-Progress -Value 0 -Status ""
-        return $false
-    }
-    finally {
-        if (-not $script:Config.SilentMode) {
-            Set-ButtonsEnabled -Enabled $true
-            Update-StatusDisplay
-        }
-        if ($script:BeforeSnapshot) {
-            $afterSnapshot = Get-PatchSnapshot
-            Show-BeforeAfterComparison -Before $script:BeforeSnapshot -After $afterSnapshot -Operation "Install Patch"
-            $script:BeforeSnapshot = $null
-        }
-        try { Test-PatchAppliedSinceLastRun | Out-Null } catch { <# State save best-effort #> }
-        Write-Log "========================================" -Level "INFO"
     }
 }
 
@@ -3475,22 +3278,8 @@ if ($Silent) {
     $exitCode = 0
 
     if ($Apply) {
-        if ($script:VeraCryptDetected) {
-            Write-Error "BLOCKED: VeraCrypt system encryption detected. nvmedisk.sys breaks VeraCrypt boot. This block cannot be overridden."
-            $exitCode = 1
-        }
-        elseif (-not (Test-PreflightPassed) -and -not $Force) {
-            Write-Error "Critical preflight check(s) failed. Use -Force to override."
-            $exitCode = 1
-        }
-        elseif (-not $Force -and -not $script:HasNVMeDrives) {
-            Write-Warning "No NVMe drives detected. Use -Force to apply anyway."
-            $exitCode = 2
-        }
-        else {
-            $success = Install-NVMePatch
-            $exitCode = if ($success) { 0 } else { 1 }
-        }
+        [Console]::Error.WriteLine($script:MutationRetiredGuidance)
+        $exitCode = $script:MutationRetiredExitCode
     }
     elseif ($Remove) {
         $success = Uninstall-NVMePatch
@@ -3661,7 +3450,7 @@ $xaml = @"
                                         <StackPanel>
                                             <TextBlock Text="ACTIONS" Foreground="#FF52525b" FontSize="10" FontWeight="Bold" Margin="0,0,0,12"/>
                                             <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions>
-                                                <Button Name="BtnApply" Content="APPLY PATCH" Grid.Column="0" Background="#FF166534" Style="{StaticResource ActionButton}"/>
+                                                <Button Name="BtnApply" Content="MUTATION RETIRED" Grid.Column="0" Background="#FF166534" Style="{StaticResource ActionButton}" IsEnabled="False" ToolTip="Use NVMeDriverPatcher.exe or NVMeDriverPatcher.Cli.exe apply --safe from the same release."/>
                                                 <Button Name="BtnRemove" Content="REMOVE PATCH" Grid.Column="2" Background="#FF18181b" Style="{StaticResource ActionButton}">
                                                     <Button.Template><ControlTemplate TargetType="Button">
                                                         <Border x:Name="border" Background="#FF18181b" CornerRadius="6" BorderBrush="#FF27272a" BorderThickness="1" Padding="20,0">
@@ -4010,9 +3799,7 @@ if ($script:ui['MenuClearLog']) {
 
 # Button click handlers
 $script:ui['BtnApply'].Add_Click({
-    if (Show-ConfirmDialog -Title "Apply Patch" -Message "Apply the NVMe driver enhancement patch?" -WarningText "This will modify system registry settings." -CheckNVMe $true) {
-        Install-NVMePatch
-    }
+    Show-ThemedDialog -Title "Mutation Retired" -Message $script:MutationRetiredGuidance -Icon "Warning"
 })
 
 $script:ui['BtnRemove'].Add_Click({

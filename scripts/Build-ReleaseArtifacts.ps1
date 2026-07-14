@@ -13,6 +13,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = if ($RepoRoot) { (Resolve-Path $RepoRoot).Path } else { (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
 
+& (Join-Path $PSScriptRoot 'Validate-LegacyPowerShellBoundary.ps1') `
+    -ScriptPath (Join-Path $repoRoot 'NVMe_Driver_Patcher.ps1')
+
 if ([string]::IsNullOrWhiteSpace($Version)) {
     [xml]$props = Get-Content -Raw (Join-Path $repoRoot 'Directory.Build.props')
     $Version = [string]$props.Project.PropertyGroup.VersionPrefix

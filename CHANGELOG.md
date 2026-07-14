@@ -5,6 +5,12 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **The deprecated PowerShell artifact is now permanently read/recover-only** — `-Apply` exits 5
+  before elevation, configuration, preflight, or UI startup with the exact maintained GUI/CLI
+  handoff. The legacy GUI cannot enable/reinstall, and the old registry write implementation was
+  removed while status, patch removal, diagnostics, verification-script, and recovery-kit exports
+  remain. A PowerShell AST release gate rejects restored install functions, registry writes,
+  forced-binding/device commands, missing recovery surfaces, or a displaced early guard.
 - **Native NVMe scope is now reported honestly as machine-wide** — every apply and FeatureStore
   fallback boundary warns that Windows applies one driver-selection policy to all eligible NVMe
   drives/controllers. Legacy `drive_scope.json` preferences are detected and explained but never

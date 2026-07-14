@@ -43,7 +43,8 @@ public sealed class ReleaseAssetsScriptTests
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
-            UseShellExecute = false
+            UseShellExecute = false,
+            CreateNoWindow = true
         };
         // Drop any inherited PSModulePath (e.g. a pwsh-7 path from the spawning shell) so Windows
         // PowerShell uses its default module path and can auto-load Get-FileHash / Get-AuthenticodeSignature.
@@ -96,6 +97,29 @@ public sealed class ReleaseAssetsScriptTests
                     { "id": "gui", "path": "{{artifactRel}}", "required": true, "sign": true, "checksum": true, "upload": true{{runtimeJson}} }
                   ]
                 }
+                """);
+            Write(root, "NVMe_Driver_Patcher.ps1", """
+                [CmdletBinding()]
+                param(
+                    [switch]$Apply,
+                    [switch]$Remove,
+                    [switch]$Status,
+                    [switch]$ExportDiagnostics,
+                    [switch]$GenerateVerifyScript,
+                    [switch]$ExportRecoveryKit
+                )
+                $script:MutationRetiredExitCode = 5
+                $script:MutationRetiredGuidance = "Use NVMeDriverPatcher.exe or NVMeDriverPatcher.Cli.exe apply --safe; retained: -Status -Remove -ExportDiagnostics -GenerateVerifyScript -ExportRecoveryKit"
+                if ($Apply) {
+                    [Console]::Error.WriteLine($script:MutationRetiredGuidance)
+                    exit $script:MutationRetiredExitCode
+                }
+                function Test-Administrator { return $true }
+                function Test-PatchStatus { return $null }
+                function Uninstall-NVMePatch { return $true }
+                function Export-SystemDiagnostics { return $null }
+                function New-VerificationScript { return $null }
+                function Export-RecoveryKit { return $null }
                 """);
             // Satisfy the checksum contract so only the signature check distinguishes the two cases.
             File.WriteAllText(System.IO.Path.Combine(root, "publish", "app.exe.sha256"), $"{hash}  app.exe");
