@@ -564,6 +564,16 @@ public static class DiagnosticsService
         sb.AppendLine($"Directory Join: {bitLockerProof.DirectoryJoin.Kind}");
         sb.AppendLine($"Detail: {bitLockerProof.Detail}");
 
+        var databaseState = DataService.DatabaseState;
+        sb.AppendLine().AppendLine("HISTORY DATABASE").AppendLine("----------------");
+        sb.AppendLine($"Availability: {databaseState.Availability}");
+        sb.AppendLine($"Schema Version: {databaseState.SchemaVersion}");
+        sb.AppendLine($"Summary: {databaseState.Summary}");
+        if (!databaseState.IsAvailable)
+            sb.AppendLine($"Recovery: {databaseState.RecoveryAction}");
+        if (!string.IsNullOrWhiteSpace(databaseState.BackupPath))
+            sb.AppendLine($"Pre-upgrade Backup: {databaseState.BackupPath}");
+
         var recoverySafety = RecoverySafetyGateService.Snapshot();
         sb.AppendLine().AppendLine("STARTUP RECOVERY SAFETY").AppendLine("-----------------------");
         sb.AppendLine($"Mutation Allowed: {(recoverySafety.MutationAllowed ? "Yes" : "No")}");
