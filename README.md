@@ -127,9 +127,10 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 - **Windows Event Log** integration for audit trails
 
 **UI/UX**
-- **WPF dark theme** -- zinc-950 palette with blue accent, custom title bar, drop shadow
+- **Storage control-center shell** -- persistent left navigation, page-specific headers, an at-a-glance native NVMe status hero, Windows/drive/recovery metrics, and dedicated driver-path and rollback-health panels
+- **Light, dark, and high-contrast themes** -- shared WPF surfaces and controls retain the same information hierarchy across every palette
 - **Live reduced-motion support** -- honors Windows client-area animation settings without a restart, replacing repeating and transitional motion with stable status states
-- **Resizable window** with grip handle, clamped to work area (no off-screen at high DPI)
+- **Responsive workspace** -- the activity rail moves below the active tool on narrow windows instead of compressing safety-critical controls; the window remains clamped to the work area at high DPI
 - **Toast notifications** -- Windows balloon tips for patch results
 - **Activity log** with right-click context menu (Copy Selection, Select All, Copy All, Clear)
 - **Collapsible Settings panel** -- Auto-save, Toasts, Event Log, Restart Delay, Open Data Folder

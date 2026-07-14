@@ -229,6 +229,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   clears and persists on success, and retains the checkpoint for retry on failure.
 
 ### Changed
+- **The WPF GUI now uses a storage control-center hierarchy** — a persistent navigation rail
+  replaces the dense tab strip, the overview leads with truthful driver/readiness state and primary
+  recovery actions, and compact Windows/drive/recovery metrics sit above a visual driver path,
+  rollback-health summary, benchmark workspace, and always-available activity. Narrow windows move
+  activity below the active workspace instead of squeezing safety-critical controls. The headless
+  accessibility smoke now renders the shell at its supported desktop size and asserts the new
+  navigation, overview, action order, and layout floor across the shared theme resources.
 - **Corner-radius consistency** — normalized every control's corner radius to the house set
   (0/4/6/8/10/12): the pervasive `7` on buttons/inputs/combobox/menu/tooltip → `8` (matches cards),
   `5` → `4`, badge `3` → `4`, and hairline `1`/`2` accents → `0`. One coherent rounding language.

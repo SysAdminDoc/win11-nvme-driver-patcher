@@ -25,14 +25,158 @@
                 ClipToBounds="False">
 
             <Grid ClipToBounds="True">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="216"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0"
+                        Padding="14,18,14,14"
+                        Background="{DynamicResource SurfaceInset}"
+                        BorderBrush="{DynamicResource Border}"
+                        BorderThickness="0,0,1,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid Margin="4,0,4,26">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="40"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Width="38"
+                                    Height="38"
+                                    Background="{DynamicResource AccentBg}"
+                                    BorderBrush="{DynamicResource Accent}"
+                                    BorderThickness="1"
+                                    CornerRadius="9">
+                                <Grid>
+                                    <Border Width="22"
+                                            Height="18"
+                                            Background="Transparent"
+                                            BorderBrush="{DynamicResource Accent}"
+                                            BorderThickness="1.5"
+                                            CornerRadius="3"/>
+                                    <TextBlock Text="N"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextPrimary}"
+                                               FontSize="12"
+                                               FontWeight="Bold"/>
+                                </Grid>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="10,1,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="NVMe Control"
+                                           Foreground="{DynamicResource TextPrimary}"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock Text="DRIVER CONSOLE"
+                                           Margin="0,2,0,0"
+                                           Foreground="{DynamicResource TextDim}"
+                                           FontSize="9.5"
+                                           FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Grid.Row="1"
+                                   Margin="12,0,0,10"
+                                   Text="WORKSPACE"
+                                   Style="{StaticResource SectionEyebrow}"/>
+
+                        <ListBox x:Name="PrimaryNavigation"
+                                 Grid.Row="2"
+                                 SelectedIndex="{Binding SelectedIndex, ElementName=WorkspaceTabs, Mode=TwoWay}"
+                                 Style="{StaticResource NavigationListBox}"
+                                 AutomationProperties.Name="Primary navigation">
+                            <ListBoxItem Style="{StaticResource NavigationListItem}" AutomationProperties.Name="Overview">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE80F;" Style="{StaticResource NavigationGlyph}"/>
+                                    <TextBlock Text="Overview" Style="{StaticResource NavigationLabel}"/>
+                                </StackPanel>
+                            </ListBoxItem>
+                            <ListBoxItem Style="{StaticResource NavigationListItem}" AutomationProperties.Name="Drives and telemetry">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xEDA2;" Style="{StaticResource NavigationGlyph}"/>
+                                    <TextBlock Text="Drives" Style="{StaticResource NavigationLabel}"/>
+                                </StackPanel>
+                            </ListBoxItem>
+                            <ListBoxItem Style="{StaticResource NavigationListItem}" AutomationProperties.Name="Recovery">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xEA18;" Style="{StaticResource NavigationGlyph}"/>
+                                    <TextBlock Text="Recovery" Style="{StaticResource NavigationLabel}"/>
+                                </StackPanel>
+                            </ListBoxItem>
+                            <ListBoxItem Style="{StaticResource NavigationListItem}" AutomationProperties.Name="Advanced tuning">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE9E9;" Style="{StaticResource NavigationGlyph}"/>
+                                    <TextBlock Text="Tuning" Style="{StaticResource NavigationLabel}"/>
+                                </StackPanel>
+                            </ListBoxItem>
+                            <ListBoxItem Style="{StaticResource NavigationListItem}" AutomationProperties.Name="Diagnostics">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE9D9;" Style="{StaticResource NavigationGlyph}"/>
+                                    <TextBlock Text="Diagnostics" Style="{StaticResource NavigationLabel}"/>
+                                </StackPanel>
+                            </ListBoxItem>
+                            <ListBoxItem Style="{StaticResource NavigationListItem}" AutomationProperties.Name="Settings">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE713;" Style="{StaticResource NavigationGlyph}"/>
+                                    <TextBlock Text="Settings" Style="{StaticResource NavigationLabel}"/>
+                                </StackPanel>
+                            </ListBoxItem>
+                        </ListBox>
+
+                        <Border Grid.Row="3"
+                                Margin="4,18,4,0"
+                                Padding="10"
+                                Background="{DynamicResource BgMedium}"
+                                BorderBrush="{DynamicResource Border}"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Width="28"
+                                        Height="28"
+                                        Background="{DynamicResource GreenBg}"
+                                        CornerRadius="7">
+                                    <TextBlock Text="&#xEA18;"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                               FontSize="13"
+                                               Foreground="{DynamicResource Green}"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="9,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="Administrator"
+                                               Foreground="{DynamicResource TextSecondary}"
+                                               FontSize="11.5"
+                                               FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding VersionText}"
+                                               Margin="0,2,0,0"
+                                               Foreground="{DynamicResource TextDim}"
+                                               FontSize="10"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+
                 <Border x:Name="ShellAccentBar"
+                        Grid.Column="1"
                         Height="2"
                         VerticalAlignment="Top"
                         Background="{DynamicResource AccentLineBrush}"
                         CornerRadius="0"
                         Panel.ZIndex="2"/>
 
-                <Grid>
+                <Grid Grid.Column="1">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -42,7 +186,7 @@
 
                     <Border x:Name="TitleBarRegion"
                             Grid.Row="0"
-                            Padding="24,12,24,0"
+                            Padding="24,18,24,0"
                             Background="Transparent"
                             MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                         <Grid>
@@ -51,51 +195,77 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <StackPanel Orientation="Horizontal"
-                                        Margin="0,2,0,0"
-                                        VerticalAlignment="Top">
-                                <TextBlock Text="NVMe Driver Patcher"
-                                           FontSize="17"
+                            <StackPanel>
+                                <TextBlock FontSize="22"
                                            FontWeight="SemiBold"
-                                           Foreground="{DynamicResource TextPrimary}"/>
-                                <Border Width="1"
-                                        Height="16"
-                                        Margin="14,3,14,0"
-                                        Background="{DynamicResource Border}"/>
-                                <TextBlock Text="Windows 11 native driver control"
-                                           Margin="0,3,0,0"
-                                           FontSize="12"
-                                           Foreground="{DynamicResource TextDim}"/>
+                                           Foreground="{DynamicResource TextPrimary}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="System overview"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="1"><Setter Property="Text" Value="Drives &amp; telemetry"/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="2"><Setter Property="Text" Value="Recovery"/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="3"><Setter Property="Text" Value="Advanced tuning"/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="4"><Setter Property="Text" Value="Diagnostics"/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="5"><Setter Property="Text" Value="Settings"/></DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Margin="0,5,0,0"
+                                           Foreground="{DynamicResource TextMuted}"
+                                           FontSize="12.5">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="Driver state, readiness, and a machine-specific performance baseline."/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="1"><Setter Property="Text" Value="Inspect NVMe devices, active drivers, health, and DirectStorage readiness."/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="2"><Setter Property="Text" Value="Keep offline rollback assets and post-reboot verification close at hand."/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="3"><Setter Property="Text" Value="Tune supported storage policies with explicit risk and recovery context."/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="4"><Setter Property="Text" Value="Capture evidence, inspect activity, and export support-ready diagnostics."/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="5"><Setter Property="Text" Value="Configure appearance, storage paths, automation, and update behavior."/></DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </StackPanel>
 
-                            <StackPanel Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        VerticalAlignment="Top">
-                                <Border Margin="0,0,10,0"
-                                        Padding="9,5"
-                                        VerticalAlignment="Top"
-                                        Visibility="Collapsed"
-                                        Style="{StaticResource StatusChipBorder}"
-                                        AutomationProperties.Name="Current patch state">
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                                <Border Margin="0,0,8,0"
+                                        Padding="9,6"
+                                        Background="{DynamicResource GreenBg}"
+                                        BorderBrush="{DynamicResource Border}"
+                                        BorderThickness="1"
+                                        CornerRadius="8">
                                     <StackPanel Orientation="Horizontal">
-                                        <Border Width="3"
-                                                Height="14"
-                                                Margin="0,0,7,0"
-                                                VerticalAlignment="Center"
-                                                Background="{Binding StatusColor, Converter={StaticResource StrToBrush}}"
-                                                CornerRadius="0"/>
-                                        <TextBlock Text="{Binding StatusText}"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource TextSecondary}"
+                                        <TextBlock Text="&#xEA18;"
+                                                   Margin="0,0,6,0"
+                                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                                    FontSize="11"
+                                                   Foreground="{DynamicResource Green}"/>
+                                        <TextBlock Text="ADMINISTRATOR"
+                                                   FontSize="10"
                                                    FontWeight="SemiBold"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   MaxWidth="180"/>
+                                                   Foreground="{DynamicResource Green}"/>
                                     </StackPanel>
                                 </Border>
 
+                                <Button Margin="0,0,8,0"
+                                        Style="{StaticResource SecondaryButton}"
+                                        AutomationProperties.Name="Refresh readiness checks"
+                                        ToolTip="Run readiness checks again and rescan hardware inventory (F5)."
+                                        Command="{Binding RefreshCommand}"
+                                        IsEnabled="{Binding ButtonsEnabled}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE72C;"
+                                                   Margin="0,0,6,0"
+                                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"/>
+                                        <TextBlock Text="Refresh"/>
+                                    </StackPanel>
+                                </Button>
+
                                 <Button Style="{StaticResource BadgeButton}"
-                                        Margin="0,0,10,0"
+                                        Margin="0,0,8,0"
                                         Background="{DynamicResource YellowBg}"
                                         Foreground="{DynamicResource Yellow}"
                                         AutomationProperties.Name="Open available update"
@@ -107,43 +277,16 @@
 
                                 <Button x:Name="ThemeToggleButton"
                                         Content="&#x2600;"
-                                        Margin="0,0,8,0"
                                         Style="{StaticResource WindowChromeButton}"
                                         FontFamily="Segoe UI Symbol"
                                         FontSize="14"
                                         AutomationProperties.Name="Toggle theme"
                                         Click="ThemeToggle_Click"/>
-
-                                <Border Margin="0,0,10,0"
-                                        Padding="9,5"
-                                        Background="{DynamicResource SurfaceInset}"
-                                        BorderBrush="{DynamicResource Border}"
-                                        BorderThickness="1"
-                                        CornerRadius="8">
-                                    <TextBlock Text="{Binding VersionText}"
-                                               FontSize="11"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource TextMuted}"/>
-                                </Border>
-
-                                <Button Content="&#x2013;"
-                                        Style="{StaticResource WindowChromeButton}"
-                                        AutomationProperties.Name="Minimize window"
-                                        Visibility="Collapsed"
-                                        Click="Minimize_Click"/>
                                 <Button x:Name="MaximizeRestoreButton"
                                         Content="&#x25A1;"
-                                        Margin="6,0,0,0"
-                                        Style="{StaticResource WindowChromeButton}"
+                                        Visibility="Collapsed"
                                         AutomationProperties.Name="Maximize window"
-                                        Visibility="Collapsed"
                                         Click="MaximizeRestore_Click"/>
-                                <Button Content="&#x2715;"
-                                        Margin="6,0,0,0"
-                                        Style="{StaticResource CloseWindowChromeButton}"
-                                        AutomationProperties.Name="Close window"
-                                        Visibility="Collapsed"
-                                        Click="Close_Click"/>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -700,102 +843,186 @@
 
                     <Border x:Name="CommandDeck"
                             Grid.Row="1"
-                            Margin="20,10,20,0"
-                            Padding="16,12"
-                            Background="{DynamicResource SurfaceCardBrush}"
-                            BorderBrush="{DynamicResource Border}"
-                            BorderThickness="1"
-                            CornerRadius="8">
+                            Margin="20,16,20,0">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource HeroCard}">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="1"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                    <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="2"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                    <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="3"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                    <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="4"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                    <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="5"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="0.95*"/>
-                                <ColumnDefinition Width="22"/>
-                                <ColumnDefinition Width="1.35*"/>
-                                <ColumnDefinition Width="22"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
 
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Status" Style="{StaticResource SectionEyebrow}"/>
-                                <TextBlock Text="{Binding StatusText}"
-                                           Margin="0,4,0,0"
-                                           Foreground="{Binding StatusColor, Converter={StaticResource StrToBrush}}"
-                                           FontSize="18"
-                                           FontWeight="SemiBold"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding StatusSummaryText}"
-                                           Margin="0,3,0,0"
-                                           Foreground="{DynamicResource TextMuted}"
-                                           FontSize="12"
-                                           LineHeight="16"
-                                           MaxHeight="30"
-                                           TextTrimming="CharacterEllipsis"
-                                           TextWrapping="Wrap"/>
-                            </StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="180"/>
+                                </Grid.ColumnDefinitions>
 
-                            <Border Grid.Column="1"
-                                    Width="1"
-                                    HorizontalAlignment="Center"
-                                    Background="{DynamicResource Border}"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="NATIVE NVME STATUS" Style="{StaticResource SectionEyebrow}"/>
+                                        <Border Margin="10,-3,0,0"
+                                                Padding="8,4"
+                                                Background="{DynamicResource GreenBg}"
+                                                BorderBrush="{Binding StatusColor, Converter={StaticResource StrToBrush}}"
+                                                BorderThickness="1"
+                                                CornerRadius="10"
+                                                AutomationProperties.Name="Current patch state">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Ellipse Width="6"
+                                                         Height="6"
+                                                         Margin="0,0,6,0"
+                                                         VerticalAlignment="Center"
+                                                         Fill="{Binding StatusColor, Converter={StaticResource StrToBrush}}"/>
+                                                <TextBlock Text="{Binding StatusText}"
+                                                           Foreground="{Binding StatusColor, Converter={StaticResource StrToBrush}}"
+                                                           FontSize="10"
+                                                           FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding StatusText}"
+                                               Margin="0,10,0,0"
+                                               Foreground="{DynamicResource TextPrimary}"
+                                               FontSize="27"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding StatusSummaryText}"
+                                               Margin="0,7,0,0"
+                                               MaxWidth="720"
+                                               HorizontalAlignment="Left"
+                                               Foreground="{DynamicResource TextMuted}"
+                                               FontSize="13"
+                                               LineHeight="19"
+                                               TextWrapping="Wrap"/>
 
-                            <StackPanel Grid.Column="2"
-                                        VerticalAlignment="Center">
-                                <TextBlock Text="Next step" Style="{StaticResource SectionEyebrow}"/>
-                                <TextBlock Text="{Binding NextStepTitle}"
-                                           Margin="0,4,0,0"
-                                           Foreground="{Binding NextStepColor, Converter={StaticResource StrToBrush}}"
-                                           FontSize="13.5"
-                                           FontWeight="SemiBold"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding NextStepDescription}"
-                                           Margin="0,3,0,0"
-                                           Foreground="{DynamicResource TextMuted}"
-                                           FontSize="12"
-                                           LineHeight="16"
-                                           MaxHeight="30"
-                                           TextTrimming="CharacterEllipsis"
-                                           TextWrapping="Wrap"/>
-                            </StackPanel>
+                                    <Border Margin="0,12,0,0"
+                                            Padding="10,8"
+                                            MaxWidth="720"
+                                            HorizontalAlignment="Left"
+                                            Background="{DynamicResource SurfaceInset}"
+                                            BorderBrush="{DynamicResource Border}"
+                                            BorderThickness="1"
+                                            CornerRadius="8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="3"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Background="{Binding NextStepColor, Converter={StaticResource StrToBrush}}" CornerRadius="2"/>
+                                            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                                <TextBlock Text="{Binding NextStepTitle}"
+                                                           Foreground="{DynamicResource TextSecondary}"
+                                                           FontSize="12"
+                                                           FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding NextStepDescription}"
+                                                           Margin="0,3,0,0"
+                                                           Foreground="{DynamicResource TextDim}"
+                                                           FontSize="11.5"
+                                                           TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
 
-                            <Border Grid.Column="3"
-                                    Width="1"
-                                    HorizontalAlignment="Center"
-                                    Background="{DynamicResource Border}"/>
-
-                            <Grid Grid.Column="4">
-                                <StackPanel MinWidth="326"
-                                            VerticalAlignment="Center">
-                                    <TextBlock Text="Actions" Style="{StaticResource SectionEyebrow}"/>
-                                    <StackPanel Margin="0,6,0,0"
-                                                Orientation="Horizontal">
+                                    <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
                                         <Button Content="{Binding ApplyButtonText}"
-                                                MinWidth="126"
+                                                MinWidth="142"
                                                 Margin="0,0,8,0"
                                                 Style="{StaticResource ActionButton}"
                                                 AutomationProperties.Name="Apply patch"
                                                 IsEnabled="{Binding ApplyEnabled}"
                                                 ToolTip="{Binding ApplyButtonTooltipText}"
                                                 Command="{Binding ApplyPatchCommand}"/>
-
                                         <Button Content="Remove"
-                                                MinWidth="84"
+                                                MinWidth="88"
                                                 Margin="0,0,8,0"
                                                 Style="{StaticResource DangerButton}"
                                                 AutomationProperties.Name="Remove patch"
                                                 IsEnabled="{Binding RemoveEnabled}"
                                                 ToolTip="{Binding RemoveButtonTooltipText}"
                                                 Command="{Binding RemovePatchCommand}"/>
-
-                                        <Button Content="Refresh"
-                                                MinWidth="84"
+                                        <Button Content="Create Recovery Kit"
+                                                MinWidth="146"
                                                 Style="{StaticResource SecondaryButton}"
-                                                AutomationProperties.Name="Refresh readiness checks"
-                                                ToolTip="Run readiness checks again and rescan hardware inventory (F5)."
-                                                Command="{Binding RefreshCommand}"
+                                                AutomationProperties.Name="Create recovery kit"
+                                                Command="{Binding ExportRecoveryKitCommand}"
                                                 IsEnabled="{Binding ButtonsEnabled}"/>
                                     </StackPanel>
                                 </StackPanel>
+
+                                <Grid Grid.Column="1" VerticalAlignment="Center">
+                                    <Ellipse Width="132"
+                                             Height="132"
+                                             HorizontalAlignment="Center"
+                                             Fill="{DynamicResource AccentBg}"
+                                             Stroke="{DynamicResource BorderLight}"
+                                             StrokeThickness="1"/>
+                                    <Border Width="76"
+                                            Height="88"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Background="{DynamicResource BgMedium}"
+                                            BorderBrush="{DynamicResource Accent}"
+                                            BorderThickness="2"
+                                            CornerRadius="38,38,26,26">
+                                        <TextBlock Text="&#xE73E;"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                                   FontSize="32"
+                                                   Foreground="{DynamicResource Accent}"/>
+                                    </Border>
+                                </Grid>
                             </Grid>
+
+                            <UniformGrid Grid.Row="1" Margin="0,20,0,0" Columns="3">
+                                <Border Margin="0,0,6,0" Style="{StaticResource MetricCard}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Width="30" Height="30" Background="{DynamicResource AccentBg}" CornerRadius="7">
+                                            <TextBlock Text="&#xE7F8;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Accent}"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="WINDOWS BUILD" Style="{StaticResource SectionEyebrow}"/>
+                                            <TextBlock Text="{Binding BuildSummaryText}" Margin="0,5,0,0" Foreground="{DynamicResource TextPrimary}" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Border Margin="3,0" Style="{StaticResource MetricCard}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Width="30" Height="30" Background="{DynamicResource AccentBg}" CornerRadius="7">
+                                            <TextBlock Text="&#xEDA2;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Accent}"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="NVME DRIVES" Style="{StaticResource SectionEyebrow}"/>
+                                            <TextBlock Text="{Binding DriveInventorySummaryText}" Margin="0,5,0,0" Foreground="{DynamicResource TextPrimary}" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Border Margin="6,0,0,0" Style="{StaticResource MetricCard}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Width="30" Height="30" Background="{DynamicResource YellowBg}" CornerRadius="7">
+                                            <TextBlock Text="&#xEA18;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Green}"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="RECOVERY" Style="{StaticResource SectionEyebrow}"/>
+                                            <TextBlock Text="{Binding RecoveryTabBadgeText}" Margin="0,5,0,0" Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </UniformGrid>
                         </Grid>
                     </Border>
 
@@ -1419,8 +1646,8 @@
                                 Style="{StaticResource SurfaceCard}">
                             <Grid>
                                 <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
+                                    <RowDefinition x:Name="WorkspacePrimaryRow" Height="Auto"/>
+                                    <RowDefinition x:Name="WorkspaceActivityRow" Height="*"/>
                                 </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -1440,8 +1667,8 @@
                                             Grid.Column="0"
                                             Grid.RowSpan="2"
                                             Margin="0"
-                                            SelectedIndex="1"
-                                            Style="{StaticResource WorkspaceTabControl}"
+                                            SelectedIndex="0"
+                                            Style="{StaticResource WorkspaceContentTabControl}"
                                             KeyboardNavigation.TabNavigation="Cycle"
                                             AutomationProperties.Name="Workspace tabs"
                                             SelectionChanged="WorkspaceTabs_SelectionChanged">
@@ -1464,10 +1691,98 @@
                                                 <RowDefinition Height="*"/>
                                             </Grid.RowDefinitions>
 
-                                            <Border Style="{StaticResource InsetCard}" Visibility="Collapsed">
-                                                <TextBlock Text="Validate the patch with a before-and-after run from this machine."
-                                                           Style="{StaticResource BodyCopy}"/>
-                                            </Border>
+                                            <Grid Margin="0,0,0,12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="1.12*"/>
+                                                    <ColumnDefinition Width="12"/>
+                                                    <ColumnDefinition Width="0.88*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Border Style="{StaticResource InsetCard}">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <TextBlock Text="DRIVER PATH" Style="{StaticResource SectionEyebrow}"/>
+                                                                <TextBlock Text="Windows storage stack" Margin="0,5,0,0" Style="{StaticResource SectionTitle}"/>
+                                                            </StackPanel>
+                                                            <Border Grid.Column="1" Padding="8,4" Background="{DynamicResource AccentBg}" CornerRadius="9">
+                                                                <TextBlock Text="SYSTEM" Foreground="{DynamicResource Accent}" FontSize="9.5" FontWeight="SemiBold"/>
+                                                            </Border>
+                                                        </Grid>
+                                                        <Grid Grid.Row="1" Margin="0,14,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="30"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="30"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Border Padding="6,8" Background="{DynamicResource BgMedium}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="7">
+                                                                <StackPanel>
+                                                                    <TextBlock Text="WINDOWS" Style="{StaticResource SectionEyebrow}"/>
+                                                                    <TextBlock Text="Storage stack" Margin="0,4,0,0" Foreground="{DynamicResource TextSecondary}" FontSize="11.5" FontWeight="SemiBold"/>
+                                                                </StackPanel>
+                                                            </Border>
+                                                            <TextBlock Grid.Column="1" Text="&#xE76C;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource TextDim}"/>
+                                                            <Border Grid.Column="2" Padding="6,8" Background="{DynamicResource BgMedium}" BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="7">
+                                                                <StackPanel>
+                                                                    <TextBlock Text="CONTROLLER" Style="{StaticResource SectionEyebrow}"/>
+                                                                    <TextBlock Text="stornvme.sys" Margin="0,4,0,0" Foreground="{DynamicResource TextPrimary}" FontFamily="Cascadia Code, Consolas" FontSize="10" FontWeight="SemiBold"/>
+                                                                </StackPanel>
+                                                            </Border>
+                                                            <TextBlock Grid.Column="3" Text="&#xE76C;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource TextDim}"/>
+                                                            <Border Grid.Column="4" Padding="6,8" Background="{DynamicResource BgMedium}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="7">
+                                                                <StackPanel>
+                                                                    <TextBlock Text="DISK" Style="{StaticResource SectionEyebrow}"/>
+                                                                    <TextBlock Text="nvmedisk.sys" Margin="0,4,0,0" Foreground="{DynamicResource TextSecondary}" FontFamily="Cascadia Code, Consolas" FontSize="10" FontWeight="SemiBold"/>
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </Grid>
+                                                        <TextBlock Grid.Row="2"
+                                                                   Text="Machine-wide driver change · restart required after apply or rollback"
+                                                                   Margin="0,10,0,0"
+                                                                   Foreground="{DynamicResource TextDim}"
+                                                                   FontSize="10.5"/>
+                                                    </Grid>
+                                                </Border>
+
+                                                <Border Grid.Column="2" Style="{StaticResource InsetCard}">
+                                                    <StackPanel>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <TextBlock Text="RECOVERY HEALTH" Style="{StaticResource SectionEyebrow}"/>
+                                                                <TextBlock Text="Rollback readiness" Margin="0,5,0,0" Style="{StaticResource SectionTitle}"/>
+                                                            </StackPanel>
+                                                            <Border Grid.Column="1" Padding="8,4" Background="{DynamicResource YellowBg}" CornerRadius="9">
+                                                                <TextBlock Text="{Binding RecoveryTabBadgeText}" Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}" FontSize="9.5" FontWeight="SemiBold"/>
+                                                            </Border>
+                                                        </Grid>
+                                                        <Grid Margin="0,13,0,0">
+                                                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                                            <Ellipse Width="7" Height="7" Margin="0,3,9,0" VerticalAlignment="Top" Fill="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"/>
+                                                            <StackPanel Grid.Column="1">
+                                                                <TextBlock Text="Recovery kit" Foreground="{DynamicResource TextSecondary}" FontSize="11.5" FontWeight="SemiBold"/>
+                                                                <TextBlock Text="{Binding RecoveryKitStatusText}" Margin="0,3,0,0" MaxHeight="30" Foreground="{DynamicResource TextDim}" FontSize="10.5" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        <Grid Margin="0,10,0,0">
+                                                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                                            <Ellipse Width="7" Height="7" Margin="0,3,9,0" VerticalAlignment="Top" Fill="{DynamicResource Accent}"/>
+                                                            <StackPanel Grid.Column="1">
+                                                                <TextBlock Text="Post-reboot verification" Foreground="{DynamicResource TextSecondary}" FontSize="11.5" FontWeight="SemiBold"/>
+                                                                <TextBlock Text="{Binding VerificationScriptStatusText}" Margin="0,3,0,0" MaxHeight="30" Foreground="{DynamicResource TextDim}" FontSize="10.5" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </StackPanel>
+                                                </Border>
+                                            </Grid>
 
                                             <Border x:Name="BenchmarkEmptyState"
                                                     Grid.Row="1"
@@ -2576,7 +2891,8 @@
                     </Border>
                 </Grid>
 
-                <Border Panel.ZIndex="4"
+                <Border Grid.ColumnSpan="2"
+                        Panel.ZIndex="4"
                         Background="{DynamicResource OverlayScrimBrush}"
                         AutomationProperties.Name="Readiness refresh overlay"
                         AutomationProperties.LiveSetting="Polite"
