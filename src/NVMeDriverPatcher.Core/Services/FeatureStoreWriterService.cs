@@ -51,7 +51,27 @@ public sealed record FeatureConfigState(
 //     evidence heuristic when the Rtl API is unavailable.
 public static class FeatureStoreWriterService
 {
-    private static readonly SemaphoreSlim WriteLock = new(1, 1);
+    // RtlSetFeatureConfigurations mutates MACHINE-GLOBAL FeatureStore state, so a process-local
+    // lock was insufficient: an elevated CLI write and an elevated GUI fallback could interleave
+    // their two-phase (Runtime then Boot) writes and stomp each other's overrides. Serialize across
+    // processes with a named mutex.
+    private const string WriteMutexName = @"Global\NVMeDriverPatcher.FeatureStoreWrite";
+
+    private static FeatureStoreWriteResult RunExclusive(Func<FeatureStoreWriteResult> action)
+    {
+        using var mutex = new System.Threading.Mutex(initiallyOwned: false, WriteMutexName);
+        bool held = false;
+        try
+        {
+            try { held = mutex.WaitOne(TimeSpan.FromSeconds(30)); }
+            catch (System.Threading.AbandonedMutexException) { held = true; } // prior owner crashed mid-write
+            return action();
+        }
+        finally
+        {
+            if (held) { try { mutex.ReleaseMutex(); } catch { } }
+        }
+    }
 
     public const string FeatureStoreSubkey =
         @"SYSTEM\CurrentControlSet\Control\FeatureManagement\Overrides";
@@ -163,15 +183,7 @@ public static class FeatureStoreWriterService
         if (ids.Length == 0)
             return new FeatureStoreWriteResult { Success = false, Summary = "No feature IDs supplied." };
 
-        WriteLock.Wait();
-        try
-        {
-            return WriteOverridesCore(ids);
-        }
-        finally
-        {
-            WriteLock.Release();
-        }
+        return RunExclusive(() => WriteOverridesCore(ids));
     }
 
     private static FeatureStoreWriteResult WriteOverridesCore(int[] ids)
@@ -278,15 +290,7 @@ public static class FeatureStoreWriterService
         if (ids.Length == 0)
             return new FeatureStoreWriteResult { Success = false, Summary = "No feature IDs supplied." };
 
-        WriteLock.Wait();
-        try
-        {
-            return ResetOverridesCore(ids);
-        }
-        finally
-        {
-            WriteLock.Release();
-        }
+        return RunExclusive(() => ResetOverridesCore(ids));
     }
 
     private static FeatureStoreWriteResult ResetOverridesCore(int[] ids)
