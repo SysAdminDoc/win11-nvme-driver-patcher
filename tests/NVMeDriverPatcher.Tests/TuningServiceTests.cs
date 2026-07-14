@@ -27,4 +27,14 @@ public sealed class TuningServiceTests
     {
         Assert.False(TuningService.IsKnownParameterName(name));
     }
+
+    [Fact]
+    public void IsNativeNvmeBound_IsCallable_WithoutThrowing()
+    {
+        // Contract/smoke: the bound-driver probe must never throw (it fails open so a WMI hiccup
+        // can't block legacy-stack tuning). The value is environment-dependent, so only assert it
+        // returns without throwing.
+        var ex = Record.Exception(() => TuningService.IsNativeNvmeBound());
+        Assert.Null(ex);
+    }
 }
