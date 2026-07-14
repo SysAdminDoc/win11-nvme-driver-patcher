@@ -30,7 +30,7 @@ Get-NvmeFirmwareCompat | Where-Object Level -eq 'Bad'
 - `Invoke-NvmePatchApply`          — apply with profile + unattended/no-restart/force switches
 - `Invoke-NvmePatchRemove`         — remove the patch
 - `Get-NvmeWatchdogReport`         — verdict + raw output
-- `Get-NvmeControllerAudit`        — parsed per-controller list with IsNative flag
+- `Get-NvmeControllerAudit`        — bound driver plus read-only PnP candidate/rank evidence per controller
 - `Get-NvmeRecoveryProof`          — recovery readiness proof (JSON)
 - `Get-NvmeBypassIo`               — BypassIO status and gaming-impact guidance (JSON)
 - `Get-NvmeFirmwareCompat`         — firmware/controller compatibility matches (JSON)

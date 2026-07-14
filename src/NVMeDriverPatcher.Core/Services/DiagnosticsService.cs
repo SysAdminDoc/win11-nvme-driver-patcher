@@ -639,7 +639,7 @@ public static class DiagnosticsService
                 foreach (var c in PerControllerAuditService.FindCustomNativeWorkaroundEvidence(controllerAudit.Controllers))
                 {
                     sb.AppendLine($"  Suspect binding: {c.FriendlyName} (id={c.InstanceId})");
-                    sb.AppendLine($"    driver={c.BoundDriver}  inf={c.InfName}  provider={c.DriverProvider}");
+                    sb.AppendLine($"    driver={c.BoundDriver}  inf={c.InfName}  provider={c.DriverProvider}  version={c.BoundDriverVersion}");
                     sb.AppendLine($"    hardware={c.HardwareId}  compat={c.CompatibleId}");
                 }
             }
@@ -664,9 +664,13 @@ public static class DiagnosticsService
                 foreach (var c in controllerAudit.Controllers)
                 {
                     sb.AppendLine($"  {(c.IsNative ? "[NATIVE]" : "[LEGACY]")} {c.FriendlyName} (id={c.InstanceId})");
-                    sb.AppendLine($"    driver={c.BoundDriver}  inf={c.InfName}  provider={c.DriverProvider}  class={c.DeviceClass}");
+                    sb.AppendLine($"    driver={c.BoundDriver}  inf={c.InfName}  provider={c.DriverProvider}  version={c.BoundDriverVersion}  class={c.DeviceClass}");
                 }
             }
+
+            sb.AppendLine();
+            sb.AppendLine("DRIVER CANDIDATES / RANK EVIDENCE");
+            sb.AppendLine(controllerAudit.RenderDriverCandidateEvidence());
         }
         catch (Exception ex) { sb.AppendLine($"  Per-controller audit failed: {ex.Message}"); }
 

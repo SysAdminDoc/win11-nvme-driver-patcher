@@ -123,6 +123,7 @@ public sealed class DiagnosticsServiceTests : IDisposable
             TestSigningEnabled = true,
             ControllerAudit = new PerControllerAuditReport
             {
+                ObservedAtUtc = new DateTimeOffset(2026, 7, 14, 15, 0, 0, TimeSpan.Zero),
                 Controllers =
                 {
                     new ControllerAudit
@@ -133,8 +134,21 @@ public sealed class DiagnosticsServiceTests : IDisposable
                         IsNative = true,
                         InfName = "oem42.inf",
                         DriverProvider = "Community Test",
+                        BoundDriverVersion = "10.0.26100.8521",
                         HardwareId = "SCSI\\DiskNVMe____Custom_Model",
-                        CompatibleId = "GenNvmeDisk"
+                        CompatibleId = "GenNvmeDisk",
+                        DriverCandidateProbeSucceeded = true,
+                        DriverCandidateCommand = "pnputil.exe /enum-devices ... /drivers /format xml",
+                        DriverCandidates =
+                        {
+                            new ControllerDriverCandidate
+                            {
+                                InfName = "oem42.inf", Provider = "Community Test",
+                                DriverVersion = "10.0.26100.8521", Rank = "00FF1001",
+                                MatchingDeviceId = "SCSI\\DiskNVMe____Custom_Model",
+                                Status = "BestRanked/Installed"
+                            }
+                        }
                     }
                 }
             }
@@ -148,6 +162,8 @@ public sealed class DiagnosticsServiceTests : IDisposable
         Assert.Contains("BCD TESTSIGNING: Yes", report, StringComparison.Ordinal);
         Assert.Contains("WD SN850X", report, StringComparison.Ordinal);
         Assert.Contains("oem42.inf", report, StringComparison.Ordinal);
+        Assert.Contains("DRIVER CANDIDATES / RANK EVIDENCE", report, StringComparison.Ordinal);
+        Assert.Contains("rank=00FF1001", report, StringComparison.Ordinal);
         Assert.Contains("pnputil /enum-drivers /files", report, StringComparison.Ordinal);
     }
 

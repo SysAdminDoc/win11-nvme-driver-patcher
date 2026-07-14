@@ -124,16 +124,21 @@ function Get-NvmeControllerAudit {
             IsNative       = [bool]$c.isNative
             Name           = $c.friendlyName
             Driver         = $c.boundDriver
+            DriverVersion  = $c.boundDriverVersion
             InstanceId     = $c.instanceId
             InfName        = $c.infName
             DriverProvider = $c.driverProvider
             DeviceClass    = $c.deviceClass
+            CandidateProbeSucceeded = [bool]$c.driverCandidateProbeSucceeded
+            CandidateProbeError     = $c.driverCandidateProbeError
+            DriverCandidates        = $c.driverCandidates
         }
     }
     [PSCustomObject]@{
         ExitCode    = $j.ExitCode
         NativeCount = $d.nativeCount
         LegacyCount = $d.legacyCount
+        ObservedAtUtc = $d.observedAtUtc
         Controllers = $controllers
     }
 }

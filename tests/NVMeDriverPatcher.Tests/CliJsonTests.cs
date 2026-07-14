@@ -166,23 +166,41 @@ public sealed class CliJsonTests
     public void Controllers_FieldNamesAreStable()
     {
         var report = new PerControllerAuditReport();
+        report.ObservedAtUtc = new DateTimeOffset(2026, 7, 14, 15, 0, 0, TimeSpan.Zero);
         report.Controllers.Add(new ControllerAudit
         {
             IsNative = true, FriendlyName = "WD SN850X", BoundDriver = "nvmedisk.sys",
+            BoundDriverVersion = "10.0.26100.8521",
             InstanceId = "SCSI\\...", InfName = "nvmedisk.inf", DriverProvider = "Microsoft",
             DeviceClass = "DiskDrive", HardwareId = "SCSI\\DiskNVMe", CompatibleId = "GenNvmeDisk",
+            DriverCandidateProbeSucceeded = true,
+            DriverCandidateCommand = "pnputil.exe /enum-devices ... /drivers /format xml",
+            DriverCandidates =
+            {
+                new ControllerDriverCandidate
+                {
+                    InfName = "nvmedisk.inf", Provider = "Microsoft", Rank = "00FF2006",
+                    Status = "BestRanked/Installed", DriverVersion = "06/21/2006 10.0.26100.8521"
+                }
+            }
         });
         var data = Parse("controllers", CliJson.BuildControllers(report)).GetProperty("data");
 
         Assert.Equal(1, data.GetProperty("nativeCount").GetInt32());
         Assert.Equal(0, data.GetProperty("legacyCount").GetInt32());
+        Assert.Equal(0, data.GetProperty("candidateProbeFailureCount").GetInt32());
         var c = data.GetProperty("controllers")[0];
         Assert.True(c.GetProperty("isNative").GetBoolean());
         Assert.Equal("WD SN850X", c.GetProperty("friendlyName").GetString());
         Assert.Equal("nvmedisk.sys", c.GetProperty("boundDriver").GetString());
         Assert.Equal("nvmedisk.inf", c.GetProperty("infName").GetString());
         Assert.Equal("Microsoft", c.GetProperty("driverProvider").GetString());
+        Assert.Equal("10.0.26100.8521", c.GetProperty("boundDriverVersion").GetString());
         Assert.Equal("GenNvmeDisk", c.GetProperty("compatibleId").GetString());
+        Assert.True(c.GetProperty("driverCandidateProbeSucceeded").GetBoolean());
+        Assert.Equal("00FF2006", c.GetProperty("driverCandidates")[0].GetProperty("rank").GetString());
+        Assert.True(c.GetProperty("driverCandidates")[0].GetProperty("isInstalled").GetBoolean());
+        Assert.Equal("2026-07-14T15:00:00+00:00", data.GetProperty("observedAtUtc").GetString());
     }
 
     [Fact]
