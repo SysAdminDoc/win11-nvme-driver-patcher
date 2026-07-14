@@ -41,10 +41,18 @@ public static class WinReBcdPrepService
         if (string.IsNullOrWhiteSpace(stdout)) return (false, null, null);
 
         string? guid = null;
-        foreach (Match m in RxGuid.Matches(stdout))
+        foreach (var line in stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
         {
-            var g = m.Groups[1].Value;
-            if (!IsZeroGuid(g)) { guid = "{" + g + "}"; break; }
+            // The translated label retains the invariant "BCD" acronym. Restrict the GUID to
+            // that identifier row so unrelated recovery/package GUIDs cannot be mistaken for the
+            // WinRE boot entry merely because they appeared earlier in reagentc output.
+            if (!line.Contains("BCD", StringComparison.OrdinalIgnoreCase)) continue;
+            var match = RxGuid.Match(line);
+            if (!match.Success) continue;
+
+            var candidate = match.Groups[1].Value;
+            if (!IsZeroGuid(candidate)) guid = "{" + candidate + "}";
+            break;
         }
 
         var pathMatch = RxWinrePath.Match(stdout);

@@ -679,12 +679,11 @@ exit /b 0
             try { proc.Kill(entireProcessTree: true); } catch { }
             throw;
         }
+        var output = await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
         if (proc.ExitCode != 0)
         {
-            var err = await stderr;
-            var outp = await stdout;
             throw new InvalidOperationException(
-                $"{Path.GetFileName(file)} {string.Join(' ', args)} exit {proc.ExitCode}: {err.Trim()} {outp.Trim()}".Trim());
+                $"{Path.GetFileName(file)} {string.Join(' ', args)} exit {proc.ExitCode}: {output[1].Trim()} {output[0].Trim()}".Trim());
         }
     }
 }

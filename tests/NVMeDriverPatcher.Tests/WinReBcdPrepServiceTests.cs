@@ -70,4 +70,32 @@ public sealed class WinReBcdPrepServiceTests
         Assert.False(enabled);
         Assert.Null(guid);
     }
+
+    [Fact]
+    public void ParseReagentcInfo_IgnoresGuidOutsideBcdIdentifierRow()
+    {
+        const string expected = "7d2c8f1a-3b4c-4d5e-8f90-1a2b3c4d5e6f";
+        const string unrelated = "11111111-2222-3333-4444-555555555555";
+        var stdout =
+            $"Recovery package identifier: {unrelated}\r\n" +
+            $"Boot Configuration Data (BCD) identifier: {expected}\r\n";
+
+        var (enabled, _, guid) = WinReBcdPrepService.ParseReagentcInfo(stdout);
+
+        Assert.True(enabled);
+        Assert.Equal($"{{{expected}}}", guid);
+    }
+
+    [Fact]
+    public void ParseReagentcInfo_DoesNotTreatUnrelatedGuidAsEnabled()
+    {
+        const string stdout =
+            "Recovery package identifier: 11111111-2222-3333-4444-555555555555\r\n" +
+            "Boot Configuration Data (BCD) identifier: 00000000-0000-0000-0000-000000000000\r\n";
+
+        var (enabled, _, guid) = WinReBcdPrepService.ParseReagentcInfo(stdout);
+
+        Assert.False(enabled);
+        Assert.Null(guid);
+    }
 }

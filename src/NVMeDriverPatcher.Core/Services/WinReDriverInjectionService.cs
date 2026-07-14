@@ -313,12 +313,11 @@ public static class WinReDriverInjectionService
             throw;
         }
 
+        var output = await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
         if (proc.ExitCode != 0)
         {
-            var err = await stderr.ConfigureAwait(false);
-            var outp = await stdout.ConfigureAwait(false);
             throw new InvalidOperationException(
-                $"{Path.GetFileName(file)} {string.Join(' ', args)} exit {proc.ExitCode}: {err.Trim()} {outp.Trim()}".Trim());
+                $"{Path.GetFileName(file)} {string.Join(' ', args)} exit {proc.ExitCode}: {output[1].Trim()} {output[0].Trim()}".Trim());
         }
     }
 }
