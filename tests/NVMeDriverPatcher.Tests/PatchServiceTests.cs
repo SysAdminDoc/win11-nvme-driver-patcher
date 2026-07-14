@@ -1,3 +1,4 @@
+using Microsoft.Win32;
 using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 
@@ -5,6 +6,21 @@ namespace NVMeDriverPatcher.Tests;
 
 public sealed class PatchServiceTests
 {
+    [Fact]
+    public void ProbeRemovalResidue_ReadsEveryStore_WithoutThrowing_AndReturnsWellFormedEntries()
+    {
+        // Read-only probe against the live HKLM64 — safe without admin and non-destructive.
+        // On an unpatched machine it returns few/no entries; each entry must be a human-readable,
+        // non-empty descriptor. Any store it cannot confirm clean is reported as residue
+        // (fail-closed) rather than throwing.
+        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+        var residue = PatchService.ProbeRemovalResidue(hklm, null);
+
+        Assert.NotNull(residue);
+        Assert.All(residue, r => Assert.False(string.IsNullOrWhiteSpace(r)));
+    }
+
+
     [Theory]
     [InlineData(0, true)]
     [InlineData(1116, true)]

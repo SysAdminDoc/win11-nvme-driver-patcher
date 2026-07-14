@@ -230,6 +230,20 @@ public partial class MainViewModel
                     }
                 }
             }
+            else if (result.Residue.Count > 0)
+            {
+                // Partial removal: the watchdog is deliberately LEFT ARMED (Disarm only runs on
+                // clean success above). Be explicit so the user doesn't assume a clean rollback.
+                ToastService.Show("Removal Incomplete",
+                    $"{result.Residue.Count} component(s) still present. See the activity log.",
+                    ToastType.Error, Config.EnableToasts);
+                InfoDialog?.Invoke("Removal Incomplete",
+                    "The patch was only partially removed — these components are still present:\n\n" +
+                    string.Join("\n", result.Residue.Select(r => "• " + r)) +
+                    "\n\nRe-run Remove Patch as Administrator. If they persist, restore the pre-removal registry " +
+                    "backup or run the Recovery Kit from WinRE. Do NOT assume the system is back to its pre-patch state.",
+                    DialogIcon.Error);
+            }
         });
         }
         catch (Exception ex)

@@ -1097,6 +1097,15 @@ class Program
             // an explicit uninstall.
             EventLogWatchdogService.Disarm(config);
         }
+        else if (result.Residue.Count > 0)
+        {
+            // Watchdog is deliberately LEFT ARMED on a partial removal.
+            Console.Error.WriteLine();
+            Console.Error.WriteLine($"Removal INCOMPLETE — {result.Residue.Count} component(s) still present:");
+            foreach (var r in result.Residue)
+                Console.Error.WriteLine($"  - {r}");
+            Console.Error.WriteLine("Re-run 'remove' as Administrator; if residue persists, use the Recovery Kit or restore the pre-removal backup.");
+        }
         if (result.Success && result.NeedsRestart && !noRestart)
             Console.WriteLine("Restart required to complete removal.");
         return result.Success ? 0 : 1;
