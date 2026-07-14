@@ -71,6 +71,24 @@ public sealed class ReleaseArm64ContractTests
             Assert.Contains(assetId, script);
             Assert.Contains(arm64AssetName, script);
         }
+        Assert.Contains("Update-PackageManifests.ps1", script);
+        Assert.Contains("-Arm64ExePath", script);
+        Assert.DoesNotContain("InstallerUrl:\\s*\\S+", script);
+        Assert.DoesNotContain("\"hash\":\\s*\"[^\"]*\"", script);
+    }
+
+    [Fact]
+    public void PackageSandboxSmoke_ValidatesFullPortableLifecycle()
+    {
+        var script = File.ReadAllText(Path.Combine(RepoRoot(), "scripts/Test-PackageSandbox.ps1"));
+        Assert.Contains("WindowsSandbox.exe", script);
+        Assert.Contains("'validate'", script);
+        Assert.Contains("'install'", script);
+        Assert.Contains("'query'", script);
+        Assert.Contains("'uninstall'", script);
+        Assert.Contains("post-uninstall-query", script);
+        Assert.Contains("WinGet\\Links\\NVMeDriverPatcher.exe", script);
+        Assert.Contains("Generated winget x64 hash does not match ExePath", script);
     }
 
     public static IEnumerable<object[]> RuntimeProjectRows() =>

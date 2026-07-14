@@ -20,6 +20,15 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   isolated cached directory is atomically replaced and the full payload is authenticated again
   after promotion and before every execution. This also fixes ARM64 fallback installation, which
   previously checked the published ARM64 executable against an x64-only hash allowlist.
+- **Release metadata is architecture-bound and schema-valid** — the release builder now delegates
+  winget, Scoop, and Chocolatey generation to one structure-aware script that validates x64/ARM64
+  PE machine types before binding each artifact URL and SHA-256. Winget now uses its required
+  three-file multi-manifest form (the old singleton illegally carried two installers), and the
+  builder runs `winget validate`. Scoop keeps the ARM64 download URL while renaming the portable
+  asset to the common `NVMeDriverPatcher.exe` expected by its `bin`. The independent release gate
+  verifies every manifest version, per-architecture binding, executable name, hash, and PE type;
+  fixture tests reject swapped artifacts before output mutation, and a Windows Sandbox lifecycle
+  smoke covers x64 validate/install/query/uninstall/residue when that optional feature is available.
 - **Boot-critical probes are typed and fail closed** — administrator, VeraCrypt, Intel RST/VMD,
   BitLocker, and SafeBoot checks now return `Pass | Fail | Unknown` with a stable reason code,
   native error, timestamp, and concrete evidence. Access denied, provider timeout, unsupported API,

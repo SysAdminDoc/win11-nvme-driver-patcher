@@ -1,10 +1,10 @@
 {
   "$comment": "Release artifact contract. Every artifact a tagged release must (or may) carry. Paths are repo-root-relative; {version} is replaced with the tag-derived version (no leading v). Validated by scripts/Validate-ReleaseAssets.ps1 before the GitHub release is created — a missing required artifact fails the release before any asset is published.",
   "artifacts": [
-    { "id": "gui",      "path": "publish/gui/NVMeDriverPatcher.exe",                  "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "portable" },
-    { "id": "cli",      "path": "publish/cli/NVMeDriverPatcher.Cli.exe",              "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "portable" },
-    { "id": "tray",     "path": "publish/tray/NVMeDriverPatcher.Tray.exe",            "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "portable" },
-    { "id": "watchdog", "path": "publish/watchdog/NVMeDriverPatcher.Watchdog.exe",    "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "portable" },
+    { "id": "gui",      "path": "publish/gui/NVMeDriverPatcher.exe",                  "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "portable", "runtime": "win-x64" },
+    { "id": "cli",      "path": "publish/cli/NVMeDriverPatcher.Cli.exe",              "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "portable", "runtime": "win-x64" },
+    { "id": "tray",     "path": "publish/tray/NVMeDriverPatcher.Tray.exe",            "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "portable", "runtime": "win-x64" },
+    { "id": "watchdog", "path": "publish/watchdog/NVMeDriverPatcher.Watchdog.exe",    "required": true,  "sign": true,  "checksum": true,  "upload": true,  "channel": "portable", "runtime": "win-x64" },
     { "id": "gui-arm64",      "path": "publish/NVMeDriverPatcher-win-arm64.exe",                  "required": true, "sign": true, "checksum": true, "upload": true, "channel": "portable-arm64", "runtime": "win-arm64", "note": "Diagnostic/status build only until Microsoft ships an ARM64 nvmedisk.sys." },
     { "id": "cli-arm64",      "path": "publish/NVMeDriverPatcher.Cli-win-arm64.exe",              "required": true, "sign": true, "checksum": true, "upload": true, "channel": "portable-arm64", "runtime": "win-arm64", "note": "Diagnostic/status build only until Microsoft ships an ARM64 nvmedisk.sys." },
     { "id": "tray-arm64",     "path": "publish/NVMeDriverPatcher.Tray-win-arm64.exe",             "required": true, "sign": true, "checksum": true, "upload": true, "channel": "portable-arm64", "runtime": "win-arm64", "note": "Diagnostic/status build only until Microsoft ships an ARM64 nvmedisk.sys." },
@@ -13,7 +13,9 @@
     { "id": "legacy-ps1", "path": "NVMe_Driver_Patcher.ps1",                          "required": true,  "sign": false, "checksum": true,  "upload": true,  "channel": "legacy" },
     { "id": "powershell-module", "path": "publish/NVMeDriverPatcher.PowerShell-{version}.zip", "required": true, "sign": false, "checksum": true, "upload": true, "channel": "powershell" },
     { "id": "sha256sums", "path": "publish/SHA256SUMS.txt",                           "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "integrity" },
-    { "id": "winget-manifest", "path": "publish/SysAdminDoc.NVMeDriverPatcher.yaml",  "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "winget" },
+    { "id": "winget-version-manifest", "path": "publish/winget/SysAdminDoc.NVMeDriverPatcher.yaml",  "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "winget" },
+    { "id": "winget-installer-manifest", "path": "publish/winget/SysAdminDoc.NVMeDriverPatcher.installer.yaml",  "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "winget" },
+    { "id": "winget-locale-manifest", "path": "publish/winget/SysAdminDoc.NVMeDriverPatcher.locale.en-US.yaml",  "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "winget" },
     { "id": "chocolatey-nupkg", "path": "publish/nvme-driver-patcher.{version}.nupkg", "required": true, "sign": false, "checksum": false, "upload": true, "channel": "chocolatey" },
     { "id": "scoop-manifest", "path": "publish/nvme-driver-patcher.json",              "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "scoop" }
   ]

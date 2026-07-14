@@ -118,44 +118,32 @@ if (-not $SkipMsi) {
     )
 }
 
-$guiExe = Join-Path $publishRoot 'gui/NVMeDriverPatcher.exe'
-$guiHash = Get-Sha256Hex $guiExe
-$guiHashUpper = $guiHash.ToUpperInvariant()
-$tagUrl = "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v$Version/NVMeDriverPatcher.exe"
-
 $moduleZip = Join-Path $publishRoot "NVMeDriverPatcher.PowerShell-$Version.zip"
 if (Test-Path -LiteralPath $moduleZip) { Remove-Item -LiteralPath $moduleZip -Force }
 Compress-Archive -Path (Join-Path $repoRoot 'packaging/powershell/*') -DestinationPath $moduleZip -Force
 
-$winget = Get-Content -Raw (Join-Path $repoRoot 'packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml')
-$winget = $winget -replace 'PackageVersion:\s*\S+', "PackageVersion: $Version"
-$winget = $winget -replace 'InstallerUrl:\s*\S+', "InstallerUrl: $tagUrl"
-$winget = $winget -replace 'InstallerSha256:\s*\S+', "InstallerSha256: $guiHashUpper"
-Set-Content -LiteralPath (Join-Path $publishRoot 'SysAdminDoc.NVMeDriverPatcher.yaml') -Value $winget -Encoding UTF8
-
-$scoop = Get-Content -Raw (Join-Path $repoRoot 'packaging/scoop/nvme-driver-patcher.json')
-$scoop = $scoop -replace '"version":\s*"[^"]*"', "`"version`": `"$Version`""
-$scoop = $scoop -replace '"hash":\s*"[^"]*"', "`"hash`": `"$guiHash`""
-$scoop = $scoop -replace 'download/v[0-9][^/]*/NVMeDriverPatcher\.exe', "download/v$Version/NVMeDriverPatcher.exe"
-$null = $scoop | ConvertFrom-Json
-Set-Content -LiteralPath (Join-Path $publishRoot 'nvme-driver-patcher.json') -Value $scoop -Encoding UTF8
+$manifestGenerator = Join-Path $repoRoot 'scripts/Update-PackageManifests.ps1'
+Invoke-Checked powershell.exe @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    $manifestGenerator,
+    '-Version',
+    $Version,
+    '-ExePath',
+    (Join-Path $publishRoot 'gui/NVMeDriverPatcher.exe'),
+    '-Arm64ExePath',
+    (Join-Path $publishRoot 'NVMeDriverPatcher-win-arm64.exe'),
+    '-RepoRoot',
+    $repoRoot,
+    '-OutputRoot',
+    $publishRoot
+)
+Invoke-Checked winget.exe @('validate', '--manifest', (Join-Path $publishRoot 'winget'))
 
 $chocoStage = Join-Path $publishRoot 'chocolatey-package'
-if (Test-Path -LiteralPath $chocoStage) { Remove-Item -LiteralPath $chocoStage -Recurse -Force }
-New-Item -ItemType Directory -Path $chocoStage | Out-Null
-Copy-Item -Path (Join-Path $repoRoot 'packaging/chocolatey/*') -Destination $chocoStage -Recurse -Force
-
-$chocoInstall = Join-Path $chocoStage 'tools/chocolateyInstall.ps1'
-$installText = Get-Content -Raw $chocoInstall
-$installText = $installText -replace "url64bit\s*=\s*'[^']*'", "url64bit       = '$tagUrl'"
-$installText = $installText -replace "checksum64\s*=\s*'[^']*'", "checksum64     = '$guiHash'"
-Set-Content -LiteralPath $chocoInstall -Value $installText -NoNewline -Encoding UTF8
-
 $nuspec = Join-Path $chocoStage 'nvme-driver-patcher.nuspec'
-$nuspecText = Get-Content -Raw $nuspec
-$nuspecText = $nuspecText -replace '<version>[^<]*</version>', "<version>$Version</version>"
-$nuspecText = $nuspecText -replace 'http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd', 'http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd'
-Set-Content -LiteralPath $nuspec -Value $nuspecText -NoNewline -Encoding UTF8
 
 $nuget = Join-Path $env:USERPROFILE 'repos/nuget.exe'
 if (-not (Test-Path -LiteralPath $nuget)) { $nuget = 'nuget.exe' }

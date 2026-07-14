@@ -44,6 +44,26 @@ function Get-Sha256Hex {
     }
 }
 
+function Get-PeMachine {
+    param([Parameter(Mandatory)] [string]$Path)
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    $reader = [System.IO.BinaryReader]::new($stream)
+    try {
+        if ($stream.Length -lt 64 -or $reader.ReadUInt16() -ne 0x5A4D) { throw 'missing MZ header' }
+        $stream.Position = 0x3C
+        $peOffset = $reader.ReadInt32()
+        if ($peOffset -lt 0 -or $peOffset -gt ($stream.Length - 6)) { throw 'invalid PE header offset' }
+        $stream.Position = $peOffset
+        if ($reader.ReadUInt32() -ne 0x00004550) { throw 'missing PE signature' }
+        return $reader.ReadUInt16()
+    }
+    finally {
+        $reader.Dispose()
+        $stream.Dispose()
+    }
+}
+
 foreach ($a in $contract.artifacts) {
     $rel = $a.path -replace '\{version\}', $Version
     $full = Join-Path $repoRoot $rel
@@ -56,6 +76,20 @@ foreach ($a in $contract.artifacts) {
 
     $leaf = Split-Path $rel -Leaf
     $actualHash = Get-Sha256Hex $full
+
+    if ($a.runtime -in @('win-x64', 'win-arm64')) {
+        $expectedMachine = if ($a.runtime -eq 'win-x64') { 0x8664 } else { 0xAA64 }
+        try {
+            $actualMachine = Get-PeMachine $full
+            if ($actualMachine -ne $expectedMachine) {
+                $failures.Add(('PE architecture mismatch for {0}: runtime {1} expects 0x{2:X4}, found 0x{3:X4}' -f
+                    $leaf, $a.runtime, $expectedMachine, $actualMachine))
+            }
+        }
+        catch {
+            $failures.Add("PE architecture unreadable for $leaf (runtime $($a.runtime)): $($_.Exception.Message)")
+        }
+    }
 
     if ($a.checksum) {
         # Per-asset sidecar — the in-app auto-updater requires it.
@@ -84,32 +118,53 @@ foreach ($a in $contract.artifacts) {
         }
     }
 
-    if ($a.id -eq 'winget-manifest') {
+    if ($a.id -like 'winget-*-manifest') {
         $yaml = Get-Content -Raw $full
         if ($yaml -notmatch "PackageVersion:\s*$([regex]::Escape($Version))\b") {
-            $failures.Add("winget manifest PackageVersion is not $Version")
+            $failures.Add("$($a.id) PackageVersion is not $Version")
         }
-        if ($yaml -notmatch "InstallerUrl:\s*\S*/download/v$([regex]::Escape($Version))/NVMeDriverPatcher\.exe") {
-            $failures.Add("winget manifest InstallerUrl (x64) does not point at tag v$Version")
-        }
-        if ($yaml -notmatch "Architecture:\s*arm64") {
-            $failures.Add("winget manifest missing arm64 Architecture entry")
-        }
-        if ($yaml -notmatch "InstallerUrl:\s*\S*/download/v$([regex]::Escape($Version))/NVMeDriverPatcher-win-arm64\.exe") {
-            $failures.Add("winget manifest InstallerUrl (arm64) does not point at tag v$Version")
-        }
-        $guiPath = Join-Path $repoRoot 'publish/gui/NVMeDriverPatcher.exe'
-        if (Test-Path $guiPath) {
-            $guiHash = (Get-Sha256Hex $guiPath).ToUpper()
-            if ($yaml -notmatch [regex]::Escape($guiHash)) {
-                $failures.Add("winget manifest InstallerSha256 (x64) does not match publish/gui/NVMeDriverPatcher.exe")
+    }
+
+    if ($a.id -eq 'winget-installer-manifest') {
+        $yaml = Get-Content -Raw $full
+        $installers = @{}
+        $currentArchitecture = $null
+        foreach ($line in $yaml -split '\r?\n') {
+            if ($line -match '^\s*-\s*Architecture:\s*["'']?([^"''\s]+)') {
+                $currentArchitecture = $Matches[1].ToLowerInvariant()
+                if ($installers.ContainsKey($currentArchitecture)) {
+                    $failures.Add("winget manifest contains duplicate $currentArchitecture installer blocks")
+                    $currentArchitecture = $null
+                } else {
+                    $installers[$currentArchitecture] = @{ Url = $null; Hash = $null }
+                }
+            } elseif ($currentArchitecture -and $line -match '^\s*InstallerUrl:\s*(\S+)') {
+                $installers[$currentArchitecture].Url = $Matches[1]
+            } elseif ($currentArchitecture -and $line -match '^\s*InstallerSha256:\s*(\S+)') {
+                $installers[$currentArchitecture].Hash = $Matches[1]
             }
         }
+        $guiPath = Join-Path $repoRoot 'publish/gui/NVMeDriverPatcher.exe'
         $arm64Path = Join-Path $repoRoot 'publish/NVMeDriverPatcher-win-arm64.exe'
-        if (Test-Path $arm64Path) {
-            $arm64Hash = (Get-Sha256Hex $arm64Path).ToUpper()
-            if ($yaml -notmatch [regex]::Escape($arm64Hash)) {
-                $failures.Add("winget manifest InstallerSha256 (arm64) does not match publish/NVMeDriverPatcher-win-arm64.exe")
+        foreach ($binding in @(
+            @{ Architecture = 'x64'; File = $guiPath; Asset = 'NVMeDriverPatcher.exe' },
+            @{ Architecture = 'arm64'; File = $arm64Path; Asset = 'NVMeDriverPatcher-win-arm64.exe' }
+        )) {
+            $architecture = $binding.Architecture
+            if (-not $installers.ContainsKey($architecture)) {
+                $failures.Add("winget manifest missing $architecture Architecture entry")
+                continue
+            }
+            $record = $installers[$architecture]
+            $expectedUrl = "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v$Version/$($binding.Asset)"
+            if ($record.Url -ne $expectedUrl) {
+                $failures.Add("winget manifest InstallerUrl ($architecture) is '$($record.Url)', expected '$expectedUrl'")
+            }
+            if (Test-Path $binding.File) {
+                $expectedHash = (Get-Sha256Hex $binding.File).ToUpperInvariant()
+                if ($record.Hash -ne $expectedHash) {
+                    $failures.Add("winget manifest InstallerSha256 ($architecture) does not match $($binding.Asset)")
+                }
             }
         }
     }
@@ -123,7 +178,7 @@ foreach ($a in $contract.artifacts) {
         } else {
             if ($scoop.version -ne $Version) { $failures.Add("scoop manifest version is '$($scoop.version)', expected $Version") }
             $arch = $scoop.architecture.'64bit'
-            if ($arch.url -notmatch "/releases/download/v$([regex]::Escape($Version))/NVMeDriverPatcher\.exe") {
+            if ($arch.url -ne "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v$Version/NVMeDriverPatcher.exe#/NVMeDriverPatcher.exe") {
                 $failures.Add("scoop manifest 64bit url does not point at tag v$Version")
             }
             if ($arch.hash -match 'REPLACE_ME') { $failures.Add("scoop manifest 64bit still has a REPLACE_ME hash placeholder") }
@@ -137,7 +192,7 @@ foreach ($a in $contract.artifacts) {
             if ($null -eq $arm64Arch) {
                 $failures.Add("scoop manifest missing arm64 architecture block")
             } else {
-                if ($arm64Arch.url -notmatch "/releases/download/v$([regex]::Escape($Version))/NVMeDriverPatcher-win-arm64\.exe") {
+                if ($arm64Arch.url -ne "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v$Version/NVMeDriverPatcher-win-arm64.exe#/NVMeDriverPatcher.exe") {
                     $failures.Add("scoop manifest arm64 url does not point at tag v$Version")
                 }
                 if ($arm64Arch.hash -match 'REPLACE_ME') { $failures.Add("scoop manifest arm64 still has a REPLACE_ME hash placeholder") }
@@ -150,6 +205,8 @@ foreach ($a in $contract.artifacts) {
             }
             if ($null -eq $scoop.autoupdate.architecture.arm64) {
                 $failures.Add("scoop manifest missing arm64 autoupdate block")
+            } elseif ($scoop.autoupdate.architecture.arm64.url -notmatch 'NVMeDriverPatcher-win-arm64\.exe#/NVMeDriverPatcher\.exe$') {
+                $failures.Add("scoop manifest arm64 autoupdate must preserve the ARM64 asset and common executable filename")
             }
         }
     }

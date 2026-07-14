@@ -27,6 +27,15 @@ public sealed class ReleaseAssetsScriptTests
         Assert.Contains("Authenticode", result.StdOut, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Validate_RuntimeMetadataRejectsWrongPeArchitecture()
+    {
+        using var repo = AssetsFixture.Create(runtime: "win-arm64", peMachine: 0x8664);
+        var result = RunScript(repo.Path, expectSigned: false);
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("PE architecture mismatch", result.StdOut, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ScriptResult RunScript(string repoRoot, bool expectSigned)
     {
         using var process = new Process();
@@ -67,7 +76,7 @@ public sealed class ReleaseAssetsScriptTests
         private AssetsFixture(string path) => Path = path;
         public string Path { get; }
 
-        public static AssetsFixture Create()
+        public static AssetsFixture Create(string? runtime = null, ushort? peMachine = null)
         {
             var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"NVMeDriverPatcher.AssetsScript.Tests.{Guid.NewGuid():N}");
             Directory.CreateDirectory(System.IO.Path.Combine(root, "publish"));
@@ -75,13 +84,16 @@ public sealed class ReleaseAssetsScriptTests
             // One sign:true artifact — an unsigned dummy "exe".
             var artifactRel = "publish/app.exe";
             var artifactFull = System.IO.Path.Combine(root, "publish", "app.exe");
-            File.WriteAllBytes(artifactFull, new byte[] { 0x4D, 0x5A, 0x00, 0x01, 0x02, 0x03 }); // MZ + filler
+            File.WriteAllBytes(artifactFull, peMachine is ushort machine
+                ? MinimalPe(machine)
+                : new byte[] { 0x4D, 0x5A, 0x00, 0x01, 0x02, 0x03 }); // MZ + filler
             var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(artifactFull))).ToLowerInvariant();
+            var runtimeJson = runtime is null ? string.Empty : $", \"runtime\": \"{runtime}\"";
 
             Write(root, "packaging/release-artifacts.json", $$"""
                 {
                   "artifacts": [
-                    { "id": "gui", "path": "{{artifactRel}}", "required": true, "sign": true, "checksum": true, "upload": true }
+                    { "id": "gui", "path": "{{artifactRel}}", "required": true, "sign": true, "checksum": true, "upload": true{{runtimeJson}} }
                   ]
                 }
                 """);
@@ -102,6 +114,18 @@ public sealed class ReleaseAssetsScriptTests
             var path = System.IO.Path.Combine(root, relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
             File.WriteAllText(path, content);
+        }
+
+        private static byte[] MinimalPe(ushort machine)
+        {
+            var bytes = new byte[128];
+            bytes[0] = 0x4D;
+            bytes[1] = 0x5A;
+            BitConverter.GetBytes(64).CopyTo(bytes, 0x3C);
+            bytes[64] = 0x50;
+            bytes[65] = 0x45;
+            BitConverter.GetBytes(machine).CopyTo(bytes, 68);
+            return bytes;
         }
     }
 }
