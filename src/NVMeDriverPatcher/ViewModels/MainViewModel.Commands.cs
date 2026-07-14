@@ -50,6 +50,18 @@ public partial class MainViewModel
                 return;
             }
 
+            // Defense in depth: the button is disabled on unsupported builds, but refuse here too
+            // in case a code path re-enabled it. There is no GUI override — the CLI's interactive
+            // --force-unsupported-build is the only escape hatch.
+            if (!_mutationAllowedByBuild)
+            {
+                Log($"[ERROR] BLOCKED by build policy: {MutationBlockedReason}", "ERROR");
+                InfoDialog?.Invoke("Unsupported Windows Build",
+                    $"{MutationBlockedReason}\n\nThis is verify / monitor / rollback territory — applying the patch on this build would not bind the native driver. No override is offered in the GUI.",
+                    DialogIcon.Warning);
+                return;
+            }
+
             SyncConfigFromUI();
 
             if (!Config.SkipWarnings)
@@ -78,7 +90,7 @@ public partial class MainViewModel
             UpdateOverviewSummary();
             UpdateOperationalHistory();
             ButtonsEnabled = true;
-            ApplyEnabled = PreflightService.AllCriticalPassed(_preflight.Checks) && !_preflight.VeraCryptDetected;
+            ApplyEnabled = PreflightService.AllCriticalPassed(_preflight.Checks) && !_preflight.VeraCryptDetected && _mutationAllowedByBuild;
 
             if (result.Success)
             {
@@ -414,6 +426,16 @@ public partial class MainViewModel
         ButtonsEnabled = false;
         try
         {
+            // The FeatureStore fallback is still a mutation — gate it on the same build policy.
+            if (!_mutationAllowedByBuild)
+            {
+                Log($"[ERROR] Fallback BLOCKED by build policy: {MutationBlockedReason}", "ERROR");
+                InfoDialog?.Invoke("Unsupported Windows Build",
+                    $"{MutationBlockedReason}\n\nThe FeatureStore fallback would not bind the driver on this build. No override is offered in the GUI.",
+                    DialogIcon.Warning);
+                return;
+            }
+
             var proof = RecoveryProofGateService.Evaluate(Config);
             if (!proof.AllPassed)
             {

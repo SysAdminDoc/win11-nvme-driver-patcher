@@ -190,6 +190,32 @@
                                             BorderBrush="{DynamicResource Border}"
                                             BorderThickness="1"
                                             CornerRadius="8"
+                                            Visibility="{Binding BuildPolicyBlocked, Converter={StaticResource BoolVis}}"
+                                            AutomationProperties.Name="Unsupported build notice">
+                                        <StackPanel>
+                                            <TextBlock Text="Apply disabled on this Windows build"
+                                                       Foreground="{DynamicResource Yellow}"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding MutationBlockedReason}"
+                                                       Margin="0,6,0,0"
+                                                       Foreground="{DynamicResource TextSecondary}"
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap"/>
+                                            <TextBlock Text="This is verify / monitor / rollback territory. The CLI's interactive --force-unsupported-build is the only override."
+                                                       Margin="0,6,0,0"
+                                                       Foreground="{DynamicResource TextSecondary}"
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Margin="0,14,0,0"
+                                            Padding="14,12"
+                                            Background="{DynamicResource YellowBg}"
+                                            BorderBrush="{DynamicResource Border}"
+                                            BorderThickness="1"
+                                            CornerRadius="8"
                                             Visibility="{Binding ShowViVeToolFallbackBadge, Converter={StaticResource BoolVis}}">
                                         <Grid>
                                             <Grid.ColumnDefinitions>

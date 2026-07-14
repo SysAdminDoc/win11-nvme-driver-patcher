@@ -42,6 +42,13 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _updateTooltip = "";
     [ObservableProperty] private bool _buttonsEnabled;
     [ObservableProperty] private bool _applyEnabled;
+    // Empty when the current build has a known binding path; otherwise the build-policy reason
+    // shown on the readiness card and used to keep Apply/Fallback disabled.
+    [ObservableProperty] private string _mutationBlockedReason = "";
+    // Drives the readiness-card notice visibility (true when this build has no known binding path).
+    [ObservableProperty] private bool _buildPolicyBlocked;
+    // Cached disposition from the last preflight so both ApplyEnabled set-sites agree.
+    private bool _mutationAllowedByBuild;
     [ObservableProperty] private bool _removeEnabled;
     [ObservableProperty] private string _applyButtonText = "Apply Patch";
     [ObservableProperty] private int _progressValue;
@@ -535,11 +542,19 @@ public partial class MainViewModel : ObservableObject
 
             IsLoading = false;
             ButtonsEnabled = true;
+            // Build-rule action policy: on builds with no known binding path (none-known,
+            // official-optin, unknown, invalid, or stale rules) mutation is refused and the
+            // reason is surfaced on the readiness card.
+            var buildPolicy = BuildActionPolicyService.EvaluateCurrent(Config.WorkingDir);
+            _mutationAllowedByBuild = buildPolicy.MutationAllowed;
+            MutationBlockedReason = buildPolicy.MutationAllowed ? "" : buildPolicy.Reason;
+            BuildPolicyBlocked = !buildPolicy.MutationAllowed;
             // Official enablement makes "apply" pointless (the keys would change nothing
             // the OS hasn't already done) — keep the button disabled in that state.
             ApplyEnabled = PreflightService.AllCriticalPassed(_preflight.Checks)
                 && !_preflight.VeraCryptDetected
-                && _enablementSource != EnablementSource.Official;
+                && _enablementSource != EnablementSource.Official
+                && _mutationAllowedByBuild;
             });
         }
         catch (Exception ex)
