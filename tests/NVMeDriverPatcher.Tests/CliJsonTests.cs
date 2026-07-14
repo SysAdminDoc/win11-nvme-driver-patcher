@@ -54,11 +54,20 @@ public sealed class CliJsonTests
     [Fact]
     public void Watchdog_FieldNamesAreStable()
     {
-        var report = new WatchdogReport { Verdict = WatchdogVerdict.Healthy, TotalEvents = 2 };
+        var report = new WatchdogReport
+        {
+            Verdict = WatchdogVerdict.Unavailable,
+            ObservedVerdict = WatchdogVerdict.Warning,
+            FailureCode = "StatePersistenceFailed",
+            TotalEvents = 2
+        };
         report.Counts.Add(new WatchdogEventCount { Source = "disk", Id = 51, Description = "paging error", Count = 2 });
         var data = Parse("watchdog", CliJson.BuildWatchdog(report)).GetProperty("data");
 
-        Assert.Equal("Healthy", data.GetProperty("verdict").GetString());
+        Assert.Equal("Unavailable", data.GetProperty("verdict").GetString());
+        Assert.False(data.GetProperty("dataAvailable").GetBoolean());
+        Assert.Equal("StatePersistenceFailed", data.GetProperty("failureCode").GetString());
+        Assert.Equal("Warning", data.GetProperty("observedVerdict").GetString());
         Assert.Equal(2, data.GetProperty("totalEvents").GetInt32());
         var first = data.GetProperty("eventCounts")[0];
         Assert.Equal("disk", first.GetProperty("source").GetString());

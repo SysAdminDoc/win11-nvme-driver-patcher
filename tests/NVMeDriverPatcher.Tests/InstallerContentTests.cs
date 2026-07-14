@@ -54,4 +54,42 @@ public sealed class InstallerContentTests
         Assert.Contains("LocalService", readme);
         Assert.DoesNotContain("LocalSystem service", readme); // the corrected misstatement
     }
+
+    [Fact]
+    public void WatchdogService_WixPinsRecoveryPrivilegeAndAclContract()
+    {
+        var wxs = Read("packaging", "wix", "NVMeDriverPatcher.wxs");
+        Assert.Contains("FirstFailureActionType=\"restart\"", wxs);
+        Assert.Contains("SecondFailureActionType=\"restart\"", wxs);
+        Assert.Contains("ThirdFailureActionType=\"none\"", wxs);
+        Assert.Contains("FailureActionsWhen=\"failedToStopOrReturnedError\"", wxs);
+        Assert.Contains("<RequiredPrivilege Name=\"SeChangeNotifyPrivilege\"", wxs);
+        Assert.Contains("ServiceSid=\"restricted\"", wxs);
+        Assert.Contains("ExeCommand=\"/grant-runtime-access\"", wxs);
+        Assert.Contains("Return=\"check\"", wxs);
+    }
+
+    [Fact]
+    public void WatchdogPackagingSmoke_ProvesLiveServiceContract()
+    {
+        var script = Read("scripts", "Test-WatchdogService.ps1");
+        Assert.Contains("Get-CimInstance Win32_Service", script);
+        Assert.Contains("qfailure", script);
+        Assert.Contains("qfailureflag", script);
+        Assert.Contains("qprivs", script);
+        Assert.Contains("SeChangeNotifyPrivilege", script);
+        Assert.Contains("ServiceSidType", script);
+        Assert.Contains("sc.exe showsid", script);
+        Assert.Contains("FileSystemRights]::Modify", script);
+        Assert.Contains("System-log readiness probe", script);
+    }
+
+    [Fact]
+    public void WatchdogManualInstaller_GrantsSharedStateAccessByWellKnownSid()
+    {
+        var program = Read("src", "NVMeDriverPatcher.Watchdog", "Program.cs");
+        Assert.Contains("GrantStateDirectoryAccess", program);
+        Assert.Contains("icacls.exe", program);
+        Assert.Contains("S-1-5-80-153395662-1388266646-3167021078-3452987457-2818666036", program);
+    }
 }

@@ -58,7 +58,15 @@ public static class AutoRevertService
 
             if (result.Success)
             {
-                EventLogWatchdogService.Disarm(config);
+                var disarm = EventLogWatchdogService.Disarm(config);
+                if (!disarm.Success)
+                {
+                    outcome.Success = false;
+                    outcome.Summary = $"Auto-revert removed the patch, but could not persist the watchdog disarm checkpoint ({disarm.Summary}). Restart and verify recovery state manually.";
+                    EventLogService.Write(outcome.Summary,
+                        System.Diagnostics.EventLogEntryType.Error, 3011);
+                    return outcome;
+                }
                 config.LastVerificationResult = "AutoReverted";
                 ConfigService.Save(config);
             }

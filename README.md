@@ -130,7 +130,7 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 - **Silent/CLI mode** for scripting and automation
 
 **v4.4 — Stability, correlation, enterprise (new)**
-- **Post-patch event-log watchdog** -- scans `System` channel for Storport ID 129 command timeouts, disk ID 51/153, Kernel-Power 41, and BugCheck 1001 inside a configurable window (default 48h). Crosses the revert threshold? Stages an auto-revert on next boot. The MSI grants the LocalService watchdog read access to the System log when the optional service is installed.
+- **Post-patch event-log watchdog** -- scans `System` channel for Storport ID 129 command timeouts, disk ID 51/153, Kernel-Power 41, and BugCheck 1001 inside a configurable window (default 48h). Crosses the revert threshold? Stages an auto-revert on next boot. Missing state or Event Log evidence is reported as unavailable rather than healthy; the optional LocalService restarts after its first two failures and runs with only the state-directory and System-log access it needs.
 - **Reliability Monitor correlation** -- pulls `Win32_ReliabilityStabilityMetrics`, overlays the patch-apply timestamp, reports pre/post stability averages with delta.
 - **Minidump triage** -- scans `C:\Windows\Minidump` for dumps newer than the patch and flags any that reference `nvmedisk.sys`, `stornvme.sys`, `storport.sys`, `disk.sys`.
 - **Firmware + controller compat JSON** -- shipped `compat.json` maps `{controller, firmware}` → `{Good, Caution, Bad}` and flags power-loss-risk entries such as Phison E18/E26. Preflight consults it before proceeding.

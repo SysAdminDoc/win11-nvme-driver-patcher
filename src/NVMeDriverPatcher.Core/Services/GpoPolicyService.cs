@@ -55,7 +55,7 @@ public static class GpoPolicyService
     /// Apply the policy overlay to a loaded config. Values the policy pins take precedence
     /// over whatever the user set locally; unspecified policy values leave the config alone.
     /// </summary>
-    public static void ApplyTo(AppConfig config, PolicyOverlay overlay)
+    public static WatchdogStateSaveResult? ApplyTo(AppConfig config, PolicyOverlay overlay)
     {
         if (overlay.PatchProfile is PatchProfile profile) config.PatchProfile = profile;
         if (overlay.IncludeServerKey is bool inc) config.IncludeServerKey = inc;
@@ -64,15 +64,14 @@ public static class GpoPolicyService
 
         if (overlay.WatchdogAutoRevert is not null || overlay.WatchdogWindowHours is not null)
         {
-            try
-            {
-                var state = EventLogWatchdogService.LoadState(config);
-                if (overlay.WatchdogAutoRevert is bool autoRevert) state.AutoRevertEnabled = autoRevert;
-                if (overlay.WatchdogWindowHours is int hours) state.WindowHours = hours;
-                EventLogWatchdogService.SaveState(config, state);
-            }
-            catch { }
+            return EventLogWatchdogService.UpdateState(config, state =>
+                {
+                    if (overlay.WatchdogAutoRevert is bool autoRevert) state.AutoRevertEnabled = autoRevert;
+                    if (overlay.WatchdogWindowHours is int hours) state.WindowHours = hours;
+                });
         }
+
+        return null;
     }
 
     private static PatchProfile? ReadProfile(RegistryKey key, string valueName)

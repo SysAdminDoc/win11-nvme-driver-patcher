@@ -73,7 +73,11 @@ public static class ConfigImportExportService
             if (bundle.DriveScope is not null)
                 PerDriveScopeService.Save(config, bundle.DriveScope);
             if (bundle.Watchdog is not null)
-                EventLogWatchdogService.SaveState(config, bundle.Watchdog);
+            {
+                var watchdogSave = EventLogWatchdogService.SaveState(config, bundle.Watchdog);
+                if (!watchdogSave.Success)
+                    return (false, $"Config bundle was only partially imported: watchdog state was not persisted ({watchdogSave.Summary}).");
+            }
             return (true, "Config bundle imported.");
         }
         catch (Exception ex)

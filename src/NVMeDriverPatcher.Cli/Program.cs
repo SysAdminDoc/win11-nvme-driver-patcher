@@ -46,7 +46,9 @@ class Program
             catch { }
             // GPO overlay takes precedence over shared config.json so a pinned fleet policy
             // isn't quietly overridden by a local run of the CLI.
-            GpoPolicyService.ApplyTo(config, GpoPolicyService.Read());
+            var policyWatchdogSave = GpoPolicyService.ApplyTo(config, GpoPolicyService.Read());
+            if (policyWatchdogSave is { Success: false })
+                Console.Error.WriteLine("[WARNING] Watchdog Group Policy state is unavailable: " + policyWatchdogSave.Summary);
             LogRotationService.RotateAll(config);
             EventLogRegistrationService.EnsureRegistered();
             EventLogService.Initialize(config.WriteEventLog);
@@ -773,7 +775,13 @@ class Program
         if (json)
         {
             Console.WriteLine(CliJson.Serialize("watchdog", CliJson.BuildWatchdog(report)));
-            return report.Verdict switch { WatchdogVerdict.Unstable => 1, WatchdogVerdict.Warning => 2, _ => 0 };
+            return report.Verdict switch
+            {
+                WatchdogVerdict.Unstable => 1,
+                WatchdogVerdict.Warning => 2,
+                WatchdogVerdict.Unavailable => 3,
+                _ => 0
+            };
         }
         Console.WriteLine("NVMe Driver Watchdog");
         Console.WriteLine("====================");
@@ -787,6 +795,7 @@ class Program
         {
             WatchdogVerdict.Unstable => 1,
             WatchdogVerdict.Warning => 2,
+            WatchdogVerdict.Unavailable => 3,
             _ => 0
         };
     }
@@ -1124,8 +1133,10 @@ class Program
             PatchVerificationService.MarkPending(config);
             // Arm the post-patch watchdog so post-reboot event-log distress signals auto-revert
             // (if the user opted into auto-revert in config / GPO).
-            EventLogWatchdogService.Arm(config);
-            checkpointSaved = ConfigService.Save(config) &&
+            var watchdogCheckpoint = EventLogWatchdogService.Arm(config);
+            if (!watchdogCheckpoint.Success)
+                Console.Error.WriteLine("[ERROR] Watchdog checkpoint failed: " + watchdogCheckpoint.Summary);
+            checkpointSaved = watchdogCheckpoint.Success && ConfigService.Save(config) &&
                 MutationLedgerService.MarkRebootPending(
                     config.WorkingDir,
                     result.MutationOperationId,
@@ -1134,7 +1145,9 @@ class Program
             {
                 var restored = MutationLedgerService.RestoreOriginalState(config.WorkingDir, message => Console.WriteLine(message));
                 PatchVerificationService.Clear(config, new VerificationReport { Outcome = VerificationOutcome.Reverted });
-                EventLogWatchdogService.Disarm(config);
+                var watchdogRollback = EventLogWatchdogService.Disarm(config);
+                if (!watchdogRollback.Success)
+                    Console.Error.WriteLine("[ERROR] Rollback restored the patch state, but the watchdog checkpoint is still unavailable: " + watchdogRollback.Summary);
                 ConfigService.Save(config);
                 Console.Error.WriteLine(
                     restored.Success
@@ -1181,11 +1194,15 @@ class Program
         var nativeStatus = DriveService.TestNativeNVMeActive();
         var bypassStatus = DriveService.GetBypassIOStatus();
         var result = PatchService.Uninstall(config, nativeStatus, bypassStatus, msg => Console.WriteLine(msg));
+        bool watchdogDisarmed = true;
         if (result.Success)
         {
             // Close the watchdog window — no more post-patch monitoring makes sense after
             // an explicit uninstall.
-            EventLogWatchdogService.Disarm(config);
+            var disarm = EventLogWatchdogService.Disarm(config);
+            watchdogDisarmed = disarm.Success;
+            if (!watchdogDisarmed)
+                Console.Error.WriteLine("Removal completed, but the watchdog disarm checkpoint is unavailable: " + disarm.Summary);
         }
         else if (result.Residue.Count > 0)
         {
@@ -1198,7 +1215,7 @@ class Program
         }
         if (result.Success && result.NeedsRestart && !noRestart)
             Console.WriteLine("Restart required to complete removal.");
-        return result.Success ? 0 : 1;
+        return result.Success && watchdogDisarmed ? 0 : 1;
     }
 
     static int DisableForUpdateCommand(AppConfig config, bool noRestart)
@@ -1383,7 +1400,10 @@ class Program
         Console.WriteLine($"Method: {result.Method}");
         Console.WriteLine($"Integrity check: {result.IntegritySignal}");
         PatchVerificationService.MarkPending(config, isFallback: true);
-        bool configCheckpointSaved = ConfigService.Save(config);
+        var watchdogCheckpoint = EventLogWatchdogService.Arm(config);
+        if (!watchdogCheckpoint.Success)
+            Console.Error.WriteLine("Watchdog checkpoint failed: " + watchdogCheckpoint.Summary);
+        bool configCheckpointSaved = watchdogCheckpoint.Success && ConfigService.Save(config);
         bool ledgerCheckpointSaved = configCheckpointSaved &&
             MutationLedgerService.MarkRebootPending(
                 config.WorkingDir,
@@ -1393,7 +1413,9 @@ class Program
         {
             var restored = MutationLedgerService.RestoreOriginalState(config.WorkingDir, message => Console.WriteLine(message));
             PatchVerificationService.Clear(config, new VerificationReport { Outcome = VerificationOutcome.Reverted });
-            EventLogWatchdogService.Disarm(config);
+            var watchdogRollback = EventLogWatchdogService.Disarm(config);
+            if (!watchdogRollback.Success)
+                Console.Error.WriteLine("Watchdog rollback checkpoint failed: " + watchdogRollback.Summary);
             ConfigService.Save(config);
             Console.Error.WriteLine();
             Console.Error.WriteLine(restored.Success

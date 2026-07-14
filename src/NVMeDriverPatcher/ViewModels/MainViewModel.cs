@@ -191,7 +191,13 @@ public partial class MainViewModel : ObservableObject
         Config = ConfigService.Load();
         // GPO overlay wins over shared config — a pinned fleet policy shouldn't be
         // quietly overridden by a stale local setting.
-        try { GpoPolicyService.ApplyTo(Config, GpoPolicyService.Read()); } catch { }
+        try
+        {
+            var policyWatchdogSave = GpoPolicyService.ApplyTo(Config, GpoPolicyService.Read());
+            if (policyWatchdogSave is { Success: false })
+                Log("Watchdog Group Policy state is unavailable: " + policyWatchdogSave.Summary, "WARNING");
+        }
+        catch { }
         VersionText = $"v{AppConfig.AppVersion}";
         _suppressConfigWrites = true;
         try
