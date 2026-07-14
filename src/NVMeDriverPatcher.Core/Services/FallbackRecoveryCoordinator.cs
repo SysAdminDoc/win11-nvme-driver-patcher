@@ -31,7 +31,35 @@ public static class FallbackRecoveryCoordinator
         => RunOnce(config, PatchVerificationService.Evaluate(config), log);
 
     public static FallbackRecoveryResult RunOnce(AppConfig config, VerificationReport report, Action<string>? log = null)
-        => RunOnce(config, report, FeatureStoreWriterService.ResetAppliedFallback, log);
+        => RunOnce(config, report, () => RestoreFallbackBaseline(config, log), log);
+
+    private static FeatureStoreWriteResult RestoreFallbackBaseline(AppConfig config, Action<string>? log)
+    {
+        var ledger = MutationLedgerService.Load(config.WorkingDir);
+        if (ledger is null && File.Exists(MutationLedgerService.LedgerPath(config.WorkingDir)))
+        {
+            return new FeatureStoreWriteResult
+            {
+                Success = false,
+                Summary = "Mutation ledger is unreadable; refusing a destructive reset that could erase pre-existing FeatureStore state."
+            };
+        }
+        if (ledger is not null && ledger.FeatureStoreTouched)
+        {
+            var restored = MutationLedgerService.RestoreFeatureStoreBaseline(config.WorkingDir, log);
+            return new FeatureStoreWriteResult
+            {
+                Success = restored.Success,
+                Summary = restored.Success
+                    ? "FeatureStore restored to its exact pre-fallback configuration."
+                    : "Exact FeatureStore restore failed: " + string.Join("; ", restored.Failures),
+                AppliedIds = ledger.Baseline.FeatureStore.Select(entry => entry.FeatureId).Distinct().ToArray()
+            };
+        }
+
+        // Compatibility for fallback writes made by releases that predate the mutation ledger.
+        return FeatureStoreWriterService.ResetAppliedFallback();
+    }
 
     // Internal overload with an injectable reset so the once/success/retry semantics are unit-testable
     // without invoking the machine-global Rtl FeatureStore API.
@@ -63,6 +91,14 @@ public static class FallbackRecoveryCoordinator
                 log?.Invoke("[FALLBACK-RECOVERY] FeatureStore IDs were reset but the checkpoint clear failed to persist — will re-verify next launch.");
                 return new FallbackRecoveryResult(true, false,
                     "Fallback IDs reset but the checkpoint could not be persisted; it will be re-evaluated next launch. " + reset.Summary);
+            }
+
+            if (MutationLedgerService.Load(config.WorkingDir) is not null &&
+                !MutationLedgerService.MarkLatestVerified(config.WorkingDir, log))
+            {
+                log?.Invoke("[FALLBACK-RECOVERY] Baseline restored and config cleared, but the terminal ledger phase did not persist.");
+                return new FallbackRecoveryResult(true, false,
+                    "Fallback baseline restored, but the terminal ledger phase could not be persisted. " + reset.Summary);
             }
 
             log?.Invoke("[FALLBACK-RECOVERY] FeatureStore fallback IDs reset and checkpoint cleared. " + reset.Summary);

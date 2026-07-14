@@ -18,6 +18,10 @@ public class PatchOperationResult
     // WasRolledBack is true.
     public bool RollbackFullyReversed { get; set; } = true;
 
+    // Durable operation identity. Callers must use this when advancing the ledger to
+    // reboot-pending so a stale GUI/CLI result cannot finalize another process's mutation.
+    public string? MutationOperationId { get; set; }
+
     // Status of the native FeatureStore / ViVeTool fallback undo attempted during Uninstall.
     // Null when no removal ran; otherwise a human-readable summary surfaced in the activity rail.
     public string? FeatureStoreResetSummary { get; set; }
@@ -104,6 +108,42 @@ public static class PatchService
         }
         result.TotalExpected = effectiveTotal;
 
+        // Write-ahead baseline: this MUST be durable before BitLocker suspension or the first
+        // registry write. It captures all feature values (including pre-existing values), every
+        // SafeBoot key, and—when readable—the FeatureStore state. Reapply reuses the first clean
+        // baseline instead of overwriting it with already-patched state.
+        var ledgerPreparation = MutationLedgerService.PrepareRegistryPatch(
+            workingDir,
+            profile,
+            includeServer,
+            featureIDsToApply,
+            log);
+        if (!ledgerPreparation.Success || ledgerPreparation.Ledger is null)
+        {
+            log?.Invoke("[ERROR] BLOCKED: " + ledgerPreparation.Summary);
+            EventLogService.Write("Patch aborted: mutation ledger could not be prepared", EventLogEntryType.Error, 3002);
+            FinalizeResult(result, nativeStatus, bypassStatus, progress);
+            return result;
+        }
+        result.MutationOperationId = ledgerPreparation.Ledger.OperationId;
+
+        // Keep the legacy SafeBoot journal in sync for rollback kits made by older releases. The
+        // mutation ledger remains authoritative, but both files now preserve the same first clean
+        // baseline and are crash-durable before mutation.
+        if (!SafeBootStateService.SaveJournal(
+                workingDir,
+                ledgerPreparation.Ledger.Baseline.SafeBoot,
+                log,
+                preserveExistingBaseline: ledgerPreparation.ReusedBaseline))
+        {
+            log?.Invoke("[ERROR] BLOCKED: SafeBoot baseline could not be persisted before mutation.");
+            MutationLedgerService.RestoreOriginalState(workingDir, log);
+            FinalizeResult(result, nativeStatus, bypassStatus, progress);
+            return result;
+        }
+
+        bool mutationMayHaveLanded = false;
+
         try
         {
             // Step 0: Suspend BitLocker — MUST succeed before touching drivers.
@@ -143,8 +183,7 @@ public static class PatchService
             using var overrides = hklm.CreateSubKey(AppConfig.RegistrySubKey);
             if (overrides is null)
             {
-                log?.Invoke("[ERROR] Failed to create registry path");
-                return result;
+                throw new IOException("Failed to create registry path.");
             }
 
             foreach (var id in featureIDsToApply)
@@ -152,6 +191,7 @@ public static class PatchService
                 string friendlyName = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn : "Feature Flag";
                 try
                 {
+                    mutationMayHaveLanded = true;
                     overrides.SetValue(id, 1, RegistryValueKind.DWord);
                     appliedKeys.Add(("Feature", id));
                     var verify = overrides.GetValue(id);
@@ -170,17 +210,6 @@ public static class PatchService
                     log?.Invoke($"  [FAIL] {id} - {ex.Message}");
                 }
             }
-
-            // Capture the exact prior state of every SafeBoot key BEFORE we touch them, so removal
-            // can restore byte-for-byte and delete only what we create. Critically, on builds where
-            // Windows already ships these keys (issue #13, a named "NvmeDisk" value) this journal is
-            // what stops uninstall from erasing OS-owned state. Never changes ACLs.
-            try
-            {
-                var journal = SafeBootStateService.CaptureJournal(new RealSafeBootRegistry(), DateTime.UtcNow.ToString("o"));
-                SafeBootStateService.SaveJournal(workingDir, journal, log);
-            }
-            catch (Exception ex) { log?.Invoke($"  [WARN] SafeBoot journal capture failed: {ex.Message}"); }
 
             // SafeBoot Minimal — track in appliedKeys ONLY after we've confirmed the write took.
             // If CreateSubKey succeeds but SetValue fails, the empty subkey is still present and
@@ -308,11 +337,21 @@ public static class PatchService
 
             if (successCount == effectiveTotal)
             {
-                result.Success = true;
-                result.NeedsRestart = true;
-                log?.Invoke($"[SUCCESS] Patch Status: SUCCESS - Applied {successCount}/{effectiveTotal} components");
-                log?.Invoke("[WARNING] Please RESTART your computer to apply changes");
-                EventLogService.Write($"NVMe Driver Patch applied successfully ({successCount}/{effectiveTotal} components)");
+                if (MutationLedgerService.MarkApplied(workingDir, result.MutationOperationId, log))
+                {
+                    result.Success = true;
+                    result.NeedsRestart = true;
+                    log?.Invoke($"[SUCCESS] Patch Status: SUCCESS - Applied {successCount}/{effectiveTotal} components");
+                    log?.Invoke("[INFO] Registry mutation is durable; finalizing the reboot checkpoint before restart is offered.");
+                    EventLogService.Write($"NVMe Driver Patch applied successfully ({successCount}/{effectiveTotal} components)");
+                }
+                else
+                {
+                    log?.Invoke("[ERROR] Registry writes landed, but the Applied ledger phase was not durable. Restoring the exact baseline.");
+                    var recovery = MutationLedgerService.RestoreOriginalState(workingDir, log);
+                    result.WasRolledBack = true;
+                    result.RollbackFullyReversed = recovery.Success;
+                }
             }
             else
             {
@@ -320,7 +359,8 @@ public static class PatchService
                 log?.Invoke("[WARNING] Rolling back partial installation...");
                 ReportProgress(progress, 96, "Rolling back...");
 
-                bool rollbackFullyReversed = Rollback(hklm, appliedKeys, workingDir, log);
+                var ledgerRollback = MutationLedgerService.RestoreOriginalState(workingDir, log);
+                bool rollbackFullyReversed = ledgerRollback.Success;
                 result.WasRolledBack = true;
                 result.RollbackFullyReversed = rollbackFullyReversed;
 
@@ -344,11 +384,18 @@ public static class PatchService
         {
             // Already logged + event-logged at the throw site. Fall through to finally
             // so the progress bar clears and we still capture an after-snapshot.
+            MutationLedgerService.RestoreOriginalState(workingDir, log);
         }
         catch (Exception ex)
         {
             log?.Invoke($"[ERROR] INSTALLATION FAILED: {ex.Message}");
             EventLogService.Write($"NVMe Driver Patch installation failed: {ex.Message}", EventLogEntryType.Error, 3001);
+            log?.Invoke(mutationMayHaveLanded
+                ? "[WARNING] Installation terminated after mutation began; restoring the exact ledger baseline."
+                : "[INFO] Installation terminated before registry mutation; closing the prepared ledger cleanly.");
+            var recovery = MutationLedgerService.RestoreOriginalState(workingDir, log);
+            result.WasRolledBack = mutationMayHaveLanded;
+            result.RollbackFullyReversed = recovery.Success;
         }
         finally
         {
@@ -531,6 +578,49 @@ public static class PatchService
 
         try
         {
+            // New installs have an exact mutation ledger. Restore from it before any legacy
+            // delete-by-name logic so pre-existing feature values and FeatureStore configurations
+            // survive uninstall byte-for-byte. The legacy path below remains for older installs.
+            var mutationLedger = MutationLedgerService.Load(workingDir);
+            if (mutationLedger is null && File.Exists(MutationLedgerService.LedgerPath(workingDir)))
+            {
+                result.Residue.Add("Mutation ledger is unreadable; exact pre-state cannot be proven.");
+                log?.Invoke("[ERROR] Removal blocked: mutation ledger exists but is unreadable. Preserve it and use the recovery kit.");
+                return result;
+            }
+            if (mutationLedger is not null)
+            {
+                bool hadMutation = mutationLedger.Phase != MutationOperationPhase.Reverted;
+                var restored = MutationLedgerService.RestoreOriginalState(workingDir, log);
+                result.AppliedCount = mutationLedger.Baseline.RegistryValues.Count +
+                                      mutationLedger.Baseline.SafeBoot.Entries.Count +
+                                      (mutationLedger.FeatureStoreTouched ? mutationLedger.Baseline.FeatureStore.Count : 0);
+                result.Success = restored.Success;
+                result.NeedsRestart = hadMutation;
+                result.Residue = restored.Failures.ToList();
+                result.FeatureStoreResetSummary = mutationLedger.FeatureStoreTouched
+                    ? (restored.Success ? "FeatureStore restored to its exact pre-fallback configuration." : "FeatureStore exact restore incomplete.")
+                    : "No FeatureStore mutation was recorded.";
+
+                if (restored.Success)
+                {
+                    SafeBootStateService.DeleteJournal(workingDir);
+                    log?.Invoke("[SUCCESS] Patch Status: REMOVED - exact pre-mutation state restored and verified");
+                    EventLogService.Write("NVMe Driver Patch removed (exact ledger baseline restored)");
+                }
+                else
+                {
+                    log?.Invoke("[PARTIAL] Ledger restore INCOMPLETE:");
+                    foreach (var failure in restored.Failures)
+                        log?.Invoke("  [RESIDUE] " + failure);
+                    EventLogService.Write(
+                        "NVMe Driver Patch ledger restore incomplete: " + string.Join(", ", restored.Failures),
+                        EventLogEntryType.Warning,
+                        3002);
+                }
+                return result;
+            }
+
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
 
             log?.Invoke("Removing registry components...");

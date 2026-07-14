@@ -13,6 +13,10 @@ public static class ConfigService
     private static readonly string[] LegacyMigrationFiles =
     [
         "config.json",
+        "mutation_ledger.json",
+        "mutation_ledger.json.bak",
+        "safeboot_journal.json",
+        "safeboot_journal.json.bak",
         "watchdog.json",
         "drive_scope.json",
         "maintenance_window.json",

@@ -94,7 +94,6 @@ public partial class MainViewModel
 
             if (result.Success)
             {
-                ToastService.Show("NVMe Patch Applied", "All components applied. Restart required.", ToastType.Success, Config.EnableToasts);
                 var verificationScriptPath = RecoveryKitService.GenerateVerificationScript(
                     Config.WorkingDir,
                     Config.PatchProfile,
@@ -116,7 +115,28 @@ public partial class MainViewModel
                 // Open the post-patch watchdog window. Any Storport/disk/bugcheck events
                 // inside this window feed the Unstable verdict + auto-revert path on next run.
                 EventLogWatchdogService.Arm(Config);
-                ConfigService.Save(Config);
+                bool configCheckpointSaved = ConfigService.Save(Config);
+                bool ledgerCheckpointSaved = configCheckpointSaved &&
+                    MutationLedgerService.MarkRebootPending(
+                        Config.WorkingDir,
+                        result.MutationOperationId,
+                        msg => Log(msg));
+                if (!ledgerCheckpointSaved)
+                {
+                    var restored = MutationLedgerService.RestoreOriginalState(Config.WorkingDir, msg => Log(msg));
+                    PatchVerificationService.Clear(Config, new VerificationReport { Outcome = VerificationOutcome.Reverted });
+                    EventLogWatchdogService.Disarm(Config);
+                    ConfigService.Save(Config);
+                    UpdateRegistryDisplay();
+                    UpdateStatusDisplay();
+                    InfoDialog?.Invoke("Checkpoint Not Saved",
+                        restored.Success
+                            ? "The patch writes landed, but the reboot checkpoint could not be made durable. The exact pre-patch state was restored, so no restart is needed. Resolve the working-directory disk or permissions problem before retrying."
+                            : "The patch writes landed, but the reboot checkpoint could not be made durable and automatic recovery was incomplete. Do not restart. Use the recovery kit or pre-patch registry backup and review the Activity log.",
+                        DialogIcon.Error);
+                    return;
+                }
+                ToastService.Show("NVMe Patch Applied", "All components applied. Restart required.", ToastType.Success, Config.EnableToasts);
                 UpdateOperationalHistory();
 
                 // Offer restart
@@ -481,8 +501,8 @@ public partial class MainViewModel
                 Log($"[ERROR] Fallback apply failed: {result.Message}", "ERROR");
                 InfoDialog?.Invoke("Fallback Failed",
                     "The fallback could not be applied:\n\n" + result.Message +
-                    "\n\nYour registry backup, restore point, and recovery kit from the original patch are still in place. " +
-                    "You can remove the patch at any time or retry the fallback later (the app will remember the block state until you do).",
+                    "\n\nThe mutation ledger attempted to restore the exact clean baseline. Review the Activity log before retrying; " +
+                    "your registry backup, restore point, and recovery kit remain available if automatic recovery reported any residue.",
                     DialogIcon.Error);
                 return;
             }
@@ -490,22 +510,31 @@ public partial class MainViewModel
             Log($"[SUCCESS] FeatureStore fallback applied via {result.Method}: {string.Join(", ", result.AppliedIds)}", "SUCCESS");
             Log($"Fallback integrity check: {result.IntegritySignal}", "INFO");
             ShowViVeToolFallbackBadge = false;
-            ToastService.Show("Fallback Applied",
-                "Fallback feature IDs written. Restart to activate the native NVMe driver.",
-                ToastType.Success, Config.EnableToasts);
             PatchVerificationService.MarkPending(Config, isFallback: true);
-            if (!ConfigService.Save(Config))
+            bool configCheckpointSaved = ConfigService.Save(Config);
+            bool ledgerCheckpointSaved = configCheckpointSaved &&
+                MutationLedgerService.MarkRebootPending(
+                    Config.WorkingDir,
+                    result.MutationOperationId,
+                    msg => Log(msg));
+            if (!ledgerCheckpointSaved)
             {
-                // The fallback checkpoint (PendingFallbackApplied) did not persist. Rebooting now
-                // would strand FeatureStore IDs the post-reboot auto-reset can no longer recognize,
-                // so refuse the restart and tell the user to retry.
-                Log("[ERROR] Fallback checkpoint could not be saved — refusing to restart to avoid an unrecoverable state.", "ERROR");
+                var restored = MutationLedgerService.RestoreOriginalState(Config.WorkingDir, msg => Log(msg));
+                PatchVerificationService.Clear(Config, new VerificationReport { Outcome = VerificationOutcome.Reverted });
+                EventLogWatchdogService.Disarm(Config);
+                ConfigService.Save(Config);
+                Log("[ERROR] Fallback checkpoint could not be saved — exact rollback attempted and restart refused.", "ERROR");
                 InfoDialog?.Invoke("Checkpoint Not Saved",
-                    "The fallback was written to Windows, but its recovery checkpoint could not be saved to disk. " +
-                    "Do NOT restart yet — resolve the disk/permissions issue and retry so the app can safely track and auto-reset the fallback.",
+                    restored.Success
+                        ? "The fallback was written, but its reboot checkpoint could not be saved durably. The exact pre-patch registry, SafeBoot, and FeatureStore state was restored. No restart is needed."
+                        : "The fallback was written, its reboot checkpoint could not be saved, and exact automatic rollback was incomplete. Do NOT restart. Use the recovery kit and review the Activity log.",
                     DialogIcon.Error);
                 return;
             }
+
+            ToastService.Show("Fallback Applied",
+                "Fallback feature IDs written. Restart to activate the native NVMe driver.",
+                ToastType.Success, Config.EnableToasts);
 
             var restartMsg =
                 $"Fallback wrote feature IDs {string.Join(" and ", result.AppliedIds)} via {result.Method}.\n\n" +

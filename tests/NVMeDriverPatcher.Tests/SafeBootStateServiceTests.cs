@@ -171,4 +171,48 @@ public sealed class SafeBootStateServiceTests
         }
         finally { try { Directory.Delete(dir, recursive: true); } catch { } }
     }
+
+    [Fact]
+    public void SaveJournal_ReapplyPreservesFirstCleanBaseline()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"NVMeDriverPatcher.SafeBoot.{Guid.NewGuid():N}");
+        try
+        {
+            var first = new SafeBootJournal
+            {
+                CapturedUtc = "2026-07-14T00:00:00Z",
+                Entries =
+                [
+                    new SafeBootJournalEntry
+                    {
+                        Path = AppConfig.SafeBootMinimalPath,
+                        Existed = true,
+                        Values = [new SafeBootValueSnapshot("", 1, "Original")]
+                    }
+                ]
+            };
+            var reapplied = new SafeBootJournal
+            {
+                CapturedUtc = "2026-07-14T01:00:00Z",
+                Entries =
+                [
+                    new SafeBootJournalEntry
+                    {
+                        Path = AppConfig.SafeBootMinimalPath,
+                        Existed = true,
+                        Values = [new SafeBootValueSnapshot("", 1, AppConfig.SafeBootValue)]
+                    }
+                ]
+            };
+
+            Assert.True(SafeBootStateService.SaveJournal(dir, first));
+            Assert.True(SafeBootStateService.SaveJournal(dir, reapplied));
+
+            var loaded = SafeBootStateService.LoadJournal(dir);
+            Assert.NotNull(loaded);
+            Assert.Equal("Original", loaded!.Entries.Single().ToSnapshot().DefaultValue);
+            Assert.Equal(first.CapturedUtc, loaded.CapturedUtc);
+        }
+        finally { try { Directory.Delete(dir, recursive: true); } catch { } }
+    }
 }

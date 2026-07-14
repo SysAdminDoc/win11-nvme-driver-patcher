@@ -93,9 +93,10 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 **Safety & Compatibility**
 - **VeraCrypt hard block** -- detects system encryption and refuses to patch ([breaks boot entirely](https://github.com/veracrypt/VeraCrypt/issues/1640))
 - **Automatic BitLocker suspension** -- suspends BitLocker for one reboot cycle to prevent recovery key prompts
+- **Crash-consistent mutation ledger** -- durably captures the first clean registry, SafeBoot, and FeatureStore baseline before mutation; interrupted work and uninstall restore that exact state, and restart is not offered until the reboot checkpoint is durable
 - **Comprehensive software detection** -- warns about Intel RST (BSOD risk), Intel VMD (boot failures), Hyper-V/WSL2 (40% I/O regression), Storage Spaces (array degradation), Veeam, Acronis, Macrium, UrBackup, NinjaOne, Paragon, Samsung Magician, WD Dashboard, Crucial Storage Executive, CrystalDiskInfo, Data Deduplication
 - **Laptop/power warning** -- detects laptops and warns about APST battery regression (~15% impact)
-- **Rollback on partial failure** -- undoes all applied registry keys if patch doesn't complete fully
+- **Rollback on partial failure** -- restores pre-existing values from the durable baseline instead of assuming every touched value was absent
 - **Registry backup** export + system restore point creation before any changes
 - **Third-party driver detection** (Samsung, WD, Intel RST, AMD, SK Hynix, Crucial, Phison)
 - **Custom INF / TESTSIGNING warning** -- flags test-signed native NVMe driver-store workarounds that the registry rollback cannot remove
