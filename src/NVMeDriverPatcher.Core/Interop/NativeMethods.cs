@@ -72,6 +72,8 @@ internal static partial class NativeMethods
     internal const uint DIF_PROPERTYCHANGE = 0x00000012;
     internal const uint DICS_FLAG_GLOBAL = 0x00000001;
     internal const uint DICS_PROPCHANGE = 0x00000003;
+    internal const uint DI_NEEDRESTART = 0x00000080;
+    internal const uint DI_NEEDREBOOT = 0x00000100;
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct SP_DEVINFO_DATA
@@ -107,6 +109,26 @@ internal static partial class NativeMethods
         public uint StateChange;
         public uint Scope;
         public uint HwProfile;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    internal unsafe struct SP_DEVINSTALL_PARAMS
+    {
+        public uint cbSize;
+        public uint Flags;
+        public uint FlagsEx;
+        public IntPtr hwndParent;
+        public IntPtr InstallMsgHandler;
+        public IntPtr InstallMsgHandlerContext;
+        public IntPtr FileQueue;
+        public UIntPtr ClassInstallReserved;
+        public uint Reserved;
+        public fixed char DriverPath[260];
+
+        public static SP_DEVINSTALL_PARAMS Create() => new()
+        {
+            cbSize = (uint)sizeof(SP_DEVINSTALL_PARAMS)
+        };
     }
 
     /// <summary>
@@ -161,6 +183,16 @@ internal static partial class NativeMethods
         ref SP_DEVINFO_DATA deviceInfoData);
 
     /// <summary>
+    /// Reads the post-installer flags, including DI_NEEDRESTART and DI_NEEDREBOOT.
+    /// </summary>
+    [LibraryImport("setupapi.dll", EntryPoint = "SetupDiGetDeviceInstallParamsW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool SetupDiGetDeviceInstallParams(
+        DeviceInfoSetSafeHandle deviceInfoSet,
+        ref SP_DEVINFO_DATA deviceInfoData,
+        ref SP_DEVINSTALL_PARAMS deviceInstallParams);
+
+    /// <summary>
     /// Destroys a device information set and frees all associated memory.
     /// </summary>
     [LibraryImport("setupapi.dll", SetLastError = true)]
@@ -172,18 +204,7 @@ internal static partial class NativeMethods
     // cfgmgr32.dll - Configuration Manager
     // ========================================================================
 
-    internal const uint CM_REENUMERATE_NORMAL = 0x00000000;
-    internal const uint CM_REENUMERATE_SYNCHRONOUS = 0x00000001;
     internal const uint CR_SUCCESS = 0x00000000;
-
-    /// <summary>
-    /// Re-enumerates a device node and its children, forcing the PnP manager to re-detect devices.
-    /// Used during hot-swap to restart the NVMe controller after driver changes.
-    /// </summary>
-    [LibraryImport("cfgmgr32.dll")]
-    internal static partial uint CM_Reenumerate_DevNode(
-        uint dnDevInst,
-        uint ulFlags);
 
     /// <summary>
     /// Locates a device instance in the device tree by its device instance ID.
@@ -192,6 +213,25 @@ internal static partial class NativeMethods
     internal static partial uint CM_Locate_DevNode(
         out uint pdnDevInst,
         string? pDeviceID,
+        uint ulFlags);
+
+    [LibraryImport("cfgmgr32.dll")]
+    internal static partial uint CM_Get_Parent(
+        out uint pdnDevInst,
+        uint dnDevInst,
+        uint ulFlags);
+
+    [LibraryImport("cfgmgr32.dll")]
+    internal static partial uint CM_Get_Device_ID_Size(
+        out uint pulLen,
+        uint dnDevInst,
+        uint ulFlags);
+
+    [LibraryImport("cfgmgr32.dll", EntryPoint = "CM_Get_Device_IDW")]
+    internal static unsafe partial uint CM_Get_Device_ID(
+        uint dnDevInst,
+        char* buffer,
+        uint bufferLen,
         uint ulFlags);
 
     internal const uint CM_LOCATE_DEVNODE_NORMAL = 0x00000000;

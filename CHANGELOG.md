@@ -5,6 +5,14 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Hot-swap is now a verified device-state transaction** — non-boot swaps fail before dismount
+  when a volume handle cannot be opened or `FlushFileBuffers` returns false. The transition now
+  targets the resolved parent controller through `DIF_PROPERTYCHANGE`, reads
+  `DI_NEEDRESTART`/`DI_NEEDREBOOT`, and independently proves the exact PnP controller is healthy,
+  its bound driver service is running, the physical disk returned, and every captured volume GUID
+  is restored to its original letter. Any missing proof is a typed partial/failure with explicit
+  reboot recovery; it cannot emit a success event. Injectable device/volume seams cover failure
+  ordering and recovery without mutating test hosts.
 - **Complete ViVeTool payload authentication** — the elevated fallback now accepts only the
   embedded v0.3.4 x64/ARM64 release manifests, with exact archive size/SHA-256, exact root-level
   member path/size/hash inventory, and PE architecture. Missing, extra, nested, duplicated,
