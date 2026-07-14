@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.IO.Compression;
+using Microsoft.Data.Sqlite;
 using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 
@@ -212,6 +213,109 @@ public sealed class DiagnosticsServiceTests : IDisposable
         Assert.True(integrity.Success, integrity.Summary + Environment.NewLine +
             string.Join(Environment.NewLine, integrity.Issues.Select(i => i.Detail)));
         Assert.Equal("support-bundle", integrity.PayloadType);
+    }
+
+    [Fact]
+    public async Task ExportBundle_UsesOneValidatedSnapshotDuringConcurrentWalWrites()
+    {
+        var databasePath = Path.Combine(_tempRoot, "nvmepatcher.db");
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Cache = SqliteCacheMode.Private,
+            DefaultTimeout = 10
+        }.ToString();
+        using var keeper = new SqliteConnection(connectionString);
+        keeper.Open();
+        using (var setup = keeper.CreateCommand())
+        {
+            setup.CommandText = """
+                PRAGMA journal_mode=WAL;
+                CREATE TABLE evidence(id INTEGER PRIMARY KEY, value TEXT NOT NULL);
+                INSERT INTO evidence(value) VALUES ('baseline');
+                """;
+            setup.ExecuteNonQuery();
+        }
+
+        using var cancellation = new CancellationTokenSource();
+        int committedWrites = 0;
+        var writer = Task.Run(() =>
+        {
+            using var connection = new SqliteConnection(connectionString);
+            connection.Open();
+            while (!cancellation.IsCancellationRequested)
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = "INSERT INTO evidence(value) VALUES ($value);";
+                command.Parameters.AddWithValue("$value", $"writer-{Volatile.Read(ref committedWrites)}");
+                command.ExecuteNonQuery();
+                Interlocked.Increment(ref committedWrites);
+                Thread.Sleep(2);
+            }
+        });
+
+        try
+        {
+            Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref committedWrites) >= 5, TimeSpan.FromSeconds(5)));
+            var outputPath = Path.Combine(_tempRoot, "concurrent-support.zip");
+
+            var bundle = DiagnosticsService.ExportBundle(
+                _tempRoot,
+                preflight: new PreflightResult(),
+                logHistory: ["[INFO] concurrent snapshot test"],
+                outputPath: outputPath);
+
+            Assert.Equal(outputPath, bundle);
+            var extracted = Path.Combine(_tempRoot, "extracted-snapshot.db");
+            using (var zip = ZipFile.OpenRead(outputPath))
+            {
+                var dbEntries = zip.Entries
+                    .Where(entry => entry.FullName.StartsWith("data/nvmepatcher.db", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var snapshotEntry = Assert.Single(dbEntries);
+                Assert.Equal("data/nvmepatcher.db", snapshotEntry.FullName);
+                Assert.DoesNotContain(zip.Entries, entry =>
+                    entry.FullName.EndsWith("-wal", StringComparison.OrdinalIgnoreCase) ||
+                    entry.FullName.EndsWith("-shm", StringComparison.OrdinalIgnoreCase));
+                snapshotEntry.ExtractToFile(extracted);
+            }
+
+            using var snapshot = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = extracted,
+                Mode = SqliteOpenMode.ReadOnly,
+                Cache = SqliteCacheMode.Private
+            }.ToString());
+            snapshot.Open();
+            using var quickCheck = snapshot.CreateCommand();
+            quickCheck.CommandText = "PRAGMA quick_check;";
+            Assert.Equal("ok", quickCheck.ExecuteScalar()?.ToString());
+            using var count = snapshot.CreateCommand();
+            count.CommandText = "SELECT COUNT(*) FROM evidence;";
+            Assert.True(Convert.ToInt64(count.ExecuteScalar()) >= 1);
+        }
+        finally
+        {
+            cancellation.Cancel();
+            await writer.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+    }
+
+    [Fact]
+    public void CreateValidatedSnapshot_RejectsCorruptSourceAndDeletesPartialOutput()
+    {
+        var source = Path.Combine(_tempRoot, "corrupt.db");
+        var destination = Path.Combine(_tempRoot, "snapshot.db");
+        File.WriteAllText(source, "not a sqlite database");
+
+        var result = SqliteSnapshotService.CreateValidatedSnapshot(source, destination);
+
+        Assert.False(result.Success);
+        Assert.Contains("failed validation", result.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(destination));
+        Assert.False(File.Exists(destination + "-wal"));
+        Assert.False(File.Exists(destination + "-shm"));
     }
 
     public void Dispose()

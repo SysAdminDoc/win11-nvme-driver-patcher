@@ -5,6 +5,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Support bundles now contain a transactionally consistent SQLite snapshot** — export uses
+  SQLite's Online Backup API instead of independently copying the live database, WAL, and SHM.
+  Both the source view and standalone destination must pass `PRAGMA quick_check`; the ZIP receives
+  exactly one validated `data/nvmepatcher.db`, or a path-free omission notice on failure. A
+  concurrent WAL-writer test proves the extracted snapshot remains readable and self-contained.
 - **WinPE media now carries every live boot-storage controller it can require** — the builder
   inventories present hardware-backed SCSI/HDC controllers, treats inbox INFs as covered, exports
   each bound OEM package once with PnPUtil, injects the signed INF into `boot.wim` in one
