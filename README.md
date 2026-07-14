@@ -137,17 +137,19 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 - **Per-drive scope** -- exclude specific NVMe drives from the swap by serial or model pattern (e.g. keep a DirectStorage gaming drive on `stornvme.sys` while the OS drive moves to `nvmedisk.sys`).
 - **Dry-run preview** (`--dry-run` / "Preview Changes") -- prints every registry write the patch would perform, without touching the registry.
 - **ETW storage trace** (`etw`) -- wraps `wpr.exe` for 60-second pre/post captures; ETL files land in `%ProgramData%\NVMePatcher\etl\`.
-- **WinPE recovery USB builder** (`winpe`) -- detects the Windows ADK + WinPE add-on and produces a bootable tree/ISO with the Recovery Kit pre-staged and a custom `startnet.cmd`.
+- **WinPE recovery USB builder** (`winpe`) -- detects the Windows ADK + WinPE add-on and produces a bootable tree/ISO with a verified Recovery Kit, a custom `startnet.cmd`, and a final SHA-256 inventory of the complete media tree.
 - **Opt-in compatibility telemetry** -- build an anonymized `{controller, firmware, OS build, profile, verification, watchdog, reliability delta}` JSON and optionally `POST` it to a user-configured HTTPS endpoint. No serials, machine names, drive letters, or user names.
 - **Driver Verifier harness** (`verifier-on` / `-off` / `-status`) -- dev/tester-mode wrapper around `verifier.exe` for kernel-level stress checks on the NVMe stack.
 - **GPO / ADMX templates** (`packaging/admx/`) -- pin Safe/Full profile, IncludeServerKey, SkipWarnings, watchdog behavior, and telemetry across a fleet via `HKLM\SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher`. Policy overrides local config.
+- **Intune source bundle** (`NVMeDriverPatcher.Intune-<version>.zip`) -- release builds package the MSI and detection script with a versioned, per-file SHA-256 manifest before upload or `.intunewin` wrapping.
 - **winget manifest** (`packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml`) -- `winget install SysAdminDoc.NVMeDriverPatcher`.
 - **Non-admin status tray agent** (`NVMeDriverPatcher.Tray`) -- separate exe, no UAC. Shows patch state + watchdog verdict from the system tray; right-click → "Open Main App (elevated)" for the admin GUI.
 - **Rotating logs** -- `crash.log`, `activity.log`, `watchdog.log`, `diagnostics.log` rotate at 5MB each with 5 generations retained.
 
 ## CLI Usage
 
-All CLI operations require Administrator privileges.
+CLI operations use the product-wide Administrator manifest. `verify-payload` is read-only and
+does not initialize application config, mutation recovery, policy, or Event Log state.
 
 ```powershell
 # Check patch status (exit code: 0=applied, 1=not applied, 2=partial)
@@ -173,7 +175,7 @@ All CLI operations require Administrator privileges.
 .\NVMe_Driver_Patcher.ps1 -ExportRecoveryKit
 ```
 
-### Extended CLI (C# binary — 58 commands)
+### Extended CLI (C# binary — 59 commands)
 
 Run `NVMeDriverPatcher.Cli help` for the full grouped command reference.
 
@@ -186,6 +188,7 @@ NVMeDriverPatcher.Cli remove                               # Undo the patch
 
 # Recovery
 NVMeDriverPatcher.Cli recovery-kit                         # Generate WinRE recovery kit
+NVMeDriverPatcher.Cli verify-payload --input=<dir-or-zip>  # Verify the complete generated payload
 NVMeDriverPatcher.Cli recovery-proof [--json]              # Prove recovery infrastructure and BitLocker protector state
 NVMeDriverPatcher.Cli upgrade-safeboot                     # Add KB5079391 SafeBoot entries
 
@@ -335,13 +338,15 @@ If you experience problems, use the **Remove Patch** button (or `-Silent -Remove
 
 The tool can generate a **WinRE-compatible Recovery Kit** -- a folder containing:
 
-- **`NVMe_Remove_Patch.reg`** -- double-click from Windows, or `regedit /s` from WinRE
-- **`Remove_NVMe_Patch.bat`** -- smart batch script that auto-detects WinRE vs Windows, finds your Windows installation, loads the offline SYSTEM hive, and removes the patch from all ControlSets
+- **`Remove_NVMe_Patch.bat`** -- canonical entry point; verifies exact file count, byte lengths, and SHA-256 before any registry mutation
+- **`Apply_Recovery_Mutation.bat`** -- guarded removal logic that auto-detects WinRE vs Windows, loads the offline SYSTEM hive, and removes the patch from all ControlSets
+- **`NVMe_Remove_Patch.reg`** -- manual fallback after independent payload verification
+- **`ARTIFACT-MANIFEST.json`** -- schema/tool version plus role, byte length, and SHA-256 for every required file
 - **`README.txt`** -- step-by-step instructions for both Windows and WinRE recovery
 
 A recovery kit is **automatically generated** after each successful patch installation. You can also create one manually via the **RECOVERY KIT** button or `.\NVMe_Driver_Patcher.ps1 -ExportRecoveryKit`.
 
-**Copy this folder to a USB drive** before rebooting to have an offline recovery option if the system won't boot.
+**Copy this folder to a USB drive** before rebooting to have an offline recovery option if the system won't boot. Run `NVMeDriverPatcher.Cli verify-payload --input=<copied-folder>` after copying when a Windows support station is available; the recovery batch also fails closed on missing, extra, truncated, or modified required files.
 
 Advanced hardening: `NVMeDriverPatcher.Cli.exe winre-inject` previews the DISM plan to inject `stornvme.inf` into the local WinRE image. `winre-inject --apply` backs up `winre.wim`, logs original/backup/final SHA-256 hashes, mounts to an app-owned temp folder, injects the driver, and commits or discards cleanly. After applying, boot into WinRE once and confirm the system volume is accessible.
 

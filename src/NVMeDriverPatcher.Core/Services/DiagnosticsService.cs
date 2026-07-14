@@ -174,6 +174,15 @@ public static class DiagnosticsService
                 AddTextEntry(zip, "MANIFEST.txt", manifest.ToString());
             }
 
+            GeneratedArtifactManifestService.PublishZipManifest(
+                tempZip,
+                "support-bundle",
+                SupportBundleRole);
+            var integrity = GeneratedArtifactManifestService.VerifyZip(tempZip);
+            if (!integrity.Success)
+                throw new InvalidDataException(integrity.Summary + " " +
+                    string.Join("; ", integrity.Issues.Select(i => $"{i.RelativePath}: {i.Detail}")));
+
             // Atomic promote — bundle never appears half-written. File.Move(overwrite:true)
             // is atomic on NTFS, so the final path never transiently disappears (unlike the
             // previous Delete + Move sequence, which had a small window where both were gone).
@@ -325,6 +334,18 @@ public static class DiagnosticsService
         catch { sb.AppendLine("  NVMe Identify:      (unavailable)"); }
 
         return sb.ToString();
+    }
+
+    private static string SupportBundleRole(string relativePath)
+    {
+        if (relativePath.Equals("diagnostics.txt", StringComparison.OrdinalIgnoreCase)) return "diagnostics";
+        if (relativePath.Equals("config.json", StringComparison.OrdinalIgnoreCase)) return "redacted-config";
+        if (relativePath.Equals("MANIFEST.txt", StringComparison.OrdinalIgnoreCase)) return "human-readable-index";
+        if (relativePath.StartsWith("crash/", StringComparison.OrdinalIgnoreCase)) return "redacted-crash-log";
+        if (relativePath.StartsWith("registry/", StringComparison.OrdinalIgnoreCase)) return "registry-backup";
+        if (relativePath.StartsWith("data/", StringComparison.OrdinalIgnoreCase)) return "diagnostic-data";
+        if (relativePath.EndsWith("-omitted.txt", StringComparison.OrdinalIgnoreCase)) return "omission-notice";
+        return "support-evidence";
     }
 
     internal static string? TryCreateShareableConfigText(string configPath)

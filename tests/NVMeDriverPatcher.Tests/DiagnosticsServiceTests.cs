@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.IO.Compression;
 using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 
@@ -188,6 +189,29 @@ public sealed class DiagnosticsServiceTests : IDisposable
         Assert.Contains("[Unknown] VeraCrypt: AccessDenied", report, StringComparison.Ordinal);
         Assert.Contains("Native Error: HRESULT=0x80070005", report, StringComparison.Ordinal);
         Assert.Contains("Observed UTC: 2026-07-14T12:00:00.0000000+00:00", report, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ExportBundle_IncludesFinalIntegrityManifestAndVerifiesAsZipPayload()
+    {
+        var configPath = Path.Combine(_tempRoot, "config.json");
+        File.WriteAllText(configPath, "{ \"PatchProfile\": \"Safe\" }");
+        var outputPath = Path.Combine(_tempRoot, "support.zip");
+
+        var bundle = DiagnosticsService.ExportBundle(
+            _tempRoot,
+            preflight: new PreflightResult(),
+            logHistory: ["[INFO] test"],
+            configPath,
+            outputPath);
+
+        Assert.Equal(outputPath, bundle);
+        using (var zip = ZipFile.OpenRead(outputPath))
+            Assert.NotNull(zip.GetEntry(GeneratedArtifactManifestService.ManifestFileName));
+        var integrity = GeneratedArtifactManifestService.VerifyZip(outputPath);
+        Assert.True(integrity.Success, integrity.Summary + Environment.NewLine +
+            string.Join(Environment.NewLine, integrity.Issues.Select(i => i.Detail)));
+        Assert.Equal("support-bundle", integrity.PayloadType);
     }
 
     public void Dispose()

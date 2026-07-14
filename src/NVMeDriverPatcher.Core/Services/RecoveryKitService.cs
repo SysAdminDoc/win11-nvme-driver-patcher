@@ -5,6 +5,9 @@ namespace NVMeDriverPatcher.Services;
 
 public static class RecoveryKitService
 {
+    internal const string MutationScriptFileName = "Apply_Recovery_Mutation.bat";
+    internal const string GuardScriptFileName = "Remove_NVMe_Patch.bat";
+
     public static string? Export(string outputDir, Action<string>? log = null)
     {
         if (string.IsNullOrWhiteSpace(outputDir))
@@ -56,17 +59,17 @@ public static class RecoveryKitService
             return null;
         }
 
-        // .bat file — same AppConfig-sourced IDs/keys as the .reg, for both the offline (WinRE
-        // ControlSet sweep) and in-Windows removal paths.
+        // The mutation script is never the documented entry point. Remove_NVMe_Patch.bat verifies
+        // this file and every other required kit member before it calls into these registry writes.
         var batContent = BuildBatContent();
 
         try
         {
-            WriteAllTextAtomic(Path.Combine(stagingDir, "Remove_NVMe_Patch.bat"), batContent, System.Text.Encoding.ASCII);
+            WriteAllTextAtomic(Path.Combine(stagingDir, MutationScriptFileName), batContent, System.Text.Encoding.ASCII);
         }
         catch (Exception ex)
         {
-            log?.Invoke($"[ERROR] Could not write Remove_NVMe_Patch.bat: {ex.Message}");
+            log?.Invoke($"[ERROR] Could not write {MutationScriptFileName}: {ex.Message}");
             DeleteDirectoryBestEffort(stagingDir);
             return null;
         }
@@ -81,7 +84,7 @@ USE THIS KIT IF:
 - You need to undo the patch from WinRE (Windows Recovery Environment)
 
 HOW TO USE FROM WINDOWS:
-1. Double-click NVMe_Remove_Patch.reg and confirm
+1. Right-click Remove_NVMe_Patch.bat and choose Run as administrator
 2. Restart your computer
 
 HOW TO USE FROM WinRE (system won't boot):
@@ -108,9 +111,11 @@ WHAT THIS KIT CAN AND CANNOT UNDO:
   boots on the legacy stack, THEN run the fallback reset from inside Windows.
 
 FILES:
-- NVMe_Remove_Patch.reg    - Registry file
-- Remove_NVMe_Patch.bat    - Smart batch script (auto-detects Windows vs WinRE)
-- README.txt               - This file";
+- Remove_NVMe_Patch.bat     - Integrity gate and canonical recovery entry point
+- Apply_Recovery_Mutation.bat - Registry removal logic called only after verification
+- NVMe_Remove_Patch.reg     - Manual registry fallback; verify the kit with the CLI before use
+- ARTIFACT-MANIFEST.json    - Versioned SHA-256 inventory for independent verification
+- README.txt                - This file";
 
         try
         {
@@ -119,7 +124,31 @@ FILES:
         catch (Exception ex)
         {
             log?.Invoke($"[ERROR] Could not write README.txt: {ex.Message}");
-            // README is informational; don't bail out the whole kit just for this.
+            DeleteDirectoryBestEffort(stagingDir);
+            return null;
+        }
+
+        try
+        {
+            var guardContent = BuildIntegrityGuardContent(stagingDir);
+            WriteAllTextAtomic(Path.Combine(stagingDir, GuardScriptFileName), guardContent, System.Text.Encoding.ASCII);
+
+            // Publish last. The manifest inventories the final wrapper as well as the mutation
+            // payload, and is itself durably flushed before the staging directory is promoted.
+            GeneratedArtifactManifestService.PublishDirectoryManifest(
+                stagingDir,
+                "recovery-kit",
+                RecoveryKitRole);
+            var integrity = GeneratedArtifactManifestService.VerifyDirectory(stagingDir);
+            if (!integrity.Success)
+                throw new InvalidDataException(integrity.Summary + " " +
+                    string.Join("; ", integrity.Issues.Select(i => $"{i.RelativePath}: {i.Detail}")));
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[ERROR] Could not finalize recovery kit integrity metadata: {ex.Message}");
+            DeleteDirectoryBestEffort(stagingDir);
+            return null;
         }
 
         string? previousKitBackupDir = null;
@@ -297,6 +326,85 @@ pause";
         // would otherwise risk mixed endings depending on how this source file is checked out.
         return bat.Replace("\r\n", "\n").Replace("\n", "\r\n");
     }
+
+    internal static string BuildIntegrityGuardContent(string kitDirectory)
+    {
+        var verifiedFiles = new[]
+        {
+            MutationScriptFileName,
+            "NVMe_Remove_Patch.reg",
+            "README.txt"
+        };
+
+        var checks = new System.Text.StringBuilder();
+        foreach (var fileName in verifiedFiles)
+        {
+            var path = Path.Combine(kitDirectory, fileName);
+            var length = new FileInfo(path).Length;
+            var hash = GeneratedArtifactManifestService.ComputeSha256(path);
+            checks.AppendLine($"call :verify \"{fileName}\" {length} {hash}");
+            checks.AppendLine("if errorlevel 1 goto :integrity_failed");
+        }
+
+        var content = $"""
+@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+cd /d "%~dp0"
+
+echo Verifying NVMe recovery payload integrity...
+where certutil.exe >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: certutil.exe is unavailable; recovery mutation is blocked.
+    exit /b 2
+)
+if not exist "{GeneratedArtifactManifestService.ManifestFileName}" (
+    echo ERROR: {GeneratedArtifactManifestService.ManifestFileName} is missing; recovery mutation is blocked.
+    exit /b 2
+)
+set "FILECOUNT="
+for /f %%C in ('dir /b /s /a-d 2^>nul ^| find /c /v ""') do set "FILECOUNT=%%C"
+if not "!FILECOUNT!"=="5" (
+    echo ERROR: Expected exactly 5 recovery-kit files but found !FILECOUNT!.
+    echo Recovery mutation is blocked because the payload has missing or unexpected files.
+    exit /b 2
+)
+{checks}echo Integrity verification passed. Starting recovery mutation...
+call "{MutationScriptFileName}"
+exit /b !errorlevel!
+
+:verify
+if not exist "%~1" (
+    echo ERROR: Required file "%~1" is missing.
+    exit /b 1
+)
+for %%I in ("%~1") do if not "%%~zI"=="%~2" (
+    echo ERROR: "%~1" has length %%~zI; expected %~2.
+    exit /b 1
+)
+set "ACTUAL_HASH="
+for /f "skip=1 tokens=* delims=" %%H in ('certutil.exe -hashfile "%~1" SHA256 2^>nul') do if not defined ACTUAL_HASH set "ACTUAL_HASH=%%H"
+set "ACTUAL_HASH=!ACTUAL_HASH: =!"
+if /I not "!ACTUAL_HASH!"=="%~3" (
+    echo ERROR: "%~1" failed SHA-256 verification.
+    exit /b 1
+)
+exit /b 0
+
+:integrity_failed
+echo Recovery mutation is blocked. Re-export or recopy the complete recovery kit.
+exit /b 2
+""";
+        return content.Replace("\r\n", "\n").Replace("\n", "\r\n");
+    }
+
+    private static string RecoveryKitRole(string relativePath) => relativePath switch
+    {
+        GuardScriptFileName => "integrity-gate",
+        MutationScriptFileName => "registry-mutation",
+        "NVMe_Remove_Patch.reg" => "manual-registry-fallback",
+        "README.txt" => "documentation",
+        _ => "recovery-payload"
+    };
 
     public static string? GenerateVerificationScript(string workingDir, bool includeServerKey)
     {

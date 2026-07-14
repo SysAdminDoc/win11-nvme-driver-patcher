@@ -8,6 +8,19 @@ namespace NVMeDriverPatcher.Tests;
 public sealed class WinPERecoveryBuilderServiceTests
 {
     [Fact]
+    public async Task BuildAsync_RequiresGeneratedRecoveryKitBeforeAdkWorkStarts()
+    {
+        var result = await WinPERecoveryBuilderService.BuildAsync(new WinPEBuildOptions
+        {
+            OutputDir = Path.GetTempPath(),
+            RecoveryKitDir = Path.Combine(Path.GetTempPath(), $"missing-kit-{Guid.NewGuid():N}")
+        });
+
+        Assert.False(result.Success);
+        Assert.Contains("self-verifying Recovery Kit is required", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StartnetTargetPath_IsInsideImageWindowsSystem32_NotMediaSources()
     {
         var mount = Path.Combine(Path.GetTempPath(), "fakeMount");
@@ -46,6 +59,36 @@ public sealed class WinPERecoveryBuilderServiceTests
         finally
         {
             try { Directory.Delete(mount, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void PublishMediaManifest_RecordsBootImageAndEmbeddedRecoveryKitThenVerifies()
+    {
+        var media = Path.Combine(Path.GetTempPath(), $"NVMeDriverPatcher.WinPE.Media.Tests.{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(media, "sources"));
+            Directory.CreateDirectory(Path.Combine(media, "NVMe_Recovery_Kit"));
+            File.WriteAllText(Path.Combine(media, "sources", "boot.wim"), "fake-wim");
+            File.WriteAllText(Path.Combine(media, "NVMe_Recovery_Kit", "Remove_NVMe_Patch.bat"), "exit /b 0");
+
+            var result = WinPERecoveryBuilderService.PublishMediaManifest(media);
+
+            Assert.True(result.Success, result.Summary);
+            Assert.Equal("winpe-recovery-media", result.PayloadType);
+            var json = File.ReadAllText(Path.Combine(media, GeneratedArtifactManifestService.ManifestFileName));
+            Assert.Contains("\"role\": \"boot-image\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"role\": \"embedded-recovery-kit\"", json, StringComparison.Ordinal);
+
+            File.AppendAllText(Path.Combine(media, "sources", "boot.wim"), "tampered");
+            var tampered = GeneratedArtifactManifestService.VerifyDirectory(media);
+            Assert.False(tampered.Success);
+            Assert.Contains(tampered.Issues, i => i.RelativePath == "sources/boot.wim");
+        }
+        finally
+        {
+            try { Directory.Delete(media, recursive: true); } catch { }
         }
     }
 }

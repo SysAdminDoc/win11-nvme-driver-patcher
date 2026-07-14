@@ -73,6 +73,10 @@ public sealed class ReleaseArm64ContractTests
         }
         Assert.Contains("Update-PackageManifests.ps1", script);
         Assert.Contains("-Arm64ExePath", script);
+        Assert.Contains("'-bindpath'", script);
+        Assert.Contains("packaging/wix", script);
+        Assert.Contains(".tmp.zip", script);
+        Assert.Contains("[IO.File]::Replace($intuneZipTemp, $intuneZip, $intuneZipBackup)", script);
         Assert.DoesNotContain("InstallerUrl:\\s*\\S+", script);
         Assert.DoesNotContain("\"hash\":\\s*\"[^\"]*\"", script);
     }
