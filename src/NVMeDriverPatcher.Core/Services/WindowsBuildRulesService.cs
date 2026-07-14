@@ -68,7 +68,7 @@ public class WindowsBuildRuleset
 // mirroring compat.json.
 public static class WindowsBuildRulesService
 {
-    private const string BundledRulesFile = "windows_build_rules.json";
+    internal const string BundledRulesFile = "windows_build_rules.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -79,7 +79,22 @@ public static class WindowsBuildRulesService
     {
         var candidates = new List<string>();
         var workDir = workingDir ?? AppConfig.GetWorkingDir();
-        if (!string.IsNullOrEmpty(workDir)) candidates.Add(Path.Combine(workDir, BundledRulesFile));
+        if (!string.IsNullOrEmpty(workDir))
+        {
+            if (AppConfig.IsRuntimeWorkingDirectory(workDir))
+            {
+                var access = PrivilegedStateSecurityService.EnsureForMutation(workDir);
+                var localRules = Path.Combine(access.Directory, BundledRulesFile);
+                if (access.Success && File.Exists(localRules) &&
+                    PrivilegedStateSecurityService.ValidateCriticalFile(
+                        localRules, StateDirectoryRole.Privileged).Success)
+                    candidates.Add(localRules);
+            }
+            else
+            {
+                candidates.Add(Path.Combine(workDir, BundledRulesFile));
+            }
+        }
         try
         {
             var appDir = AppContext.BaseDirectory;

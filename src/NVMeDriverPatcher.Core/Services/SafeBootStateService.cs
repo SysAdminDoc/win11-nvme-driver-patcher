@@ -170,7 +170,8 @@ public static class SafeBootStateService
         return failures;
     }
 
-    public static string JournalPath(string workingDir) => Path.Combine(workingDir, JournalFileName);
+    public static string JournalPath(string workingDir) =>
+        Path.Combine(AppConfig.GetPrivilegedStateDirectory(workingDir), JournalFileName);
 
     public static bool SaveJournal(
         string workingDir,
@@ -181,8 +182,11 @@ public static class SafeBootStateService
         string? tmp = null;
         try
         {
-            Directory.CreateDirectory(workingDir);
+            var access = PrivilegedStateSecurityService.EnsureForMutation(workingDir);
+            if (!access.Success)
+                throw new UnauthorizedAccessException(access.Summary);
             var target = JournalPath(workingDir);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             if (preserveExistingBaseline && LoadJournal(workingDir) is not null)
                 return true;
 
@@ -210,6 +214,21 @@ public static class SafeBootStateService
                 File.Replace(tmp, target, target + ".bak", ignoreMetadataErrors: true);
             else
                 File.Move(tmp, target);
+            if (AppConfig.IsRuntimeWorkingDirectory(workingDir))
+            {
+                var protectedPrimary = PrivilegedStateSecurityService.ProtectCriticalFile(
+                    target, StateDirectoryRole.Privileged);
+                if (!protectedPrimary.Success)
+                    throw new IOException(protectedPrimary.Summary);
+                var backup = target + ".bak";
+                if (File.Exists(backup))
+                {
+                    var protectedBackup = PrivilegedStateSecurityService.ProtectCriticalFile(
+                        backup, StateDirectoryRole.Privileged);
+                    if (!protectedBackup.Success)
+                        throw new IOException(protectedBackup.Summary);
+                }
+            }
             return true;
         }
         catch (Exception ex)
@@ -224,8 +243,13 @@ public static class SafeBootStateService
     {
         try
         {
+            var access = PrivilegedStateSecurityService.EnsureForMutation(workingDir);
+            if (!access.Success) return null;
             var path = JournalPath(workingDir);
             if (!File.Exists(path)) return null;
+            if (AppConfig.IsRuntimeWorkingDirectory(workingDir) &&
+                !PrivilegedStateSecurityService.ValidateCriticalFile(path, StateDirectoryRole.Privileged).Success)
+                return null;
             var json = File.ReadAllText(path);
             return string.IsNullOrWhiteSpace(json) ? null : JsonSerializer.Deserialize<SafeBootJournal>(json);
         }
@@ -234,7 +258,17 @@ public static class SafeBootStateService
 
     public static void DeleteJournal(string workingDir)
     {
-        try { var p = JournalPath(workingDir); if (File.Exists(p)) File.Delete(p); } catch { }
+        try
+        {
+            var access = PrivilegedStateSecurityService.EnsureForMutation(workingDir);
+            if (!access.Success) return;
+            var p = JournalPath(workingDir);
+            if (File.Exists(p) &&
+                (!AppConfig.IsRuntimeWorkingDirectory(workingDir) ||
+                 PrivilegedStateSecurityService.ValidateCriticalFile(p, StateDirectoryRole.Privileged).Success))
+                File.Delete(p);
+        }
+        catch { }
     }
 
     /// <summary>Classify the two boot-critical GUID keys for preflight, using the live registry.</summary>

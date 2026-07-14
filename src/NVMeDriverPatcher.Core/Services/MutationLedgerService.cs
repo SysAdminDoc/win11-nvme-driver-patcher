@@ -110,7 +110,8 @@ public static class MutationLedgerService
         Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
     };
 
-    public static string LedgerPath(string workingDir) => Path.Combine(workingDir, LedgerFileName);
+    public static string LedgerPath(string workingDir) =>
+        Path.Combine(AppConfig.GetPrivilegedStateDirectory(workingDir), LedgerFileName);
 
     public static MutationPreparationResult PrepareRegistryPatch(
         string workingDir,
@@ -745,15 +746,22 @@ public static class MutationLedgerService
 
     private static MutationOperationLedger? LoadUnsafe(string workingDir)
     {
+        var access = PrivilegedStateSecurityService.EnsureForMutation(workingDir);
+        if (!access.Success)
+            return null;
         var path = LedgerPath(workingDir);
-        return TryLoadLedgerFile(path) ?? TryLoadLedgerFile(path + ".bak");
+        var validateMetadata = AppConfig.IsRuntimeWorkingDirectory(workingDir);
+        return TryLoadLedgerFile(path, validateMetadata) ?? TryLoadLedgerFile(path + ".bak", validateMetadata);
     }
 
-    private static MutationOperationLedger? TryLoadLedgerFile(string path)
+    private static MutationOperationLedger? TryLoadLedgerFile(string path, bool validateMetadata)
     {
         try
         {
             if (!File.Exists(path)) return null;
+            if (validateMetadata &&
+                !PrivilegedStateSecurityService.ValidateCriticalFile(path, StateDirectoryRole.Privileged).Success)
+                return null;
             var json = File.ReadAllText(path, Encoding.UTF8);
             var ledger = JsonSerializer.Deserialize<MutationOperationLedger>(json, JsonOptions);
             return ledger is { SchemaVersion: 1 } &&
@@ -771,11 +779,17 @@ public static class MutationLedgerService
         out string error,
         Action<string>? beforePublish = null)
     {
+        var access = PrivilegedStateSecurityService.EnsureForMutation(workingDir);
+        if (!access.Success)
+        {
+            error = access.Summary;
+            return false;
+        }
         var target = LedgerPath(workingDir);
         var temp = target + "." + Environment.ProcessId + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            Directory.CreateDirectory(workingDir);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             var json = JsonSerializer.Serialize(ledger, JsonOptions);
             using (var fs = new FileStream(
                        temp,
@@ -806,6 +820,21 @@ public static class MutationLedgerService
             else
             {
                 File.Move(temp, target);
+            }
+            if (AppConfig.IsRuntimeWorkingDirectory(workingDir))
+            {
+                var protectedPrimary = PrivilegedStateSecurityService.ProtectCriticalFile(
+                    target, StateDirectoryRole.Privileged);
+                if (!protectedPrimary.Success)
+                    throw new IOException(protectedPrimary.Summary);
+                var backup = target + ".bak";
+                if (File.Exists(backup))
+                {
+                    var protectedBackup = PrivilegedStateSecurityService.ProtectCriticalFile(
+                        backup, StateDirectoryRole.Privileged);
+                    if (!protectedBackup.Success)
+                        throw new IOException(protectedBackup.Summary);
+                }
             }
             error = string.Empty;
             return true;

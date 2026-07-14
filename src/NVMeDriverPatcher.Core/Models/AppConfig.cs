@@ -113,6 +113,8 @@ public class AppConfig
     public const string DocumentationURL = "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353";
     public const string GitHubApiReleasesUrl = "https://api.github.com/repos/SysAdminDoc/win11-nvme-driver-patcher/releases/latest";
     public const string WorkingDirFolderName = "NVMePatcher";
+    public const string PrivilegedStateFolderName = "State";
+    public const string WatchdogStateFolderName = "Watchdog";
     private const string TempFallbackFolderName = "NVMePatcher_Backups";
 
     public static IReadOnlyList<string> FeatureIDs { get; } = ["735209102", "1853569164", "156965516"];
@@ -280,6 +282,56 @@ public class AppConfig
         var shared = GetSharedWorkingDirPath();
         return PathsEqual(path, shared);
     }
+
+    /// <summary>
+    /// Resolve boot-critical state away from portable, per-user, TEMP, and current-directory
+    /// storage. Explicit non-runtime paths are retained so isolated tests can exercise the
+    /// persistence services without touching the host's ProgramData tree.
+    /// </summary>
+    public static string GetPrivilegedStateDirectory(string? workingDir = null)
+    {
+        var shared = GetSharedWorkingDirPath()
+            ?? throw new IOException("The shared ProgramData state path is unavailable.");
+        var candidate = string.IsNullOrWhiteSpace(workingDir) ? GetWorkingDir() : workingDir;
+        return IsRuntimeWorkingDirectory(candidate)
+            ? Path.Combine(shared, PrivilegedStateFolderName)
+            : Path.GetFullPath(candidate);
+    }
+
+    /// <summary>Resolve the LocalService-writable watchdog store independently of privileged rollback state.</summary>
+    public static string GetWatchdogStateDirectory(string? workingDir = null)
+    {
+        var shared = GetSharedWorkingDirPath()
+            ?? throw new IOException("The shared ProgramData state path is unavailable.");
+        var candidate = string.IsNullOrWhiteSpace(workingDir) ? GetWorkingDir() : workingDir;
+        return IsRuntimeWorkingDirectory(candidate)
+            ? Path.Combine(shared, WatchdogStateFolderName)
+            : Path.GetFullPath(candidate);
+    }
+
+    internal static bool IsRuntimeWorkingDirectory(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return true;
+
+        var runtimePaths = new List<string?>
+        {
+            GetSharedWorkingDirPath(),
+            GetLegacyUserWorkingDirPath(),
+            Path.Combine(Path.GetTempPath(), TempFallbackFolderName),
+            Environment.CurrentDirectory
+        };
+        try { runtimePaths.Add(Services.PortableModeService.PortableDataPath()); } catch { }
+        return runtimePaths.Any(candidate => PathsEqual(path, candidate));
+    }
+
+    internal static string ResolveAuthoritativeStateDirectory(
+        string workingDir,
+        string sharedRoot,
+        params string[] runtimeWorkingDirs) =>
+        runtimeWorkingDirs.Any(path => PathsEqual(workingDir, path))
+            ? Path.Combine(sharedRoot, PrivilegedStateFolderName)
+            : Path.GetFullPath(workingDir);
 
     internal static bool PathsEqual(string? left, string? right)
     {

@@ -19,7 +19,12 @@ public static class DataFileProvenanceService
     }
 
     public static DataFileProvenance InspectWindowsBuildRules(string? workingDir = null, int staleAfterDays = DefaultStaleAfterDays) =>
-        Inspect("Windows build rules", "windows_build_rules.json", workingDir, AppContext.BaseDirectory, staleAfterDays);
+        Inspect(
+            "Windows build rules",
+            "windows_build_rules.json",
+            string.IsNullOrWhiteSpace(workingDir) ? null : AppConfig.GetPrivilegedStateDirectory(workingDir),
+            AppContext.BaseDirectory,
+            staleAfterDays);
 
     public static DataFileProvenance InspectFirmwareCompat(string? workingDir = null, int staleAfterDays = DefaultStaleAfterDays) =>
         Inspect("Firmware compatibility DB", "compat.json", workingDir, AppContext.BaseDirectory, staleAfterDays);

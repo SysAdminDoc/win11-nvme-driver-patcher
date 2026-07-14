@@ -121,8 +121,9 @@ WatchdogAutoRevert, WatchdogWindowHours, CompatTelemetryEnabled.
 ",
         ["portable"] = @"
 Create portable.flag beside the exe (or run `portable-enable`) and the working dir
-redirects to Data\ beside the exe. Lets field techs carry the patcher on a USB stick
-without installer state. `portable-disable` removes the flag.
+redirects diagnostics, exports, and user settings to Data\ beside the exe. Boot-critical
+mutation/recovery state always remains in the protected ProgramData State directory so a
+portable folder cannot replace an elevated rollback baseline. `portable-disable` removes the flag.
 ",
         ["telemetry"] = @"
 Opt-in. Build with `telemetry`; submit with `telemetry --endpoint=<https url>`. No

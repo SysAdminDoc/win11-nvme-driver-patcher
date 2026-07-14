@@ -40,15 +40,30 @@ public sealed class WorkingDirResolutionTests : IDisposable
 
         var copied = ConfigService.MigrateLegacyWorkingDirIfNeeded(target, legacy);
 
-        Assert.Equal(3, copied);
+        Assert.Equal(2, copied);
         Assert.Equal("{\"RestartDelay\":10}", File.ReadAllText(Path.Combine(target, "config.json")));
-        Assert.Equal("{\"LastVerdict\":\"Warning\"}", File.ReadAllText(Path.Combine(target, "watchdog.json")));
+        Assert.False(File.Exists(Path.Combine(target, "watchdog.json")));
         Assert.Equal("{\"rules\":[]}", File.ReadAllText(Path.Combine(target, "drive_scope.json")));
         Assert.Equal("legacy-db", File.ReadAllText(Path.Combine(target, "nvmepatcher.db")));
 
         File.Delete(Path.Combine(target, "watchdog.json"));
         Assert.Equal(0, ConfigService.MigrateLegacyWorkingDirIfNeeded(target, legacy));
         Assert.False(File.Exists(Path.Combine(target, "watchdog.json")));
+    }
+
+    [Fact]
+    public void AuthoritativeState_LeavesPortableDataForDiagnosticsButUsesSharedProtectedChild()
+    {
+        var shared = Path.Combine(_root, "ProgramData", AppConfig.WorkingDirFolderName);
+        var portable = Path.Combine(_root, "Portable", "Data");
+
+        var resolved = AppConfig.ResolveAuthoritativeStateDirectory(
+            portable,
+            shared,
+            shared,
+            portable);
+
+        Assert.Equal(Path.Combine(shared, AppConfig.PrivilegedStateFolderName), resolved);
     }
 
     [Fact]
