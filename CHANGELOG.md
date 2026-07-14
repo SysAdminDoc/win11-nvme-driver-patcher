@@ -5,6 +5,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Scripted update checks now report typed failure states** — `update-check` returns success only
+  for a proved current/newer release response, names a missing GUI asset separately, and reports
+  GitHub rate limits, HTTP failures, transport timeouts/errors, unsafe redirects, and malformed
+  JSON instead of collapsing them into “no release.” DLL-hosted read-only checks no longer require
+  administrator state initialization.
 - **Recovery subprocess parsing and capture are now deterministic** — the WinRE probe accepts only
   the GUID on reagentc's BCD identifier row, so an earlier unrelated recovery GUID cannot select
   the wrong boot entry. Successful DISM/WinPE commands now drain both redirected output streams
