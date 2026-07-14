@@ -29,8 +29,12 @@ public static class DataFileProvenanceService
         string fileName,
         string? workingDir,
         string? shippedDir,
-        int staleAfterDays)
+        int staleAfterDays,
+        DateTime? nowUtc = null)
     {
+        // Freshness is evaluated against an injectable clock so unit fixtures stay stable on
+        // any calendar date; production callers pass null and get DateTime.UtcNow.
+        var now = (nowUtc ?? DateTime.UtcNow).ToUniversalTime();
         var shippedPath = string.IsNullOrWhiteSpace(shippedDir) ? string.Empty : Path.Combine(shippedDir, fileName);
         var localPath = string.IsNullOrWhiteSpace(workingDir) ? string.Empty : Path.Combine(workingDir, fileName);
         var activePath = !string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath) ? localPath : shippedPath;
@@ -70,7 +74,7 @@ public static class DataFileProvenanceService
                 result.Updated = updated.GetString() ?? string.Empty;
 
             result.NewestLastReviewed = NewestDate(EnumerateDateStrings(root, "lastReviewed").Append(result.Updated));
-            result.IsStale = IsStale(result.NewestLastReviewed, staleAfterDays);
+            result.IsStale = IsStale(result.NewestLastReviewed, staleAfterDays, now);
             result.Summary = BuildSummary(result);
         }
         catch (Exception ex)
@@ -125,12 +129,12 @@ public static class DataFileProvenanceService
         return $"{file.FileName}: {file.SourceKind}{custom}, schema {file.SchemaVersion}, {freshness}, sha256 {ShortHash(file.Sha256)}.";
     }
 
-    private static bool IsStale(string date, int staleAfterDays)
+    private static bool IsStale(string date, int staleAfterDays, DateTime nowUtc)
     {
         if (!DateTime.TryParse(date, out var parsed))
             return true;
 
-        var age = DateTime.UtcNow.Date - parsed.ToUniversalTime().Date;
+        var age = nowUtc.Date - parsed.ToUniversalTime().Date;
         return age.TotalDays > staleAfterDays;
     }
 

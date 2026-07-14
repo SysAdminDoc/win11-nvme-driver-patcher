@@ -4,6 +4,12 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 
 ## [Unreleased] — 2026-06-30
 
+### Fixed
+- **Clock-stable provenance tests** — `DataFileProvenanceService.Inspect` now takes an injectable
+  `nowUtc` clock so freshness fixtures pass on any calendar date instead of aging past the 30-day
+  window; the bundled-data contract still uses the real clock. Cleared xUnit2031 (`Assert.Single`
+  over `Where`) and xUnit1026 (unused theory parameters) so the suite is analyzer-clean (759 tests).
+
 ### Added
 - **SQLite FTS5 CVE surface mitigation** — defensive mode (`SQLITE_DBCONFIG_DEFENSIVE`) enabled
   via raw C API on every DB connection, blocking FTS5 shadow-table writes. Tests prove the

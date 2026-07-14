@@ -16,8 +16,12 @@ public sealed class ReleaseArm64ContractTests
 
     [Theory]
     [MemberData(nameof(RuntimeProjectRows))]
-    public void RuntimeProject_DefaultsToX64AndAllowsArm64(string projectPath, string _, string __)
+    public void RuntimeProject_DefaultsToX64AndAllowsArm64(string projectPath, string assetId, string arm64AssetName)
     {
+        // Row-integrity: the ARM64 asset id/name columns must stay well-formed alongside the RID contract.
+        Assert.EndsWith("-arm64", assetId);
+        Assert.EndsWith("-win-arm64.exe", arm64AssetName);
+
         var project = XDocument.Load(Path.Combine(RepoRoot(), projectPath.Replace('/', Path.DirectorySeparatorChar)));
         var properties = project.Descendants()
             .Where(e => e.Name.LocalName is "RuntimeIdentifier" or "RuntimeIdentifiers")

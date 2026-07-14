@@ -21,7 +21,8 @@ public sealed class DataFileProvenanceServiceTests : IDisposable
         File.WriteAllText(Path.Combine(shippedDir, "compat.json"), Payload("2026-06-10", "2026-06-10", "shipped"));
         File.WriteAllText(Path.Combine(localDir, "compat.json"), Payload("2026-06-11", "2026-06-11", "local"));
 
-        var result = DataFileProvenanceService.Inspect("Firmware compatibility DB", "compat.json", localDir, shippedDir, staleAfterDays: 30);
+        // Fixed clock 9 days after the reviewed date keeps this fixture fresh on any calendar date.
+        var result = DataFileProvenanceService.Inspect("Firmware compatibility DB", "compat.json", localDir, shippedDir, staleAfterDays: 30, nowUtc: new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc));
 
         Assert.True(result.Exists);
         Assert.Equal("local override", result.SourceKind);
@@ -41,7 +42,7 @@ public sealed class DataFileProvenanceServiceTests : IDisposable
         Directory.CreateDirectory(shippedDir);
         File.WriteAllText(Path.Combine(shippedDir, "windows_build_rules.json"), Payload("2000-01-01", "2000-01-02", "old"));
 
-        var result = DataFileProvenanceService.Inspect("Windows build rules", "windows_build_rules.json", null, shippedDir, staleAfterDays: 30);
+        var result = DataFileProvenanceService.Inspect("Windows build rules", "windows_build_rules.json", null, shippedDir, staleAfterDays: 30, nowUtc: new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc));
 
         Assert.True(result.IsStale);
         Assert.Contains("STALE", result.Summary);
