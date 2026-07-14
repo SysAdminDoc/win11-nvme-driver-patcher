@@ -42,8 +42,8 @@ public static class VerifiedDownloader
         /// If true, integrity MUST be verified (SHA-256 sidecar or Authenticode). If neither
         /// is available, the download is rejected. Use for anything that will be executed.
         /// If false, a missing sidecar is reported via <see cref="DownloadResult.Signal"/> but
-        /// doesn't fail the download (used for archive downloads where the archive's own
-        /// content check substitutes, e.g. zip-slip defense + filesize cap).
+        /// doesn't fail the download (used when the caller performs an embedded-manifest
+        /// archive hash and exact member-inventory check before extraction).
         /// </summary>
         public bool RequireIntegrity { get; init; } = true;
 

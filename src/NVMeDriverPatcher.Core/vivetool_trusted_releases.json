@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "source": "https://github.com/thebookisclosed/ViVe/releases/tag/v0.3.4",
+  "lastReviewed": "2026-07-14",
+  "releases": [
+    {
+      "tag": "v0.3.4",
+      "assets": [
+        {
+          "architecture": "X64",
+          "name": "ViVeTool-v0.3.4-IntelAmd.zip",
+          "archiveSize": 538555,
+          "archiveSha256": "cc27f073f3fe5dd2c3d947faf558fd4b2f8e34454f812689b0d65ee8a52e4147",
+          "executablePeMachine": 332,
+          "members": [
+            {
+              "path": "Albacore.ViVe.dll",
+              "size": 15872,
+              "sha256": "f57e02e954244781d86a7c1a849be24142c4aa4883c07aa9cd93be0919d2e50c"
+            },
+            {
+              "path": "FeatureDictionary.pfs",
+              "size": 608083,
+              "sha256": "8ee86b7abd13390d06f251de998fb578e149cc42e7ea9114212ff6af4c956828"
+            },
+            {
+              "path": "Newtonsoft.Json.dll",
+              "size": 711952,
+              "sha256": "e1e27af7b07eeedf5ce71a9255f0422816a6fc5849a483c6714e1b472044fa9d"
+            },
+            {
+              "path": "ViVeTool.exe",
+              "size": 51200,
+              "sha256": "d3b69c982622a26ad0b37c65b8f006b5139e50aeb45fda68734a33ca28706dea"
+            }
+          ]
+        },
+        {
+          "architecture": "Arm64",
+          "name": "ViVeTool-v0.3.4-SnapdragonArm64.zip",
+          "archiveSize": 538467,
+          "archiveSha256": "30ad9a4912686355bfce60e1d7bef608735475b7e2160d67418eed8f5e3ba8c7",
+          "executablePeMachine": 43620,
+          "members": [
+            {
+              "path": "Albacore.ViVe.dll",
+              "size": 15872,
+              "sha256": "f57e02e954244781d86a7c1a849be24142c4aa4883c07aa9cd93be0919d2e50c"
+            },
+            {
+              "path": "FeatureDictionary.pfs",
+              "size": 608083,
+              "sha256": "8ee86b7abd13390d06f251de998fb578e149cc42e7ea9114212ff6af4c956828"
+            },
+            {
+              "path": "Newtonsoft.Json.dll",
+              "size": 711952,
+              "sha256": "e1e27af7b07eeedf5ce71a9255f0422816a6fc5849a483c6714e1b472044fa9d"
+            },
+            {
+              "path": "ViVeTool.exe",
+              "size": 50688,
+              "sha256": "01478449e91e051ae461d7967ebbb3349f7e338b2b65b1c34fe6db10de70853b"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
