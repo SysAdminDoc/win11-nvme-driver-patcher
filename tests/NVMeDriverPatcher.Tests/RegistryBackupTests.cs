@@ -50,6 +50,15 @@ public sealed class RegistryBackupTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("Storage Disks", "Storage Disks")]
+    [InlineData(@"C:\Path\With\Slashes", @"C:\\Path\\With\\Slashes")]
+    [InlineData("has \"quotes\"", "has \\\"quotes\\\"")]
+    public void EscapeRegString_EscapesBackslashesAndQuotes(string input, string expected)
+    {
+        Assert.Equal(expected, RegistryService.EscapeRegString(input));
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_dir, recursive: true); } catch { }

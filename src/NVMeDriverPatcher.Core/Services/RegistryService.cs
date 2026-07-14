@@ -212,7 +212,7 @@ public static class RegistryService
                     lines.Add("");
                     lines.Add($@"[HKEY_LOCAL_MACHINE\{path}]");
                     if (key.GetValue("") is string val && !string.IsNullOrEmpty(val))
-                        lines.Add($"@=\"{val}\"");
+                        lines.Add($"@=\"{EscapeRegString(val)}\"");
                 }
                 else
                 {
@@ -251,6 +251,12 @@ public static class RegistryService
             return null;
         }
     }
+
+    // .reg string values require backslashes and double-quotes to be escaped, or regedit silently
+    // refuses to import the file — defeating the recovery purpose. Our values are app-controlled
+    // ("Storage Disks") today, but a captured pre-existing value could contain either.
+    internal static string EscapeRegString(string value) =>
+        value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
     public static bool IsServerKeyApplied()
     {

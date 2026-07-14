@@ -58,6 +58,11 @@ public static class EtwTraceService
 
         try
         {
+            // Clear any stale kernel session left by a prior capture that was killed between -start
+            // and -stop (crash/taskkill/reset). Without this, -start fails with "already recording"
+            // and the session lingers until reboot. Best-effort — a no-op when nothing is recording.
+            try { await RunWprAsync(new[] { "-cancel" }, 15, CancellationToken.None); } catch { }
+
             await RunWprAsync(new[] { "-start", DefaultProfile, "-filemode" }, 30, cancellationToken);
             try
             {
