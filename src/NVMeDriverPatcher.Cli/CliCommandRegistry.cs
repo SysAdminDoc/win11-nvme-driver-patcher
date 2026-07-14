@@ -54,6 +54,8 @@ public static class CliCommandRegistry
         // ── Recovery ──
         new("recovery-kit", ["export-recovery-kit"], CommandGroup.Recovery,
             "Generate WinRE recovery kit (.reg + .bat + README)"),
+        new("verify-payload", ["payload-integrity"], CommandGroup.Recovery,
+            "Verify a generated directory or ZIP against ARTIFACT-MANIFEST.json (--input=<path>)"),
         new("kit-freshness", ["recovery-kit-freshness"], CommandGroup.Recovery,
             "Check recovery kit age and freshness status"),
         new("upgrade-safeboot", ["safeboot-upgrade"], CommandGroup.Recovery,

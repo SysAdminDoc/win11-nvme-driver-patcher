@@ -5,6 +5,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Generated recovery and deployment payloads are now self-verifying** — Recovery Kit, WinPE
+  media, support-bundle ZIPs, and the release-built Intune source bundle publish
+  `ARTIFACT-MANIFEST.json` last with schema/tool version and per-file role, length, and SHA-256.
+  The read-only `verify-payload` CLI reports the exact missing, unexpected, truncated, or
+  modified path. Recovery now keeps registry commands in a separate mutation script and its
+  documented batch entry point verifies the complete fixed file set before calling it; WinPE
+  also rejects an unverified source kit and proves its final media tree before ISO creation.
 - **Hot-swap is now a verified device-state transaction** — non-boot swaps fail before dismount
   when a volume handle cannot be opened or `FlushFileBuffers` returns false. The transition now
   targets the resolved parent controller through `DIF_PROPERTYCHANGE`, reads

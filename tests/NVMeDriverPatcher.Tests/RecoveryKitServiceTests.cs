@@ -46,7 +46,7 @@ public sealed class RecoveryKitServiceTests : IDisposable
         var kitDir = RecoveryKitService.Export(_tempRoot);
 
         Assert.NotNull(kitDir);
-        var batch = File.ReadAllText(Path.Combine(kitDir!, "Remove_NVMe_Patch.bat"));
+        var batch = File.ReadAllText(Path.Combine(kitDir!, RecoveryKitService.MutationScriptFileName));
         Assert.Contains(@"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinPE", batch, StringComparison.Ordinal);
         Assert.DoesNotContain(@"reg query ""HKLM\SYSTEM\CurrentControlSet""", batch, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("for /L %%N in (1,1,9)", batch, StringComparison.Ordinal);
@@ -66,7 +66,7 @@ public sealed class RecoveryKitServiceTests : IDisposable
         Assert.Contains(@"SafeBoot\Network\nvmedisk", reg);
         Assert.Contains("Remove_NVMe_Patch.bat is the canonical removal path", reg);
 
-        var bat = File.ReadAllText(Path.Combine(kitDir!, "Remove_NVMe_Patch.bat"));
+        var bat = File.ReadAllText(Path.Combine(kitDir!, RecoveryKitService.MutationScriptFileName));
         Assert.Contains(@"SafeBoot\Minimal\nvmedisk", bat);
         Assert.Contains(@"SafeBoot\Network\nvmedisk", bat);
         // Offline sweep covers rolled control sets; service-name entries must be in the loop.
@@ -106,6 +106,74 @@ public sealed class RecoveryKitServiceTests : IDisposable
 
         // No stray LF once CRLF pairs are removed — guards against mixed line endings.
         Assert.DoesNotContain("\n", bat.Replace("\r\n", string.Empty));
+    }
+
+    [Fact]
+    public void Export_PublishesVerifiedManifestAndGuardsMutationBehindHashChecks()
+    {
+        var kitDir = RecoveryKitService.Export(_tempRoot);
+
+        Assert.NotNull(kitDir);
+        var manifestPath = Path.Combine(kitDir!, GeneratedArtifactManifestService.ManifestFileName);
+        Assert.True(File.Exists(manifestPath));
+        var verification = GeneratedArtifactManifestService.VerifyDirectory(kitDir);
+        Assert.True(verification.Success, verification.Summary);
+        Assert.Equal("recovery-kit", verification.PayloadType);
+
+        var guard = File.ReadAllText(Path.Combine(kitDir, RecoveryKitService.GuardScriptFileName));
+        Assert.Contains("where certutil.exe", guard, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Expected exactly 5 recovery-kit files", guard, StringComparison.Ordinal);
+        Assert.Contains("failed SHA-256 verification", guard, StringComparison.Ordinal);
+        Assert.Contains($"call \"{RecoveryKitService.MutationScriptFileName}\"", guard, StringComparison.Ordinal);
+        Assert.True(guard.IndexOf($"call :verify \"{RecoveryKitService.MutationScriptFileName}\"", StringComparison.Ordinal) <
+                    guard.IndexOf($"call \"{RecoveryKitService.MutationScriptFileName}\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Export_TamperedMutationIsReportedAndGuardPinsOriginalHash()
+    {
+        var kitDir = RecoveryKitService.Export(_tempRoot);
+        Assert.NotNull(kitDir);
+        var mutationPath = Path.Combine(kitDir!, RecoveryKitService.MutationScriptFileName);
+        var originalHash = GeneratedArtifactManifestService.ComputeSha256(mutationPath);
+        var guard = File.ReadAllText(Path.Combine(kitDir, RecoveryKitService.GuardScriptFileName));
+        Assert.Contains(originalHash, guard, StringComparison.OrdinalIgnoreCase);
+
+        File.AppendAllText(mutationPath, "\r\nrem corrupted");
+
+        var verification = GeneratedArtifactManifestService.VerifyDirectory(kitDir);
+        Assert.False(verification.Success);
+        Assert.Contains(verification.Issues, issue =>
+            issue.RelativePath == RecoveryKitService.MutationScriptFileName &&
+            issue.Kind == ArtifactIntegrityIssueKind.LengthMismatch);
+    }
+
+    [Fact]
+    public void GuardScript_RefusesSameLengthTamperBeforeMutationScriptRuns()
+    {
+        var kitDir = RecoveryKitService.Export(_tempRoot);
+        Assert.NotNull(kitDir);
+        var mutationPath = Path.Combine(kitDir!, RecoveryKitService.MutationScriptFileName);
+        var bytes = File.ReadAllBytes(mutationPath);
+        bytes[0] ^= 0x01; // preserve length so the SHA-256 check, not the length check, must stop it
+        File.WriteAllBytes(mutationPath, bytes);
+
+        using var process = new System.Diagnostics.Process();
+        process.StartInfo = new System.Diagnostics.ProcessStartInfo(
+            "cmd.exe", $"/d /c \"\"{Path.Combine(kitDir, RecoveryKitService.GuardScriptFileName)}\"\"")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WorkingDirectory = kitDir
+        };
+        process.Start();
+        var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(10_000), "Recovery integrity guard did not exit.");
+
+        Assert.Equal(2, process.ExitCode);
+        Assert.Contains("failed SHA-256 verification", output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Patch removed. Reboot", output, StringComparison.OrdinalIgnoreCase);
     }
 
     public void Dispose()

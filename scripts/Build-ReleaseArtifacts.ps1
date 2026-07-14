@@ -109,6 +109,8 @@ if (-not $SkipMsi) {
         "ProjectRoot=$repoRoot",
         '-loc',
         (Join-Path $repoRoot 'packaging/wix/en-US.wxl'),
+        '-bindpath',
+        (Join-Path $repoRoot 'packaging/wix'),
         '-ext',
         'WixToolset.UI.wixext',
         '-ext',
@@ -116,6 +118,40 @@ if (-not $SkipMsi) {
         '-out',
         (Join-Path $publishRoot "NVMeDriverPatcher-$Version.msi")
     )
+
+    $intuneStage = Join-Path $publishRoot 'intune-input'
+    New-Item -ItemType Directory -Path $intuneStage -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $publishRoot "NVMeDriverPatcher-$Version.msi") -Destination $intuneStage -Force
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'packaging/intune/Detect-NVMeDriverPatcher.ps1') -Destination $intuneStage -Force
+    Invoke-Checked powershell.exe @(
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        (Join-Path $repoRoot 'scripts/New-ArtifactManifest.ps1'),
+        '-PayloadRoot',
+        $intuneStage,
+        '-PayloadType',
+        'intune-source',
+        '-ToolVersion',
+        $Version
+    )
+    $intuneZip = Join-Path $publishRoot "NVMeDriverPatcher.Intune-$Version.zip"
+    $intuneZipTemp = Join-Path $publishRoot ("NVMeDriverPatcher.Intune-{0}.{1}.tmp.zip" -f $Version, [Guid]::NewGuid().ToString('N'))
+    $intuneZipBackup = $intuneZip + '.replace-backup'
+    try {
+        Compress-Archive -Path (Join-Path $intuneStage '*') -DestinationPath $intuneZipTemp -Force
+        if (Test-Path -LiteralPath $intuneZip) {
+            if (Test-Path -LiteralPath $intuneZipBackup) { Remove-Item -LiteralPath $intuneZipBackup -Force }
+            [IO.File]::Replace($intuneZipTemp, $intuneZip, $intuneZipBackup)
+            Remove-Item -LiteralPath $intuneZipBackup -Force
+        }
+        else { [IO.File]::Move($intuneZipTemp, $intuneZip) }
+    }
+    finally {
+        if (Test-Path -LiteralPath $intuneZipTemp) { Remove-Item -LiteralPath $intuneZipTemp -Force }
+        if (Test-Path -LiteralPath $intuneZipBackup) { Remove-Item -LiteralPath $intuneZipBackup -Force }
+    }
 }
 
 $moduleZip = Join-Path $publishRoot "NVMeDriverPatcher.PowerShell-$Version.zip"

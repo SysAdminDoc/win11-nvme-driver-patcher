@@ -28,6 +28,23 @@ class Program
             }
             if (!CliCommandRegistry.IsKnown(command))
                 return Unknown(command);
+
+            // Payload verification is read-only and must not initialize shared app state. Keep it
+            // ahead of the in-process administrator gate for DLL-hosted support tooling; the
+            // published EXE still carries the product-wide requireAdministrator manifest.
+            if (command is "verify-payload" or "payload-integrity")
+            {
+                var payloadPath = args.Skip(1)
+                    .Select(a => a ?? string.Empty)
+                    .FirstOrDefault(a => a.StartsWith("--input=", StringComparison.OrdinalIgnoreCase))?
+                    .Substring("--input=".Length);
+                payloadPath ??= args.Skip(1)
+                    .Select(a => a ?? string.Empty)
+                    .FirstOrDefault(a => !a.StartsWith("-", StringComparison.Ordinal));
+                var payloadJson = args.Any(a => a is not null &&
+                    a.Equals("--json", StringComparison.OrdinalIgnoreCase));
+                return VerifyPayloadCommand(payloadPath, payloadJson);
+            }
             if (!PreflightService.IsRunningAsAdmin())
             {
                 Console.Error.WriteLine("Administrator privileges are required for NVMe Driver Patcher CLI operations.");
@@ -205,6 +222,43 @@ class Program
     // Routing validation is derived from CliCommandRegistry — no more hand-maintained parallel list.
     // The switch expression in Main still dispatches to concrete handler methods (refactoring that
     // into dynamic dispatch would add complexity without improving safety).
+
+    static int VerifyPayloadCommand(string? payloadPath, bool json)
+    {
+        if (string.IsNullOrWhiteSpace(payloadPath))
+        {
+            Console.Error.WriteLine("A payload directory or ZIP is required: --input=<path>");
+            return 3;
+        }
+
+        var result = GeneratedArtifactManifestService.Verify(payloadPath);
+        if (json)
+        {
+            var body = new
+            {
+                success = result.Success,
+                payloadPath = result.PayloadPath,
+                payloadType = result.PayloadType,
+                schemaVersion = result.SchemaVersion,
+                summary = result.Summary,
+                issues = result.Issues.Select(i => new
+                {
+                    kind = i.Kind.ToString(),
+                    relativePath = i.RelativePath,
+                    detail = i.Detail
+                })
+            };
+            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(body,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        }
+        else
+        {
+            Console.WriteLine(result.Summary);
+            foreach (var issue in result.Issues)
+                Console.Error.WriteLine($"  [{issue.Kind}] {issue.RelativePath}: {issue.Detail}");
+        }
+        return result.Success ? 0 : 1;
+    }
 
     static int DocsCommand(string? topic)
     {

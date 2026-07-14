@@ -74,17 +74,24 @@ public static class WinPERecoveryBuilderService
     {
         var result = new WinPEBuildResult();
 
-        if (!IsAdkAvailable(out var winPeRoot))
-        {
-            result.Success = false;
-            result.Summary = "Windows ADK + WinPE add-on not detected. Install from: " + AdkDownloadUrl;
-            return result;
-        }
-
         if (string.IsNullOrWhiteSpace(options.OutputDir))
         {
             result.Success = false;
             result.Summary = "OutputDir not set.";
+            return result;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.RecoveryKitDir) || !Directory.Exists(options.RecoveryKitDir))
+        {
+            result.Success = false;
+            result.Summary = "A generated, self-verifying Recovery Kit is required before WinPE media can be built.";
+            return result;
+        }
+
+        if (!IsAdkAvailable(out var winPeRoot))
+        {
+            result.Success = false;
+            result.Summary = "Windows ADK + WinPE add-on not detected. Install from: " + AdkDownloadUrl;
             return result;
         }
 
@@ -125,12 +132,20 @@ public static class WinPERecoveryBuilderService
                 var kitOut = Path.Combine(treeDir, "media", "NVMe_Recovery_Kit");
                 try
                 {
+                    var sourceIntegrity = GeneratedArtifactManifestService.VerifyDirectory(options.RecoveryKitDir);
+                    if (!sourceIntegrity.Success)
+                        throw new InvalidDataException("Source Recovery Kit failed integrity verification: " +
+                            string.Join("; ", sourceIntegrity.Issues.Select(i => $"{i.RelativePath}: {i.Detail}")));
                     CopyDir(options.RecoveryKitDir, kitOut);
+                    var copiedIntegrity = GeneratedArtifactManifestService.VerifyDirectory(kitOut);
+                    if (!copiedIntegrity.Success)
+                        throw new InvalidDataException("Copied Recovery Kit failed integrity verification: " +
+                            string.Join("; ", copiedIntegrity.Issues.Select(i => $"{i.RelativePath}: {i.Detail}")));
                     log?.Invoke($"[INFO] Recovery Kit copied to {kitOut}");
                 }
                 catch (Exception ex)
                 {
-                    result.Warnings.Add($"Recovery Kit copy failed: {ex.Message}");
+                    throw new InvalidDataException($"Recovery Kit copy failed: {ex.Message}", ex);
                 }
             }
 
@@ -139,6 +154,15 @@ public static class WinPERecoveryBuilderService
             // reads — it only ever runs the copy inside the image, so the recovery announcement
             // silently never appeared on the exact can't-boot path the stick exists for.
             await InjectStartnetIntoBootWimAsync(treeDir, result, log, cancellationToken);
+
+            // The media root is the payload users copy to USB and the exact tree consumed by
+            // MakeWinPEMedia. Publish its inventory only after boot.wim injection is committed.
+            var mediaRoot = Path.Combine(treeDir, "media");
+            var mediaIntegrity = PublishMediaManifest(mediaRoot);
+            if (!mediaIntegrity.Success)
+                throw new InvalidDataException(mediaIntegrity.Summary + " " +
+                    string.Join("; ", mediaIntegrity.Issues.Select(i => $"{i.RelativePath}: {i.Detail}")));
+            log?.Invoke($"[INFO] WinPE media manifest published at {Path.Combine(mediaRoot, GeneratedArtifactManifestService.ManifestFileName)}");
 
             if (options.ProduceIso)
             {
@@ -160,6 +184,11 @@ public static class WinPERecoveryBuilderService
                     result.Warnings.Add("MakeWinPEMedia returned 0 but ISO file is missing.");
                 }
             }
+
+            var finalIntegrity = GeneratedArtifactManifestService.VerifyDirectory(mediaRoot);
+            if (!finalIntegrity.Success)
+                throw new InvalidDataException("WinPE media changed after manifest publication: " +
+                    string.Join("; ", finalIntegrity.Issues.Select(i => $"{i.RelativePath}: {i.Detail}")));
 
             result.Success = true;
             result.Summary = result.IsoPath is not null
@@ -280,6 +309,24 @@ public static class WinPERecoveryBuilderService
             Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
             File.Copy(file, dst, overwrite: true);
         }
+    }
+
+    internal static ArtifactIntegrityResult PublishMediaManifest(string mediaRoot)
+    {
+        GeneratedArtifactManifestService.PublishDirectoryManifest(
+            mediaRoot,
+            "winpe-recovery-media",
+            WinPeMediaRole);
+        return GeneratedArtifactManifestService.VerifyDirectory(mediaRoot);
+    }
+
+    private static string WinPeMediaRole(string relativePath)
+    {
+        if (relativePath.Equals("sources/boot.wim", StringComparison.OrdinalIgnoreCase)) return "boot-image";
+        if (relativePath.StartsWith("NVMe_Recovery_Kit/", StringComparison.OrdinalIgnoreCase)) return "embedded-recovery-kit";
+        if (relativePath.StartsWith("boot/", StringComparison.OrdinalIgnoreCase) ||
+            relativePath.StartsWith("efi/", StringComparison.OrdinalIgnoreCase)) return "bootloader";
+        return "winpe-runtime";
     }
 
     private static async Task RunProcessAsync(string file, string[] args, int timeoutSeconds, CancellationToken cancellationToken)

@@ -44,6 +44,15 @@ function Get-Sha256Hex {
     }
 }
 
+function Get-StreamSha256Hex {
+    param([Parameter(Mandatory)] [System.IO.Stream]$Stream)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return -join ($sha.ComputeHash($Stream) | ForEach-Object { $_.ToString('x2') })
+    }
+    finally { $sha.Dispose() }
+}
+
 function Get-PeMachine {
     param([Parameter(Mandatory)] [string]$Path)
 
@@ -122,6 +131,86 @@ foreach ($a in $contract.artifacts) {
         $yaml = Get-Content -Raw $full
         if ($yaml -notmatch "PackageVersion:\s*$([regex]::Escape($Version))\b") {
             $failures.Add("$($a.id) PackageVersion is not $Version")
+        }
+    }
+
+    if ($a.id -eq 'intune-source') {
+        try {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $zip = [System.IO.Compression.ZipFile]::OpenRead($full)
+            try {
+                $manifestEntries = @($zip.Entries | Where-Object { $_.FullName -ieq 'ARTIFACT-MANIFEST.json' })
+                if ($manifestEntries.Count -ne 1) {
+                    $failures.Add("Intune source ZIP must contain exactly one ARTIFACT-MANIFEST.json; found $($manifestEntries.Count)")
+                }
+                else {
+                    $reader = [IO.StreamReader]::new($manifestEntries[0].Open(), [Text.Encoding]::UTF8, $true)
+                    try { $payloadManifest = $reader.ReadToEnd() | ConvertFrom-Json }
+                    finally { $reader.Dispose() }
+
+                    if ($payloadManifest.schemaVersion -ne 1) { $failures.Add('Intune source manifest schemaVersion must be 1') }
+                    if ($payloadManifest.toolVersion -ne $Version) { $failures.Add("Intune source manifest toolVersion is '$($payloadManifest.toolVersion)', expected $Version") }
+                    if ($payloadManifest.payloadType -ne 'intune-source') { $failures.Add("Intune source manifest payloadType must be intune-source") }
+
+                    $records = @{}
+                    foreach ($record in @($payloadManifest.files)) {
+                        $key = ([string]$record.relativePath).ToLowerInvariant()
+                        if (-not $key -or $key.Contains('..') -or $key.Contains('\')) {
+                            $failures.Add("Intune source manifest contains unsafe path '$($record.relativePath)'")
+                        }
+                        elseif ($records.ContainsKey($key)) {
+                            $failures.Add("Intune source manifest contains duplicate path '$($record.relativePath)'")
+                        }
+                        else { $records[$key] = $record }
+                    }
+
+                    $actual = @{}
+                    foreach ($entry in $zip.Entries | Where-Object { $_.Name -and $_.FullName -ine 'ARTIFACT-MANIFEST.json' }) {
+                        $key = $entry.FullName.ToLowerInvariant()
+                        if ($actual.ContainsKey($key)) {
+                            $failures.Add("Intune source ZIP contains duplicate path '$($entry.FullName)'")
+                            continue
+                        }
+                        $actual[$key] = $entry
+                    }
+                    foreach ($key in $records.Keys) {
+                        if (-not $actual.ContainsKey($key)) {
+                            $failures.Add("Intune source ZIP is missing required manifest file '$($records[$key].relativePath)'")
+                            continue
+                        }
+                        $entry = $actual[$key]
+                        $record = $records[$key]
+                        if ([long]$record.byteLength -ne [long]$entry.Length) {
+                            $failures.Add("Intune source length mismatch for '$($entry.FullName)'")
+                            continue
+                        }
+                        $stream = $entry.Open()
+                        try { $entryHash = Get-StreamSha256Hex $stream }
+                        finally { $stream.Dispose() }
+                        if ($entryHash -ne [string]$record.sha256) {
+                            $failures.Add("Intune source SHA-256 mismatch for '$($entry.FullName)'")
+                        }
+                        $actual.Remove($key)
+                    }
+                    foreach ($key in $actual.Keys) {
+                        $failures.Add("Intune source ZIP contains unexpected file '$($actual[$key].FullName)'")
+                    }
+
+                    $msiName = "NVMeDriverPatcher-$Version.msi"
+                    $msiRecord = $records[$msiName.ToLowerInvariant()]
+                    if ($null -eq $msiRecord -or $msiRecord.role -ne 'installer') {
+                        $failures.Add("Intune source manifest must declare $msiName with installer role")
+                    }
+                    $detectRecord = $records['detect-nvmedriverpatcher.ps1']
+                    if ($null -eq $detectRecord -or $detectRecord.role -ne 'detection-script') {
+                        $failures.Add('Intune source manifest must declare Detect-NVMeDriverPatcher.ps1 with detection-script role')
+                    }
+                }
+            }
+            finally { $zip.Dispose() }
+        }
+        catch {
+            $failures.Add("Intune source ZIP integrity validation failed: $($_.Exception.Message)")
         }
     }
 
