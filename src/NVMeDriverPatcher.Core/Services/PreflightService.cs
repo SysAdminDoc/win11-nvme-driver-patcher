@@ -7,6 +7,7 @@ namespace NVMeDriverPatcher.Services;
 public class PreflightResult
 {
     public Dictionary<string, PreflightCheck> Checks { get; set; } = [];
+    public CriticalProbeReport CriticalProbes { get; set; } = new();
     public WindowsBuildDetails? BuildDetails { get; set; }
     public List<SystemDrive> CachedDrives { get; set; } = [];
     public bool HasNVMeDrives { get; set; }
@@ -47,13 +48,13 @@ public static class PreflightService
     {
         var result = new PreflightResult();
         var checks = new Dictionary<string, PreflightCheck>();
+        result.CriticalProbes = CriticalEnvironmentProbeService.EvaluateRegistryPatch();
 
         // Admin should already be enforced by the assembly manifest, but verify at runtime
         // anyway so a side-loaded launch (e.g. weird shell that strips elevation) still fails
         // loudly instead of silently doing nothing when registry writes are denied.
-        checks["AdminPrivileges"] = IsRunningAsAdmin()
-            ? new(CheckStatus.Pass, "Administrator", true)
-            : new(CheckStatus.Fail, "Administrator privileges required", true);
+        checks["AdminPrivileges"] = ToPreflightCheck(
+            FindCriticalProbe(result.CriticalProbes, "Administrator"));
 
         // 1. Windows Version
         log?.Invoke("  [1/11] Checking Windows version...");
@@ -127,23 +128,8 @@ public static class PreflightService
         // feature write. On newer builds Windows ships these keys itself (a named "NvmeDisk" value)
         // and may deny writes; blindly proceeding risks a failed apply or, on removal, erasing
         // OS-owned state. Surface denied/conflicting/foreign keys honestly.
-        try
-        {
-            var (min, net) = SafeBootStateService.ClassifyGuidKeys(new RealSafeBootRegistry());
-            var worst = new[] { min, net }.Max();
-            checks["SafeBootWritable"] = worst switch
-            {
-                SafeBootKeyDisposition.AccessDenied => new(CheckStatus.Fail,
-                    "SafeBoot GUID key write access DENIED — Windows owns these keys on this build (issue #13). Apply would fail and could not add Safe Mode protection.", true),
-                SafeBootKeyDisposition.ForeignValuesPresent => new(CheckStatus.Warning,
-                    "SafeBoot GUID keys already carry OS-owned values (e.g. NvmeDisk). The patch will preserve them and remove only what it adds."),
-                SafeBootKeyDisposition.ConflictingDefault => new(CheckStatus.Warning,
-                    "SafeBoot GUID keys hold a different default value than expected — the patch will record and restore it on removal."),
-                SafeBootKeyDisposition.AlreadyCorrect => new(CheckStatus.Pass, "SafeBoot GUID keys already set correctly"),
-                _ => new(CheckStatus.Pass, "SafeBoot GUID keys are writable"),
-            };
-        }
-        catch { /* probe is best-effort */ }
+        checks["SafeBootWritable"] = ToPreflightCheck(
+            FindCriticalProbe(result.CriticalProbes, "SafeBoot"));
 
         // 2. NVMe Drives
         log?.Invoke("  [2/11] Scanning drives...");
@@ -166,13 +152,12 @@ public static class PreflightService
         log?.Invoke("  [3/11] Checking BitLocker...");
         try
         {
-            result.BitLockerRecovery = BitLockerRecoveryService.InspectSystemVolume();
-            result.BitLockerEnabled = result.BitLockerRecovery.Volume.IsEncrypted;
-            checks["BitLocker"] = !result.BitLockerRecovery.ReadyForMutation
-                ? new(CheckStatus.Fail, result.BitLockerRecovery.Detail, true)
-                : result.BitLockerEnabled
-                    ? new(CheckStatus.Warning, result.BitLockerRecovery.Detail, true)
-                    : new(CheckStatus.Pass, result.BitLockerRecovery.Detail, true);
+            var bitLockerProbe = FindCriticalProbe(result.CriticalProbes, "BitLocker");
+            result.BitLockerRecovery = result.CriticalProbes.BitLockerRecovery;
+            result.BitLockerEnabled = result.BitLockerRecovery?.Volume.IsEncrypted == true;
+            checks["BitLocker"] = bitLockerProbe.Verdict == CriticalProbeVerdict.Pass && result.BitLockerEnabled
+                ? new(CheckStatus.Warning, bitLockerProbe.Detail, true)
+                : ToPreflightCheck(bitLockerProbe);
 
             // The swap changes the driver stack for ALL NVMe controllers, not just the OS volume.
             // A BitLocker-protected NON-system volume WITHOUT auto-unlock re-locks after the reboot.
@@ -189,18 +174,9 @@ public static class PreflightService
 
         // 4. VeraCrypt
         log?.Invoke("  [4/11] Checking VeraCrypt...");
-        try
-        {
-            result.VeraCryptDetected = DriveService.TestVeraCryptSystemEncryption();
-            checks["VeraCrypt"] = result.VeraCryptDetected
-                ? new(CheckStatus.Fail, "BLOCKS PATCH - breaks boot", true)
-                : new(CheckStatus.Pass, "Not detected", true);
-        }
-        catch (Exception ex)
-        {
-            log?.Invoke($"    [ERROR] VeraCrypt check failed: {ex.Message}");
-            checks["VeraCrypt"] = new(CheckStatus.Warning, "Unable to verify", true);
-        }
+        var veraCryptProbe = FindCriticalProbe(result.CriticalProbes, "VeraCrypt");
+        result.VeraCryptDetected = veraCryptProbe.Verdict == CriticalProbeVerdict.Fail;
+        checks["VeraCrypt"] = ToPreflightCheck(veraCryptProbe);
 
         // 5. Laptop / Power
         log?.Invoke("  [5/11] Checking chassis type...");
@@ -232,27 +208,10 @@ public static class PreflightService
         {
             result.IncompatibleSoftware = DriveService.GetIncompatibleSoftware() ?? [];
 
-            // Critical items (Intel RST, Intel VMD) are hard blockers — they cause BSOD/boot
-            // failures and must surface as a blocking Fail, not a dismissible warning.
-            var criticalSw = result.IncompatibleSoftware.Where(s => s.Severity == "Critical").ToList();
-            var warnSw     = result.IncompatibleSoftware.Where(s => s.Severity != "Critical").ToList();
-
-            if (criticalSw.Count > 0)
-            {
-                var names = criticalSw.Select(s => s.Name).ToList();
-                string msg = names.Count <= 3
-                    ? string.Join(", ", names)
-                    : $"{string.Join(", ", names.Take(3))} +{names.Count - 3} more";
-                checks["Compatibility"] = new(CheckStatus.Fail, $"BLOCKS PATCH: {msg}", critical: true);
-            }
-            else if (warnSw.Count > 0)
-            {
-                var names = warnSw.Select(s => s.Name).ToList();
-                string msg = names.Count <= 3 ? string.Join(", ", names) : $"{string.Join(", ", names.Take(3))} +{names.Count - 3} more";
-                checks["Compatibility"] = new(CheckStatus.Warning, msg);
-            }
-            else
-                checks["Compatibility"] = new(CheckStatus.Pass, "No conflicts");
+            var intelProbe = FindCriticalProbe(result.CriticalProbes, "IntelStorage");
+            checks["Compatibility"] = intelProbe.Verdict == CriticalProbeVerdict.Pass
+                ? ClassifyCompatibility(result.IncompatibleSoftware)
+                : ToPreflightCheck(intelProbe);
         }
         catch (Exception ex)
         {
@@ -447,6 +406,28 @@ public static class PreflightService
         if (checks is null) return false;
         return checks.Values.All(c => !c.Critical || c.Status != CheckStatus.Fail);
     }
+
+    private static CriticalProbeResult FindCriticalProbe(CriticalProbeReport report, string id) =>
+        report.Items.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal)) ??
+        new CriticalProbeResult
+        {
+            Id = id,
+            Label = id,
+            Verdict = CriticalProbeVerdict.Unknown,
+            ReasonCode = CriticalProbeReasonCode.InvalidEvidence,
+            Detail = "Required critical probe result is missing; mutation is blocked.",
+            Evidence = ["probe result missing"],
+            ObservedAtUtc = DateTimeOffset.UtcNow
+        };
+
+    internal static PreflightCheck ToPreflightCheck(CriticalProbeResult probe) => probe.Verdict switch
+    {
+        CriticalProbeVerdict.Pass => new(CheckStatus.Pass, probe.Detail, true),
+        CriticalProbeVerdict.Fail => new(CheckStatus.Fail,
+            $"BLOCKED [{probe.ReasonCode}]: {probe.Detail}", true),
+        _ => new(CheckStatus.Fail,
+            $"UNKNOWN [{probe.ReasonCode}]: {probe.Detail}", true)
+    };
 
     public static bool IsRunningAsAdmin()
     {

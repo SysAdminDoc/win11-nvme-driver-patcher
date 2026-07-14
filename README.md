@@ -92,6 +92,7 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 
 **Safety & Compatibility**
 - **VeraCrypt hard block** -- detects system encryption and refuses to patch ([breaks boot entirely](https://github.com/veracrypt/VeraCrypt/issues/1640))
+- **Typed critical environment gate** -- administrator, VeraCrypt, Intel RST/VMD, BitLocker, and SafeBoot probes return `Pass`, `Fail`, or `Unknown` with reason code, native error, evidence, and timestamp; `Fail`/`Unknown` cannot be forced past
 - **Proved BitLocker recovery + suspension** -- requires a numerical recovery-password protector, surfaces only its safe-to-match ID, refreshes AD/Entra escrow on joined devices, and WMI-confirms an exact one-reboot suspension before mutation
 - **Crash-consistent mutation ledger** -- durably captures the first clean registry, SafeBoot, and FeatureStore baseline before mutation; interrupted work and uninstall restore that exact state, and restart is not offered until the reboot checkpoint is durable
 - **Comprehensive software detection** -- warns about Intel RST (BSOD risk), Intel VMD (boot failures), Hyper-V/WSL2 (40% I/O regression), Storage Spaces (array degradation), Veeam, Acronis, Macrium, UrBackup, NinjaOne, Paragon, Samsung Magician, WD Dashboard, Crucial Storage Executive, CrystalDiskInfo, Data Deduplication
@@ -169,7 +170,7 @@ All CLI operations require Administrator privileges.
 .\NVMe_Driver_Patcher.ps1 -ExportRecoveryKit
 ```
 
-### Extended CLI (C# binary — 42 commands)
+### Extended CLI (C# binary — 58 commands)
 
 Run `NVMeDriverPatcher.Cli help` for the full grouped command reference.
 
@@ -186,6 +187,7 @@ NVMeDriverPatcher.Cli recovery-proof [--json]              # Prove recovery infr
 NVMeDriverPatcher.Cli upgrade-safeboot                     # Add KB5079391 SafeBoot entries
 
 # Diagnostics
+NVMeDriverPatcher.Cli preflight [--json]                   # Typed critical probes (exit: 0 pass, 1 blocked, 2 unknown)
 NVMeDriverPatcher.Cli watchdog                             # Stability verdict (exit: 0/1/2)
 NVMeDriverPatcher.Cli watchdog-service                     # Real-time service state
 NVMeDriverPatcher.Cli reliability                          # Reliability Monitor correlation

@@ -55,6 +55,26 @@ public sealed class DryRunServiceTests
     }
 
     [Fact]
+    public void UnknownCriticalProbe_PropagatesAsPreflightBlocker()
+    {
+        var preflight = new PreflightResult();
+        preflight.CriticalProbes.Items.Add(new CriticalProbeResult
+        {
+            Id = "IntelStorage",
+            Label = "Intel RST/VMD",
+            Verdict = CriticalProbeVerdict.Unknown,
+            ReasonCode = CriticalProbeReasonCode.Timeout,
+            Detail = "Driver query timed out.",
+            ObservedAtUtc = DateTimeOffset.UtcNow
+        });
+
+        var report = DryRunService.PlanInstall(new AppConfig(), preflight);
+
+        Assert.Single(report.PreflightBlockers);
+        Assert.Contains("Unknown [Timeout]", report.PreflightBlockers[0]);
+    }
+
+    [Fact]
     public void Markdown_IncludesAllRegistryItems()
     {
         var config = new AppConfig { PatchProfile = PatchProfile.Safe };

@@ -50,6 +50,20 @@ public partial class MainViewModel
                 return;
             }
 
+            if (!_preflight.CriticalProbes.AllPassed)
+            {
+                var blocked = _preflight.CriticalProbes.Items.Where(item => item.BlocksMutation).ToList();
+                foreach (var probe in blocked)
+                    Log($"[ERROR] BLOCKED [{probe.Id}/{probe.Verdict}/{probe.ReasonCode}]: {probe.Detail}", "ERROR");
+                InfoDialog?.Invoke("Critical Safety Proof Failed",
+                    "The storage-driver change is blocked because a boot-critical condition failed or could not be verified. " +
+                    "Refresh preflight after resolving it; expert mode cannot bypass this gate.\n\n" +
+                    string.Join("\n", blocked.Select(probe =>
+                        $"• {probe.Label}: {probe.Verdict} [{probe.ReasonCode}] — {probe.Detail}")),
+                    DialogIcon.Error);
+                return;
+            }
+
             // Defense in depth: the button is disabled on unsupported builds, but refuse here too
             // in case a code path re-enabled it. There is no GUI override — the CLI's interactive
             // --force-unsupported-build is the only escape hatch.
@@ -75,8 +89,6 @@ public partial class MainViewModel
 
         var result = await Task.Run(() => PatchService.Install(
             Config,
-            _preflight.BitLockerEnabled,
-            _preflight.VeraCryptDetected,
             _preflight.NativeNVMeStatus,
             _preflight.BypassIOStatus,
             msg => Log(msg),
@@ -467,6 +479,22 @@ public partial class MainViewModel
                 InfoDialog?.Invoke("Unsupported Windows Build",
                     $"{MutationBlockedReason}\n\nThe FeatureStore fallback would not bind the driver on this build. No override is offered in the GUI.",
                     DialogIcon.Warning);
+                return;
+            }
+
+
+            var criticalProbes = CriticalEnvironmentProbeService.EvaluateFeatureStoreFallback();
+            if (!criticalProbes.AllPassed)
+            {
+                var blocked = criticalProbes.Items.Where(item => item.BlocksMutation).ToList();
+                foreach (var probe in blocked)
+                    Log($"[ERROR] Fallback BLOCKED [{probe.Id}/{probe.Verdict}/{probe.ReasonCode}]: {probe.Detail}", "ERROR");
+                InfoDialog?.Invoke("Critical Safety Proof Failed",
+                    "FeatureStore fallback is blocked because a boot-critical condition failed or could not be verified. " +
+                    "This gate cannot be overridden.\n\n" +
+                    string.Join("\n", blocked.Select(probe =>
+                        $"• {probe.Label}: {probe.Verdict} [{probe.ReasonCode}] — {probe.Detail}")),
+                    DialogIcon.Error);
                 return;
             }
 

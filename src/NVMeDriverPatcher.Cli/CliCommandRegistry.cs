@@ -48,6 +48,8 @@ public static class CliCommandRegistry
             "Generate post-reboot verification script"),
         new("recovery-proof", [], CommandGroup.Recovery,
             "Check recovery infrastructure readiness (exit: 0=ready, 1=not ready)"),
+        new("preflight", ["critical-probes"], CommandGroup.Diagnostics,
+            "Run typed boot-critical probes (exit: 0=pass, 1=blocked, 2=unknown; --json)"),
 
         // ── Recovery ──
         new("recovery-kit", ["export-recovery-kit"], CommandGroup.Recovery,

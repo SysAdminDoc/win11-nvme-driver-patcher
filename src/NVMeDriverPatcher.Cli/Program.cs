@@ -68,9 +68,10 @@ class Program
 
             bool force = args.Any(a => a is not null && MatchesAny(a, "--force", "-f"));
             bool noRestart = args.Any(a => a is not null && MatchesAny(a, "--no-restart"));
-            // Generic --force overrides preflight/recovery gates but NOT the build-rule action
-            // policy. Overriding a build with no known binding path requires this explicit,
-            // interactive-only flag, and it can never auto-restart.
+            // Generic --force may override non-critical readiness (for example, no detected NVMe
+            // drive or a missing optional recovery artifact). It never overrides typed critical
+            // probes or the build-rule action policy. Overriding only the build policy requires
+            // this explicit, interactive-only flag, and it can never auto-restart.
             bool forceUnsupportedBuild = args.Any(a => a is not null && MatchesAny(a, "--force-unsupported-build"));
             bool includeServerKeyOverride = args.Any(a => a is not null && MatchesAny(a, "--include-server-key"));
             bool excludeServerKeyOverride = args.Any(a => a is not null && MatchesAny(a, "--no-server-key"));
@@ -136,6 +137,7 @@ class Program
                 "recovery-kit" or "export-recovery-kit" => RecoveryKitCommand(config),
                 "verify" => VerifyCommand(config),
                 "recovery-proof" => RecoveryProofCommand(config, json),
+                "preflight" or "critical-probes" => CriticalPreflightCommand(json),
                 "dry-run" or "preview" => DryRunCommand(config),
                 "watchdog" => autoRevert ? WatchdogAutoRevertCommand(config) : WatchdogCommand(config, json),
                 "watchdog-service" or "service-status" => WatchdogServiceStateCommand(),
@@ -176,7 +178,8 @@ class Program
                     config,
                     args.Any(a => a is not null && a.Equals("--write-native", StringComparison.OrdinalIgnoreCase)),
                     args.Any(a => a is not null && a.Equals("--reset-native", StringComparison.OrdinalIgnoreCase)),
-                    json),
+                    json,
+                    forceUnsupportedBuild),
                 "kit-freshness" or "recovery-kit-freshness" => RecoveryKitFreshnessCommand(config),
                 "docs" or "help-topic" => DocsCommand(args.Skip(1).FirstOrDefault()),
                 "clean-data" => CleanDataCommand(config),
@@ -611,7 +614,12 @@ class Program
         return info.WinReEnabled ? 0 : 1;
     }
 
-    static int FeatureStoreCommand(AppConfig config, bool writeNative, bool resetNative, bool json)
+    static int FeatureStoreCommand(
+        AppConfig config,
+        bool writeNative,
+        bool resetNative,
+        bool json,
+        bool forceUnsupportedBuild)
     {
         bool hasFallback = FeatureStoreWriterService.HasFallbackEvidence();
         var configurations = FeatureStoreWriterService.QueryAllKnownConfigurations();
@@ -641,21 +649,43 @@ class Program
 
         if (writeNative)
         {
+            var policy = BuildActionPolicyService.EvaluateCurrent(config.WorkingDir);
+            if (!policy.MutationAllowed && !forceUnsupportedBuild)
+            {
+                Console.Error.WriteLine("BUILD POLICY: " + policy.Reason);
+                Console.Error.WriteLine("Native FeatureStore write refused; use --force-unsupported-build only from an interactive console.");
+                return 1;
+            }
+            var probes = CriticalEnvironmentProbeService.EvaluateFeatureStoreFallback();
+            if (!probes.AllPassed)
+            {
+                PrintCriticalProbeFailures(probes);
+                return probes.ExitCode;
+            }
+
             // EXPERIMENTAL: native enable via RtlSetFeatureConfigurations — same write
-            // ViVeTool performs, without the external download. Build-gated ID set.
+            // ViVeTool performs, without the external download. It still uses the same
+            // transaction ledger, BitLocker proof, and critical environment gate as fallback.
             var idSet = ViVeToolService.SelectFallbackSet();
             Console.WriteLine();
             Console.WriteLine($"EXPERIMENTAL native write: enabling set '{idSet.Name}' ({idSet.IdsDisplay})...");
-            var write = FeatureStoreWriterService.WriteOverrides(idSet.Ids);
-            Console.WriteLine(write.Summary);
-            foreach (var s in write.IdStatuses)
-            {
-                Console.WriteLine($"  {s.FeatureId,10}  Runtime: {(s.RuntimeEnabled ? "enabled" : "NOT enabled"),-11}  Boot: {(s.BootEnabled ? "enabled" : "NOT enabled")}");
-            }
+            var write = FallbackApplyService.ApplyNativeOnlyAsync(
+                    config.WorkingDir,
+                    Console.WriteLine,
+                    allowUnsupportedBuild: forceUnsupportedBuild)
+                .GetAwaiter().GetResult();
+            Console.WriteLine(write.Message);
             if (write.Success)
             {
-                PatchVerificationService.MarkPending(config);
-                ConfigService.Save(config);
+                PatchVerificationService.MarkPending(config, isFallback: true);
+                bool checkpointSaved = ConfigService.Save(config) &&
+                    MutationLedgerService.MarkRebootPending(config.WorkingDir, write.MutationOperationId, Console.WriteLine);
+                if (!checkpointSaved)
+                {
+                    MutationLedgerService.RestoreOriginalState(config.WorkingDir, Console.WriteLine);
+                    Console.Error.WriteLine("Native FeatureStore write landed but its reboot checkpoint was not durable; exact restore was attempted.");
+                    return 1;
+                }
                 Console.WriteLine("Post-reboot verification armed. Restart to activate.");
             }
             return write.Success ? 0 : 1;
@@ -1059,10 +1089,11 @@ class Program
             Console.Error.WriteLine("BLOCKED: VeraCrypt system encryption detected. This safeguard cannot be bypassed.");
             return 1;
         }
-        if (!PreflightService.AllCriticalPassed(preflight.Checks) && !force)
+        if (!PreflightService.AllCriticalPassed(preflight.Checks))
         {
-            Console.Error.WriteLine("Critical preflight check(s) failed. Use --force to override.");
-            return 1;
+            PrintCriticalProbeFailures(preflight.CriticalProbes);
+            Console.Error.WriteLine("Critical safety failures and Unknown probe states cannot be overridden by --force.");
+            return preflight.CriticalProbes.ExitCode;
         }
         if (!preflight.HasNVMeDrives && !force)
         {
@@ -1082,11 +1113,10 @@ class Program
 
         var result = PatchService.Install(
             config,
-            preflight.BitLockerEnabled,
-            preflight.VeraCryptDetected,
             preflight.NativeNVMeStatus,
             preflight.BypassIOStatus,
-            msg => Console.WriteLine(msg));
+            msg => Console.WriteLine(msg),
+            allowUnsupportedBuild: forceUnsupportedBuild);
 
         bool checkpointSaved = true;
         if (result.Success)
@@ -1338,7 +1368,10 @@ class Program
         Console.WriteLine($"(set '{fbSet.Name}' for {fbSet.AppliesTo}; confidence: {fbSet.Confidence}).");
         Console.WriteLine();
         Action<string> log = msg => Console.WriteLine(msg);
-        var result = FallbackApplyService.ApplyAsync(config.WorkingDir, log).GetAwaiter().GetResult();
+        var result = FallbackApplyService.ApplyAsync(
+            config.WorkingDir,
+            log,
+            allowUnsupportedBuild: forceUnsupportedBuild).GetAwaiter().GetResult();
         if (!result.Success)
         {
             Console.Error.WriteLine();
@@ -1430,6 +1463,39 @@ class Program
         Console.WriteLine();
         Console.WriteLine(proof.AllPassed ? "Ready to apply." : "Fix the items above before applying.");
         return proof.AllPassed ? 0 : 1;
+    }
+
+    static int CriticalPreflightCommand(bool json)
+    {
+        var report = CriticalEnvironmentProbeService.EvaluateRegistryPatch();
+        if (json)
+        {
+            Console.WriteLine(CliJson.Serialize("preflight", CliJson.BuildCriticalProbes(report)));
+            return report.ExitCode;
+        }
+
+        Console.WriteLine(report.Summary);
+        foreach (var item in report.Items)
+        {
+            Console.WriteLine($"  [{item.Verdict}] {item.Label} [{item.ReasonCode}]: {item.Detail}");
+            if (!string.IsNullOrWhiteSpace(item.NativeError))
+                Console.WriteLine("      Native: " + item.NativeError);
+            foreach (var evidence in item.Evidence)
+                Console.WriteLine("      Evidence: " + evidence);
+            Console.WriteLine($"      Observed: {item.ObservedAtUtc:O}");
+        }
+        return report.ExitCode;
+    }
+
+    static void PrintCriticalProbeFailures(CriticalProbeReport report)
+    {
+        Console.Error.WriteLine(report.Summary);
+        foreach (var item in report.Items.Where(item => item.BlocksMutation))
+        {
+            Console.Error.WriteLine($"  {item.Id}: {item.Verdict} [{item.ReasonCode}] — {item.Detail}");
+            if (!string.IsNullOrWhiteSpace(item.NativeError))
+                Console.Error.WriteLine("    Native: " + item.NativeError);
+        }
     }
 
     static int Unknown(string cmd)

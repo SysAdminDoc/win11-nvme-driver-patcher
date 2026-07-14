@@ -149,6 +149,47 @@ public sealed class DiagnosticsServiceTests : IDisposable
         Assert.Contains("pnputil /enum-drivers /files", report, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Export_IncludesTypedCriticalProbeEvidence()
+    {
+        var probeReport = new CriticalProbeReport { Scope = MutationProbeScope.RegistryPatch };
+        probeReport.Items.Add(new CriticalProbeResult
+        {
+            Id = "VeraCrypt",
+            Label = "VeraCrypt system encryption",
+            Verdict = CriticalProbeVerdict.Unknown,
+            ReasonCode = CriticalProbeReasonCode.AccessDenied,
+            Detail = "Registry evidence unavailable.",
+            NativeError = "HRESULT=0x80070005",
+            Evidence = ["exception=UnauthorizedAccessException"],
+            ObservedAtUtc = new DateTimeOffset(2026, 7, 14, 12, 0, 0, TimeSpan.Zero)
+        });
+        var bitLocker = new BitLockerRecoveryProof(
+            new BitLockerVolumeEvidence
+            {
+                ProbeSucceeded = true,
+                SystemVolumePresent = true,
+                MountPoint = "C:",
+                ConversionStatus = 0,
+                ProtectionStatus = 0
+            },
+            new DirectoryJoinEvidence(true, DirectoryJoinKind.None));
+        var preflight = new PreflightResult
+        {
+            CriticalProbes = probeReport,
+            BitLockerRecovery = bitLocker
+        };
+
+        var reportPath = DiagnosticsService.Export(_tempRoot, preflight, []);
+
+        Assert.NotNull(reportPath);
+        var report = File.ReadAllText(reportPath!);
+        Assert.Contains("CRITICAL ENVIRONMENT PROBES", report, StringComparison.Ordinal);
+        Assert.Contains("[Unknown] VeraCrypt: AccessDenied", report, StringComparison.Ordinal);
+        Assert.Contains("Native Error: HRESULT=0x80070005", report, StringComparison.Ordinal);
+        Assert.Contains("Observed UTC: 2026-07-14T12:00:00.0000000+00:00", report, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         try

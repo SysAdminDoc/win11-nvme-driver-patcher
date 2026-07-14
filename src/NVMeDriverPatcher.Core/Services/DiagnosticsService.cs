@@ -524,6 +524,22 @@ public static class DiagnosticsService
         sb.AppendLine($"Directory Join: {bitLockerProof.DirectoryJoin.Kind}");
         sb.AppendLine($"Detail: {bitLockerProof.Detail}");
 
+        var criticalProbes = preflight?.CriticalProbes is { Items.Count: > 0 } fromPreflightProbes
+            ? fromPreflightProbes
+            : CriticalEnvironmentProbeService.EvaluateRegistryPatch();
+        sb.AppendLine().AppendLine("CRITICAL ENVIRONMENT PROBES").AppendLine("---------------------------");
+        sb.AppendLine($"Scope: {criticalProbes.Scope}");
+        sb.AppendLine($"Mutation Ready: {(criticalProbes.AllPassed ? "Yes" : "No")}");
+        foreach (var probe in criticalProbes.Items)
+        {
+            sb.AppendLine($"  [{probe.Verdict}] {probe.Id}: {probe.ReasonCode} — {probe.Detail}");
+            sb.AppendLine($"    Observed UTC: {probe.ObservedAtUtc:O}");
+            if (!string.IsNullOrWhiteSpace(probe.NativeError))
+                sb.AppendLine($"    Native Error: {probe.NativeError}");
+            foreach (var evidence in probe.Evidence)
+                sb.AppendLine($"    Evidence: {evidence}");
+        }
+
         var incompatSw = preflight?.IncompatibleSoftware ?? DriveService.GetIncompatibleSoftware();
         sb.AppendLine().AppendLine("INCOMPATIBLE SOFTWARE").AppendLine("---------------------");
         if (incompatSw.Count > 0)

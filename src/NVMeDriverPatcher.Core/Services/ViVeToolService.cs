@@ -460,7 +460,7 @@ public static class ViVeToolService
     // Runs ViVeTool.exe /enable for each supplied feature ID. Returns on first failure —
     // caller surfaces the concatenated output. We deliberately run one ID at a time so a
     // partial failure is obvious in the log, even if ViVeTool supports batching.
-    public static async Task<ViVeToolResult> ApplyFallbackAsync(
+    internal static async Task<ViVeToolResult> ApplyFallbackAsync(
         string workingDir,
         Action<string>? log = null,
         CancellationToken ct = default)

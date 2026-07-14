@@ -95,45 +95,6 @@ public sealed class PatchServiceTests
     }
 
     // ========================================================================
-    // ClassifyPreRegistryAbort — full truth table
-    // ========================================================================
-
-    [Fact]
-    public void ClassifyPreRegistryAbort_VeraCrypt_AlwaysBlocks()
-    {
-        Assert.Equal(PatchPreRegistryAbortReason.VeraCryptSystemEncryption,
-            PatchService.ClassifyPreRegistryAbort(veraCryptDetected: true, bitLockerEnabled: false, bitLockerSuspended: false));
-    }
-
-    [Fact]
-    public void ClassifyPreRegistryAbort_VeraCrypt_TakesPrecedenceOverBitLocker()
-    {
-        Assert.Equal(PatchPreRegistryAbortReason.VeraCryptSystemEncryption,
-            PatchService.ClassifyPreRegistryAbort(veraCryptDetected: true, bitLockerEnabled: true, bitLockerSuspended: false));
-    }
-
-    [Fact]
-    public void ClassifyPreRegistryAbort_BitLockerNotSuspended_Aborts()
-    {
-        Assert.Equal(PatchPreRegistryAbortReason.BitLockerSuspensionFailed,
-            PatchService.ClassifyPreRegistryAbort(veraCryptDetected: false, bitLockerEnabled: true, bitLockerSuspended: false));
-    }
-
-    [Fact]
-    public void ClassifyPreRegistryAbort_BitLockerSuspended_NoAbort()
-    {
-        Assert.Equal(PatchPreRegistryAbortReason.None,
-            PatchService.ClassifyPreRegistryAbort(veraCryptDetected: false, bitLockerEnabled: true, bitLockerSuspended: true));
-    }
-
-    [Fact]
-    public void ClassifyPreRegistryAbort_NoBitLockerNoVeraCrypt_NoAbort()
-    {
-        Assert.Equal(PatchPreRegistryAbortReason.None,
-            PatchService.ClassifyPreRegistryAbort(veraCryptDetected: false, bitLockerEnabled: false, bitLockerSuspended: false));
-    }
-
-    // ========================================================================
     // RequiresManualRecoveryWarning
     // ========================================================================
 

@@ -198,7 +198,7 @@ public static class FeatureStoreWriterService
     /// operation) in the Runtime AND Boot stores. Requires admin. Callers must keep
     /// this behind an explicit opt-in switch until the path has soaked.
     /// </summary>
-    public static FeatureStoreWriteResult WriteOverrides(IEnumerable<int> featureIds)
+    internal static FeatureStoreWriteResult WriteOverrides(IEnumerable<int> featureIds)
     {
         var ids = featureIds.Distinct().ToArray();
         if (ids.Length == 0)
