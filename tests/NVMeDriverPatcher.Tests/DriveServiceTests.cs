@@ -72,7 +72,7 @@ public sealed class DriveServiceTests
     {
         var findings = DriveService.DetectServiceIncompatibilities(["DiskInfo64.exe"]);
 
-        var crystal = Assert.Single(findings.Where(f => f.Name == "CrystalDiskInfo"));
+        var crystal = Assert.Single(findings, f => f.Name == "CrystalDiskInfo");
         Assert.Equal("Medium", crystal.Severity);
         Assert.Contains("SCSI pass-through", crystal.Message);
         Assert.Contains("Get-StorageReliabilityCounter", crystal.Message);
