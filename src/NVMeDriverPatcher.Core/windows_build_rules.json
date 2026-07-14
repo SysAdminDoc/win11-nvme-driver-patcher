@@ -70,30 +70,30 @@
       "lastReviewed": "2026-07-14"
     },
     {
-      "id": "24h2-post-block",
+      "id": "24h2-26100-8106-fallback",
       "server": false,
       "minBuild": 26100,
-      "maxBuild": 26199,
-      "minUbr": 3775,
-      "maxUbr": 999999,
+      "maxBuild": 26100,
+      "minUbr": 8106,
+      "maxUbr": 8106,
       "expectedPath": "vivetool-fallback",
       "fallbackSet": "post-block-2026-03",
-      "summary": "24H2 with Feb/Mar 2026+ servicing: Microsoft neutered the FeatureManagement\\Overrides registry route (keys write successfully but the driver never binds; the hard block was reported on Insider build 26100.8106, publicized ~2026-03-24). The FeatureStore fallback (60786016 + 48433719) still works. Some branches still bound the registry route (Canary 29553.1000, 28020.1362) — trust live status output over this static table.",
-      "sourceUrl": "https://www.tomshardware.com/software/windows/microsoft-blocks-the-registry-hack-trick-that-unlocked-native-nvme-performance-on-windows-11",
-      "confidence": "verified",
+      "summary": "Windows 11 build 26100.8106 is the directly evidenced 24H2 block point: FeatureManagement override keys no longer bind, while the FeatureStore fallback was reported working. This exact rule must not be extrapolated to adjacent UBRs.",
+      "sourceUrl": "https://forums.mydigitallife.net/threads/discussion-windows-11-26x00-native-nvme-driver-discussion.89933/page-10",
+      "confidence": "community-verified",
       "lastReviewed": "2026-07-14"
     },
     {
-      "id": "24h2-pre-block",
+      "id": "24h2-client-unverified",
       "server": false,
       "minBuild": 26100,
       "maxBuild": 26199,
       "minUbr": 0,
-      "maxUbr": 3774,
-      "expectedPath": "registry-override",
-      "summary": "24H2 before the Feb/Mar 2026 servicing block: the registry override route works as originally documented.",
-      "sourceUrl": "https://www.tomshardware.com/pc-components/ssds/windows-11s-secret-nvme-performance-switch",
-      "confidence": "verified",
+      "maxUbr": 999999,
+      "expectedPath": "none-known",
+      "summary": "No primary Microsoft client matrix or sufficiently precise public evidence establishes a working enablement path for this 24H2 build/UBR. Do not extrapolate from 26100.8106; verify, monitor, or roll back only until an exact rule is sourced.",
+      "sourceUrl": "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353",
+      "confidence": "conservative-default",
       "lastReviewed": "2026-07-14"
     },
     {
@@ -103,10 +103,10 @@
       "maxBuild": 26099,
       "minUbr": 0,
       "maxUbr": 999999,
-      "expectedPath": "registry-override",
-      "summary": "Pre-24H2 builds: the native NVMe components may be missing or incomplete; the registry route writes but the driver frequently is not present. 24H2+ is recommended.",
+      "expectedPath": "none-known",
+      "summary": "Pre-24H2 client builds have no sourced working enablement interval and may lack complete native NVMe components. The tool is verify/monitor/rollback-only; writing override keys is not evidence that the driver can bind.",
       "sourceUrl": "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353",
-      "confidence": "verified",
+      "confidence": "conservative-default",
       "lastReviewed": "2026-07-14"
     }
   ]

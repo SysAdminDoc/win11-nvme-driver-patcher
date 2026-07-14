@@ -5,6 +5,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-06-30
 
 ### Fixed
+- **Client build rules now fail closed outside sourced intervals** — pre-24H2 clients and broad
+  26100 ranges no longer inherit a working registry/fallback path from Server documentation or an
+  unrelated UBR cutoff. Only the directly evidenced 26100.8106 fallback and the existing
+  26200.0-8523 community interval permit mutation; adjacent or unmatched builds are
+  verify/monitor/rollback-only, with boundary tests and matching CLI/README guidance.
 - **Pre-patch registry backup can actually undo the install** — the exported `.reg` recorded only
   prior values, so re-importing it after a patch left the added keys in place (the recovery message
   over-promised). It now emits deletion directives (`"<id>"=-`, `[-HKLM\...SafeBoot GUID]`) for
