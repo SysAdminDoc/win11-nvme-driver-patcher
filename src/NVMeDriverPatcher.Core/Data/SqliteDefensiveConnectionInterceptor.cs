@@ -36,7 +36,9 @@ public sealed class SqliteDefensiveConnectionInterceptor : DbConnectionIntercept
         return base.ConnectionOpenedAsync(connection, eventData, cancellationToken);
     }
 
-    private static void Harden(DbConnection connection)
+    private static void Harden(DbConnection connection) => HardenConnection(connection);
+
+    internal static void HardenConnection(DbConnection connection)
     {
         if (connection is not SqliteConnection sqlite)
             return;

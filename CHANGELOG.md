@@ -5,6 +5,14 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **SQLite history upgrades are now versioned, backed up, and integrity-checked** — startup adopts
+  the real legacy v1 (Benchmarks/Snapshots/Telemetry) and formerly-unversioned v2
+  (BypassIoHistory) layouts into schema v2. Existing files must pass `PRAGMA quick_check`; metadata
+  or DDL changes receive a validated SQLite Online Backup, run in one immediate transaction, and
+  revalidate every required table, column, and index before history is served. Injected failures
+  roll back without losing rows. Corrupt, incomplete, and newer schemas remain untouched and
+  expose a typed unavailable state plus the exact backup/recovery action in the GUI, diagnostics,
+  and support bundle instead of masquerading as empty history.
 - **Startup recovery now fails closed across GUI, CLI, and Core mutation services** — a failed
   interrupted-ledger restore, FeatureStore recovery, or watchdog auto-revert is retained as a
   process-wide critical state. Apply/reinstall, fallback, SafeBoot upgrade, and hot-swap remain

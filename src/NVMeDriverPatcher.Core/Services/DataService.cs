@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using NVMeDriverPatcher.Data;
 using NVMeDriverPatcher.Models;
@@ -7,19 +8,65 @@ namespace NVMeDriverPatcher.Services;
 
 public static class DataService
 {
+    private static readonly object StateSync = new();
+    private static AppDatabaseState _databaseState = AppDatabaseState.NotInitialized;
+
     private static readonly JsonSerializerOptions _jsonOpts = new()
     {
         WriteIndented = false
     };
 
-    public static void Initialize()
+    public static AppDatabaseState DatabaseState
     {
-        AppDbContext.EnsureCreated();
+        get
+        {
+            lock (StateSync)
+                return _databaseState;
+        }
+    }
+
+    public static AppDatabaseState Initialize()
+    {
+        lock (StateSync)
+        {
+            _databaseState = AppDbContext.EnsureCreated();
+            return _databaseState;
+        }
+    }
+
+    private static bool EnsureDatabaseAvailable()
+    {
+        var state = DatabaseState;
+        if (state.Availability == AppDatabaseAvailability.NotInitialized)
+            state = Initialize();
+        return state.IsAvailable;
+    }
+
+    private static void RecordStructuralFailure(string operation, Exception ex)
+    {
+        var structural = ex is InvalidDataException ||
+                         ex is SqliteException { SqliteErrorCode: 1 or 11 or 26 };
+        if (!structural)
+            return;
+
+        lock (StateSync)
+        {
+            var prior = _databaseState;
+            _databaseState = new AppDatabaseState(
+                AppDatabaseAvailability.Unavailable,
+                prior.SchemaVersion,
+                $"{operation} failed because the history database is unavailable ({ex.GetType().Name}: {ex.Message}).",
+                prior.BackupPath is null
+                    ? "Close the app, preserve nvmepatcher.db for support, then move it aside to create a fresh history database."
+                    : $"Close the app and restore the validated backup '{prior.BackupPath}' over nvmepatcher.db.",
+                prior.BackupPath);
+        }
     }
 
     public static void SaveBenchmark(BenchmarkResult result)
     {
         if (result is null) return;
+        if (!EnsureDatabaseAvailable()) return;
         try
         {
             using var db = new AppDbContext();
@@ -47,6 +94,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Saving benchmark history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] SaveBenchmark failed: {ex.Message}");
         }
     }
@@ -54,6 +102,7 @@ public static class DataService
     public static List<BenchmarkRecord> GetBenchmarkHistory(int limit = 50)
     {
         if (limit <= 0) limit = 50;
+        if (!EnsureDatabaseAvailable()) return [];
         try
         {
             using var db = new AppDbContext();
@@ -64,6 +113,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Reading benchmark history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] GetBenchmarkHistory failed: {ex.Message}");
             return [];
         }
@@ -72,6 +122,7 @@ public static class DataService
     public static void SaveSnapshot(PatchSnapshot snapshot, string description, bool isPrePatch)
     {
         if (snapshot is null) return;
+        if (!EnsureDatabaseAvailable()) return;
         try
         {
             using var db = new AppDbContext();
@@ -106,6 +157,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Saving patch snapshot history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] SaveSnapshot failed: {ex.Message}");
         }
     }
@@ -117,6 +169,7 @@ public static class DataService
     public static List<SnapshotRecord> GetSnapshots(int limit = 100)
     {
         if (limit <= 0) limit = 100;
+        if (!EnsureDatabaseAvailable()) return [];
         try
         {
             using var db = new AppDbContext();
@@ -127,6 +180,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Reading patch snapshot history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] GetSnapshots failed: {ex.Message}");
             return [];
         }
@@ -144,6 +198,7 @@ public static class DataService
         int unsafeShutdowns)
     {
         if (driveNumber < 0) return;
+        if (!EnsureDatabaseAvailable()) return;
         try
         {
             using var db = new AppDbContext();
@@ -167,6 +222,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Saving telemetry history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] SaveTelemetry failed: {ex.Message}");
         }
     }
@@ -175,6 +231,7 @@ public static class DataService
     {
         if (driveNumber < 0) return [];
         if (window <= TimeSpan.Zero) window = TimeSpan.FromDays(7);
+        if (!EnsureDatabaseAvailable()) return [];
         try
         {
             using var db = new AppDbContext();
@@ -189,6 +246,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Reading telemetry history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] GetTelemetryHistory failed: {ex.Message}");
             return [];
         }
@@ -197,6 +255,7 @@ public static class DataService
     public static TelemetryRecord? GetLatestTelemetry(int driveNumber)
     {
         if (driveNumber < 0) return null;
+        if (!EnsureDatabaseAvailable()) return null;
         try
         {
             using var db = new AppDbContext();
@@ -207,6 +266,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Reading latest telemetry", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] GetLatestTelemetry failed: {ex.Message}");
             return null;
         }
@@ -220,6 +280,7 @@ public static class DataService
     /// </summary>
     public static int PruneTelemetry(TimeSpan? retention = null)
     {
+        if (!EnsureDatabaseAvailable()) return 0;
         try
         {
             using var db = new AppDbContext();
@@ -229,6 +290,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Pruning telemetry history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] PruneTelemetry failed: {ex.Message}");
             return 0;
         }
@@ -241,6 +303,7 @@ public static class DataService
     public static int PruneSnapshots(int keepNewest = 500)
     {
         if (keepNewest < 100) keepNewest = 100;
+        if (!EnsureDatabaseAvailable()) return 0;
         try
         {
             using var db = new AppDbContext();
@@ -256,6 +319,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Pruning patch snapshot history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] PruneSnapshots failed: {ex.Message}");
             return 0;
         }
@@ -268,6 +332,7 @@ public static class DataService
     public static int PruneBenchmarks(int keepNewest = 500)
     {
         if (keepNewest < 50) keepNewest = 50;
+        if (!EnsureDatabaseAvailable()) return 0;
         try
         {
             using var db = new AppDbContext();
@@ -282,6 +347,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Pruning benchmark history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] PruneBenchmarks failed: {ex.Message}");
             return 0;
         }
@@ -290,6 +356,7 @@ public static class DataService
     public static void SaveBypassIoSnapshot(IEnumerable<BypassIoVolumeInfo> volumes, string description, bool isPrePatch)
     {
         if (volumes is null) return;
+        if (!EnsureDatabaseAvailable()) return;
         try
         {
             using var db = new AppDbContext();
@@ -310,6 +377,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Saving BypassIO history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] SaveBypassIoSnapshot failed: {ex.Message}");
         }
     }
@@ -317,6 +385,7 @@ public static class DataService
     public static List<BypassIoHistoryRecord> GetBypassIoHistory(int limit = 100)
     {
         if (limit <= 0) limit = 100;
+        if (!EnsureDatabaseAvailable()) return [];
         try
         {
             using var db = new AppDbContext();
@@ -327,6 +396,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Reading BypassIO history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] GetBypassIoHistory failed: {ex.Message}");
             return [];
         }
@@ -334,6 +404,7 @@ public static class DataService
 
     public static (List<BypassIoHistoryRecord> Pre, List<BypassIoHistoryRecord> Post) GetBypassIoLatestPair()
     {
+        if (!EnsureDatabaseAvailable()) return ([], []);
         try
         {
             using var db = new AppDbContext();
@@ -351,6 +422,7 @@ public static class DataService
         }
         catch (Exception ex)
         {
+            RecordStructuralFailure("Reading paired BypassIO history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] GetBypassIoLatestPair failed: {ex.Message}");
             return ([], []);
         }

@@ -46,7 +46,12 @@ public partial class MainViewModel
         try
         {
             var snapshots = DataService.GetSnapshots();
-            if (snapshots.Count == 0)
+            var databaseState = DataService.DatabaseState;
+            if (!databaseState.IsAvailable)
+            {
+                SnapshotHistoryText = $"Snapshot history unavailable: {databaseState.Summary} {databaseState.RecoveryAction}";
+            }
+            else if (snapshots.Count == 0)
             {
                 SnapshotHistoryText = NoSnapshotHistoryText;
             }
@@ -64,7 +69,14 @@ public partial class MainViewModel
         try
         {
             var benchmarks = DataService.GetBenchmarkHistory();
-            if (benchmarks.Count == 0)
+            var databaseState = DataService.DatabaseState;
+            if (!databaseState.IsAvailable)
+            {
+                HasBenchmarkHistory = false;
+                BenchmarkRunCount = 0;
+                BenchmarkHistoryText = $"Benchmark history unavailable: {databaseState.Summary} {databaseState.RecoveryAction}";
+            }
+            else if (benchmarks.Count == 0)
             {
                 HasBenchmarkHistory = false;
                 BenchmarkRunCount = 0;

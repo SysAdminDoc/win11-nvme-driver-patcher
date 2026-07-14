@@ -5,6 +5,12 @@ namespace NVMeDriverPatcher.Data;
 
 public class AppDbContext : DbContext
 {
+    private readonly string? _databasePath;
+
+    public AppDbContext() { }
+
+    internal AppDbContext(string databasePath) => _databasePath = Path.GetFullPath(databasePath);
+
     public DbSet<BenchmarkRecord> Benchmarks => Set<BenchmarkRecord>();
     public DbSet<SnapshotRecord> Snapshots => Set<SnapshotRecord>();
     public DbSet<TelemetryRecord> Telemetry => Set<TelemetryRecord>();
@@ -12,7 +18,7 @@ public class AppDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        var dbPath = System.IO.Path.Combine(
+        var dbPath = _databasePath ?? System.IO.Path.Combine(
             Models.AppConfig.GetWorkingDir(),
             "nvmepatcher.db");
 
@@ -60,17 +66,7 @@ public class AppDbContext : DbContext
         });
     }
 
-    public static void EnsureCreated()
-    {
-        using var db = new AppDbContext();
-        db.Database.EnsureCreated();
-        // Defensive mode, trusted_schema=OFF and cell_size_check=ON are now applied to every
-        // connection by SqliteDefensiveConnectionInterceptor. Here we only set the persistent,
-        // DB-level init PRAGMAs: WAL improves concurrency between read pollers and writes;
-        // busy_timeout backs SQLite's own retry loop when a brief writer blocks a reader.
-        try { db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=5000;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("PRAGMA synchronous=NORMAL;"); } catch { }
-        try { db.Database.ExecuteSqlRaw("PRAGMA quick_check;"); } catch { }
-    }
+    public static AppDatabaseState EnsureCreated(string? databasePath = null) =>
+        AppDatabaseUpgradeService.Upgrade(
+            databasePath ?? System.IO.Path.Combine(Models.AppConfig.GetWorkingDir(), "nvmepatcher.db"));
 }

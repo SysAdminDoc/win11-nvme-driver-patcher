@@ -74,14 +74,17 @@ public partial class App : Application
 
         try
         {
-            Services.DataService.Initialize();
+            var databaseState = Services.DataService.Initialize();
+            if (!databaseState.IsAvailable)
+                WriteCrashEntry("HistoryDatabase", new InvalidDataException(
+                    databaseState.Summary + " " + databaseState.RecoveryAction));
             // Lazy GC of stale rows so the SQLite file doesn't grow without bound for users
             // who keep the app installed for years. Both calls are best-effort.
             try { Services.DataService.PruneTelemetry(TimeSpan.FromDays(90)); } catch { }
             try { Services.DataService.PruneSnapshots(500); } catch { }
             try { Services.DataService.PruneBenchmarks(500); } catch { }
         }
-        catch { /* Best-effort app data store */ }
+        catch (Exception ex) { WriteCrashEntry("HistoryDatabaseStartup", ex); }
 
         // Rotate local log files before any service starts writing. Bounded retention keeps
         // the support-bundle ZIP small for users who've been running the app for months.

@@ -814,6 +814,7 @@ public partial class MainWindow : Window
             }
 
             var history = await Task.Run(() => DataService.GetTelemetryHistory(driveNumber, TimeSpan.FromDays(7)));
+            var databaseState = DataService.DatabaseState;
             if (requestId != _telemetryDataRefreshId)
                 return;
 
@@ -830,7 +831,13 @@ public partial class MainWindow : Window
             TelemetryPanelControl.UpdateTempHistory(tempHistory);
             TelemetryPanelControl.UpdateWearHistory(wearHistory);
 
-            if (liveData is not null)
+            if (!databaseState.IsAvailable)
+            {
+                TelemetryPanelControl.SetTelemetryStatus(
+                    $"Live data may still be shown, but saved history is unavailable: {databaseState.Summary} {databaseState.RecoveryAction}",
+                    "error");
+            }
+            else if (liveData is not null)
             {
                 TelemetryPanelControl.SetTelemetryStatus(
                     $"Live SMART snapshot captured for Disk {driveNumber} at {DateTime.Now:t}. Showing the last 7 days of saved history.",
