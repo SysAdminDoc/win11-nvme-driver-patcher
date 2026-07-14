@@ -636,6 +636,55 @@ public static class DriveService
         return false;
     }
 
+    /// <summary>A BitLocker-encryptable fixed volume and the facts that decide whether the NVMe
+    /// driver swap will leave it locked after the reboot.</summary>
+    public sealed record BitLockerVolume(string DriveLetter, bool IsSystemDrive, bool ProtectionOn, bool AutoUnlockEnabled);
+
+    /// <summary>
+    /// Pure classifier: protected NON-system volumes WITHOUT auto-unlock re-lock after the post-patch
+    /// reboot (their key isn't released automatically), so the user must be warned and their
+    /// protectors suspended. The system volume is handled separately (its failure aborts the patch).
+    /// </summary>
+    public static IReadOnlyList<BitLockerVolume> DataVolumesNeedingAttention(IEnumerable<BitLockerVolume> volumes) =>
+        volumes.Where(v => !v.IsSystemDrive && v.ProtectionOn && !v.AutoUnlockEnabled).ToList();
+
+    /// <summary>Enumerate encryptable fixed volumes with protection + auto-unlock state. Auto-unlock
+    /// defaults to false (the conservative "needs attention") when it can't be determined.</summary>
+    public static List<BitLockerVolume> GetBitLockerVolumes()
+    {
+        var list = new List<BitLockerVolume>();
+        try
+        {
+            var systemDrive = (Environment.GetEnvironmentVariable("SystemDrive") ?? "C:").TrimEnd('\\');
+            using var search = new ManagementObjectSearcher(@"root\cimv2\Security\MicrosoftVolumeEncryption",
+                "SELECT DriveLetter, ProtectionStatus, VolumeType FROM Win32_EncryptableVolume");
+            foreach (var vol in Enumerate(search))
+            {
+                var letter = vol["DriveLetter"]?.ToString();
+                if (string.IsNullOrWhiteSpace(letter)) continue;
+                letter = letter.TrimEnd('\\');
+                bool isSystem = string.Equals(letter, systemDrive, StringComparison.OrdinalIgnoreCase);
+                bool protectionOn = AsInt(vol["ProtectionStatus"]) == 1;
+
+                bool autoUnlock = false;
+                if (!isSystem && protectionOn)
+                {
+                    // Win32_EncryptableVolume.IsAutoUnlockEnabled(out bool, out string). If we can't
+                    // determine it, leave autoUnlock=false so the volume is flagged (fail-safe).
+                    try
+                    {
+                        var outParams = vol.InvokeMethod("IsAutoUnlockEnabled", null, null);
+                        if (outParams?["IsAutoUnlockEnabled"] is bool b) autoUnlock = b;
+                    }
+                    catch { }
+                }
+                list.Add(new BitLockerVolume(letter, isSystem, protectionOn, autoUnlock));
+            }
+        }
+        catch { }
+        return list;
+    }
+
     public static bool TestVeraCryptSystemEncryption()
     {
         try

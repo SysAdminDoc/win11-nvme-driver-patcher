@@ -5,6 +5,12 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-06-30
 
 ### Fixed
+- **BitLocker data volumes are protected too** — the swap affects all NVMe controllers, but only the
+  OS volume's protectors were suspended, so a BitLocker-protected non-system NVMe volume without
+  auto-unlock re-locked after reboot unwarned. Preflight now enumerates protected fixed volumes and
+  warns for any non-auto-unlock data volume, and apply suspends those volumes for one reboot cycle
+  (best-effort — a data volume re-locking is recoverable with the key, so a failure warns instead of
+  aborting like the system-drive path).
 - **Concurrency-safe config writes** — `ConfigService.Save` now uses a per-process-unique temp file
   and a machine-global mutex (`Global\NVMeDriverPatcher.ConfigSave`) so simultaneous saves from the
   GUI, CLI, Tray, and Watchdog can no longer clobber each other's half-written temp or silently drop
