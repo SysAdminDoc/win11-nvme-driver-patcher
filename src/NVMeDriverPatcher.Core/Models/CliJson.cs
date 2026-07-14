@@ -119,17 +119,37 @@ public static class CliJson
     {
         NativeCount = report.NativeCount,
         LegacyCount = report.LegacyCount,
+        CandidateProbeFailureCount = report.CandidateProbeFailureCount,
+        ObservedAtUtc = report.ObservedAtUtc,
         Controllers = report.Controllers.Select(c => new ControllerJson
         {
             IsNative = c.IsNative,
             FriendlyName = c.FriendlyName,
             BoundDriver = c.BoundDriver,
+            BoundDriverVersion = c.BoundDriverVersion,
             InstanceId = c.InstanceId,
             InfName = c.InfName,
             DriverProvider = c.DriverProvider,
             DeviceClass = c.DeviceClass,
             HardwareId = c.HardwareId,
             CompatibleId = c.CompatibleId,
+            DriverCandidateCommand = c.DriverCandidateCommand,
+            DriverCandidateProbeSucceeded = c.DriverCandidateProbeSucceeded,
+            DriverCandidateProbeError = c.DriverCandidateProbeError,
+            DriverCandidates = c.DriverCandidates.Select(candidate => new ControllerDriverCandidateJson
+            {
+                InfName = candidate.InfName,
+                Provider = candidate.Provider,
+                ClassName = candidate.ClassName,
+                ClassGuid = candidate.ClassGuid,
+                DriverVersion = candidate.DriverVersion,
+                SignerName = candidate.SignerName,
+                MatchingDeviceId = candidate.MatchingDeviceId,
+                Rank = candidate.Rank,
+                Status = candidate.Status,
+                IsBestRanked = candidate.IsBestRanked,
+                IsInstalled = candidate.IsInstalled
+            }).ToList(),
         }).ToList(),
     };
 
@@ -245,6 +265,8 @@ public sealed class ControllersJson
 {
     public int NativeCount { get; set; }
     public int LegacyCount { get; set; }
+    public int CandidateProbeFailureCount { get; set; }
+    public DateTimeOffset ObservedAtUtc { get; set; }
     public List<ControllerJson> Controllers { get; set; } = new();
 }
 
@@ -314,12 +336,32 @@ public sealed class ControllerJson
     public bool IsNative { get; set; }
     public string FriendlyName { get; set; } = string.Empty;
     public string BoundDriver { get; set; } = string.Empty;
+    public string BoundDriverVersion { get; set; } = string.Empty;
     public string InstanceId { get; set; } = string.Empty;
     public string InfName { get; set; } = string.Empty;
     public string DriverProvider { get; set; } = string.Empty;
     public string DeviceClass { get; set; } = string.Empty;
     public string HardwareId { get; set; } = string.Empty;
     public string CompatibleId { get; set; } = string.Empty;
+    public string DriverCandidateCommand { get; set; } = string.Empty;
+    public bool DriverCandidateProbeSucceeded { get; set; }
+    public string DriverCandidateProbeError { get; set; } = string.Empty;
+    public List<ControllerDriverCandidateJson> DriverCandidates { get; set; } = [];
+}
+
+public sealed class ControllerDriverCandidateJson
+{
+    public string InfName { get; set; } = string.Empty;
+    public string Provider { get; set; } = string.Empty;
+    public string ClassName { get; set; } = string.Empty;
+    public string ClassGuid { get; set; } = string.Empty;
+    public string DriverVersion { get; set; } = string.Empty;
+    public string SignerName { get; set; } = string.Empty;
+    public string MatchingDeviceId { get; set; } = string.Empty;
+    public string Rank { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public bool IsBestRanked { get; set; }
+    public bool IsInstalled { get; set; }
 }
 
 public sealed class ReliabilityJson

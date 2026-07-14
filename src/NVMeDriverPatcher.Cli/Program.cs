@@ -395,10 +395,18 @@ class Program
         Console.WriteLine("Per-controller audit");
         Console.WriteLine("====================");
         Console.WriteLine(report.Summary);
+        Console.WriteLine($"Observed UTC: {report.ObservedAtUtc:o}");
         foreach (var c in report.Controllers)
         {
             Console.WriteLine($"  {(c.IsNative ? "[NATIVE] " : "[LEGACY] ")}{c.FriendlyName}  driver={c.BoundDriver}  id={c.InstanceId}");
-            Console.WriteLine($"      inf={c.InfName}  provider={c.DriverProvider}  class={c.DeviceClass}");
+            Console.WriteLine($"      inf={c.InfName}  provider={c.DriverProvider}  version={c.BoundDriverVersion}  class={c.DeviceClass}");
+            if (!c.DriverCandidateProbeSucceeded)
+            {
+                Console.WriteLine($"      candidate-error={c.DriverCandidateProbeError}");
+                continue;
+            }
+            foreach (var candidate in c.DriverCandidates)
+                Console.WriteLine($"      candidate rank={candidate.Rank} inf={candidate.InfName} provider={candidate.Provider} version={candidate.DriverVersion} match={candidate.MatchingDeviceId} status={candidate.Status}");
         }
         if (report.NativeCount > 0)
         {

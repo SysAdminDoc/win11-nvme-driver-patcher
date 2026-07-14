@@ -5,6 +5,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Controller audits now explain Windows' driver selection without changing it** — each timestamped
+  snapshot records the bound INF/provider/version, then runs only `pnputil /enum-devices
+  /instanceid … /drivers /format xml` to capture matching candidates, hexadecimal ranks,
+  match IDs, signer/status, and per-controller command or parse errors. The DTD-prohibited,
+  size-bounded XML parser is fixture-tested against Windows' real schema; CLI text/JSON,
+  diagnostics, support bundles, and the PowerShell wrapper expose the same evidence. No candidate
+  is installed, deleted, or force-bound.
 - **Recovery readiness now probes the pending operation's exact working directory** — an explicit
   `AppConfig.WorkingDir` is normalized, created, durably write-tested, and cleaned using the same
   fallback rule as patch install. A writable default directory can no longer mask an unwritable

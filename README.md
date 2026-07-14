@@ -199,7 +199,7 @@ NVMeDriverPatcher.Cli watchdog                             # Stability verdict (
 NVMeDriverPatcher.Cli watchdog-service                     # Real-time service state
 NVMeDriverPatcher.Cli reliability                          # Reliability Monitor correlation
 NVMeDriverPatcher.Cli minidump                             # NVMe-stack crash scan
-NVMeDriverPatcher.Cli controllers                          # Per-controller driver audit
+NVMeDriverPatcher.Cli controllers [--json]                 # Bound driver plus read-only candidate/rank evidence
 NVMeDriverPatcher.Cli bypassio                             # Per-volume BypassIO + named-game gaming impact
 NVMeDriverPatcher.Cli bypassio --history                   # Pre/post patch BypassIO comparison
 NVMeDriverPatcher.Cli apst                                 # APST state + battery impact estimate
