@@ -527,6 +527,7 @@ public partial class MainViewModel
 
                 var gateMsg =
                     "Recovery proof failed before applying FeatureStore fallback.\n\n" +
+                    "Scope: this fallback is machine-wide; no NVMe drive/controller can be excluded independently.\n\n" +
                     "Unlike registry patches, FeatureStore overrides CANNOT be reset from WinRE or Safe Mode " +
                     "(the Rtl API requires a running Windows kernel). If the fallback causes instability, " +
                     "recovery depends on the items below.\n\n" +

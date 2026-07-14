@@ -42,6 +42,8 @@ public static class FallbackApplyService
         Action<string>? log,
         CancellationToken cancellationToken)
     {
+        log?.Invoke("[SCOPE] FeatureStore fallback is machine-wide. Every eligible NVMe drive/controller is subject to the same Windows driver selection; per-drive exclusions are not enforced.");
+
         var recoverySafety = RecoverySafetyGateService.Snapshot();
         if (!recoverySafety.MutationAllowed)
         {

@@ -734,6 +734,7 @@ public partial class MainViewModel : ObservableObject
                 "The registry changes are in place, but Windows is still loading the legacy stornvme.sys driver.\n\n" +
                 "Microsoft began blocking this override path on recent Insider builds in early 2026. " +
                 "On those builds the FeatureManagement\\Overrides route is a no-op.\n\n" +
+                "Scope: FeatureStore is machine-wide. Every eligible NVMe drive/controller is subject to the same Windows driver selection; legacy drive_scope.json exclusions are not enforced.\n\n" +
                 $"A fallback exists: the app can write build-specific FeatureStore IDs {ViVeToolService.SelectFallbackSet().IdsDisplay} with the native Rtl API first. " +
                 "If native both-store verification fails, it will try ViVeTool from its official GitHub release " +
                 $"({ViVeToolService.ViVeToolProjectUrl}) as the secondary path.\n\n" +
@@ -1260,6 +1261,8 @@ public partial class MainViewModel : ObservableObject
 
         if (title == "Apply Patch")
         {
+            warnings.Add("Global scope — the registry/feature change affects Windows driver selection for every eligible NVMe drive/controller. Legacy drive_scope.json exclusions were never enforced; no drive can be kept independently on stornvme.sys.");
+
             // Educational opener — set expectations before the list of disclaimers so users
             // understand WHAT they're turning on, not just what might break.
             var profileLine = Config.PatchProfile == PatchProfile.Safe

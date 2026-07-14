@@ -456,7 +456,7 @@ public static class DriveService
 
         if (result.Supported)
         {
-            return $"DirectStorage impact: BypassIO is currently available. If this drive is patched to nvmedisk.sys, DirectStorage titles such as {DirectStorageGameExamplesText} can fall back to legacy I/O with higher CPU use or stutter. Keep game-library drives on stornvme.sys with per-drive scope when gaming performance matters.";
+            return $"DirectStorage impact: BypassIO is currently available. If this machine is patched to nvmedisk.sys, DirectStorage titles such as {DirectStorageGameExamplesText} can fall back to legacy I/O with higher CPU use or stutter. The mutation is machine-wide; game-library drives cannot be excluded.";
         }
 
         if (IsNvmeStorage(result.StorageType))
@@ -464,7 +464,7 @@ public static class DriveService
             var eac = blocker.Contains("EOSSys", StringComparison.OrdinalIgnoreCase)
                 ? " EasyAntiCheat's EOSSys.sys is the current BypassIO veto, so address that driver separately from the storage-driver choice."
                 : " EasyAntiCheat's EOSSys.sys can also veto BypassIO independently on systems using that anti-cheat driver.";
-            return $"DirectStorage impact: BypassIO is blocked by {blocker}. DirectStorage titles such as {DirectStorageGameExamplesText} can fall back to legacy I/O with higher CPU use or stutter. Keep game-library drives on stornvme.sys with per-drive scope when gaming performance matters.{eac}";
+            return $"DirectStorage impact: BypassIO is blocked by {blocker}. DirectStorage titles such as {DirectStorageGameExamplesText} can fall back to legacy I/O with higher CPU use or stutter. The mutation is machine-wide; game-library drives cannot be excluded.{eac}";
         }
 
         return "DirectStorage impact: no NVMe BypassIO regression detected on the queried system drive.";

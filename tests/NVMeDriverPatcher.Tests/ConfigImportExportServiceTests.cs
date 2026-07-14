@@ -67,10 +67,33 @@ public sealed class ConfigImportExportServiceTests
     [Fact]
     public void ValidateBundleJson_MissingSchemaVersion_DefaultsToCurrentAndPasses()
     {
-        // An absent SchemaVersion defaults to 1 (the model default), so it must not be rejected.
+        // An absent SchemaVersion is treated as a legacy v1 bundle, so it must not be rejected.
         var json = """{ "Config": { "RestartDelay": 10 } }""";
         var (ok, error) = ConfigImportExportService.ValidateBundleJson(json);
         Assert.True(ok, error);
+    }
+
+    [Fact]
+    public void Export_UsesSchemaV2AndOmitsUnenforcedDriveScope()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"NVMePatcher.ConfigExport.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        var output = Path.Combine(dir, "bundle.json");
+        try
+        {
+            var config = new NVMeDriverPatcher.Models.AppConfig { WorkingDir = dir };
+
+            var exportedPath = ConfigImportExportService.Export(config, output);
+
+            Assert.Equal(output, exportedPath);
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(output));
+            Assert.Equal(2, document.RootElement.GetProperty("SchemaVersion").GetInt32());
+            Assert.False(document.RootElement.TryGetProperty("DriveScope", out _));
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
     }
 
     [Fact]
@@ -95,5 +118,40 @@ public sealed class ConfigImportExportServiceTests
             Assert.False(config.SkipWarnings); // untouched
         }
         finally { try { File.Delete(tmp); } catch { } }
+    }
+
+    [Fact]
+    public void Import_LegacyDriveScope_IsAcceptedButExplicitlyIgnored()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"NVMePatcher.ConfigImport.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        var input = Path.Combine(dir, "bundle.json");
+        File.WriteAllText(input,
+            """
+            {
+              "SchemaVersion": 1,
+              "Config": { "RestartDelay": 30, "PatchProfile": 0 },
+              "DriveScope": { "Enabled": true, "ExcludedSerials": ["SN-1"] }
+            }
+            """);
+        try
+        {
+            var config = new NVMeDriverPatcher.Models.AppConfig
+            {
+                WorkingDir = dir,
+                ConfigFile = Path.Combine(dir, "config.json")
+            };
+
+            var (success, summary) = ConfigImportExportService.Import(input, config);
+
+            Assert.True(success, summary);
+            Assert.Contains("ignored", summary, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("machine-wide", summary, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(dir, "drive_scope.json")));
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
     }
 }

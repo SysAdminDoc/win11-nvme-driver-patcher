@@ -148,6 +148,7 @@ public static class DryRunService
         var sb = new StringBuilder();
         sb.Append("Dry-run install: ");
         sb.Append($"{report.TotalWrites} feature-flag write(s), {report.TotalCreates} subkey creation(s). ");
+        sb.Append("Scope: machine-wide across every eligible NVMe drive/controller; per-drive exclusions are not enforced. ");
         sb.Append($"Profile: {report.Profile}");
         if (report.IncludeServerKey) sb.Append(" + Server 2025 key");
         if (report.PreflightBlockers.Count > 0) sb.Append($" | {report.PreflightBlockers.Count} BLOCKER(s)");

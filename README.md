@@ -45,7 +45,7 @@ irm https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/dow
 > | Native FeatureStore fallback for post-block builds (ViVeTool only after native failure) | ❌ | ✅ |
 > | Post-reboot bind verification (honest status) | ❌ | ✅ |
 > | Watchdog auto-revert, minidump triage, reliability correlation | ❌ | ✅ |
-> | Per-drive scope, dry-run preview, recovery USB builder | ❌ | ✅ |
+> | Global-scope warning, dry-run preview, recovery USB builder | ❌ | ✅ |
 >
 > It remains in releases for air-gapped/legacy environments only.
 </details>
@@ -138,7 +138,7 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 - **Reliability Monitor correlation** -- pulls `Win32_ReliabilityStabilityMetrics`, overlays the patch-apply timestamp, reports pre/post stability averages with delta.
 - **Minidump triage** -- scans `C:\Windows\Minidump` for dumps newer than the patch and flags any that reference `nvmedisk.sys`, `stornvme.sys`, `storport.sys`, `disk.sys`.
 - **Firmware + controller compat JSON** -- shipped `compat.json` maps `{controller, firmware}` → `{Good, Caution, Bad}` and flags power-loss-risk entries such as Phison E18/E26. Preflight consults it before proceeding.
-- **Per-drive scope** -- exclude specific NVMe drives from the swap by serial or model pattern (e.g. keep a DirectStorage gaming drive on `stornvme.sys` while the OS drive moves to `nvmedisk.sys`).
+- **Honest machine-wide scope** -- the registry and FeatureStore routes affect Windows driver selection for every eligible NVMe drive/controller. Legacy `drive_scope.json` preferences are detected and reported as unenforced; the tool does not claim a drive can stay independently on `stornvme.sys`.
 - **Dry-run preview** (`--dry-run` / "Preview Changes") -- prints every registry write the patch would perform, without touching the registry.
 - **ETW storage trace** (`etw`) -- wraps `wpr.exe` for 60-second pre/post captures; ETL files land in `%ProgramData%\NVMePatcher\etl\`.
 - **Controller-complete WinPE recovery USB builder** (`winpe`) -- detects the Windows ADK + WinPE add-on, inventories every present hardware-backed storage controller, exports each bound OEM package once, injects signed packages into `boot.wim`, and retains the same INFs for manual `drvload`. The published tree/ISO includes a verified Recovery Kit, controller coverage report, custom `startnet.cmd`, and final SHA-256 inventory. `winpe-freshness` verifies that media and reports stale when the app, Recovery Kit, rollback script, WinRE image, or controller INF/version has changed.

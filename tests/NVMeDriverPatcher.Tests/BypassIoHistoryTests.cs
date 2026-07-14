@@ -49,7 +49,7 @@ public sealed class BypassIoHistoryTests
     }
 
     [Fact]
-    public void BuildBypassIoGamingImpact_NvmediskBlocked_NamesGamesAndPerDriveScope()
+    public void BuildBypassIoGamingImpact_NvmediskBlocked_NamesGamesAndGlobalScope()
     {
         var impact = DriveService.BuildBypassIoGamingImpact(new BypassIOResult
         {
@@ -62,8 +62,9 @@ public sealed class BypassIoHistoryTests
         Assert.Contains("Forspoken", impact);
         Assert.Contains("Forza Motorsport", impact);
         Assert.Contains("Horizon Forbidden West", impact);
-        Assert.Contains("stornvme.sys", impact);
-        Assert.Contains("per-drive scope", impact);
+        Assert.Contains("nvmedisk.sys", impact);
+        Assert.Contains("machine-wide", impact);
+        Assert.Contains("cannot be excluded", impact);
     }
 
     [Fact]
@@ -110,7 +111,8 @@ public sealed class BypassIoHistoryTests
         Assert.Contains("F:", impact);
         Assert.DoesNotContain("E:", impact);
         Assert.Contains("Ratchet & Clank: Rift Apart", impact);
-        Assert.Contains("game-library drives", impact);
+        Assert.Contains("game-library drive", impact);
+        Assert.Contains("machine-wide", impact);
     }
 
     [Fact]

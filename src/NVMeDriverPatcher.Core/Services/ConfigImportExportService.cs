@@ -5,8 +5,9 @@ using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
 
-// Export a portable config bundle (AppConfig JSON + drive_scope.json + watchdog.json +
-// active tuning profile) and import one on another machine. Separate from the support-bundle
+// Export a portable config bundle (AppConfig JSON + watchdog.json) and import one on another
+// machine. Legacy DriveScope members are accepted but ignored because driver selection is global.
+// Separate from the support-bundle
 // ZIP — that one is for diagnostics, this one is for fleet cloning.
 public static class ConfigImportExportService
 {
@@ -14,15 +15,14 @@ public static class ConfigImportExportService
 
     // Highest bundle schema this build understands. A future bundle (higher number) is rejected
     // rather than silently partially-applied. RestartDelay bound matches the AppConfig clamp.
-    internal const int CurrentSchemaVersion = 1;
+    internal const int CurrentSchemaVersion = 2;
     internal const int MaxRestartDelaySeconds = 3600;
 
     public class Bundle
     {
-        public int SchemaVersion { get; set; } = 1;
+        public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string ExportedAt { get; set; } = DateTime.UtcNow.ToString("o");
         public AppConfig? Config { get; set; }
-        public PerDriveScopeConfig? DriveScope { get; set; }
         public WatchdogState? Watchdog { get; set; }
     }
 
@@ -31,7 +31,6 @@ public static class ConfigImportExportService
         var bundle = new Bundle
         {
             Config = config,
-            DriveScope = PerDriveScopeService.Load(config),
             Watchdog = EventLogWatchdogService.LoadState(config)
         };
         var json = JsonSerializer.Serialize(bundle, JsonOptions);
@@ -70,15 +69,18 @@ public static class ConfigImportExportService
                 config.PatchProfile = bundle.Config.PatchProfile;
                 ConfigService.Save(config);
             }
-            if (bundle.DriveScope is not null)
-                PerDriveScopeService.Save(config, bundle.DriveScope);
             if (bundle.Watchdog is not null)
             {
                 var watchdogSave = EventLogWatchdogService.SaveState(config, bundle.Watchdog);
                 if (!watchdogSave.Success)
                     return (false, $"Config bundle was only partially imported: watchdog state was not persisted ({watchdogSave.Summary}).");
             }
-            return (true, "Config bundle imported.");
+            using var raw = JsonDocument.Parse(json);
+            bool ignoredLegacyScope = raw.RootElement.TryGetProperty("DriveScope", out var legacyScope)
+                                      && legacyScope.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined;
+            return (true, ignoredLegacyScope
+                ? "Config bundle imported. Legacy DriveScope preferences were ignored because the native NVMe mutation is machine-wide and no per-drive exclusion is enforced."
+                : "Config bundle imported.");
         }
         catch (Exception ex)
         {
@@ -103,7 +105,7 @@ public static class ConfigImportExportService
             if (root.ValueKind != JsonValueKind.Object)
                 return (false, "Bundle root is not a JSON object.");
 
-            int schema = 1; // default matches Bundle.SchemaVersion when the field is absent
+            int schema = 1; // absent version means a legacy v1 bundle
             if (root.TryGetProperty("SchemaVersion", out var sv) && sv.ValueKind == JsonValueKind.Number)
                 schema = sv.GetInt32();
             if (schema < 1 || schema > CurrentSchemaVersion)

@@ -95,7 +95,7 @@ public static class CliCommandRegistry
         new("identify", [], CommandGroup.Diagnostics,
             "NVMe Identify Controller dump (vendor, model, firmware, features)"),
         new("scope", [], CommandGroup.Diagnostics,
-            "List per-drive include/exclude decisions from drive_scope.json"),
+            "Report machine-wide driver scope and warn about unenforced legacy drive_scope.json preferences"),
 
         // ── Storage & Performance ──
         new("etw", [], CommandGroup.StoragePerformance,

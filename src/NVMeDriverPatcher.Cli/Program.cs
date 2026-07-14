@@ -957,9 +957,9 @@ class Program
             .Where(d => d.IsNVMe)
             .Select(d => (Serial: d.PNPDeviceID ?? string.Empty, Model: d.Name ?? string.Empty));
         var decisions = PerDriveScopeService.Decide(driveTuples, scope);
-        Console.WriteLine(PerDriveScopeService.Summarize(decisions));
+        Console.WriteLine(PerDriveScopeService.Summarize(decisions, scope));
         foreach (var dec in decisions)
-            Console.WriteLine($"  {(dec.Include ? "[include]" : "[EXCLUDE]")}  {dec.Model}  [{dec.Serial}]  {dec.Reason}");
+            Console.WriteLine($"  [GLOBAL]  {dec.Model}  [{dec.Serial}]  {dec.Reason}");
         return 0;
     }
 
@@ -1206,6 +1206,8 @@ class Program
             Console.Error.WriteLine("No NVMe drives detected. Use --force to apply anyway.");
             return 2;
         }
+
+        Console.WriteLine("SCOPE: the registry/feature mutation is machine-wide. Every eligible NVMe drive/controller is subject to the same Windows driver selection; drive_scope.json exclusions are not enforced.");
 
         var proof = RecoveryProofGateService.Evaluate(config);
         Console.WriteLine($"Recovery readiness: {proof.PassedCount}/{proof.TotalCount}");
@@ -1476,6 +1478,7 @@ class Program
             Console.WriteLine("--force specified: proceeding despite recovery proof failure.");
         }
 
+        Console.WriteLine("SCOPE: FeatureStore fallback is machine-wide; every eligible NVMe drive/controller is subject to the same Windows driver selection. Per-drive exclusions are not enforced.");
         Console.WriteLine("FeatureStore fallback (native Rtl API first; no network unless native write fails)");
         var fbSet = ViVeToolService.SelectFallbackSet();
         Console.WriteLine($"Writes feature IDs {fbSet.IdsDisplay} to Windows's FeatureStore");

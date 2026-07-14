@@ -1,20 +1,24 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
 
 public class PerDriveScopeConfig
 {
-    // Per-drive serial numbers the user has opted OUT of the swap — typically a DirectStorage
-    // gaming drive the user wants to keep on stornvme.sys while the OS drive moves to nvmedisk.
+    // Legacy wire fields retained only so old drive_scope.json files can be detected and their
+    // unenforced intent explained. They never authorize a per-device binding change.
     public List<string> ExcludedSerials { get; set; } = new();
 
-    // Optional model-based exclusions for users who want to exclude a whole family without
-    // pinning to a specific serial (e.g. all "WD_BLACK SN850X" drives).
+    // Legacy model-pattern intent retained for detection only. It never narrows the global
+    // mutation scope or changes device binding.
     public List<string> ExcludedModelPatterns { get; set; } = new();
 
     public bool Enabled { get; set; }
+
+    [JsonIgnore] public bool LegacyFilePresent { get; set; }
+    [JsonIgnore] public string? LoadError { get; set; }
 }
 
 public class PerDriveDecision
@@ -22,26 +26,17 @@ public class PerDriveDecision
     public string Serial { get; set; } = string.Empty;
     public string Model { get; set; } = string.Empty;
     public bool Include { get; set; } = true;
+    public bool LegacyExclusionRequested { get; set; }
     public string Reason { get; set; } = string.Empty;
 }
 
-// Lets the user exclude specific NVMe drives from the global feature-flag swap by writing
-// a class-upper filter pin on the excluded drive's device instance, keeping it bound to
-// stornvme.sys while the rest of the system swaps to nvmedisk.sys.
-//
-// NOTE: the feature flags in HKLM\...\FeatureManagement\Overrides are *global* — they apply
-// to every NVMe controller. The only way to truly scope is via a per-instance UpperFilters
-// entry. This service writes that filter value via the stornvme device instance path.
-// Implementation is intentionally conservative: we only *add* a UpperFilters override,
-// never mutate the driver binding directly.
+// Legacy compatibility reader. Earlier releases described drive_scope.json as a per-drive
+// exclusion mechanism, but no call path ever changed driver selection: the feature/registry
+// mutation is machine-wide. Preserve and report old intent without inventing an unsupported
+// UpperFilters or forced-binding workaround.
 public static class PerDriveScopeService
 {
     private const string ScopeFile = "drive_scope.json";
-
-    // Value-name kept simple so an admin auditing the registry can read it. The actual
-    // key we write lives under the NVMe instance in HKLM\SYSTEM\...\Enum\PCI\VEN_...
-    // and is keyed by the drive's ParentInstanceId.
-    internal const string ScopeValueName = "NVMeDriverPatcher_Exclude";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -59,34 +54,24 @@ public static class PerDriveScopeService
             var path = ScopePath(config);
             if (!File.Exists(path)) return new PerDriveScopeConfig();
             var json = File.ReadAllText(path);
-            return string.IsNullOrWhiteSpace(json)
+            var scope = string.IsNullOrWhiteSpace(json)
                 ? new PerDriveScopeConfig()
                 : JsonSerializer.Deserialize<PerDriveScopeConfig>(json, JsonOptions) ?? new PerDriveScopeConfig();
+            scope.LegacyFilePresent = true;
+            return scope;
         }
-        catch
+        catch (Exception ex)
         {
-            return new PerDriveScopeConfig();
+            return new PerDriveScopeConfig
+            {
+                LegacyFilePresent = true,
+                LoadError = $"{ex.GetType().Name}: {ex.Message}"
+            };
         }
-    }
-
-    public static void Save(AppConfig config, PerDriveScopeConfig scope)
-    {
-        try
-        {
-            var path = ScopePath(config);
-            var dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            var json = JsonSerializer.Serialize(scope, JsonOptions);
-            var tmp = path + ".tmp";
-            File.WriteAllText(tmp, json);
-            File.Move(tmp, path, overwrite: true);
-        }
-        catch { /* best-effort */ }
     }
 
     /// <summary>
-    /// For each supplied drive, decide whether it should be included in the swap or pinned
-    /// to stornvme.sys via the per-drive scope. Pure function — no registry side effects.
+    /// Reports legacy exclusion matches while keeping every drive in the machine-wide scope.
     /// </summary>
     public static List<PerDriveDecision> Decide(IEnumerable<(string Serial, string Model)> drives, PerDriveScopeConfig scope)
     {
@@ -98,7 +83,7 @@ public static class PerDriveScopeService
                 Serial = serial ?? string.Empty,
                 Model = model ?? string.Empty,
                 Include = true,
-                Reason = "Default (included in swap)"
+                Reason = "Global feature/driver selection includes this drive."
             };
             if (!scope.Enabled)
             {
@@ -108,15 +93,15 @@ public static class PerDriveScopeService
             if (!string.IsNullOrWhiteSpace(serial) &&
                 scope.ExcludedSerials.Any(s => string.Equals(s, serial, StringComparison.OrdinalIgnoreCase)))
             {
-                decision.Include = false;
-                decision.Reason = $"Excluded by serial: {serial}";
+                decision.LegacyExclusionRequested = true;
+                decision.Reason = $"Legacy drive_scope.json requested exclusion by serial ({serial}), but that preference was never enforced; this drive remains in the global swap.";
             }
             else if (!string.IsNullOrWhiteSpace(model) &&
                      scope.ExcludedModelPatterns.Any(p => !string.IsNullOrWhiteSpace(p) && model.Contains(p, StringComparison.OrdinalIgnoreCase)))
             {
-                decision.Include = false;
+                decision.LegacyExclusionRequested = true;
                 var matched = scope.ExcludedModelPatterns.First(p => model.Contains(p, StringComparison.OrdinalIgnoreCase));
-                decision.Reason = $"Excluded by model pattern: {matched}";
+                decision.Reason = $"Legacy drive_scope.json requested exclusion by model pattern ({matched}), but that preference was never enforced; this drive remains in the global swap.";
             }
             decisions.Add(decision);
         }
@@ -124,13 +109,18 @@ public static class PerDriveScopeService
     }
 
     /// <summary>
-    /// Returns a summary suitable for the preflight panel or CLI: "3 drives, 1 excluded".
+    /// Returns an honest global-scope summary and warns when a legacy file requested exclusions.
     /// </summary>
-    public static string Summarize(List<PerDriveDecision> decisions)
+    public static string Summarize(List<PerDriveDecision> decisions, PerDriveScopeConfig? scope = null)
     {
         int total = decisions.Count;
-        int excluded = decisions.Count(d => !d.Include);
-        if (excluded == 0) return $"{total} NVMe drive(s) — all included in swap.";
-        return $"{total} NVMe drive(s) — {excluded} excluded by scope, {total - excluded} will swap.";
+        int requested = decisions.Count(d => d.LegacyExclusionRequested);
+        if (scope?.LegacyFilePresent == true && !string.IsNullOrWhiteSpace(scope.LoadError))
+            return $"WARNING: legacy drive_scope.json was detected but could not be read ({scope.LoadError}). It is not enforced; the mutation remains machine-wide across all {total} detected NVMe drive(s).";
+        if (requested == 0)
+            return scope?.LegacyFilePresent == true
+                ? $"NOTICE: legacy drive_scope.json was detected, but it is not enforced. The mutation is machine-wide and all {total} detected NVMe drive(s) remain in scope."
+                : $"Global scope: all {total} detected NVMe drive(s) are eligible for the same Windows driver selection; no per-drive exclusion is enforced.";
+        return $"WARNING: drive_scope.json requested {requested} per-drive exclusion(s), but they were never enforced. The mutation is machine-wide and all {total} detected NVMe drive(s) remain in scope.";
     }
 }
