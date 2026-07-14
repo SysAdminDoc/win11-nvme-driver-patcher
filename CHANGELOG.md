@@ -83,6 +83,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   auto-restart. `dry-run` prints the disposition without mutating.
 
 ### Security
+- **Pinned-hash verification for the DiskSpd benchmark binary** — DiskSpd (downloaded from the pinned
+  Microsoft v2.2 release and executed) is now verified against a repo-pinned SHA-256 allowlist
+  (amd64/arm64/x86) before it is copied or run, failing closed on mismatch — matching the ViVeTool
+  trust bar instead of relying on host + size validation. A stale/tampered cached copy is treated as
+  not-installed so a verified copy is re-downloaded.
 - **Updater no longer accepts an unpinned Authenticode signer** — the self-updater's Authenticode
   fallback verified signature validity, not signer identity, so any validly-signed binary at the
   asset URL could be staged for the in-place self-replace. Since releases ship unsigned with a
@@ -103,6 +108,16 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   can't be enabled, the connection open throws rather than serving queries unhardened.
 
 ### Fixed
+- **Registry backup escapes special characters** — `.reg` string values now escape backslashes and
+  quotes, so a captured SafeBoot value containing either produces a valid backup regedit will import
+  (previously it could be silently rejected, defeating recovery).
+- **ETW capture clears a stale kernel session before starting** — a capture killed between `-start`
+  and `-stop` left a WPR session that blocked the next capture with "already recording"; a best-effort
+  `-cancel` now precedes `-start`.
+- **Removed a use-after-dispose WMI helper footgun** — `WmiQueryHelper`'s unused string-query
+  overloads disposed the searcher before the lazy collection was enumerated; deleted so no caller can
+  fall into it.
+- **CLI surfaces a failed config-migration save** instead of silently discarding it.
 - **Backup-tool warnings name the disk-ID root cause** — the Acronis/Veeam/Macrium compat warnings
   now explain that native NVMe changes the disk ID (moving the drive under Storage disks) and advise
   re-registering backup jobs/chains after the swap, instead of only saying the drive "can't be seen."

@@ -31,6 +31,29 @@ public static class BenchmarkService
     private const long MinExeBytes = 32 * 1024;
     private static readonly SemaphoreSlim _installLock = new(1, 1);
 
+    // Repo-pinned SHA-256 of the DiskSpd v2.2 executables (amd64/arm64/x86). DiskSpd ships no
+    // upstream .sha256 sidecar and we execute it, so — matching the ViVeTool bar — verify the
+    // extracted exe against this allowlist and fail closed on mismatch rather than trusting host +
+    // size validation alone. The archive URL is pinned to a fixed release, so these are stable.
+    private static readonly HashSet<string> PinnedDiskSpdSha256 = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "8f3b2f0909549c54253edee26c9a8d239b8b6c817b076bcd7efb1bda6571aee9", // amd64
+        "229653c37b2c82480aae61d245b927624912bb2baddf9e5a1581c32085c0faff", // arm64
+        "9728ecbbeddae5f6fc8f0b8240882ee40ea0bded549e6821dd1fb60a06f94c90", // x86
+    };
+
+    internal static bool IsPinnedDiskSpd(string exePath)
+    {
+        try
+        {
+            if (!File.Exists(exePath)) return false;
+            using var fs = File.OpenRead(exePath);
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            return PinnedDiskSpdSha256.Contains(Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant());
+        }
+        catch { return false; }
+    }
+
     private static readonly Regex RxDiskSpdTotalLine = new(@"^\s*total:",          RegexOptions.Compiled);
     private static readonly Regex RxCommaGroupedInt  = new(@"^[+-]?\d{1,3}(,\d{3})+$", RegexOptions.Compiled);
     private static readonly Regex RxDotGroupedInt    = new(@"^[+-]?\d{1,3}(\.\d{3})+$", RegexOptions.Compiled);
@@ -145,8 +168,14 @@ public static class BenchmarkService
                 if (stagedExe.Length < MinExeBytes)
                     throw new InvalidOperationException("DiskSpd executable looks incomplete after extraction.");
 
+                // Fail closed on an unrecognized binary — we execute this, so a size/host match is
+                // not enough. Authenticode is an additional (best-effort) signal on top of the pin.
+                if (!IsPinnedDiskSpd(found))
+                    throw new InvalidOperationException(
+                        "DiskSpd executable did not match the pinned known-good SHA-256 (v2.2). Refusing to run an unverified benchmark binary.");
+
                 if (!VerifiedDownloader.VerifyAuthenticode(found))
-                    log?.Invoke("[WARNING] DiskSpd Authenticode verification unavailable (signtool not found) — using size + host validation only");
+                    log?.Invoke("[INFO] DiskSpd Authenticode check unavailable (signtool not found) — proceeding on the verified pinned hash.");
 
                 File.Copy(found, diskSpdExe, overwrite: true);
                 log?.Invoke("DiskSpd downloaded successfully");
@@ -547,7 +576,10 @@ public static class BenchmarkService
         try
         {
             if (!File.Exists(exePath)) return false;
-            return new FileInfo(exePath).Length >= MinExeBytes;
+            if (new FileInfo(exePath).Length < MinExeBytes) return false;
+            // A cached copy is only trusted if it still matches a pinned known-good hash — a
+            // tampered/stale cache is treated as not-installed so a verified copy is re-downloaded.
+            return IsPinnedDiskSpd(exePath);
         }
         catch
         {
