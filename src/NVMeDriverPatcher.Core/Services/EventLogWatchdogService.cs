@@ -9,6 +9,8 @@ namespace NVMeDriverPatcher.Services;
 
 public enum WatchdogVerdict
 {
+    /// <summary>State persistence or System Event Log evidence could not be proved.</summary>
+    Unavailable,
     /// <summary>No patch active or no pending watchdog window. Nothing to report.</summary>
     Idle,
     /// <summary>Watching — post-patch window still open, event counts below threshold.</summary>
@@ -33,6 +35,10 @@ public class WatchdogEventCount
 public class WatchdogReport
 {
     public WatchdogVerdict Verdict { get; set; }
+    public WatchdogVerdict? ObservedVerdict { get; set; }
+    public bool DataAvailable => Verdict != WatchdogVerdict.Unavailable;
+    public bool AutoRevertEnabled { get; set; }
+    public string? FailureCode { get; set; }
     public DateTime? WindowStart { get; set; }
     public DateTime? WindowEnd { get; set; }
     public int TotalEvents { get; set; }
@@ -54,6 +60,36 @@ public class WatchdogState
     public int CumulativeEvents { get; set; }
 }
 
+public enum WatchdogStateAccessStatus
+{
+    Loaded,
+    Missing,
+    Saved,
+    Busy,
+    Unavailable
+}
+
+public sealed record WatchdogStateLoadResult(
+    WatchdogState State,
+    WatchdogStateAccessStatus Status,
+    string Summary)
+{
+    public bool Success => Status is WatchdogStateAccessStatus.Loaded or WatchdogStateAccessStatus.Missing;
+}
+
+public sealed record WatchdogStateSaveResult(WatchdogStateAccessStatus Status, string Summary)
+{
+    public bool Success => Status == WatchdogStateAccessStatus.Saved;
+}
+
+public sealed record WatchdogEventLogProbeResult(bool Success, string Summary, string? FailureCode = null);
+
+internal sealed record WatchdogEventQueryResult(
+    bool Success,
+    List<WatchdogEventCount> Counts,
+    string Summary,
+    string? FailureCode = null);
+
 // Post-patch stability watchdog. Watches Storport ID 129 (timeout), disk ID 51/153 (paging),
 // nvmedisk init/unload, and BugCheck ID 1001 in the N-hour window after a patch apply.
 // If counts cross the revert threshold, signals the caller to stage an auto-revert on next
@@ -61,6 +97,8 @@ public class WatchdogState
 public static class EventLogWatchdogService
 {
     private const string StateFile = "watchdog.json";
+    internal const string StateMutexName = @"Global\NVMeDriverPatcher.WatchdogState";
+    private static readonly TimeSpan StateMutexTimeout = TimeSpan.FromSeconds(10);
 
     // Events we treat as storage-stack distress signals. Each is either a direct NVMe failure
     // or a class of failure that correlates with the patch on community BSOD threads.
@@ -88,99 +126,120 @@ public static class EventLogWatchdogService
 
     public static WatchdogState LoadState(AppConfig config)
     {
-        try
-        {
-            var path = StatePath(config);
-            if (!File.Exists(path)) return new WatchdogState();
-            var json = File.ReadAllText(path);
-            return string.IsNullOrWhiteSpace(json)
-                ? new WatchdogState()
-                : JsonSerializer.Deserialize<WatchdogState>(json, JsonOptions) ?? new WatchdogState();
-        }
-        catch
-        {
-            return new WatchdogState();
-        }
+        var result = LoadStateWithStatus(config);
+        if (!result.Success)
+            throw new IOException(result.Summary);
+        return result.State;
     }
 
-    public static void SaveState(AppConfig config, WatchdogState state)
+    public static WatchdogStateLoadResult LoadStateWithStatus(AppConfig config) =>
+        LoadStateWithStatus(config, StateMutexTimeout, StateMutexName);
+
+    internal static WatchdogStateLoadResult LoadStateWithStatus(
+        AppConfig config,
+        TimeSpan timeout,
+        string mutexName)
     {
-        try
-        {
-            var path = StatePath(config);
-            var dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            var json = JsonSerializer.Serialize(state, JsonOptions);
-            var tmp = path + ".tmp";
-            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
-            {
-                sw.Write(json);
-                sw.Flush();
-                fs.Flush(flushToDisk: true);
-            }
-            File.Move(tmp, path, overwrite: true);
-        }
-        catch { /* best-effort — watchdog state lossy is acceptable */ }
+        using var lease = AcquireStateMutex(timeout, mutexName);
+        return lease.Held
+            ? LoadStateCore(config)
+            : new WatchdogStateLoadResult(
+                new WatchdogState(),
+                lease.Error is null ? WatchdogStateAccessStatus.Busy : WatchdogStateAccessStatus.Unavailable,
+                lease.Error ?? "Watchdog state is busy in another process; no protected state was read.");
     }
 
-    private static readonly string LockFile = "watchdog.lock";
+    public static WatchdogStateSaveResult SaveState(AppConfig config, WatchdogState state) =>
+        SaveState(config, state, StateMutexTimeout, StateMutexName);
 
-    private static string LockPath(AppConfig config) =>
-        Path.Combine(string.IsNullOrWhiteSpace(config.WorkingDir) ? AppConfig.GetWorkingDir() : config.WorkingDir, LockFile);
-
-    private static FileStream? AcquireFileLock(AppConfig config)
+    internal static WatchdogStateSaveResult SaveState(
+        AppConfig config,
+        WatchdogState state,
+        TimeSpan timeout,
+        string mutexName)
     {
-        try
+        using var lease = AcquireStateMutex(timeout, mutexName);
+        return lease.Held
+            ? SaveStateCore(config, state)
+            : new WatchdogStateSaveResult(
+                lease.Error is null ? WatchdogStateAccessStatus.Busy : WatchdogStateAccessStatus.Unavailable,
+                lease.Error ?? "Watchdog state is busy in another process; no protected state was written.");
+    }
+
+    public static WatchdogStateSaveResult UpdateState(
+        AppConfig config,
+        Action<WatchdogState> update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        using var lease = AcquireStateMutex(StateMutexTimeout, StateMutexName);
+        if (!lease.Held)
         {
-            var path = LockPath(config);
-            var dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            return new WatchdogStateSaveResult(
+                lease.Error is null ? WatchdogStateAccessStatus.Busy : WatchdogStateAccessStatus.Unavailable,
+                lease.Error ?? "Watchdog state is busy in another process; the update did not run.");
         }
-        catch
-        {
-            return null;
-        }
+
+        var loaded = LoadStateCore(config);
+        if (!loaded.Success)
+            return new WatchdogStateSaveResult(WatchdogStateAccessStatus.Unavailable, loaded.Summary);
+        update(loaded.State);
+        return SaveStateCore(config, loaded.State);
     }
 
     /// <summary>
     /// Call immediately after a successful patch apply to open the watchdog window.
     /// </summary>
-    public static void Arm(AppConfig config, int? windowHours = null)
-    {
-        var state = LoadState(config);
-        state.PatchAppliedAt = DateTime.UtcNow.ToString("o");
-        state.WindowHours = windowHours ?? state.WindowHours;
-        state.CumulativeEvents = 0;
-        state.LastVerdict = WatchdogVerdict.Healthy.ToString();
-        state.LastEvaluatedAt = null;
-        SaveState(config, state);
-    }
+    public static WatchdogStateSaveResult Arm(AppConfig config, int? windowHours = null) =>
+        UpdateState(config, state =>
+        {
+            state.PatchAppliedAt = DateTime.UtcNow.ToString("o");
+            state.WindowHours = Math.Clamp(windowHours ?? state.WindowHours, 1, 168);
+            state.CumulativeEvents = 0;
+            state.LastVerdict = WatchdogVerdict.Healthy.ToString();
+            state.LastEvaluatedAt = null;
+        });
 
     /// <summary>
     /// Call after an uninstall or a confirmed revert to close the window cleanly.
     /// </summary>
-    public static void Disarm(AppConfig config)
-    {
-        var state = LoadState(config);
-        state.PatchAppliedAt = null;
-        state.CumulativeEvents = 0;
-        state.LastVerdict = WatchdogVerdict.Idle.ToString();
-        state.LastEvaluatedAt = DateTime.UtcNow.ToString("o");
-        SaveState(config, state);
-    }
+    public static WatchdogStateSaveResult Disarm(AppConfig config) =>
+        UpdateState(config, state =>
+        {
+            state.PatchAppliedAt = null;
+            state.CumulativeEvents = 0;
+            state.LastVerdict = WatchdogVerdict.Idle.ToString();
+            state.LastEvaluatedAt = DateTime.UtcNow.ToString("o");
+        });
 
     /// <summary>
-    /// Read-only evaluation. Returns Idle if no patch is armed, Completed if the window expired,
-    /// or Healthy/Warning/Unstable based on the event counts inside the window.
+    /// Returns Idle if no patch is armed, Completed if the window expired, Healthy/Warning/Unstable
+    /// from proved Event Log evidence, or Unavailable when state/query/persistence cannot be proved.
     /// </summary>
-    public static WatchdogReport Evaluate(AppConfig config)
-    {
-        using var fileLock = AcquireFileLock(config);
+    public static WatchdogReport Evaluate(AppConfig config) =>
+        Evaluate(config, CountEvents, DateTime.UtcNow, StateMutexTimeout, StateMutexName, SaveStateCore);
 
-        var report = new WatchdogReport();
-        var state = LoadState(config);
+    internal static WatchdogReport Evaluate(
+        AppConfig config,
+        Func<DateTime, WatchdogEventQueryResult> queryEvents,
+        DateTime utcNow,
+        TimeSpan mutexTimeout,
+        string mutexName,
+        Func<AppConfig, WatchdogState, WatchdogStateSaveResult> persistState)
+    {
+        using var lease = AcquireStateMutex(mutexTimeout, mutexName);
+        if (!lease.Held)
+        {
+            return UnavailableReport(
+                lease.Error is null ? "StateBusy" : "StateLockUnavailable",
+                lease.Error ?? "Watchdog state is busy in another process; evaluation did not read protected state.");
+        }
+
+        var loaded = LoadStateCore(config);
+        if (!loaded.Success)
+            return UnavailableReport("StateUnavailable", loaded.Summary);
+
+        var state = loaded.State;
+        var report = new WatchdogReport { AutoRevertEnabled = state.AutoRevertEnabled };
 
         if (string.IsNullOrWhiteSpace(state.PatchAppliedAt))
         {
@@ -195,10 +254,10 @@ public static class EventLogWatchdogService
                 System.Globalization.DateTimeStyles.RoundtripKind,
                 out var appliedRaw))
         {
-            report.Verdict = WatchdogVerdict.Idle;
-            report.Summary = "Watchdog window timestamp corrupt — clearing.";
-            Disarm(config);
-            return report;
+            return UnavailableReport(
+                "InvalidWindowTimestamp",
+                "Watchdog state contains an invalid patch-window timestamp; it was preserved for recovery instead of being cleared.",
+                state.AutoRevertEnabled);
         }
 
         var applied = appliedRaw.Kind switch
@@ -210,25 +269,58 @@ public static class EventLogWatchdogService
         report.WindowStart = applied;
         report.WindowEnd = applied + TimeSpan.FromHours(Math.Max(1, state.WindowHours));
 
-        var counts = CountEvents(applied);
-        report.Counts = counts;
-        report.TotalEvents = counts.Sum(c => c.Count);
-        report.BugChecks = counts.FirstOrDefault(c => c.Source == "BugCheck" && c.Id == 1001)?.Count ?? 0;
+        var query = queryEvents(applied);
+        if (!query.Success)
+        {
+            state.LastVerdict = WatchdogVerdict.Unavailable.ToString();
+            state.LastEvaluatedAt = utcNow.ToString("o");
+            var persisted = persistState(config, state);
+            var persistenceDetail = persisted.Success ? string.Empty : " State persistence also failed: " + persisted.Summary;
+            return UnavailableReport(
+                query.FailureCode ?? "EventLogQueryFailed",
+                query.Summary + persistenceDetail,
+                state.AutoRevertEnabled);
+        }
+
+        report.Counts = query.Counts;
+        report.TotalEvents = query.Counts.Sum(c => c.Count);
+        report.BugChecks = query.Counts.FirstOrDefault(c => c.Source == "BugCheck" && c.Id == 1001)?.Count ?? 0;
 
         report.Verdict = DeriveVerdict(
             report.TotalEvents, state.WarnThreshold, state.RevertThreshold,
-            windowExpired: DateTime.UtcNow > report.WindowEnd);
+            windowExpired: utcNow > report.WindowEnd);
+        report.ObservedVerdict = report.Verdict;
 
         report.Summary = BuildSummary(report, state);
         report.Detail = BuildDetail(report, state);
 
         state.LastVerdict = report.Verdict.ToString();
-        state.LastEvaluatedAt = DateTime.UtcNow.ToString("o");
+        state.LastEvaluatedAt = utcNow.ToString("o");
         state.CumulativeEvents = report.TotalEvents;
-        SaveState(config, state);
+        var saved = persistState(config, state);
+        if (!saved.Success)
+        {
+            report.Verdict = WatchdogVerdict.Unavailable;
+            report.FailureCode = "StatePersistenceFailed";
+            report.Summary = $"Watchdog observed {report.ObservedVerdict} from System-log evidence, but the result is unavailable as a durable checkpoint: {saved.Summary}";
+            report.Detail = report.Summary + Environment.NewLine + report.Detail;
+        }
 
         return report;
     }
+
+    private static WatchdogReport UnavailableReport(
+        string failureCode,
+        string summary,
+        bool autoRevertEnabled = false) =>
+        new()
+        {
+            Verdict = WatchdogVerdict.Unavailable,
+            FailureCode = failureCode,
+            Summary = summary,
+            Detail = summary,
+            AutoRevertEnabled = autoRevertEnabled
+        };
 
     /// <summary>
     /// Pure verdict derivation — the watchdog's core decision, extracted so the full
@@ -250,6 +342,7 @@ public static class EventLogWatchdogService
     {
         var summary = report.Verdict switch
         {
+            WatchdogVerdict.Unavailable => "Watchdog evidence is unavailable — do not interpret missing counts as healthy.",
             WatchdogVerdict.Unstable => $"Storage instability detected ({report.TotalEvents} events) — auto-revert eligible.",
             WatchdogVerdict.Warning => $"Elevated storage events ({report.TotalEvents}) in post-patch window.",
             WatchdogVerdict.Healthy => $"Stable — {report.TotalEvents} storage events in watchdog window.",
@@ -285,6 +378,259 @@ public static class EventLogWatchdogService
     internal static bool HasStorportCommandTimeout(WatchdogReport report) =>
         report.Counts.Any(c => c.Id == 129 && c.Count > 0);
 
+    private static WatchdogStateLoadResult LoadStateCore(AppConfig config)
+    {
+        var path = StatePath(config);
+        var backupPath = path + ".bak";
+        if (File.Exists(path) && TryReadState(path, out var primary, out _))
+        {
+            return new WatchdogStateLoadResult(
+                primary!,
+                WatchdogStateAccessStatus.Loaded,
+                "Loaded validated watchdog state.");
+        }
+
+        string? primaryFailure = null;
+        if (File.Exists(path))
+        {
+            TryReadState(path, out _, out var error);
+            var evidence = PreserveCorruptCopy(path);
+            primaryFailure = $"Primary watchdog state failed validation ({error})." +
+                (evidence is null ? " Corrupt evidence could not be copied." : $" Preserved as {Path.GetFileName(evidence)}.");
+        }
+
+        if (File.Exists(backupPath) && TryReadState(backupPath, out var backup, out _))
+        {
+            return new WatchdogStateLoadResult(
+                backup!,
+                WatchdogStateAccessStatus.Loaded,
+                string.Join(" ", new[] { primaryFailure, "Loaded validated watchdog.json.bak." }
+                    .Where(value => !string.IsNullOrWhiteSpace(value))));
+        }
+
+        if (!File.Exists(path) && !File.Exists(backupPath))
+        {
+            return new WatchdogStateLoadResult(
+                new WatchdogState(),
+                WatchdogStateAccessStatus.Missing,
+                "No watchdog state exists; the watchdog is not armed.");
+        }
+
+        string? backupFailure = null;
+        if (File.Exists(backupPath))
+        {
+            TryReadState(backupPath, out _, out var error);
+            var evidence = PreserveCorruptCopy(backupPath);
+            backupFailure = $"Watchdog backup failed validation ({error})." +
+                (evidence is null ? " Corrupt evidence could not be copied." : $" Preserved as {Path.GetFileName(evidence)}.");
+        }
+
+        return new WatchdogStateLoadResult(
+            new WatchdogState(),
+            WatchdogStateAccessStatus.Unavailable,
+            string.Join(" ", new[] { primaryFailure, backupFailure, "No validated watchdog state is available." }
+                .Where(value => !string.IsNullOrWhiteSpace(value))));
+    }
+
+    private static WatchdogStateSaveResult SaveStateCore(AppConfig config, WatchdogState state)
+    {
+        var path = StatePath(config);
+        var backupPath = path + ".bak";
+        var tempPath = $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            var directory = Path.GetDirectoryName(path);
+            if (string.IsNullOrWhiteSpace(directory))
+                return new(WatchdogStateAccessStatus.Unavailable, "Watchdog state path has no parent directory.");
+            Directory.CreateDirectory(directory);
+
+            var json = JsonSerializer.Serialize(state, JsonOptions);
+            WriteDurableText(tempPath, json);
+            if (!TryReadState(tempPath, out _, out var stagingError))
+            {
+                return new(WatchdogStateAccessStatus.Unavailable,
+                    "Flushed watchdog staging file failed validation: " + stagingError);
+            }
+
+            if (File.Exists(path))
+            {
+                if (TryReadState(path, out _, out _))
+                    File.Replace(tempPath, path, backupPath, ignoreMetadataErrors: true);
+                else
+                    File.Replace(tempPath, path, UniqueEvidencePath(path), ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Move(tempPath, path, overwrite: false);
+            }
+
+            if (!EnsureValidBackup(path, backupPath, out var backupError))
+                return new(WatchdogStateAccessStatus.Unavailable, backupError);
+            if (!TryReadState(path, out _, out var primaryError))
+                return new(WatchdogStateAccessStatus.Unavailable, "Published watchdog state failed validation: " + primaryError);
+
+            return new(WatchdogStateAccessStatus.Saved,
+                "Watchdog state was validated, flushed, and published atomically with a validated backup.");
+        }
+        catch (Exception ex)
+        {
+            return new(WatchdogStateAccessStatus.Unavailable,
+                $"Watchdog state persistence failed ({ex.GetType().Name}): {ex.Message}");
+        }
+        finally
+        {
+            TryDelete(tempPath);
+        }
+    }
+
+    private static bool EnsureValidBackup(string primaryPath, string backupPath, out string error)
+    {
+        error = string.Empty;
+        if (File.Exists(backupPath) && TryReadState(backupPath, out _, out _))
+            return true;
+
+        var tempPath = $"{backupPath}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            File.Copy(primaryPath, tempPath, overwrite: false);
+            FlushExistingFile(tempPath);
+            if (!TryReadState(tempPath, out _, out error))
+            {
+                error = "Watchdog backup staging failed validation: " + error;
+                return false;
+            }
+
+            if (File.Exists(backupPath))
+                File.Replace(tempPath, backupPath, UniqueEvidencePath(backupPath), ignoreMetadataErrors: true);
+            else
+                File.Move(tempPath, backupPath, overwrite: false);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Could not publish a validated watchdog backup ({ex.GetType().Name}): {ex.Message}";
+            return false;
+        }
+        finally
+        {
+            TryDelete(tempPath);
+        }
+    }
+
+    internal static bool TryReadState(string path, out WatchdogState? state, out string error)
+    {
+        state = null;
+        error = string.Empty;
+        try
+        {
+            var json = File.ReadAllText(path, Encoding.UTF8);
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                error = "file is empty";
+                return false;
+            }
+
+            state = JsonSerializer.Deserialize<WatchdogState>(json, JsonOptions);
+            if (state is null)
+            {
+                error = "JSON deserialized to null";
+                return false;
+            }
+            if (state.WindowHours is < 1 or > 168 ||
+                state.WarnThreshold < 1 ||
+                state.RevertThreshold < state.WarnThreshold ||
+                state.CumulativeEvents < 0)
+            {
+                error = "state values violate watchdog bounds";
+                state = null;
+                return false;
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"{ex.GetType().Name}: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static string? PreserveCorruptCopy(string path)
+    {
+        try
+        {
+            var evidence = UniqueEvidencePath(path);
+            File.Copy(path, evidence, overwrite: false);
+            FlushExistingFile(evidence);
+            return evidence;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string UniqueEvidencePath(string path)
+    {
+        var basePath = path + ".corrupt";
+        if (!File.Exists(basePath)) return basePath;
+        return basePath + "." + DateTime.UtcNow.ToString(
+            "yyyyMMdd'T'HHmmssfffffff'Z'",
+            System.Globalization.CultureInfo.InvariantCulture) + "." + Guid.NewGuid().ToString("N");
+    }
+
+    private static void WriteDurableText(string path, string content)
+    {
+        using var stream = new FileStream(
+            path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 16 * 1024, FileOptions.WriteThrough);
+        using var writer = new StreamWriter(stream, new UTF8Encoding(false), leaveOpen: true);
+        writer.Write(content);
+        writer.Flush();
+        stream.Flush(flushToDisk: true);
+    }
+
+    private static void FlushExistingFile(string path)
+    {
+        using var stream = new FileStream(
+            path, FileMode.Open, FileAccess.ReadWrite, FileShare.None, 16 * 1024, FileOptions.WriteThrough);
+        stream.Flush(flushToDisk: true);
+    }
+
+    private static StateMutexLease AcquireStateMutex(TimeSpan timeout, string mutexName)
+    {
+        Mutex? mutex = null;
+        try
+        {
+            mutex = new Mutex(initiallyOwned: false, mutexName);
+            var held = false;
+            try { held = mutex.WaitOne(timeout); }
+            catch (AbandonedMutexException) { held = true; }
+            return new StateMutexLease(mutex, held, null);
+        }
+        catch (Exception ex)
+        {
+            mutex?.Dispose();
+            return new StateMutexLease(null, false,
+                $"Watchdog state lock is unavailable ({ex.GetType().Name}): {ex.Message}");
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); } catch { }
+    }
+
+    private sealed class StateMutexLease(Mutex? mutex, bool held, string? error) : IDisposable
+    {
+        public bool Held { get; } = held;
+        public string? Error { get; } = error;
+
+        public void Dispose()
+        {
+            if (Held) { try { mutex?.ReleaseMutex(); } catch { } }
+            mutex?.Dispose();
+        }
+    }
+
     // Safety cap on the per-evaluation event loop. Above this many matching records we stop
     // reading — the verdict would already be locked in as Unstable (revert threshold is
     // typically 6, not thousands), and walking the remaining tail only costs memory and IO.
@@ -292,7 +638,7 @@ public static class EventLogWatchdogService
     // an unrelated flood (e.g. a driver re-install spamming disk 153 events) can't wedge us.
     private const int MaxEventsScanned = 10_000;
 
-    private static List<WatchdogEventCount> CountEvents(DateTime since)
+    private static WatchdogEventQueryResult CountEvents(DateTime since)
     {
         var results = WatchEvents
             .Select(w => new WatchdogEventCount { Source = w.Source, Id = w.Id, Description = w.Description })
@@ -310,47 +656,63 @@ public static class EventLogWatchdogService
         {
             var query = new EventLogQuery("System", PathType.LogName, xpath);
             using var reader = new EventLogReader(query);
-            EventRecord? record;
             int scanned = 0;
-            while ((record = TryReadNext(reader)) is not null)
+            while (true)
             {
-                try
+                using var record = reader.ReadEvent();
+                if (record is null) break;
+                var src = record.ProviderName ?? string.Empty;
+                var id = record.Id;
+                var ts = record.TimeCreated?.ToUniversalTime();
+                foreach (var c in results)
                 {
-                    var src = record.ProviderName ?? string.Empty;
-                    var id = record.Id;
-                    var ts = record.TimeCreated?.ToUniversalTime();
-                    foreach (var c in results)
+                    if (c.Id == id && string.Equals(c.Source, src, StringComparison.OrdinalIgnoreCase))
                     {
-                        if (c.Id == id && string.Equals(c.Source, src, StringComparison.OrdinalIgnoreCase))
-                        {
-                            c.Count++;
-                            if (ts is not null && (c.LatestOccurrence is null || ts > c.LatestOccurrence))
-                                c.LatestOccurrence = ts;
-                            break;
-                        }
+                        c.Count++;
+                        if (ts is not null && (c.LatestOccurrence is null || ts > c.LatestOccurrence))
+                            c.LatestOccurrence = ts;
+                        break;
                     }
-                }
-                finally
-                {
-                    try { record.Dispose(); } catch { }
                 }
 
                 if (++scanned >= MaxEventsScanned) break;
             }
-        }
-        catch
-        {
-            // Hardened SKUs can deny SYSTEM channel read to the current session even when
-            // elevated. Return whatever we have — zero counts is safer than false positives.
-        }
 
-        return results;
+            return new WatchdogEventQueryResult(
+                true,
+                results,
+                $"System Event Log query succeeded ({scanned} matching record(s) scanned).");
+        }
+        catch (Exception ex)
+        {
+            return new WatchdogEventQueryResult(
+                false,
+                results,
+                $"System Event Log query failed ({ex.GetType().Name}): {ex.Message}",
+                ex is UnauthorizedAccessException ? "EventLogAccessDenied" : "EventLogQueryFailed");
+        }
     }
 
-    private static EventRecord? TryReadNext(EventLogReader reader)
+    public static WatchdogEventLogProbeResult ProbeSystemLogReadability()
     {
-        try { return reader.ReadEvent(); }
-        catch { return null; }
+        try
+        {
+            var query = new EventLogQuery("System", PathType.LogName, "*[System]")
+            {
+                ReverseDirection = true
+            };
+            using var reader = new EventLogReader(query);
+            using var record = reader.ReadEvent();
+            return new(true, record is null
+                ? "System Event Log opened successfully; the channel currently has no records."
+                : $"System Event Log live read succeeded ({record.ProviderName ?? "unknown"}/{record.Id}).");
+        }
+        catch (Exception ex)
+        {
+            return new(false,
+                $"System Event Log live read failed ({ex.GetType().Name}): {ex.Message}",
+                ex is UnauthorizedAccessException ? "EventLogAccessDenied" : "EventLogProbeFailed");
+        }
     }
 
     /// <summary>
@@ -359,7 +721,8 @@ public static class EventLogWatchdogService
     /// </summary>
     public static bool ShouldAutoRevert(AppConfig config, WatchdogReport report)
     {
-        var state = LoadState(config);
-        return state.AutoRevertEnabled && report.Verdict == WatchdogVerdict.Unstable;
+        _ = config;
+        var actionable = report.ObservedVerdict ?? report.Verdict;
+        return report.AutoRevertEnabled && actionable == WatchdogVerdict.Unstable;
     }
 }

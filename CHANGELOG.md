@@ -80,6 +80,16 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   load validates the primary then backup, self-heals from the backup, and preserves every invalid
   primary/backup as `.corrupt` evidence before using safe defaults. Concurrent-writer, torn-file,
   and lock-timeout tests cover the recovery contract.
+- **Watchdog evidence is durable, observable, and service-recoverable** — every watchdog state
+  read-modify-write now serializes through a machine-global mutex, validates and flushes a unique
+  staging file, atomically publishes it, retains a validated backup, and preserves corrupt evidence.
+  State contention, invalid timestamps, Event Log query failures, and checkpoint write failures
+  produce a typed `Unavailable` verdict instead of a false zero-event `Healthy`; proved unstable
+  evidence remains auto-revert eligible even if its final checkpoint cannot be saved. GUI/CLI/GPO,
+  config import, removal, and auto-revert callers surface failed arm/disarm writes. Both MSI and
+  manual service installs pin LocalService, restricted SID, minimum privilege, shared-state/Event
+  Log ACLs, and two restart recovery actions without a machine reboot; an elevated packaging smoke
+  verifies the live SCM and System-log-readability contract.
 - **`compare-benchmarks` can actually detect a regression** — the CLI compared the baseline to
   itself (always exit 0). It now compares the baseline against a real current benchmark (the most
   recent recorded run, or an explicit `--current=<path>`) and exits non-zero on a real regression

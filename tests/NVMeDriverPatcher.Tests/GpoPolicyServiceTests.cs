@@ -68,8 +68,10 @@ public sealed class GpoPolicyServiceTests
         try
         {
             var config = new AppConfig { WorkingDir = dir };
-            GpoPolicyService.ApplyTo(config, new PolicyOverlay { WatchdogAutoRevert = false, WatchdogWindowHours = 72 });
+            var saved = GpoPolicyService.ApplyTo(config, new PolicyOverlay { WatchdogAutoRevert = false, WatchdogWindowHours = 72 });
 
+            Assert.NotNull(saved);
+            Assert.True(saved.Success, saved.Summary);
             var state = EventLogWatchdogService.LoadState(config);
             Assert.False(state.AutoRevertEnabled);
             Assert.Equal(72, state.WindowHours);

@@ -126,8 +126,10 @@ public partial class MainViewModel
                 PatchVerificationService.MarkPending(Config);
                 // Open the post-patch watchdog window. Any Storport/disk/bugcheck events
                 // inside this window feed the Unstable verdict + auto-revert path on next run.
-                EventLogWatchdogService.Arm(Config);
-                bool configCheckpointSaved = ConfigService.Save(Config);
+                var watchdogCheckpoint = EventLogWatchdogService.Arm(Config);
+                if (!watchdogCheckpoint.Success)
+                    Log("[ERROR] Watchdog checkpoint failed: " + watchdogCheckpoint.Summary, "ERROR");
+                bool configCheckpointSaved = watchdogCheckpoint.Success && ConfigService.Save(Config);
                 bool ledgerCheckpointSaved = configCheckpointSaved &&
                     MutationLedgerService.MarkRebootPending(
                         Config.WorkingDir,
@@ -137,7 +139,9 @@ public partial class MainViewModel
                 {
                     var restored = MutationLedgerService.RestoreOriginalState(Config.WorkingDir, msg => Log(msg));
                     PatchVerificationService.Clear(Config, new VerificationReport { Outcome = VerificationOutcome.Reverted });
-                    EventLogWatchdogService.Disarm(Config);
+                    var watchdogRollback = EventLogWatchdogService.Disarm(Config);
+                    if (!watchdogRollback.Success)
+                        Log("[ERROR] Watchdog rollback checkpoint failed: " + watchdogRollback.Summary, "ERROR");
                     ConfigService.Save(Config);
                     UpdateRegistryDisplay();
                     UpdateStatusDisplay();
@@ -244,7 +248,14 @@ public partial class MainViewModel
             {
                 // Close the watchdog window — no more post-patch monitoring makes sense
                 // after an explicit uninstall. Safe even if it was never armed.
-                try { EventLogWatchdogService.Disarm(Config); } catch { }
+                var disarm = EventLogWatchdogService.Disarm(Config);
+                if (!disarm.Success)
+                {
+                    Log("[ERROR] Patch removal completed, but the watchdog disarm checkpoint failed: " + disarm.Summary, "ERROR");
+                    InfoDialog?.Invoke("Watchdog State Unavailable",
+                        "The patch was removed, but its watchdog state could not be updated durably. Restart remains safe, but resolve the ProgramData disk or permissions problem before applying the patch again.\n\n" + disarm.Summary,
+                        DialogIcon.Warning);
+                }
                 ToastService.Show("NVMe Patch Removed", "Patch components removed. Restart required.", ToastType.Info, Config.EnableToasts);
 
                 var restartMsg = $"Patch removed successfully ({result.AppliedCount} component(s)).\n\n" +
@@ -539,7 +550,10 @@ public partial class MainViewModel
             Log($"Fallback integrity check: {result.IntegritySignal}", "INFO");
             ShowViVeToolFallbackBadge = false;
             PatchVerificationService.MarkPending(Config, isFallback: true);
-            bool configCheckpointSaved = ConfigService.Save(Config);
+            var watchdogCheckpoint = EventLogWatchdogService.Arm(Config);
+            if (!watchdogCheckpoint.Success)
+                Log("[ERROR] Watchdog checkpoint failed: " + watchdogCheckpoint.Summary, "ERROR");
+            bool configCheckpointSaved = watchdogCheckpoint.Success && ConfigService.Save(Config);
             bool ledgerCheckpointSaved = configCheckpointSaved &&
                 MutationLedgerService.MarkRebootPending(
                     Config.WorkingDir,
@@ -549,7 +563,9 @@ public partial class MainViewModel
             {
                 var restored = MutationLedgerService.RestoreOriginalState(Config.WorkingDir, msg => Log(msg));
                 PatchVerificationService.Clear(Config, new VerificationReport { Outcome = VerificationOutcome.Reverted });
-                EventLogWatchdogService.Disarm(Config);
+                var watchdogRollback = EventLogWatchdogService.Disarm(Config);
+                if (!watchdogRollback.Success)
+                    Log("[ERROR] Watchdog rollback checkpoint failed: " + watchdogRollback.Summary, "ERROR");
                 ConfigService.Save(Config);
                 Log("[ERROR] Fallback checkpoint could not be saved — exact rollback attempted and restart refused.", "ERROR");
                 InfoDialog?.Invoke("Checkpoint Not Saved",

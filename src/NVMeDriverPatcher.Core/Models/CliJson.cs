@@ -43,6 +43,9 @@ public static class CliJson
     public static WatchdogJson BuildWatchdog(WatchdogReport report) => new()
     {
         Verdict = report.Verdict.ToString(),
+        DataAvailable = report.DataAvailable,
+        FailureCode = report.FailureCode,
+        ObservedVerdict = report.ObservedVerdict?.ToString(),
         TotalEvents = report.TotalEvents,
         BugChecks = report.BugChecks,
         Summary = report.Summary,
@@ -221,6 +224,9 @@ public sealed class StatusJson
 public sealed class WatchdogJson
 {
     public string Verdict { get; set; } = string.Empty;
+    public bool DataAvailable { get; set; }
+    public string? FailureCode { get; set; }
+    public string? ObservedVerdict { get; set; }
     public int TotalEvents { get; set; }
     public int BugChecks { get; set; }
     public string Summary { get; set; } = string.Empty;

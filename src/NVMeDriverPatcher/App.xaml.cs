@@ -100,7 +100,9 @@ public partial class App : Application
         try
         {
             var arConfig = Services.ConfigService.Load();
-            Services.GpoPolicyService.ApplyTo(arConfig, Services.GpoPolicyService.Read());
+            var policyWatchdogSave = Services.GpoPolicyService.ApplyTo(arConfig, Services.GpoPolicyService.Read());
+            if (policyWatchdogSave is { Success: false })
+                WriteCrashEntry("WatchdogPolicy", new IOException(policyWatchdogSave.Summary));
             var outcome = Services.AutoRevertService.MaybeRun(arConfig, m => WriteCrashEntry("AutoRevert", new InvalidOperationException(m)));
             if (outcome.Executed)
             {

@@ -51,12 +51,19 @@ internal static class Program
         arg.Equals("/install", StringComparison.OrdinalIgnoreCase) ||
         arg.Equals("/uninstall", StringComparison.OrdinalIgnoreCase) ||
         arg.Equals("/grant-eventlog", StringComparison.OrdinalIgnoreCase) ||
+        arg.Equals("/grant-runtime-access", StringComparison.OrdinalIgnoreCase) ||
         arg.Equals("--install", StringComparison.OrdinalIgnoreCase) ||
         arg.Equals("--uninstall", StringComparison.OrdinalIgnoreCase) ||
-        arg.Equals("--grant-eventlog", StringComparison.OrdinalIgnoreCase);
+        arg.Equals("--grant-eventlog", StringComparison.OrdinalIgnoreCase) ||
+        arg.Equals("--grant-runtime-access", StringComparison.OrdinalIgnoreCase);
 
     private static int HandleServiceControl(string verb)
     {
+        if (verb.Contains("grant-runtime-access", StringComparison.OrdinalIgnoreCase))
+        {
+            var stateAccess = GrantStateDirectoryAccess();
+            return stateAccess == 0 ? GrantEventLogAccess(warnOnly: false) : stateAccess;
+        }
         if (verb.Contains("grant-eventlog", StringComparison.OrdinalIgnoreCase))
             return GrantEventLogAccess(warnOnly: false);
 
@@ -71,15 +78,46 @@ internal static class Program
                 "obj=", "NT AUTHORITY\\LocalService", "DisplayName=", "NVMe Driver Patcher Watchdog");
             if (rc != 0) return rc;
 
-            // Restrict the service SID so it can only access resources explicitly granted
-            // to its per-service SID, even if LocalService has broader permissions elsewhere.
-            rc = RunSc("sidtype", ServiceName, "restricted");
-            if (rc != 0)
-                Console.Error.WriteLine($"Warning: could not set restricted SID (sc sidtype exit {rc}). Service will still run under LocalService.");
-            GrantEventLogAccess(warnOnly: true);
+            // Both installer routes have one fail-closed service contract: restricted SID,
+            // minimum token privileges, restart on first/second failure, never reboot the host.
+            var configurationSteps = new Func<int>[]
+            {
+                () => RunSc("sidtype", ServiceName, "restricted"),
+                () => RunSc("privs", ServiceName, "SeChangeNotifyPrivilege"),
+                () => RunSc("failure", ServiceName, "reset=", "86400", "actions=",
+                    "restart/10000/restart/10000/none/0"),
+                () => RunSc("failureflag", ServiceName, "1"),
+                GrantStateDirectoryAccess,
+                () => GrantEventLogAccess(warnOnly: false)
+            };
+            foreach (var step in configurationSteps)
+            {
+                rc = step();
+                if (rc == 0) continue;
+                Console.Error.WriteLine("Watchdog service configuration failed; removing the partial service registration.");
+                RunSc("delete", ServiceName);
+                return rc;
+            }
             return 0;
         }
         return RunSc("delete", ServiceName);
+    }
+
+    private static int GrantStateDirectoryAccess()
+    {
+        var workingDir = AppConfig.GetWorkingDir();
+        try { Directory.CreateDirectory(workingDir); }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Could not create watchdog state directory '{workingDir}': {ex.Message}");
+            return 1;
+        }
+
+        // A SERVICE_SID_TYPE_RESTRICTED token may write only where its per-service SID is
+        // explicitly allowed. The SID is deterministic for the service name (`sc showsid`) and
+        // avoids localized account-name resolution. Inheritance covers atomic temp/backup files.
+        const string serviceSid = "S-1-5-80-153395662-1388266646-3167021078-3452987457-2818666036";
+        return RunProcess("icacls.exe", workingDir, "/grant", $"*{serviceSid}:(OI)(CI)(M)");
     }
 
     private static int GrantEventLogAccess(bool warnOnly)
@@ -103,8 +141,11 @@ internal static class Program
     }
 
     private static int RunSc(params string[] args)
+        => RunProcess("sc.exe", args);
+
+    private static int RunProcess(string executable, params string[] args)
     {
-        var psi = new ProcessStartInfo("sc.exe")
+        var psi = new ProcessStartInfo(executable)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -113,14 +154,14 @@ internal static class Program
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
         using var proc = Process.Start(psi);
-        if (proc is null) { Console.Error.WriteLine("sc.exe did not start."); return 1; }
+        if (proc is null) { Console.Error.WriteLine($"{executable} did not start."); return 1; }
 
         var stdoutTask = proc.StandardOutput.ReadToEndAsync();
         var stderrTask = proc.StandardError.ReadToEndAsync();
         if (!proc.WaitForExit(30_000))
         {
             try { proc.Kill(true); } catch { }
-            Console.Error.WriteLine("sc.exe timed out after 30s.");
+            Console.Error.WriteLine($"{executable} timed out after 30s.");
             return 1;
         }
 
@@ -145,6 +186,15 @@ internal sealed class WatchdogWorker : BackgroundService
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var systemLogProbe = EventLogWatchdogService.ProbeSystemLogReadability();
+        if (!systemLogProbe.Success)
+        {
+            _logger.LogCritical("System Event Log readiness probe failed: {code} {summary}",
+                systemLogProbe.FailureCode, systemLogProbe.Summary);
+            throw new InvalidOperationException(systemLogProbe.Summary);
+        }
+        _logger.LogInformation("System Event Log readiness proved: {summary}", systemLogProbe.Summary);
+
         try
         {
             var providerClause = "(Provider[@Name='nvmedisk'] or Provider[@Name='stornvme'] or " +
@@ -182,17 +232,26 @@ internal sealed class WatchdogWorker : BackgroundService
 
     private async Task RunFlushLoop(CancellationToken stoppingToken)
     {
+        var consecutiveFailures = 0;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 FlushOnce();
+                consecutiveFailures = 0;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Watchdog flush failed — will retry next interval.");
+                consecutiveFailures++;
+                _logger.LogError(ex, "Watchdog flush failed ({count}/3).", consecutiveFailures);
+                if (consecutiveFailures >= 3)
+                {
+                    _logger.LogCritical("Watchdog evidence remained unavailable; terminating so SCM recovery can restart the service.");
+                    throw;
+                }
             }
-            try { await Task.Delay(_flushInterval, stoppingToken); }
+            var delay = consecutiveFailures == 0 ? _flushInterval : TimeSpan.FromSeconds(30);
+            try { await Task.Delay(delay, stoppingToken); }
             catch (TaskCanceledException) { break; }
         }
     }
@@ -203,9 +262,12 @@ internal sealed class WatchdogWorker : BackgroundService
         // sees. The in-memory counter is authoritative for "something happened since last
         // flush" — we log it and let Evaluate compute the full verdict from the event log.
         int observed;
-        lock (_lock) { observed = _eventsSinceFlush; _eventsSinceFlush = 0; }
+        lock (_lock) { observed = _eventsSinceFlush; }
         var config = ConfigService.Load();
         var report = EventLogWatchdogService.Evaluate(config);
+        if (!report.DataAvailable)
+            throw new InvalidOperationException($"{report.FailureCode}: {report.Summary}");
+        lock (_lock) { _eventsSinceFlush = Math.Max(0, _eventsSinceFlush - observed); }
         _logger.LogInformation("Watchdog flush: {observed} events observed since last flush; verdict={verdict} total={total}",
             observed, report.Verdict, report.TotalEvents);
     }
