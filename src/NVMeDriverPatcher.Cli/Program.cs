@@ -40,7 +40,8 @@ class Program
             try
             {
                 var (changed, migrationSummary) = ConfigMigrationService.Migrate(config);
-                if (changed) ConfigService.Save(config);
+                if (changed && !ConfigService.Save(config))
+                    Console.Error.WriteLine("[WARNING] Config migration could not be saved — it will be re-attempted next run.");
             }
             catch { }
             // GPO overlay takes precedence over shared config.json so a pinned fleet policy

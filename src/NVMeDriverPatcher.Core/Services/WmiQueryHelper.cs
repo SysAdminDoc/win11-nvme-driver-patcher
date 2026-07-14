@@ -20,20 +20,7 @@ public static class WmiQueryHelper
         ReturnImmediately = true
     };
 
-    public static ManagementObjectCollection ExecuteWithTimeout(
-        string query,
-        TimeSpan? timeout = null)
-    {
-        using var searcher = new ManagementObjectSearcher(query);
-        return ExecuteWithTimeout(searcher, timeout);
-    }
-
-    public static ManagementObjectCollection ExecuteWithTimeout(
-        string scope,
-        string query,
-        TimeSpan? timeout = null)
-    {
-        using var searcher = new ManagementObjectSearcher(scope, query);
-        return ExecuteWithTimeout(searcher, timeout);
-    }
+    // NOTE: string-query overloads were removed — they disposed the searcher (`using`) before the
+    // caller enumerated the lazily-evaluated ManagementObjectCollection (use-after-dispose). All
+    // callers pass a live ManagementObjectSearcher they own and dispose; keep it that way.
 }
