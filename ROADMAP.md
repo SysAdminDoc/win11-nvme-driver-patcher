@@ -21,13 +21,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
   Acceptance: A built MSI shows product-specific purpose, risk, and recovery copy with no placeholder text; all strings come from the en-US localization contract; automated inspection rejects lorem ipsum/version/service-account drift; documentation says LocalService and matches the MSI service table.
   Complexity: S
 
-- [ ] P2 — Emit deletion directives in the pre-patch registry backup and fix recovery messaging
-  Why: `ExportRegistryBackup` records only pre-existing values, so re-importing it after a patch never removes the keys the patch added; recovery guidance that points users at this backup over-promises in exactly the incomplete-rollback path.
-  Evidence: `src/NVMeDriverPatcher.Core/Services/RegistryService.cs:152-264`; recovery message at `src/NVMeDriverPatcher.Core/Services/PatchService.cs:316`.
-  Touches: `RegistryService` (add `"<id>"=-` and `[-...GUID]` directives for keys absent pre-patch, or a separate revert.reg), `PatchService` recovery copy, tests.
-  Acceptance: Importing the generated backup after a patch removes every app-added override/SafeBoot key and restores prior values; a test asserts the emitted `.reg` deletes keys that were absent pre-patch; recovery messaging accurately describes what the backup restores.
-  Complexity: M
-
 ### P3
 
 - [ ] P3 — Gate the StorNVMe tuning surface on the currently-bound driver
