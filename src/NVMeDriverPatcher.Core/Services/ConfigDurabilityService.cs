@@ -233,6 +233,7 @@ public static partial class ConfigService
             config.ConfigVersion,
             config.LastRun,
             config.LastRecoveryKitPath,
+            config.LastWinPEMediaPath,
             config.LastDiagnosticsPath,
             config.LastSupportBundlePath,
             config.LastVerificationScriptPath,
@@ -291,6 +292,7 @@ public static partial class ConfigService
             : saved.ConfigVersion;
         config.LastRun = saved.LastRun;
         config.LastRecoveryKitPath = ExistingDir(saved.LastRecoveryKitPath);
+        config.LastWinPEMediaPath = ExistingDir(saved.LastWinPEMediaPath);
         config.LastDiagnosticsPath = ExistingFileWithExtension(saved.LastDiagnosticsPath, ".txt");
         config.LastSupportBundlePath = ExistingFileWithExtension(saved.LastSupportBundlePath, ".zip");
         config.LastVerificationScriptPath = ExistingFile(saved.LastVerificationScriptPath);

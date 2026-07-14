@@ -120,6 +120,9 @@ class Program
             string? isoOut = args.Select(a => (a ?? string.Empty))
                                  .FirstOrDefault(a => a.StartsWith("--output=", StringComparison.OrdinalIgnoreCase))?
                                  .Substring("--output=".Length);
+            string? inputPath = args.Select(a => (a ?? string.Empty))
+                                 .FirstOrDefault(a => a.StartsWith("--input=", StringComparison.OrdinalIgnoreCase))?
+                                 .Substring("--input=".Length);
             string? telemetryEndpoint = args.Select(a => (a ?? string.Empty))
                                  .FirstOrDefault(a => a.StartsWith("--endpoint=", StringComparison.OrdinalIgnoreCase))?
                                  .Substring("--endpoint=".Length);
@@ -166,6 +169,7 @@ class Program
                 "scope" => ScopeCommand(config),
                 "etw" => EtwCommand(config).GetAwaiter().GetResult(),
                 "winpe" => WinPECommand(config, isoOut).GetAwaiter().GetResult(),
+                "winpe-freshness" or "winpe-status" => WinPEFreshnessCommand(config, inputPath).GetAwaiter().GetResult(),
                 "telemetry" => TelemetryCommand(config, telemetryEndpoint).GetAwaiter().GetResult(),
                 "verifier-on" => VerifierOnCommand(),
                 "verifier-off" => VerifierOffCommand(),
@@ -965,8 +969,36 @@ class Program
         };
         var result = await WinPERecoveryBuilderService.BuildAsync(options, msg => Console.WriteLine(msg));
         Console.WriteLine(result.Summary);
+        foreach (var controller in result.Controllers)
+            Console.WriteLine($"  [{controller.Coverage}] {controller.FriendlyName} — {controller.InfName} {controller.DriverVersion} — {controller.Detail}");
         foreach (var w in result.Warnings) Console.WriteLine($"  [WARN] {w}");
+        if (result.Success && !string.IsNullOrWhiteSpace(result.MediaRoot))
+        {
+            config.LastWinPEMediaPath = result.MediaRoot;
+            if (!ConfigService.Save(config))
+                Console.Error.WriteLine("[WARNING] WinPE media was built, but its path could not be saved for later freshness checks.");
+            if (!string.IsNullOrWhiteSpace(result.ControllerReportPath))
+                Console.WriteLine($"Controller report: {result.ControllerReportPath}");
+        }
         return result.Success ? 0 : 1;
+    }
+
+    static async Task<int> WinPEFreshnessCommand(AppConfig config, string? inputPath)
+    {
+        var mediaPath = string.IsNullOrWhiteSpace(inputPath) ? config.LastWinPEMediaPath : inputPath;
+        var recoveryKit = config.LastRecoveryKitPath ?? Path.Combine(config.WorkingDir, "NVMe_Recovery_Kit");
+        var report = await WinPEMediaFreshnessService.EvaluateAsync(
+            mediaPath ?? string.Empty,
+            recoveryKit);
+        Console.WriteLine(report.Summary);
+        foreach (var reason in report.Reasons)
+            Console.WriteLine($"  - {reason}");
+        return report.State switch
+        {
+            WinPEMediaFreshness.Fresh => 0,
+            WinPEMediaFreshness.Unknown => 2,
+            _ => 1
+        };
     }
 
     static async Task<int> TelemetryCommand(AppConfig config, string? endpoint)
