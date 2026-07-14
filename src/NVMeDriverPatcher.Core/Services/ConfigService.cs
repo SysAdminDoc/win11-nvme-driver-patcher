@@ -213,8 +213,26 @@ public static class ConfigService
         if (string.IsNullOrEmpty(config.ConfigFile))
             return false;
 
-        var tempFile = config.ConfigFile + ".tmp";
+        // config.json lives in shared %ProgramData% and is written by GUI, CLI, Tray, and Watchdog.
+        // A fixed-name temp file made concurrent saves race (one writer's Create/Move clobbering
+        // another's half-written temp). Use a per-process-unique temp name AND serialize the whole
+        // read-modify-write across processes with a machine-global mutex so a settings/state write
+        // is never silently lost.
+        var tempFile = $"{config.ConfigFile}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
         Exception? lastException = null;
+
+        System.Threading.Mutex? mutex = null;
+        bool mutexHeld = false;
+        try
+        {
+            mutex = new System.Threading.Mutex(initiallyOwned: false, @"Global\NVMeDriverPatcher.ConfigSave");
+            try { mutexHeld = mutex.WaitOne(TimeSpan.FromSeconds(10)); }
+            catch (AbandonedMutexException) { mutexHeld = true; } // prior owner crashed — we own it now
+        }
+        catch { /* mutex unavailable (rare) — proceed best-effort with the unique temp name */ }
+
+        try
+        {
 
         // Retry up to 5 times with a short backoff. The common transient failure is an AV
         // scanner holding an exclusive handle on the target during File.Move — that usually
@@ -301,6 +319,12 @@ public static class ConfigService
         catch { }
 
         return false;
+        }
+        finally
+        {
+            if (mutexHeld) { try { mutex?.ReleaseMutex(); } catch { } }
+            mutex?.Dispose();
+        }
     }
 
     internal sealed class LenientPatchProfileJsonConverter : JsonConverter<PatchProfile>
