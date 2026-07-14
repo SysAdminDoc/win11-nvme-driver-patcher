@@ -7,7 +7,10 @@ param(
     # Optional tag-derived version ("4.6.2", no leading v). When supplied, it must equal
     # the canonical VersionPrefix — prevents tagging a commit whose metadata lags the tag.
     [string]$ReleaseVersion,
-    [string]$RepoRoot
+    [string]$RepoRoot,
+    # Minimal version-validator fixtures can isolate the legacy checks; real release invocations
+    # must leave this unset so documentation facts remain part of the gate.
+    [switch]$SkipDocumentationFacts
 )
 
 $ErrorActionPreference = 'Stop'
@@ -174,6 +177,11 @@ if ($failures.Count -gt 0) {
     Write-Host "Version drift detected (canonical = $canonical):" -ForegroundColor Red
     $failures | ForEach-Object { Write-Host "  FAIL $_" -ForegroundColor Red }
     exit 1
+}
+
+if (-not $SkipDocumentationFacts) {
+    & (Join-Path $PSScriptRoot 'Validate-DocumentationFacts.ps1') -RepoRoot $repoRoot
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
 Write-Host "All version surfaces match canonical $canonical." -ForegroundColor Green

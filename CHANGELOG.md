@@ -5,6 +5,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Release documentation facts now fail closed on source drift** — the release-version gate also
+  derives the canonical CLI command count, discovered-test floor, version, .NET target, SDK major,
+  shipped project set, and documented repository paths from their source files. Fixture tests
+  deliberately stale each fact and require the validator to name the exact field; README and the
+  local contributor guide no longer carry obsolete service paths or exact suite totals.
 - **Keyboard focus and readiness progress now remain visible at every layout width** — every
   custom control style falls back to a one-pixel keyboard focus adorner instead of an empty
   template. The readiness overlay's indeterminate band now sweeps in relative track units rather

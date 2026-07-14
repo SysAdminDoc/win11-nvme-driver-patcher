@@ -96,6 +96,7 @@ public sealed class PackagingVersionScriptTests
         process.StartInfo.ArgumentList.Add(ScriptPath());
         process.StartInfo.ArgumentList.Add("-RepoRoot");
         process.StartInfo.ArgumentList.Add(repoRoot);
+        process.StartInfo.ArgumentList.Add("-SkipDocumentationFacts");
 
         process.Start();
         var stdOut = process.StandardOutput.ReadToEnd();
