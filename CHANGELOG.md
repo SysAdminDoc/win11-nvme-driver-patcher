@@ -5,6 +5,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-06-30
 
 ### Fixed
+- **Pre-patch registry backup can actually undo the install** — the exported `.reg` recorded only
+  prior values, so re-importing it after a patch left the added keys in place (the recovery message
+  over-promised). It now emits deletion directives (`"<id>"=-`, `[-HKLM\...SafeBoot GUID]`) for
+  feature values and SafeBoot keys that were absent before the patch, while still restoring prior
+  values and never scheduling deletion of a pre-existing SafeBoot key that may hold OS-owned state.
 - **FeatureStore writes serialized across processes** — `FeatureStoreWriterService` used a
   process-local semaphore, but `RtlSetFeatureConfigurations` mutates machine-global state; an
   elevated CLI write and GUI fallback could interleave their two-phase (Runtime→Boot) writes. They

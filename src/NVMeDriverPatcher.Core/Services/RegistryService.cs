@@ -186,63 +186,52 @@ public static class RegistryService
                 $@"[HKEY_LOCAL_MACHINE\{AppConfig.RegistrySubKey}]"
             };
 
+            // Overrides: for each managed feature value emit a RESTORE (dword) when it exists
+            // pre-patch, or a DELETION directive ("id"=-) when it doesn't — so re-importing this
+            // backup after a patch removes the values the patch added rather than leaving them.
             using var overrides = hklm.OpenSubKey(AppConfig.RegistrySubKey);
-            if (overrides is not null)
+            foreach (var id in AppConfig.FeatureIDs.Append(AppConfig.ServerFeatureID))
             {
-                foreach (var id in AppConfig.FeatureIDs)
+                var val = overrides?.GetValue(id);
+                if (val is int intVal)
+                    lines.Add($"\"{id}\"=dword:{intVal:x8}");
+                else
+                    lines.Add($"\"{id}\"=-"); // absent pre-patch → delete on import
+            }
+
+            // SafeBoot keys: restore an existing key's default value, or (when the key is absent
+            // pre-patch) record it for a deletion directive so re-import removes the key the patch
+            // creates. A key that already exists pre-patch is never scheduled for deletion — it may
+            // hold OS-owned state (issue #13).
+            var safeBootDeletions = new List<string>();
+            void CaptureSafeBoot(string path)
+            {
+                using var key = hklm.OpenSubKey(path);
+                if (key is not null)
                 {
-                    var val = overrides.GetValue(id);
-                    if (val is int intVal)
-                        lines.Add($"\"{id}\"=dword:{intVal:x8}");
+                    lines.Add("");
+                    lines.Add($@"[HKEY_LOCAL_MACHINE\{path}]");
+                    if (key.GetValue("") is string val && !string.IsNullOrEmpty(val))
+                        lines.Add($"@=\"{val}\"");
                 }
-                // Server key
-                var srvVal = overrides.GetValue(AppConfig.ServerFeatureID);
-                if (srvVal is int srvInt)
-                    lines.Add($"\"{AppConfig.ServerFeatureID}\"=dword:{srvInt:x8}");
+                else
+                {
+                    safeBootDeletions.Add($@"[-HKEY_LOCAL_MACHINE\{path}]");
+                }
             }
 
-            // SafeBoot keys
+            CaptureSafeBoot(AppConfig.SafeBootMinimalPath);
+            CaptureSafeBoot(AppConfig.SafeBootNetworkPath);
+            CaptureSafeBoot(AppConfig.SafeBootMinimalServicePath);
+            CaptureSafeBoot(AppConfig.SafeBootNetworkServicePath);
+
+            if (safeBootDeletions.Count > 0)
+            {
+                lines.Add("");
+                lines.Add("; Delete SafeBoot keys the patch creates (absent before patch):");
+                lines.AddRange(safeBootDeletions);
+            }
             lines.Add("");
-            using var safeMin = hklm.OpenSubKey(AppConfig.SafeBootMinimalPath);
-            if (safeMin is not null)
-            {
-                lines.Add($@"[HKEY_LOCAL_MACHINE\{AppConfig.SafeBootMinimalPath}]");
-                var val = safeMin.GetValue("") as string;
-                if (!string.IsNullOrEmpty(val))
-                    lines.Add($"@=\"{val}\"");
-                lines.Add("");
-            }
-
-            using var safeNet = hklm.OpenSubKey(AppConfig.SafeBootNetworkPath);
-            if (safeNet is not null)
-            {
-                lines.Add($@"[HKEY_LOCAL_MACHINE\{AppConfig.SafeBootNetworkPath}]");
-                var val = safeNet.GetValue("") as string;
-                if (!string.IsNullOrEmpty(val))
-                    lines.Add($"@=\"{val}\"");
-                lines.Add("");
-            }
-
-            // Supplemental service-name SafeBoot entries (25H2 compat)
-            using var safeMinSvc = hklm.OpenSubKey(AppConfig.SafeBootMinimalServicePath);
-            if (safeMinSvc is not null)
-            {
-                lines.Add($@"[HKEY_LOCAL_MACHINE\{AppConfig.SafeBootMinimalServicePath}]");
-                var val = safeMinSvc.GetValue("") as string;
-                if (!string.IsNullOrEmpty(val))
-                    lines.Add($"@=\"{val}\"");
-                lines.Add("");
-            }
-
-            using var safeNetSvc = hklm.OpenSubKey(AppConfig.SafeBootNetworkServicePath);
-            if (safeNetSvc is not null)
-            {
-                lines.Add($@"[HKEY_LOCAL_MACHINE\{AppConfig.SafeBootNetworkServicePath}]");
-                var val = safeNetSvc.GetValue("") as string;
-                if (!string.IsNullOrEmpty(val))
-                    lines.Add($"@=\"{val}\"");
-                lines.Add("");
-            }
 
             // .reg files must be UTF-16 LE with BOM. Atomic write so a crash doesn't leave
             // a half-written backup that regedit will silently refuse to import.
