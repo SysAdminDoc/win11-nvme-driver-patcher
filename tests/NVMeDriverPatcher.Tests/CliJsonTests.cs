@@ -70,6 +70,18 @@ public sealed class CliJsonTests
     public void RecoveryProof_FieldNamesAreStable()
     {
         var report = new RecoveryProofReport();
+        report.BitLockerRecovery = new BitLockerRecoveryProof(
+            new BitLockerVolumeEvidence
+            {
+                ProbeSucceeded = true,
+                SystemVolumePresent = true,
+                MountPoint = "C:",
+                ConversionStatus = 1,
+                ProtectionStatus = 0,
+                SuspendCount = 1,
+                RecoveryProtectorIds = ["{11111111-1111-1111-1111-111111111111}"]
+            },
+            new DirectoryJoinEvidence(true, DirectoryJoinKind.MicrosoftEntra));
         report.Items.Add(new RecoveryProofItem { Label = "System Restore", Passed = false, Detail = "off" });
         report.Items.Add(new RecoveryProofItem { Label = "Recovery kit", Passed = true, Detail = "fresh" });
         var data = Parse("recovery-proof", CliJson.BuildRecoveryProof(report)).GetProperty("data");
@@ -81,6 +93,14 @@ public sealed class CliJsonTests
         Assert.Equal("System Restore", item.GetProperty("label").GetString());
         Assert.False(item.GetProperty("passed").GetBoolean());
         Assert.Equal("off", item.GetProperty("detail").GetString());
+        var bitLocker = data.GetProperty("bitLocker");
+        Assert.True(bitLocker.GetProperty("probeSucceeded").GetBoolean());
+        Assert.True(bitLocker.GetProperty("encrypted").GetBoolean());
+        Assert.True(bitLocker.GetProperty("readyForMutation").GetBoolean());
+        Assert.Equal("C:", bitLocker.GetProperty("mountPoint").GetString());
+        Assert.Equal(1u, bitLocker.GetProperty("suspendCount").GetUInt32());
+        Assert.Equal("MicrosoftEntra", bitLocker.GetProperty("directoryJoin").GetString());
+        Assert.Equal("{11111111-1111-1111-1111-111111111111}", bitLocker.GetProperty("protectorIds")[0].GetString());
     }
 
     [Fact]

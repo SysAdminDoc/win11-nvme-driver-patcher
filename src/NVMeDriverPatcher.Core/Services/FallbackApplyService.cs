@@ -36,12 +36,43 @@ public static class FallbackApplyService
             };
         }
 
-        var result = await ApplyAsync(
-            workingDir,
-            log,
-            cancellationToken,
-            ids => FeatureStoreWriterService.WriteOverrides(ids),
-            ViVeToolService.ApplyFallbackAsync).ConfigureAwait(false);
+        var bitLocker = BitLockerRecoveryService.PrepareForMutation(
+            () => MutationLedgerService.MarkBitLockerSuspensionPlanned(
+                workingDir,
+                prepared.Ledger.OperationId,
+                log),
+            log);
+        if (!bitLocker.Success)
+        {
+            if (bitLocker.SuspendedByThisCall)
+                MutationLedgerService.RestoreOriginalState(workingDir, log);
+            else
+                MutationLedgerService.MarkPreparedWithoutMutation(workingDir, prepared.Ledger.OperationId, log);
+            return new FallbackApplyResult
+            {
+                Success = false,
+                Message = "Fallback blocked before FeatureStore mutation: " + bitLocker.Summary,
+                MutationOperationId = prepared.Ledger.OperationId
+            };
+        }
+
+        FallbackApplyResult result;
+        try
+        {
+            result = await ApplyAsync(
+                workingDir,
+                log,
+                cancellationToken,
+                ids => FeatureStoreWriterService.WriteOverrides(ids),
+                ViVeToolService.ApplyFallbackAsync).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Cancellation or an unexpected fallback exception must not leave an application-owned
+            // BitLocker suspension behind. The ledger restores both FeatureStore and protector state.
+            MutationLedgerService.RestoreOriginalState(workingDir, log);
+            throw;
+        }
         result.MutationOperationId = prepared.Ledger.OperationId;
 
         if (!result.Success)

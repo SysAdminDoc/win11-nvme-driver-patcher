@@ -516,7 +516,13 @@ public static class DiagnosticsService
         sb.AppendLine($"Is Laptop: {(preflight?.IsLaptop ?? false ? "Yes (APST warning applies)" : "No (Desktop)")}");
 
         sb.AppendLine().AppendLine("BITLOCKER STATUS").AppendLine("----------------");
-        sb.AppendLine($"System Drive Encrypted: {(preflight?.BitLockerEnabled ?? false ? "Yes" : "No")}");
+        var bitLockerProof = preflight?.BitLockerRecovery ?? BitLockerRecoveryService.InspectSystemVolume();
+        sb.AppendLine($"Authoritative Probe: {(bitLockerProof.Volume.ProbeSucceeded ? "Succeeded" : "Failed")}");
+        sb.AppendLine($"System Drive Encrypted: {(bitLockerProof.Volume.ProbeSucceeded ? (bitLockerProof.Volume.IsEncrypted ? "Yes" : "No") : "Unknown")}");
+        sb.AppendLine($"Recovery Proof: {(bitLockerProof.ReadyForMutation ? "Ready" : "Blocked")}");
+        sb.AppendLine($"Recovery Protector IDs: {(bitLockerProof.Volume.RecoveryProtectorIds.Count > 0 ? string.Join(", ", bitLockerProof.Volume.RecoveryProtectorIds) : "None")}");
+        sb.AppendLine($"Directory Join: {bitLockerProof.DirectoryJoin.Kind}");
+        sb.AppendLine($"Detail: {bitLockerProof.Detail}");
 
         var incompatSw = preflight?.IncompatibleSoftware ?? DriveService.GetIncompatibleSoftware();
         sb.AppendLine().AppendLine("INCOMPATIBLE SOFTWARE").AppendLine("---------------------");

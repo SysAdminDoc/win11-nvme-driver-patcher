@@ -12,6 +12,7 @@ public sealed class RecoveryProofItem
 public sealed class RecoveryProofReport
 {
     public List<RecoveryProofItem> Items { get; } = new();
+    public BitLockerRecoveryProof? BitLockerRecovery { get; set; }
     public bool AllPassed => Items.All(i => i.Passed);
     public int PassedCount => Items.Count(i => i.Passed);
     public int TotalCount => Items.Count;
@@ -37,6 +38,20 @@ public static class RecoveryProofGateService
     {
         var report = new RecoveryProofReport();
 
+        try
+        {
+            report.BitLockerRecovery = BitLockerRecoveryService.InspectSystemVolume();
+            report.Items.Add(EvaluateBitLockerRecovery(report.BitLockerRecovery));
+        }
+        catch (Exception ex)
+        {
+            report.Items.Add(new()
+            {
+                Label = "BitLocker recovery",
+                Passed = false,
+                Detail = $"Authoritative recovery proof failed: {ex.GetType().Name}"
+            });
+        }
         report.Items.Add(EvaluateRecoveryKit(config));
         report.Items.Add(EvaluateBackupCapability());
         report.Items.Add(EvaluateSafeBootEntries());
@@ -44,6 +59,13 @@ public static class RecoveryProofGateService
 
         return report;
     }
+
+    internal static RecoveryProofItem EvaluateBitLockerRecovery(BitLockerRecoveryProof proof) => new()
+    {
+        Label = "BitLocker recovery",
+        Passed = proof.ReadyForMutation,
+        Detail = proof.Detail
+    };
 
     private static RecoveryProofItem EvaluateRecoveryKit(AppConfig config)
     {

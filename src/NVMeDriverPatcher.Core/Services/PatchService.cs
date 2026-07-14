@@ -143,6 +143,7 @@ public static class PatchService
         }
 
         bool mutationMayHaveLanded = false;
+        bool bitLockerStateMayHaveChanged = false;
 
         try
         {
@@ -151,16 +152,23 @@ public static class PatchService
             // clears and an after-snapshot is still captured — matches the VeraCrypt branch
             // above. Throwing here is the cleanest way to reuse that cleanup path without
             // duplicating FinalizeResult at every early return.
-            if (bitLockerEnabled)
+            var bitLockerPreparation = BitLockerRecoveryService.PrepareForMutation(
+                () => MutationLedgerService.MarkBitLockerSuspensionPlanned(
+                    workingDir,
+                    result.MutationOperationId,
+                    log),
+                log);
+            bitLockerStateMayHaveChanged = bitLockerPreparation.SuspendedByThisCall;
+            if (!bitLockerPreparation.Success)
             {
-                log?.Invoke("Suspending BitLocker for one reboot cycle...");
-                if (!SuspendBitLocker(log))
-                {
-                    EventLogService.Write("Patch aborted: BitLocker suspension failed", EventLogEntryType.Error, 3002);
-                    throw new PatchAbortedException("BitLocker suspension failed — patch aborted before any registry writes.");
-                }
-                log?.Invoke("[SUCCESS] BitLocker suspended - will auto-resume after reboot");
+                log?.Invoke("[ERROR] BLOCKED: " + bitLockerPreparation.Summary);
+                EventLogService.Write("Patch aborted: BitLocker recoverability or suspension proof failed", EventLogEntryType.Error, 3002);
+                throw new PatchAbortedException("BitLocker recovery/suspension proof failed — patch aborted before registry writes.");
             }
+            if (bitLockerPreparation.Proof.Volume.IsEncrypted)
+                log?.Invoke("[SUCCESS] " + bitLockerPreparation.Summary);
+            else if (bitLockerEnabled)
+                log?.Invoke("[WARNING] Preflight reported BitLocker active, but the authoritative WMI proof reports no encrypted system volume.");
 
             // Protected NVMe DATA volumes without auto-unlock re-lock after the reboot. Suspend them
             // too (best-effort — access loss, not a boot brick, so a failure warns rather than aborts).
@@ -384,7 +392,10 @@ public static class PatchService
         {
             // Already logged + event-logged at the throw site. Fall through to finally
             // so the progress bar clears and we still capture an after-snapshot.
-            MutationLedgerService.RestoreOriginalState(workingDir, log);
+            if (bitLockerStateMayHaveChanged)
+                MutationLedgerService.RestoreOriginalState(workingDir, log);
+            else
+                MutationLedgerService.MarkPreparedWithoutMutation(workingDir, result.MutationOperationId, log);
         }
         catch (Exception ex)
         {
@@ -393,7 +404,11 @@ public static class PatchService
             log?.Invoke(mutationMayHaveLanded
                 ? "[WARNING] Installation terminated after mutation began; restoring the exact ledger baseline."
                 : "[INFO] Installation terminated before registry mutation; closing the prepared ledger cleanly.");
-            var recovery = MutationLedgerService.RestoreOriginalState(workingDir, log);
+            var recovery = mutationMayHaveLanded || bitLockerStateMayHaveChanged
+                ? MutationLedgerService.RestoreOriginalState(workingDir, log)
+                : MutationLedgerService.MarkPreparedWithoutMutation(workingDir, result.MutationOperationId, log)
+                    ? MutationRestoreResult.Succeeded
+                    : new MutationRestoreResult(false, new[] { "Prepared ledger could not be finalized." });
             result.WasRolledBack = mutationMayHaveLanded;
             result.RollbackFullyReversed = recovery.Success;
         }
@@ -410,12 +425,6 @@ public static class PatchService
     private sealed class PatchAbortedException : Exception
     {
         public PatchAbortedException(string message) : base(message) { }
-    }
-
-    private static bool SuspendBitLocker(Action<string>? log)
-    {
-        var sysDrive = NormalizeSystemDrive(Environment.GetEnvironmentVariable("SystemDrive"));
-        return SuspendBitLockerDrive(sysDrive, log);
     }
 
     // Best-effort suspension of protected NVMe DATA volumes without auto-unlock. Never aborts the

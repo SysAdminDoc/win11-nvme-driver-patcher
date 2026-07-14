@@ -92,7 +92,7 @@ Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be 
 
 **Safety & Compatibility**
 - **VeraCrypt hard block** -- detects system encryption and refuses to patch ([breaks boot entirely](https://github.com/veracrypt/VeraCrypt/issues/1640))
-- **Automatic BitLocker suspension** -- suspends BitLocker for one reboot cycle to prevent recovery key prompts
+- **Proved BitLocker recovery + suspension** -- requires a numerical recovery-password protector, surfaces only its safe-to-match ID, refreshes AD/Entra escrow on joined devices, and WMI-confirms an exact one-reboot suspension before mutation
 - **Crash-consistent mutation ledger** -- durably captures the first clean registry, SafeBoot, and FeatureStore baseline before mutation; interrupted work and uninstall restore that exact state, and restart is not offered until the reboot checkpoint is durable
 - **Comprehensive software detection** -- warns about Intel RST (BSOD risk), Intel VMD (boot failures), Hyper-V/WSL2 (40% I/O regression), Storage Spaces (array degradation), Veeam, Acronis, Macrium, UrBackup, NinjaOne, Paragon, Samsung Magician, WD Dashboard, Crucial Storage Executive, CrystalDiskInfo, Data Deduplication
 - **Laptop/power warning** -- detects laptops and warns about APST battery regression (~15% impact)
@@ -182,7 +182,7 @@ NVMeDriverPatcher.Cli remove                               # Undo the patch
 
 # Recovery
 NVMeDriverPatcher.Cli recovery-kit                         # Generate WinRE recovery kit
-NVMeDriverPatcher.Cli recovery-proof                       # Check recovery infrastructure readiness
+NVMeDriverPatcher.Cli recovery-proof [--json]              # Prove recovery infrastructure and BitLocker protector state
 NVMeDriverPatcher.Cli upgrade-safeboot                     # Add KB5079391 SafeBoot entries
 
 # Diagnostics
@@ -307,7 +307,7 @@ The tool automatically detects and warns about all of these. VeraCrypt is a hard
 | Software | Issue | Severity | Auto-Detected |
 |----------|-------|----------|---------------|
 | **VeraCrypt** (system encryption) | [Breaks boot entirely](https://github.com/veracrypt/VeraCrypt/issues/1640) | **Critical** | Yes (blocks patch) |
-| **BitLocker** | May trigger recovery key prompt | High | Yes (auto-suspends) |
+| **BitLocker** | May trigger recovery key prompt | High | Yes (requires recovery-password protector, refreshes directory escrow, verifies one-reboot suspension) |
 | **Intel RST** | Conflicts with nvmedisk.sys, BSOD risk | High | Yes (warns) |
 | **Intel VMD** | Boot failures on VMD-configured systems | High | Yes (warns) |
 | **Hyper-V / WSL2** | WSL2 disk I/O ~40% slower (no paravirt) | Medium | Yes (warns) |
@@ -412,7 +412,7 @@ Samsung Magician, WD Dashboard, Crucial Storage Executive, and CrystalDiskInfo u
 
 ## Disclaimer
 
-This tool modifies system registry settings to enable an **experimental, unsupported** feature on Windows 11. While safety measures are included (VeraCrypt detection, BitLocker auto-suspend, restore points, registry backups, rollback on failure, recovery kit generation), use at your own risk. The native NVMe driver is only officially supported on Windows Server 2025. Always ensure you have backups before making system changes.
+This tool modifies system registry settings to enable an **experimental, unsupported** feature on Windows 11. While safety measures are included (VeraCrypt detection, proved BitLocker recovery and one-reboot suspension, restore points, registry backups, rollback on failure, recovery kit generation), use at your own risk. The native NVMe driver is only officially supported on Windows Server 2025. Always ensure you have backups before making system changes.
 
 ---
 

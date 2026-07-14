@@ -72,6 +72,7 @@ public sealed class MutationOperationLedger
     public string PatchProfile { get; set; } = string.Empty;
     public bool IncludeServerKey { get; set; }
     public bool FeatureStoreTouched { get; set; }
+    public bool BitLockerSuspensionPlanned { get; set; }
     public List<string> IntendedFeatureIds { get; set; } = new();
     public MutationBaseline Baseline { get; set; } = new();
 }
@@ -228,8 +229,39 @@ public static class MutationLedgerService
     public static bool MarkApplied(string workingDir, string? operationId, Action<string>? log = null) =>
         MarkPhase(workingDir, operationId, MutationOperationPhase.Applied, log);
 
+    public static bool MarkBitLockerSuspensionPlanned(
+        string workingDir,
+        string? operationId,
+        Action<string>? log = null)
+    {
+        using var lease = AcquireMutex();
+        if (!lease.Held)
+            return false;
+        var ledger = LoadUnsafe(workingDir);
+        if (ledger is null || string.IsNullOrWhiteSpace(operationId) ||
+            !string.Equals(ledger.OperationId, operationId, StringComparison.OrdinalIgnoreCase) ||
+            ledger.Phase != MutationOperationPhase.Prepared)
+            return false;
+
+        ledger.BitLockerSuspensionPlanned = true;
+        ledger.UpdatedUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+        if (!SaveUnsafe(workingDir, ledger, out var error))
+        {
+            log?.Invoke("[LEDGER] Could not persist BitLocker suspension intent: " + error);
+            return false;
+        }
+        log?.Invoke("[LEDGER] BitLocker suspension intent is durable before protector state changes.");
+        return true;
+    }
+
     public static bool MarkRebootPending(string workingDir, string? operationId, Action<string>? log = null) =>
         MarkPhase(workingDir, operationId, MutationOperationPhase.RebootPending, log);
+
+    public static bool MarkPreparedWithoutMutation(
+        string workingDir,
+        string? operationId,
+        Action<string>? log = null) =>
+        MarkPhase(workingDir, operationId, MutationOperationPhase.Verified, log);
 
     public static bool MarkLatestVerified(string workingDir, Action<string>? log = null) =>
         MarkPhase(workingDir, operationId: null, MutationOperationPhase.Verified, log);
@@ -272,6 +304,8 @@ public static class MutationLedgerService
             ledger.OwnerProcessId = 0;
             ledger.OwnerProcessStartedUtc = string.Empty;
         }
+        if (phase is MutationOperationPhase.Verified or MutationOperationPhase.Reverted)
+            ledger.BitLockerSuspensionPlanned = false;
 
         if (!SaveUnsafe(workingDir, ledger, out var error))
         {
@@ -416,6 +450,13 @@ public static class MutationLedgerService
                 failures.Add("FeatureStore baseline is incomplete");
             else
                 failures.AddRange(FeatureStoreWriterService.RestoreConfigurations(ledger.Baseline.FeatureStore, log));
+        }
+
+        if (ledger.BitLockerSuspensionPlanned)
+        {
+            var resumed = BitLockerRecoveryService.ResumeSystemVolume(log);
+            if (!resumed.Success)
+                failures.Add("BitLocker protection resume failed: " + resumed.Summary);
         }
 
         failures.AddRange(ProbeBaselineDifferences(ledger));

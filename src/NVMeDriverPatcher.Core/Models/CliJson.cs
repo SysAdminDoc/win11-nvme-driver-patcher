@@ -66,6 +66,21 @@ public static class CliJson
             Passed = i.Passed,
             Detail = i.Detail,
         }).ToList(),
+        BitLocker = report.BitLockerRecovery is { } proof
+            ? new BitLockerRecoveryJson
+            {
+                ProbeSucceeded = proof.Volume.ProbeSucceeded,
+                Encrypted = proof.Volume.IsEncrypted,
+                ReadyForMutation = proof.ReadyForMutation,
+                MountPoint = proof.Volume.MountPoint,
+                ConversionStatus = proof.Volume.ConversionStatus,
+                ProtectionStatus = proof.Volume.ProtectionStatus,
+                SuspendCount = proof.Volume.SuspendCount,
+                ProtectorIds = proof.Volume.RecoveryProtectorIds.ToList(),
+                DirectoryJoin = proof.DirectoryJoin.Kind.ToString(),
+                FailureCode = proof.Volume.FailureCode ?? proof.DirectoryJoin.FailureCode,
+            }
+            : null,
     };
 
     public static BypassIoJson BuildBypassIo(BypassIOResult result) => new()
@@ -214,6 +229,21 @@ public sealed class RecoveryProofJson
     public int PassedCount { get; set; }
     public int TotalCount { get; set; }
     public List<RecoveryProofItemJson> Items { get; set; } = new();
+    public BitLockerRecoveryJson? BitLocker { get; set; }
+}
+
+public sealed class BitLockerRecoveryJson
+{
+    public bool ProbeSucceeded { get; set; }
+    public bool Encrypted { get; set; }
+    public bool ReadyForMutation { get; set; }
+    public string MountPoint { get; set; } = string.Empty;
+    public uint ConversionStatus { get; set; }
+    public uint ProtectionStatus { get; set; }
+    public uint? SuspendCount { get; set; }
+    public List<string> ProtectorIds { get; set; } = new();
+    public string DirectoryJoin { get; set; } = string.Empty;
+    public string? FailureCode { get; set; }
 }
 
 public sealed class RecoveryProofItemJson
