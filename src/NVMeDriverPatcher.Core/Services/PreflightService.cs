@@ -169,6 +169,13 @@ public static class PreflightService
             checks["BitLocker"] = result.BitLockerEnabled
                 ? new(CheckStatus.Warning, "Encryption active")
                 : new(CheckStatus.Pass, "Not detected");
+
+            // The swap changes the driver stack for ALL NVMe controllers, not just the OS volume.
+            // A BitLocker-protected NON-system volume WITHOUT auto-unlock re-locks after the reboot.
+            var dataVols = DriveService.DataVolumesNeedingAttention(DriveService.GetBitLockerVolumes());
+            if (dataVols.Count > 0)
+                checks["BitLockerDataDrives"] = new(CheckStatus.Warning,
+                    $"BitLocker data volume(s) {string.Join(", ", dataVols.Select(v => v.DriveLetter))} have no auto-unlock — they will re-lock after reboot. The patch suspends them for one reboot; keep their recovery keys handy.");
         }
         catch (Exception ex)
         {

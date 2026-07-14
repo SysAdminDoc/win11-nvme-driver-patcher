@@ -122,6 +122,10 @@ public static class PatchService
                 log?.Invoke("[SUCCESS] BitLocker suspended - will auto-resume after reboot");
             }
 
+            // Protected NVMe DATA volumes without auto-unlock re-lock after the reboot. Suspend them
+            // too (best-effort — access loss, not a boot brick, so a failure warns rather than aborts).
+            SuspendBitLockerDataVolumes(log);
+
             // Step 1: Backup
             log?.Invoke("Step 1/3: Creating system backup...");
             ReportProgress(progress, 10, "Creating registry backup...");
@@ -363,9 +367,35 @@ public static class PatchService
 
     private static bool SuspendBitLocker(Action<string>? log)
     {
+        var sysDrive = NormalizeSystemDrive(Environment.GetEnvironmentVariable("SystemDrive"));
+        return SuspendBitLockerDrive(sysDrive, log);
+    }
+
+    // Best-effort suspension of protected NVMe DATA volumes without auto-unlock. Never aborts the
+    // patch — a data volume re-locking is an access-loss the user can recover with the key, not a
+    // boot brick — but each failure is surfaced so the user knows to have the recovery key ready.
+    private static void SuspendBitLockerDataVolumes(Action<string>? log)
+    {
         try
         {
-            var sysDrive = NormalizeSystemDrive(Environment.GetEnvironmentVariable("SystemDrive"));
+            var dataVols = DriveService.DataVolumesNeedingAttention(DriveService.GetBitLockerVolumes());
+            foreach (var v in dataVols)
+            {
+                log?.Invoke($"[WARNING] BitLocker data volume {v.DriveLetter} has no auto-unlock — suspending it for one reboot so it doesn't re-lock.");
+                if (!SuspendBitLockerDrive(v.DriveLetter, log))
+                    log?.Invoke($"[WARNING] Could not suspend BitLocker on {v.DriveLetter}. Keep its recovery key handy — it may prompt after reboot.");
+            }
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[WARNING] BitLocker data-volume suspension probe failed: {ex.Message}");
+        }
+    }
+
+    private static bool SuspendBitLockerDrive(string drive, Action<string>? log)
+    {
+        try
+        {
             var psi = new ProcessStartInfo("manage-bde")
             {
                 UseShellExecute = false,
@@ -375,14 +405,14 @@ public static class PatchService
             };
             psi.ArgumentList.Add("-protectors");
             psi.ArgumentList.Add("-disable");
-            psi.ArgumentList.Add(sysDrive);
+            psi.ArgumentList.Add(drive);
             psi.ArgumentList.Add("-RebootCount");
             psi.ArgumentList.Add("1");
 
             using var proc = Process.Start(psi);
             if (proc is null)
             {
-                log?.Invoke("[ERROR] BitLocker suspension FAILED - manage-bde could not start (aborting to prevent boot failure)");
+                log?.Invoke($"[ERROR] BitLocker suspension FAILED on {drive} - manage-bde could not start");
                 return false;
             }
             // Drain stdout/stderr asynchronously to avoid the buffer-full deadlock on chatty
@@ -392,14 +422,14 @@ public static class PatchService
             if (!proc.WaitForExit(30000))
             {
                 try { proc.Kill(true); } catch { }
-                log?.Invoke("[ERROR] BitLocker suspension FAILED - manage-bde timed out after 30s (aborting)");
+                log?.Invoke($"[ERROR] BitLocker suspension FAILED on {drive} - manage-bde timed out after 30s");
                 return false;
             }
             string stdout = stdoutTask.GetAwaiter().GetResult();
             string stderr = stderrTask.GetAwaiter().GetResult();
             if (proc.ExitCode != 0)
             {
-                log?.Invoke($"[ERROR] BitLocker suspension FAILED (exit {proc.ExitCode}) - aborting to prevent boot failure");
+                log?.Invoke($"[ERROR] BitLocker suspension FAILED on {drive} (exit {proc.ExitCode})");
                 if (!string.IsNullOrWhiteSpace(stderr))
                     log?.Invoke($"  manage-bde stderr: {stderr.Trim()}");
                 else if (!string.IsNullOrWhiteSpace(stdout))
@@ -410,7 +440,7 @@ public static class PatchService
         }
         catch (Exception ex)
         {
-            log?.Invoke($"[ERROR] BitLocker suspension FAILED: {ex.Message} - aborting");
+            log?.Invoke($"[ERROR] BitLocker suspension FAILED on {drive}: {ex.Message}");
             return false;
         }
     }
