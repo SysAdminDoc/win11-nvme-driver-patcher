@@ -312,8 +312,8 @@ The tool automatically detects and warns about all of these. VeraCrypt is a hard
 | **Intel VMD** | Boot failures on VMD-configured systems | High | Yes (warns) |
 | **Hyper-V / WSL2** | WSL2 disk I/O ~40% slower (no paravirt) | Medium | Yes (warns) |
 | **Storage Spaces** | Arrays may degrade or disappear | High | Yes (warns) |
-| **Acronis True Image** | Drives invisible to backup/restore | High | Yes (warns) |
-| **Veeam Backup** | Cannot detect drives | High | Yes (warns) |
+| **Acronis True Image** | Disk-ID change moves the drive under Storage disks — backup jobs lose it; re-register after the swap | High | Yes (warns) |
+| **Veeam Backup** | Disk-ID change → agent stops detecting the drive; re-add it to the job after the swap | High | Yes (warns) |
 | **Macrium Reflect** | May need update for compatibility | Medium | Yes (warns) |
 | **UrBackup / NinjaOne / Paragon** | Backup image-mount driver may be blocked by Windows CodeIntegrity after KB5083769 | Medium | Yes (service + event-log evidence) |
 | **Samsung Magician** | Cannot detect drives (SCSI pass-through) | Low | Yes (warns) |

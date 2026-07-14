@@ -103,6 +103,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   can't be enabled, the connection open throws rather than serving queries unhardened.
 
 ### Fixed
+- **Backup-tool warnings name the disk-ID root cause** — the Acronis/Veeam/Macrium compat warnings
+  now explain that native NVMe changes the disk ID (moving the drive under Storage disks) and advise
+  re-registering backup jobs/chains after the swap, instead of only saying the drive "can't be seen."
+- **StorNVMe tuning is gated on the bound driver** — the tuning parameters live under the legacy
+  stornvme service key and have no effect once nvmedisk.sys is bound. `TuningService.ApplyProfile`
+  now refuses (rather than reporting a hollow success) while native NVMe is active, pointing the user
+  to revert first.
 - **Clock-stable provenance tests** — `DataFileProvenanceService.Inspect` now takes an injectable
   `nowUtc` clock so freshness fixtures pass on any calendar date instead of aging past the 30-day
   window; the bundled-data contract still uses the real clock. Cleared xUnit2031 (`Assert.Single`

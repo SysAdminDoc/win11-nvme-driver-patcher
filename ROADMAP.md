@@ -6,27 +6,4 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 ---
 
-## Research-Driven Additions
-
-### P0
-
-### P1
-
-### P2
-
-
-### P3
-
-- [ ] P3 — Gate the StorNVMe tuning surface on the currently-bound driver
-  Why: `TuningService` writes `Services\stornvme\Parameters\Device`, which the native `nvmedisk` driver ignores; once the patch is active the tuning UI/CLI reports "applied/verified" while changing nothing on the bound stack.
-  Evidence: `src/NVMeDriverPatcher.Core/Services/TuningService.cs:8`, `:89-90`; `TuningPanel`, CLI `tuning-import`.
-  Touches: `TuningService`, `TuningPanel`/`MainViewModel`, CLI tuning commands.
-  Acceptance: When `nvmedisk` is the bound driver, tuning controls are disabled or clearly labeled legacy-stack-only (or target the correct service key), and no command reports success for a write that cannot take effect.
-  Complexity: S
-
-- [ ] P3 — Warn that native NVMe changes the disk ID before it breaks backup tools
-  Why: Enabling the native stack mutates the disk ID, which is the root cause of Acronis/Veeam/Macrium losing the drive; today the tool warns those tools are affected but not why or when the mount/backup chains break.
-  Evidence: guru3D forums 458842 (disk-ID mutation root cause); existing backup-tool warnings in `DriveService`/preflight.
-  Touches: preflight/confirmation copy for detected backup software, README known-issues, tests.
-  Acceptance: When a supported backup tool is detected, the warning names the disk-ID change as the cause and advises re-registering backup jobs/chains after the swap; the copy is covered by a preflight message test.
-  Complexity: S
+No actionable items are currently open. The last research-driven batch (P0–P3) has been fully drained — see [CHANGELOG.md](CHANGELOG.md) and git history for what shipped. Items waiting on external resources (hardware, VMs, live validation, credentials) live in [Roadmap_Blocked.md](Roadmap_Blocked.md).
