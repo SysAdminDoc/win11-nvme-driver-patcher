@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.Tests;
 
@@ -67,6 +68,10 @@ public sealed class InstallerContentTests
         Assert.Contains("ServiceSid=\"restricted\"", wxs);
         Assert.Contains("ExeCommand=\"/grant-runtime-access\"", wxs);
         Assert.Contains("Return=\"check\"", wxs);
+        Assert.Contains("Id=\"PRIVILEGEDSTATEFOLDER\"", wxs);
+        Assert.Contains("Id=\"WATCHDOGSTATEFOLDER\"", wxs);
+        Assert.Contains("O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)", wxs);
+        Assert.Contains(PrivilegedStateSecurityService.WatchdogServiceSid, wxs);
     }
 
     [Fact]
@@ -85,11 +90,11 @@ public sealed class InstallerContentTests
     }
 
     [Fact]
-    public void WatchdogManualInstaller_GrantsSharedStateAccessByWellKnownSid()
+    public void WatchdogManualInstaller_GrantsOnlyDedicatedStateAccess()
     {
         var program = Read("src", "NVMeDriverPatcher.Watchdog", "Program.cs");
         Assert.Contains("GrantStateDirectoryAccess", program);
-        Assert.Contains("icacls.exe", program);
-        Assert.Contains("S-1-5-80-153395662-1388266646-3167021078-3452987457-2818666036", program);
+        Assert.Contains("EnsureForWatchdog", program);
+        Assert.DoesNotContain("icacls.exe", program);
     }
 }

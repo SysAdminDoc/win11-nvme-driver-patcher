@@ -64,7 +64,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "sc.exe showsid failed: $($sidOutput -join ' ')" }
     $serviceSid = [regex]::Match(($sidOutput -join "`n"), 'S-1-5-80-(?:\d+-){4}\d+').Value
     if ([string]::IsNullOrWhiteSpace($serviceSid)) { throw 'Service SID could not be resolved.' }
-    $stateDir = Join-Path $env:ProgramData 'NVMePatcher'
+    $stateDir = Join-Path $env:ProgramData 'NVMePatcher\Watchdog'
     $stateAcl = Get-Acl -LiteralPath $stateDir
     $stateAccess = $stateAcl.Access | Where-Object {
         try {

@@ -122,7 +122,10 @@ public static class EventLogWatchdogService
     };
 
     public static string StatePath(AppConfig config) =>
-        Path.Combine(string.IsNullOrWhiteSpace(config.WorkingDir) ? AppConfig.GetWorkingDir() : config.WorkingDir, StateFile);
+        Path.Combine(
+            AppConfig.GetWatchdogStateDirectory(
+                string.IsNullOrWhiteSpace(config.WorkingDir) ? AppConfig.GetWorkingDir() : config.WorkingDir),
+            StateFile);
 
     public static WatchdogState LoadState(AppConfig config)
     {
@@ -380,6 +383,14 @@ public static class EventLogWatchdogService
 
     private static WatchdogStateLoadResult LoadStateCore(AppConfig config)
     {
+        var workingDir = string.IsNullOrWhiteSpace(config.WorkingDir) ? AppConfig.GetWorkingDir() : config.WorkingDir;
+        var access = PrivilegedStateSecurityService.EnsureForWatchdog(workingDir);
+        if (!access.Success)
+        {
+            return new WatchdogStateLoadResult(
+                new WatchdogState(), WatchdogStateAccessStatus.Unavailable,
+                "Watchdog state trust check failed: " + access.Summary);
+        }
         var path = StatePath(config);
         var backupPath = path + ".bak";
         if (File.Exists(path) && TryReadState(path, out var primary, out _))
@@ -434,6 +445,10 @@ public static class EventLogWatchdogService
 
     private static WatchdogStateSaveResult SaveStateCore(AppConfig config, WatchdogState state)
     {
+        var workingDir = string.IsNullOrWhiteSpace(config.WorkingDir) ? AppConfig.GetWorkingDir() : config.WorkingDir;
+        var access = PrivilegedStateSecurityService.EnsureForWatchdog(workingDir);
+        if (!access.Success)
+            return new(WatchdogStateAccessStatus.Unavailable, "Watchdog state trust check failed: " + access.Summary);
         var path = StatePath(config);
         var backupPath = path + ".bak";
         var tempPath = $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
@@ -468,6 +483,20 @@ public static class EventLogWatchdogService
                 return new(WatchdogStateAccessStatus.Unavailable, backupError);
             if (!TryReadState(path, out _, out var primaryError))
                 return new(WatchdogStateAccessStatus.Unavailable, "Published watchdog state failed validation: " + primaryError);
+            if (AppConfig.IsRuntimeWorkingDirectory(workingDir))
+            {
+                var protectedPrimary = PrivilegedStateSecurityService.ProtectCriticalFile(
+                    path, StateDirectoryRole.Watchdog);
+                if (!protectedPrimary.Success)
+                    return new(WatchdogStateAccessStatus.Unavailable, protectedPrimary.Summary);
+                if (File.Exists(backupPath))
+                {
+                    var protectedBackup = PrivilegedStateSecurityService.ProtectCriticalFile(
+                        backupPath, StateDirectoryRole.Watchdog);
+                    if (!protectedBackup.Success)
+                        return new(WatchdogStateAccessStatus.Unavailable, protectedBackup.Summary);
+                }
+            }
 
             return new(WatchdogStateAccessStatus.Saved,
                 "Watchdog state was validated, flushed, and published atomically with a validated backup.");

@@ -5,6 +5,14 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Privileged persisted state now has an explicit Windows trust boundary** — boot-critical
+  mutation ledgers, SafeBoot journals, and administrator build-rule overrides resolve to
+  `%ProgramData%\NVMePatcher\State` even when portable or fallback data storage is active. The
+  root and child DACLs are protected, standard users are read-only, owner/reparse/hard-link
+  metadata is revalidated around elevated reads and atomic publications, and untrusted legacy
+  recovery files are rejected rather than adopted. The restricted LocalService watchdog can
+  write only `%ProgramData%\NVMePatcher\Watchdog`; MSI and manual-service installation author the
+  same split ACL contract. Legacy LocalAppData migration no longer copies privileged inputs.
 - **Controller audits now explain Windows' driver selection without changing it** — each timestamped
   snapshot records the bound INF/provider/version, then runs only `pnputil /enum-devices
   /instanceid … /drivers /format xml` to capture matching candidates, hexadecimal ranks,

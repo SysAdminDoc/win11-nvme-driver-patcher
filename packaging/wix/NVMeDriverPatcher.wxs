@@ -75,7 +75,10 @@
     </StandardDirectory>
 
     <StandardDirectory Id="CommonAppDataFolder">
-      <Directory Id="PROGRAMDATAFOLDER" Name="NVMePatcher" />
+      <Directory Id="PROGRAMDATAFOLDER" Name="NVMePatcher">
+        <Directory Id="PRIVILEGEDSTATEFOLDER" Name="State" />
+        <Directory Id="WATCHDOGSTATEFOLDER" Name="Watchdog" />
+      </Directory>
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
@@ -178,13 +181,27 @@
 
     <ComponentGroup Id="SharedDataFolder" Directory="PROGRAMDATAFOLDER">
       <Component Id="SharedDataDirectory" Guid="*">
-        <CreateFolder />
+        <CreateFolder>
+          <!-- Owner=Administrators; protected DACL. Standard users and the restricted
+               watchdog token can read shared config but cannot create/replace children. -->
+          <PermissionEx Sddl="O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)(A;OICI;0x1200a9;;;LS)(A;OICI;0x1200a9;;;S-1-5-80-153395662-1388266646-3167021078-3452987457-2818666036)" />
+        </CreateFolder>
         <RegistryValue Root="HKLM"
                        Key="Software\SysAdminDoc\NVMeDriverPatcher"
                        Name="ProgramDataDirectoryCreated"
                        Type="integer"
                        Value="1"
                        KeyPath="yes" />
+      </Component>
+      <Component Id="PrivilegedStateDirectory" Directory="PRIVILEGEDSTATEFOLDER" Guid="657EB463-8C4D-4E16-A525-EAB5DBF4284B">
+        <CreateFolder>
+          <PermissionEx Sddl="O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+        </CreateFolder>
+      </Component>
+      <Component Id="WatchdogStateDirectory" Directory="WATCHDOGSTATEFOLDER" Guid="5D3FB12D-C5AA-43F6-A732-44CF29E394FF">
+        <CreateFolder>
+          <PermissionEx Sddl="O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;LS)(A;OICI;0x1301bf;;;S-1-5-80-153395662-1388266646-3167021078-3452987457-2818666036)" />
+        </CreateFolder>
       </Component>
     </ComponentGroup>
 

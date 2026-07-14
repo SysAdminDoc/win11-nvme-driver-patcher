@@ -106,18 +106,20 @@ internal static class Program
     private static int GrantStateDirectoryAccess()
     {
         var workingDir = AppConfig.GetWorkingDir();
-        try { Directory.CreateDirectory(workingDir); }
-        catch (Exception ex)
+        var access = PrivilegedStateSecurityService.EnsureRuntimeTree();
+        if (!access.Success)
         {
-            Console.Error.WriteLine($"Could not create watchdog state directory '{workingDir}': {ex.Message}");
+            Console.Error.WriteLine(access.Summary);
             return 1;
         }
-
-        // A SERVICE_SID_TYPE_RESTRICTED token may write only where its per-service SID is
-        // explicitly allowed. The SID is deterministic for the service name (`sc showsid`) and
-        // avoids localized account-name resolution. Inheritance covers atomic temp/backup files.
-        const string serviceSid = "S-1-5-80-153395662-1388266646-3167021078-3452987457-2818666036";
-        return RunProcess("icacls.exe", workingDir, "/grant", $"*{serviceSid}:(OI)(CI)(M)");
+        var watchdogAccess = PrivilegedStateSecurityService.EnsureForWatchdog(workingDir);
+        if (!watchdogAccess.Success)
+        {
+            Console.Error.WriteLine(watchdogAccess.Summary);
+            return 1;
+        }
+        Console.WriteLine($"Watchdog access is restricted to '{watchdogAccess.Directory}'.");
+        return 0;
     }
 
     private static int GrantEventLogAccess(bool warnOnly)
