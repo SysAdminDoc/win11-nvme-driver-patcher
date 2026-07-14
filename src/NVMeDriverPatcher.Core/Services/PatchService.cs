@@ -21,6 +21,11 @@ public class PatchOperationResult
     // Status of the native FeatureStore / ViVeTool fallback undo attempted during Uninstall.
     // Null when no removal ran; otherwise a human-readable summary surfaced in the activity rail.
     public string? FeatureStoreResetSummary { get; set; }
+
+    // Components still present after a post-removal re-probe of every store. Non-empty means the
+    // removal was PARTIAL: Success is false, the watchdog stays armed, and the CLI exits non-zero.
+    // Surfaced to the activity log and (via snapshots) to support bundles as structured evidence.
+    public List<string> Residue { get; set; } = new();
 }
 
 public enum PatchPreRegistryAbortReason
@@ -622,18 +627,37 @@ public static class PatchService
                 log?.Invoke($"  [FeatureStore] reset skipped: {ex.Message}");
             }
 
-            ReportProgress(progress, 90, "Validating...");
+            // Residue re-probe: re-read EVERY store instead of trusting that the per-component
+            // deletes above (whose failures are individually logged and swallowed) succeeded.
+            // Success is possible ONLY when nothing this app is responsible for remains.
+            ReportProgress(progress, 90, "Validating removal (residue probe)...");
             result.AppliedCount = removedCount;
-            result.Success = true;
+            result.Residue = ProbeRemovalResidue(hklm, log);
+            result.Success = result.Residue.Count == 0;
             result.NeedsRestart = removedCount > 0 || result.NeedsRestart;
 
             log?.Invoke("========================================");
-            log?.Invoke($"[SUCCESS] Patch Status: REMOVED - Removed {removedCount} components");
-            if (result.NeedsRestart)
-                log?.Invoke("[INFO] After reboot: Drives will return to 'Disk drives' using stornvme.sys");
+            if (result.Success)
+            {
+                log?.Invoke($"[SUCCESS] Patch Status: REMOVED - Removed {removedCount} components (zero residue verified)");
+                if (result.NeedsRestart)
+                    log?.Invoke("[INFO] After reboot: Drives will return to 'Disk drives' using stornvme.sys");
+                else
+                    log?.Invoke("[INFO] No patch components were present. No reboot needed.");
+                EventLogService.Write($"NVMe Driver Patch removed ({removedCount} components, zero residue)");
+            }
             else
-                log?.Invoke("[INFO] No patch components were present. No reboot needed.");
-            EventLogService.Write($"NVMe Driver Patch removed ({removedCount} components)");
+            {
+                log?.Invoke($"[PARTIAL] Patch removal INCOMPLETE — {result.Residue.Count} component(s) still present after removal:");
+                foreach (var r in result.Residue)
+                    log?.Invoke($"  [RESIDUE] {r}");
+                log?.Invoke("[RECOVERY] Re-run 'Remove Patch' as Administrator. If residue persists, restore the");
+                log?.Invoke("[RECOVERY] pre-removal registry backup or run the Recovery Kit from WinRE. The watchdog");
+                log?.Invoke("[RECOVERY] stays armed until removal is clean.");
+                EventLogService.Write(
+                    $"NVMe Driver Patch removal INCOMPLETE — residue: {string.Join(", ", result.Residue)}",
+                    EventLogEntryType.Warning, 3002);
+            }
         }
         catch (Exception ex)
         {
@@ -655,6 +679,74 @@ public static class PatchService
             catch { }
         }
         return result;
+    }
+
+    // Re-reads every store this app is responsible for and returns a human-readable list of
+    // anything still present. An empty list is the ONLY basis for reporting a successful removal.
+    // Fails closed: if a store cannot be read to confirm it is clean, that counts as residue.
+    internal static List<string> ProbeRemovalResidue(RegistryKey hklm, Action<string>? log)
+    {
+        var residue = new List<string>();
+
+        // 1) Feature override values under the FeatureManagement Overrides key.
+        try
+        {
+            using var overrides = hklm.OpenSubKey(AppConfig.RegistrySubKey, writable: false);
+            if (overrides is not null)
+            {
+                foreach (var id in AppConfig.FeatureIDs.Append(AppConfig.ServerFeatureID))
+                {
+                    try
+                    {
+                        if (overrides.GetValue(id) is not null)
+                            residue.Add($"Feature override value {id}");
+                    }
+                    catch (Exception ex) { residue.Add($"Feature override {id} unverifiable ({ex.GetType().Name})"); }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            residue.Add($"Feature overrides key unverifiable ({ex.GetType().Name})");
+        }
+
+        // 2) The app-owned SafeBoot GUID keys (Minimal + Network).
+        residue.AddRange(ProbeSafeBootGuidResidue(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal", "SafeBoot Minimal"));
+        residue.AddRange(ProbeSafeBootGuidResidue(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network", "SafeBoot Network"));
+
+        // 3) FeatureStore / ViVeTool fallback IDs. A registry-only install has none and this is a
+        // clean no-op; a fallback install must have had them reset above.
+        try
+        {
+            if (FeatureStoreWriterService.HasFallbackEvidence())
+                residue.Add("FeatureStore fallback feature IDs still enabled");
+        }
+        catch (Exception ex)
+        {
+            // Can't confirm the fallback store is clean — fail closed.
+            residue.Add($"FeatureStore fallback state unverifiable ({ex.GetType().Name})");
+        }
+
+        return residue;
+    }
+
+    private static List<string> ProbeSafeBootGuidResidue(RegistryKey hklm, string parentPath, string label)
+    {
+        var found = new List<string>();
+        try
+        {
+            using var parent = hklm.OpenSubKey(parentPath, writable: false);
+            if (parent is null)
+                return found;
+            using var guid = parent.OpenSubKey(AppConfig.SafeBootGuid);
+            if (guid is not null)
+                found.Add($"{label} {AppConfig.SafeBootGuid}");
+        }
+        catch (Exception ex)
+        {
+            found.Add($"{label} {AppConfig.SafeBootGuid} unverifiable ({ex.GetType().Name})");
+        }
+        return found;
     }
 
     // Returns true only when every registered write was reversed. A partial rollback is a

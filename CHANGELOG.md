@@ -5,6 +5,12 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-06-30
 
 ### Fixed
+- **Residue-verified patch removal** — `PatchService.Uninstall` no longer reports success just
+  because it ran; it now re-reads every store (feature-override values, the app-owned SafeBoot GUID
+  keys, and the FeatureStore fallback IDs) and only reports success on a zero-residue probe. Any
+  leftover component (or any store it cannot confirm clean) yields a PARTIAL result with named
+  recovery guidance, keeps the watchdog armed, exits the CLI non-zero, and raises an explicit
+  GUI dialog + Event Log entry — closing the false-success/premature-disarm path.
 - **Durable fallback recovery checkpoint** — `PendingFallbackApplied` is now persisted in
   `config.json` (load + save + schema), so the post-reboot auto-reset survives the apply→reboot→
   fresh-launch boundary it was designed for. `PatchVerificationService.Evaluate` is now a pure read;
