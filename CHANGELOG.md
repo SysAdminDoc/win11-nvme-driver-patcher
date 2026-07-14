@@ -5,6 +5,12 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased] — 2026-07-14
 
 ### Fixed
+- **Native NVMe scope is now reported honestly as machine-wide** — every apply and FeatureStore
+  fallback boundary warns that Windows applies one driver-selection policy to all eligible NVMe
+  drives/controllers. Legacy `drive_scope.json` preferences are detected and explained but never
+  presented as enforced, config bundle schema v2 no longer exports them, and the unsupported
+  drive-scope schema was removed. Dry-run, GUI, CLI, diagnostics, and DirectStorage guidance now
+  state the same global blast radius.
 - **SQLite history upgrades are now versioned, backed up, and integrity-checked** — startup adopts
   the real legacy v1 (Benchmarks/Snapshots/Telemetry) and formerly-unversioned v2
   (BypassIoHistory) layouts into schema v2. Existing files must pass `PRAGMA quick_check`; metadata

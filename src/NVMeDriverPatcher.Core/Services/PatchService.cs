@@ -137,6 +137,7 @@ public static class PatchService
         log?.Invoke("========================================");
         log?.Invoke("STARTING PATCH INSTALLATION");
         log?.Invoke("========================================");
+        log?.Invoke("[SCOPE] Machine-wide mutation: every eligible NVMe drive/controller is subject to the same Windows driver selection; legacy drive_scope.json exclusions are not enforced.");
         EventLogService.Write("NVMe Driver Patch installation started");
 
         int successCount = 0;

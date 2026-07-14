@@ -33,7 +33,7 @@ public static class BypassIoInspectorService
         var volumeList = string.Join(", ", enabledVolumes);
         return $"Gaming impact: BypassIO is active on {enabledVolumes.Count} volume(s) ({volumeList}). " +
             $"After patching to nvmedisk.sys, DirectStorage titles such as {DriveService.DirectStorageGameExamplesText} can fall back to legacy I/O with higher CPU use or stutter. " +
-            "Keep game-library drives on stornvme.sys with per-drive scope when gaming performance matters.";
+            "The native-NVMe mutation is machine-wide, so a game-library drive cannot be excluded; remove the patch or accept this global tradeoff.";
     }
 
     public static List<BypassIoVolumeInfo> Inspect()

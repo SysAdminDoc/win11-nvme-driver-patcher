@@ -21,6 +21,8 @@ public sealed class DryRunServiceTests
         Assert.Equal(2, report.TotalCreates);
         Assert.Contains(report.Items, i => i.Action == "WRITE" && i.ValueName == AppConfig.PrimaryFeatureID);
         Assert.Equal(2, report.Items.Count(i => i.Action == "CREATE"));
+        Assert.Contains("machine-wide", report.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("per-drive exclusions are not enforced", report.Summary, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

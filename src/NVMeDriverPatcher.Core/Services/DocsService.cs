@@ -76,8 +76,9 @@ with disk 51/153 paging or reset events.
         ["bypassio"] = @"
 nvmedisk.sys vetoes BypassIO, so DirectStorage titles such as Ratchet & Clank: Rift Apart,
 Forspoken, Forza Motorsport, and Horizon Forbidden West can fall back to legacy I/O with
-higher CPU use or stutter. Keep game-library drives on stornvme.sys with per-drive scope
-when gaming performance matters. EasyAntiCheat's EOSSys.sys can also veto BypassIO
+higher CPU use or stutter. The native-NVMe mutation is machine-wide; a game-library drive
+cannot be excluded independently. Remove the patch or accept that global tradeoff.
+EasyAntiCheat's EOSSys.sys can also veto BypassIO
 independently, so an EOSSys.sys blocker is separate from the storage-driver choice.
 ",
         ["vivetool"] = @"
