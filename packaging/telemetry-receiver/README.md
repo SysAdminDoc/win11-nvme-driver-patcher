@@ -82,7 +82,7 @@ worker, keep those field names in sync with the client (a contract test pins the
   "schemaVersion": 1,
   "submittedAt": "2026-06-14T12:00:00.0000000Z",
   "anonId": "5f9c1e2a-3b4d-4c5e-8f90-1a2b3c4d5e6f",
-  "appVersion": "5.0.0",
+  "appVersion": "5.1.0",
   "osBuild": "26100.4651",
   "cpu": "Intel64 Family 6 Model 154, GenuineIntel",
   "controllers": [

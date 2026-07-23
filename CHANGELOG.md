@@ -2,7 +2,7 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
-## [Unreleased] — 2026-07-14
+## [5.1.0] — 2026-07-22
 
 ### Fixed
 - **Release documentation facts now fail closed on source drift** — the release-version gate also
@@ -789,9 +789,8 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   README now documents the exact POST payload shape. Added `package.json` marking the worker
   directory as ESM.
 
-## [Unreleased] — 2026-06-11
+### Build-ruleset and platform work (2026-06-11)
 
-### Features
 - **Windows build ruleset** (AR-2026-006): bundled `windows_build_rules.json` maps OS build
   ranges to expected enablement paths with source URLs and confidence levels. Integrated into
   preflight, verification, CLI status, diagnostics, and support bundles.

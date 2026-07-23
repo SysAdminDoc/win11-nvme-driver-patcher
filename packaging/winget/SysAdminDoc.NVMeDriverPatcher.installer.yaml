@@ -1,16 +1,16 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
 PackageIdentifier: SysAdminDoc.NVMeDriverPatcher
-PackageVersion: 5.0.0
+PackageVersion: 5.1.0
 InstallerType: portable
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.0.0/NVMeDriverPatcher.exe
+    InstallerUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.1.0/NVMeDriverPatcher.exe
     InstallerSha256: REPLACE_ME_WITH_RELEASE_SHA256
     ElevationRequirement: elevatesSelf
     Commands:
       - NVMeDriverPatcher
   - Architecture: arm64
-    InstallerUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.0.0/NVMeDriverPatcher-win-arm64.exe
+    InstallerUrl: https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.1.0/NVMeDriverPatcher-win-arm64.exe
     InstallerSha256: REPLACE_ME_WITH_ARM64_SHA256
     ElevationRequirement: elevatesSelf
     Commands:
