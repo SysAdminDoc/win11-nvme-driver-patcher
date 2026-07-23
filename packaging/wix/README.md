@@ -39,7 +39,7 @@ Use the local release builder (`scripts/Build-ReleaseArtifacts.ps1`) which publi
 binaries, builds the MSI, and generates checksums in a single pass:
 
 ```powershell
-.\scripts\Build-ReleaseArtifacts.ps1 -Version 5.0.0
+.\scripts\Build-ReleaseArtifacts.ps1 -Version 5.1.0
 ```
 
 Or build the MSI manually:

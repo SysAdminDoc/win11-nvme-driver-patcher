@@ -6,7 +6,7 @@
 
 A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driver (nvmedisk.sys) on Windows 11, replacing the legacy SCSI translation layer for improved NVMe performance.
 
-![Version](https://img.shields.io/badge/Version-5.0.0-blue)
+![Version](https://img.shields.io/badge/Version-5.1.0-blue)
 ![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows11)
 ![License](https://img.shields.io/badge/License-MIT-green)
