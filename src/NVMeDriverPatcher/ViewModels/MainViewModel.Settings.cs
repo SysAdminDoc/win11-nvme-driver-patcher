@@ -140,7 +140,12 @@ public partial class MainViewModel
         UpdateRecommendedActions();
     }
     partial void OnApplyEnabledChanged(bool value) => UpdateRecommendedActions();
-    partial void OnIsLoadingChanged(bool value) => UpdateRecommendedActions();
+    partial void OnIsLoadingChanged(bool value)
+    {
+        UpdateRecommendedActions();
+        if (!value)
+            UpdateWorkflowGuide();
+    }
 
     /// <summary>
     /// Pushes the visible settings fields back onto <see cref="Config"/>. Called from every

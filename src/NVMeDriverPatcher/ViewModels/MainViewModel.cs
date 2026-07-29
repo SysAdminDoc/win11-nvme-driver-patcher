@@ -32,7 +32,7 @@ public partial class MainViewModel : ObservableObject
     // Preflight state
     [ObservableProperty] private string _statusText = "Checking…";
     [ObservableProperty] private string _statusColor = "TextDim";
-    [ObservableProperty] private string _driverLabelText = "";
+    [ObservableProperty] private string _driverLabelText = "Scanning driver path";
     [ObservableProperty] private string _benchLabelText = "";
     [ObservableProperty] private bool _benchLabelVisible;
     [ObservableProperty] private string _versionText = "";
@@ -116,6 +116,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _hasDiagnosticsReport;
     [ObservableProperty] private bool _hasBackupFiles;
     [ObservableProperty] private bool _hasBenchmarkHistory;
+    [ObservableProperty] private string _scanStageStateText = "Readiness scan in progress";
+    [ObservableProperty] private string _scanStageDetailText = "Windows build support, storage inventory, and hard safety blockers are being checked.";
+    [ObservableProperty] private string _scanStageColor = "Accent";
     [ObservableProperty] private string _preparationStageStateText = "Review readiness and capture a baseline";
     [ObservableProperty] private string _preparationStageDetailText = "Readiness checks, backups, and optional benchmarks make the driver change easier to trust.";
     [ObservableProperty] private string _preparationStageColor = "Accent";

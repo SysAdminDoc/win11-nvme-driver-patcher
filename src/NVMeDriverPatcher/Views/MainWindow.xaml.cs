@@ -413,8 +413,8 @@ public partial class MainWindow : Window
         _compactLayoutApplied = compact;
 
         TitleBarRegion.Padding = compact
-            ? new Thickness(16, 8, 16, 0)
-            : new Thickness(20, 8, 20, 0);
+            ? new Thickness(16, 13, 16, 11)
+            : new Thickness(20, 14, 20, 12);
         OverviewSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(16);
         MainContentSpacerColumn.Width = new GridLength(0);
         MainContentSplitter.Visibility = Visibility.Collapsed;
@@ -429,14 +429,18 @@ public partial class MainWindow : Window
         SettingsSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(12);
         AuditAlertsCard.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
         ActivityRailSpacerColumn.Width = compact ? new GridLength(8) : new GridLength(10);
-        ActivityRailColumn.Width = compact ? new GridLength(340) : new GridLength(400);
+        ActivityRailColumn.Width = compact ? new GridLength(300) : new GridLength(320);
 
         if (compact)
         {
             WorkspacePrimaryRow.Height = new GridLength(1, GridUnitType.Star);
-            WorkspaceActivityRow.Height = new GridLength(220);
+            WorkspaceActivityRow.Height = new GridLength(ActivityLogToggle.IsChecked == true ? 240 : 112);
             ActivityRailSpacerColumn.Width = new GridLength(0);
             ActivityRailColumn.Width = new GridLength(0);
+            ActivityRail.Padding = new Thickness(12, 10, 12, 10);
+            ActivityRailEyebrow.Visibility = Visibility.Collapsed;
+            ActivityRailSummary.Visibility = Visibility.Collapsed;
+            LogRetentionCaption.Visibility = Visibility.Collapsed;
             Grid.SetRow(WorkspaceTabs, 0);
             Grid.SetColumn(WorkspaceTabs, 0);
             Grid.SetRowSpan(WorkspaceTabs, 1);
@@ -472,7 +476,13 @@ public partial class MainWindow : Window
             WorkspacePrimaryRow.Height = GridLength.Auto;
             WorkspaceActivityRow.Height = new GridLength(1, GridUnitType.Star);
             ActivityRailSpacerColumn.Width = new GridLength(10);
-            ActivityRailColumn.Width = new GridLength(400);
+            ActivityRailColumn.Width = new GridLength(320);
+            ActivityRail.Padding = new Thickness(14);
+            ActivityRailEyebrow.Visibility = Visibility.Visible;
+            ActivityRailSummary.Visibility = ActivityLogToggle.IsChecked == true
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+            LogRetentionCaption.Visibility = Visibility.Visible;
             Grid.SetRow(WorkspaceTabs, 0);
             Grid.SetColumn(WorkspaceTabs, 0);
             Grid.SetRowSpan(WorkspaceTabs, 2);
@@ -503,6 +513,12 @@ public partial class MainWindow : Window
             Grid.SetColumn(AuditAlertsCard, 2);
             Grid.SetColumnSpan(AuditAlertsCard, 1);
         }
+    }
+
+    private void ActivityLogToggle_StateChanged(object sender, RoutedEventArgs e)
+    {
+        if (IsLoaded)
+            UpdateAdaptiveLayout();
     }
 
     private void GitHub_Click(object sender, RoutedEventArgs e) => _vm.OpenGitHubCommand.Execute(null);

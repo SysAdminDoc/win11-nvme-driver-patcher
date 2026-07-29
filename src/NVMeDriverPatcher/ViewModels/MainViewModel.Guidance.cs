@@ -262,6 +262,31 @@ public partial class MainViewModel
         bool prepReady = CriticalCount == 0 && HasBackupFiles && (HasBenchmarkHistory || HasRecoveryKit);
         bool validationEvidenceReady = HasBenchmarkHistory || HasDiagnosticsReport;
 
+        if (IsLoading)
+        {
+            ScanStageStateText = "Readiness scan in progress";
+            ScanStageDetailText = "Windows build support, storage inventory, and hard safety blockers are being checked.";
+            ScanStageColor = "Accent";
+        }
+        else if (CriticalCount > 0)
+        {
+            ScanStageStateText = $"{CriticalCount} blocking {Pluralize(CriticalCount, "issue")}";
+            ScanStageDetailText = "Mutation stays locked until every critical readiness result is resolved and the scan runs cleanly.";
+            ScanStageColor = "Red";
+        }
+        else if (WarningCount > 0)
+        {
+            ScanStageStateText = $"Clear with {WarningCount} {Pluralize(WarningCount, "warning")}";
+            ScanStageDetailText = "The hard safety gate passed. Review the remaining compatibility tradeoffs before staging a change.";
+            ScanStageColor = "Yellow";
+        }
+        else
+        {
+            ScanStageStateText = "Readiness scan clear";
+            ScanStageDetailText = "The current build, storage inventory, and critical safeguards passed the scan.";
+            ScanStageColor = "Green";
+        }
+
         if (CriticalCount > 0)
         {
             PreparationStageStateText = "Blocked by readiness checks";
