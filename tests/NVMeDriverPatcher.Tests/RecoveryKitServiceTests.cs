@@ -121,7 +121,8 @@ public sealed class RecoveryKitServiceTests : IDisposable
         Assert.Equal("recovery-kit", verification.PayloadType);
 
         var guard = File.ReadAllText(Path.Combine(kitDir, RecoveryKitService.GuardScriptFileName));
-        Assert.Contains("where certutil.exe", guard, StringComparison.OrdinalIgnoreCase);
+        // Availability is probed against the absolute System32 path, not via PATH lookup.
+        Assert.Contains(@"if not exist ""%SystemRoot%\System32\certutil.exe""", guard, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Expected exactly 5 recovery-kit files", guard, StringComparison.Ordinal);
         Assert.Contains("failed SHA-256 verification", guard, StringComparison.Ordinal);
         Assert.Contains($"call \"{RecoveryKitService.MutationScriptFileName}\"", guard, StringComparison.Ordinal);
@@ -168,12 +169,63 @@ public sealed class RecoveryKitServiceTests : IDisposable
             WorkingDirectory = kitDir
         };
         process.Start();
-        var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
-        Assert.True(process.WaitForExit(10_000), "Recovery integrity guard did not exit.");
+
+        // Read asynchronously and bound the wait. A synchronous ReadToEnd() here blocks until the
+        // child closes stdout, so a guard script that never exits wedges the whole test run instead
+        // of failing this one test — that is exactly how the PATH-shadowed `find` hang presented.
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        Assert.True(process.WaitForExit(30_000), "Recovery integrity guard did not exit.");
+        var output = stdout.GetAwaiter().GetResult() + stderr.GetAwaiter().GetResult();
 
         Assert.Equal(2, process.ExitCode);
         Assert.Contains("failed SHA-256 verification", output, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Patch removed. Reboot", output, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GeneratedScripts_ResolveExternalToolsByAbsolutePath()
+    {
+        // A bare `find`/`reg`/`certutil` resolves through PATH. Git for Windows ships a GNU
+        // find.exe in usr\bin, so `dir | find /c /v ""` handed the count to GNU find, which read
+        // "/c" as a directory and walked the whole drive — the integrity gate never returned.
+        // The kit is also the elevated last-resort recovery path, so a PATH-resolved tool is a
+        // binary-planting vector. Every external tool must be invoked by absolute path.
+        var bareToolAtCommandPosition = new System.Text.RegularExpressions.Regex(
+            @"(?:^|[|(]|\bdo\s+|\bin\s+\(')\s*(reg|certutil|find|where|sort|findstr)(?:\.exe)?\s",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase |
+            System.Text.RegularExpressions.RegexOptions.Multiline);
+
+        // Self-check: the detector must actually fire on the shape of the original defect,
+        // otherwise a green result below would prove nothing.
+        Assert.Matches(bareToolAtCommandPosition, @"for /f %%C in ('dir /b /s /a-d 2>nul | find /c /v """") do set X=%%C");
+        Assert.Matches(bareToolAtCommandPosition, @"reg delete ""HKLM\SYSTEM\CurrentControlSet"" /f");
+
+        var kitDir = RecoveryKitService.Export(_tempRoot);
+        Assert.NotNull(kitDir);
+
+        foreach (var scriptName in new[] { RecoveryKitService.GuardScriptFileName, RecoveryKitService.MutationScriptFileName })
+        {
+            var script = File.ReadAllText(Path.Combine(kitDir!, scriptName));
+
+            // An un-interpolated placeholder emits a literal "{Sys32}\reg.exe", which is not a
+            // runnable path — the offline hive would silently never unload.
+            Assert.DoesNotContain("{Sys32}", script, StringComparison.Ordinal);
+            Assert.Contains(@"%SystemRoot%\System32", script, StringComparison.OrdinalIgnoreCase);
+
+            var executable = string.Join(
+                '\n',
+                script.Split('\n')
+                    .Select(line => line.Trim())
+                    .Where(line => !line.StartsWith("rem ", StringComparison.OrdinalIgnoreCase))
+                    .Where(line => !line.StartsWith("echo ", StringComparison.OrdinalIgnoreCase))
+                    .Where(line => !line.StartsWith(';'))
+                    // Absolute-path invocations are the compliant form; drop them before scanning
+                    // so only a genuinely bare tool name can trip the detector.
+                    .Select(line => line.Replace(@"%SystemRoot%\System32\", "ABSOLUTE_", StringComparison.OrdinalIgnoreCase)));
+
+            Assert.DoesNotMatch(bareToolAtCommandPosition, executable);
+        }
     }
 
     public void Dispose()
