@@ -150,7 +150,7 @@ public sealed class RecoveryKitServiceTests : IDisposable
     }
 
     [Fact]
-    public void GuardScript_RefusesSameLengthTamperBeforeMutationScriptRuns()
+    public async Task GuardScript_RefusesSameLengthTamperBeforeMutationScriptRuns()
     {
         var kitDir = RecoveryKitService.Export(_tempRoot);
         Assert.NotNull(kitDir);
@@ -175,8 +175,19 @@ public sealed class RecoveryKitServiceTests : IDisposable
         // of failing this one test — that is exactly how the PATH-shadowed `find` hang presented.
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        Assert.True(process.WaitForExit(30_000), "Recovery integrity guard did not exit.");
-        var output = stdout.GetAwaiter().GetResult() + stderr.GetAwaiter().GetResult();
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            process.Kill(entireProcessTree: true);
+            Assert.Fail("Recovery integrity guard did not exit.");
+        }
+
+        var output = await stdout + await stderr;
 
         Assert.Equal(2, process.ExitCode);
         Assert.Contains("failed SHA-256 verification", output, StringComparison.OrdinalIgnoreCase);
