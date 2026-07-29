@@ -61,3 +61,6 @@ AGENTS.md
 .ai/
 PROJECT_CONTEXT.md
 CONTINUATION_PROMPT.md
+
+# Test run artifacts (blame hang/crash dumps land here and are large)
+TestResults/
