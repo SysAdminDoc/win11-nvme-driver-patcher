@@ -80,7 +80,9 @@ public sealed class PatchServiceTests
     {
         var psi = PatchService.CreateRestorePointStartInfo("pre'patch");
 
-        Assert.Equal("powershell.exe", psi.FileName);
+        // Absolute path to Windows PowerShell 5.1, not a PATH lookup — PatchService runs elevated.
+        Assert.Equal(SystemToolPathService.PowerShell, psi.FileName);
+        Assert.True(Path.IsPathFullyQualified(psi.FileName));
         Assert.False(psi.UseShellExecute);
         Assert.Equal(string.Empty, psi.Arguments);
         Assert.Equal(

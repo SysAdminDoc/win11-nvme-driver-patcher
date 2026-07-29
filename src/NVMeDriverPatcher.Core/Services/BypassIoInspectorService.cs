@@ -56,7 +56,7 @@ public static class BypassIoInspectorService
     {
         try
         {
-            var psi = new ProcessStartInfo("fsutil.exe")
+            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("fsutil.exe"))
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,

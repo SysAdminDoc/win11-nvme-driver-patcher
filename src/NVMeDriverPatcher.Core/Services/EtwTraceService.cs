@@ -140,7 +140,7 @@ public static class EtwTraceService
 
     private static async Task RunWprAsync(string[] args, int timeoutSeconds, CancellationToken cancellationToken)
     {
-        var psi = new ProcessStartInfo("wpr.exe")
+        var psi = new ProcessStartInfo(SystemToolPathService.Resolve("wpr.exe"))
         {
             UseShellExecute = false,
             CreateNoWindow = true,

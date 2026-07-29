@@ -100,7 +100,7 @@ public static class DriverVerifierService
 
     private static string RunVerifier(string[] args, int timeoutSeconds)
     {
-        var psi = new ProcessStartInfo("verifier.exe")
+        var psi = new ProcessStartInfo(SystemToolPathService.Resolve("verifier.exe"))
         {
             UseShellExecute = false,
             CreateNoWindow = true,

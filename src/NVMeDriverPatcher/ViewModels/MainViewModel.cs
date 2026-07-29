@@ -1365,7 +1365,7 @@ public partial class MainViewModel : ObservableObject
 
     internal static ProcessStartInfo CreateExplorerStartInfo(string path)
     {
-        var psi = new ProcessStartInfo("explorer.exe")
+        var psi = new ProcessStartInfo(SystemToolPathService.Resolve("explorer.exe"))
         {
             UseShellExecute = false
         };
@@ -1375,7 +1375,7 @@ public partial class MainViewModel : ObservableObject
 
     internal static ProcessStartInfo CreateNotepadStartInfo(string path)
     {
-        var psi = new ProcessStartInfo("notepad.exe")
+        var psi = new ProcessStartInfo(SystemToolPathService.Resolve("notepad.exe"))
         {
             UseShellExecute = false
         };

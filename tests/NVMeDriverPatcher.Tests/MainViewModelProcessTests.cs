@@ -1,3 +1,4 @@
+using NVMeDriverPatcher.Services;
 using NVMeDriverPatcher.ViewModels;
 
 namespace NVMeDriverPatcher.Tests;
@@ -11,7 +12,10 @@ public sealed class MainViewModelProcessTests
 
         var psi = MainViewModel.CreateExplorerStartInfo(path);
 
-        Assert.Equal("explorer.exe", psi.FileName);
+        // Absolute path, not a bare name: the GUI runs elevated, so a PATH-planted explorer.exe
+        // would inherit administrator rights.
+        Assert.Equal(SystemToolPathService.Resolve("explorer.exe"), psi.FileName);
+        Assert.True(Path.IsPathFullyQualified(psi.FileName));
         Assert.False(psi.UseShellExecute);
         Assert.Equal([path], psi.ArgumentList.ToArray());
         Assert.Equal(string.Empty, psi.Arguments);
@@ -24,7 +28,8 @@ public sealed class MainViewModelProcessTests
 
         var psi = MainViewModel.CreateNotepadStartInfo(path);
 
-        Assert.Equal("notepad.exe", psi.FileName);
+        Assert.Equal(SystemToolPathService.Resolve("notepad.exe"), psi.FileName);
+        Assert.True(Path.IsPathFullyQualified(psi.FileName));
         Assert.False(psi.UseShellExecute);
         Assert.Equal([path], psi.ArgumentList.ToArray());
         Assert.Equal(string.Empty, psi.Arguments);

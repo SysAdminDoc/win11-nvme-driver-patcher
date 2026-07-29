@@ -17,6 +17,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   correctness bug and a binary-planting vector. All of them are now called as
   `%SystemRoot%\System32\<tool>.exe`, and a test asserts no bare tool name survives at a command
   position in either generated script.
+- **Every Windows tool the app launches is now resolved to an absolute System32 path** — `fsutil`,
+  `mountvol`, `manage-bde`, `bcdedit`, `pnputil`, `schtasks`, `shutdown`, `verifier`, `wpr`,
+  `powershell`, `explorer`, and `notepad` were all started by bare name, which resolves through
+  PATH. Both shipped executables carry a `requireAdministrator` manifest, so the first PATH match
+  would have run elevated. New `SystemToolPathService` resolves them via
+  `Environment.SpecialFolder.System` (correct under WOW64 redirection and on ARM64), and a test
+  fails the build if any source file launches a process by bare name again.
 - **Legacy PowerShell boundary gate runs under Windows PowerShell 5.1** — `$PSScriptRoot` is empty
   while param-block defaults bind on 5.1, so running the release gate directly with
   `powershell -File` crashed in `Split-Path` instead of validating. The default is now resolved in
