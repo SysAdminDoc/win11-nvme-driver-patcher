@@ -143,6 +143,13 @@ public partial class ThemedDialog : Window
                     LineHeight = 22
                 });
                 currentList = null;
+
+                // Only lines[0] is the lead sentence; the rest of the opening segment is
+                // still content and must be rendered. Dropping it silently blanked the
+                // file path in every "<thing> saved to:\n<path>" dialog — support bundle,
+                // verification script, recovery kit, exported log (issue #14).
+                foreach (var line in lines.Skip(1))
+                    AddContentLine(line, ref currentList);
                 continue;
             }
 
