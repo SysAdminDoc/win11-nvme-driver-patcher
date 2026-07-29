@@ -2,7 +2,15 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
-## [Unreleased]
+## [5.2.0] — 2026-07-29
+
+### Added
+- **Safety journey rail on the overview** — a Scan → Protect → Apply → Verify stage strip driven by
+  live readiness state replaces the decorative SSD illustration, which now shows real recovery-kit
+  status instead. The activity rail collapses to a one-line summary with a technical-log toggle so
+  the log no longer dominates the workspace at narrow widths.
+- **Opt-in UI snapshot harness** — setting `NVME_UI_SNAPSHOT_DIR` renders every workspace page in
+  both themes (plus the compact layout) to PNG during the accessibility smoke test.
 
 ### Fixed
 - **Recovery kit no longer hangs when another `find.exe` is ahead of it on PATH** — the integrity
@@ -28,6 +36,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   while param-block defaults bind on 5.1, so running the release gate directly with
   `powershell -File` crashed in `Split-Path` instead of validating. The default is now resolved in
   the script body.
+- **Snapshot and activity counts pluralize correctly** — "1 snapshot entrys" now reads "entries".
 
 ## [5.1.0] — 2026-07-22
 
