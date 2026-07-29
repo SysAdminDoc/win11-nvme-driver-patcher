@@ -58,7 +58,7 @@ public partial class MainViewModel
             else
             {
                 var latestSnapshot = snapshots[0];
-                SnapshotHistoryText = $"{snapshots.Count} snapshot {Pluralize(snapshots.Count, "entry")} recorded. Latest: {latestSnapshot.Description} on {latestSnapshot.Timestamp:g}.";
+                SnapshotHistoryText = $"{snapshots.Count} snapshot {Pluralize(snapshots.Count, "entry", "entries")} recorded. Latest: {latestSnapshot.Description} on {latestSnapshot.Timestamp:g}.";
             }
         }
         catch
@@ -243,15 +243,15 @@ public partial class MainViewModel
         }
         else if (LogErrorCount > 0)
         {
-            ActivitySummaryText = $"{LogEntryCount} session {Pluralize(LogEntryCount, "entry")} captured with {LogErrorCount} {Pluralize(LogErrorCount, "error")} and {LogWarningCount} {Pluralize(LogWarningCount, "warning")}.";
+            ActivitySummaryText = $"{LogEntryCount} session {Pluralize(LogEntryCount, "entry", "entries")} captured with {LogErrorCount} {Pluralize(LogErrorCount, "error")} and {LogWarningCount} {Pluralize(LogWarningCount, "warning")}.";
         }
         else if (LogWarningCount > 0)
         {
-            ActivitySummaryText = $"{LogEntryCount} session {Pluralize(LogEntryCount, "entry")} captured with advisory signals but no hard errors.";
+            ActivitySummaryText = $"{LogEntryCount} session {Pluralize(LogEntryCount, "entry", "entries")} captured with advisory signals but no hard errors.";
         }
         else
         {
-            ActivitySummaryText = $"{LogEntryCount} session {Pluralize(LogEntryCount, "entry")} captured so far with a clean audit trail.";
+            ActivitySummaryText = $"{LogEntryCount} session {Pluralize(LogEntryCount, "entry", "entries")} captured so far with a clean audit trail.";
         }
 
         var retentionParts = new List<string> { "Local log" };

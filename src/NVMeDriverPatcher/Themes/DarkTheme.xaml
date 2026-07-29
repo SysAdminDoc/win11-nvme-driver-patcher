@@ -1,41 +1,41 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- Core palette -->
-    <SolidColorBrush x:Key="BgDarkest" Color="#FF0D0F13"/>
-    <SolidColorBrush x:Key="BgDark" Color="#FF111419"/>
-    <SolidColorBrush x:Key="BgMedium" Color="#FF161A20"/>
-    <SolidColorBrush x:Key="BgLight" Color="#FF1C222A"/>
-    <SolidColorBrush x:Key="SurfaceRaised" Color="#FF181D24"/>
-    <SolidColorBrush x:Key="SurfaceInset" Color="#FF101318"/>
-    <SolidColorBrush x:Key="Border" Color="#FF2A3038"/>
-    <SolidColorBrush x:Key="BorderLight" Color="#FF39414B"/>
-    <SolidColorBrush x:Key="BorderStrong" Color="#FF596575"/>
-    <SolidColorBrush x:Key="TextPrimary" Color="#FFF6F9FF"/>
-    <SolidColorBrush x:Key="TextSecondary" Color="#FFD5DEEB"/>
-    <SolidColorBrush x:Key="TextMuted" Color="#FFAAB6C8"/>
-    <SolidColorBrush x:Key="TextDim" Color="#FF8694A8"/>
-    <SolidColorBrush x:Key="TextDimmer" Color="#FF647285"/>
-    <SolidColorBrush x:Key="Accent" Color="#FF2563EB"/>
-    <SolidColorBrush x:Key="AccentHover" Color="#FF1D4ED8"/>
+    <SolidColorBrush x:Key="BgDarkest" Color="#FF070E18"/>
+    <SolidColorBrush x:Key="BgDark" Color="#FF09131F"/>
+    <SolidColorBrush x:Key="BgMedium" Color="#FF0E1B2A"/>
+    <SolidColorBrush x:Key="BgLight" Color="#FF14283B"/>
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#FF102034"/>
+    <SolidColorBrush x:Key="SurfaceInset" Color="#FF08121E"/>
+    <SolidColorBrush x:Key="Border" Color="#FF24384D"/>
+    <SolidColorBrush x:Key="BorderLight" Color="#FF36536E"/>
+    <SolidColorBrush x:Key="BorderStrong" Color="#FF5D7896"/>
+    <SolidColorBrush x:Key="TextPrimary" Color="#FFF4F8FC"/>
+    <SolidColorBrush x:Key="TextSecondary" Color="#FFD4E0EB"/>
+    <SolidColorBrush x:Key="TextMuted" Color="#FF9FB0C1"/>
+    <SolidColorBrush x:Key="TextDim" Color="#FF74899F"/>
+    <SolidColorBrush x:Key="TextDimmer" Color="#FF53687D"/>
+    <SolidColorBrush x:Key="Accent" Color="#FF2F8CFF"/>
+    <SolidColorBrush x:Key="AccentHover" Color="#FF58A5FF"/>
     <SolidColorBrush x:Key="AccentForeground" Color="#FFFFFFFF"/>
-    <SolidColorBrush x:Key="AccentBg" Color="#FF10243A"/>
-    <SolidColorBrush x:Key="AccentSoft" Color="#FF203A55"/>
-    <SolidColorBrush x:Key="Green" Color="#FF7AD7AE"/>
-    <SolidColorBrush x:Key="GreenBg" Color="#FF123124"/>
-    <SolidColorBrush x:Key="Yellow" Color="#FFE4BD73"/>
-    <SolidColorBrush x:Key="YellowBg" Color="#FF302411"/>
-    <SolidColorBrush x:Key="Red" Color="#FFF0A1A1"/>
-    <SolidColorBrush x:Key="RedBg" Color="#FF351A20"/>
-    <SolidColorBrush x:Key="Focus" Color="#FFB7DCFF"/>
-    <SolidColorBrush x:Key="FocusGlow" Color="#334E9CFF"/>
+    <SolidColorBrush x:Key="AccentBg" Color="#FF0C2C4D"/>
+    <SolidColorBrush x:Key="AccentSoft" Color="#FF154B7C"/>
+    <SolidColorBrush x:Key="Green" Color="#FF51E0AA"/>
+    <SolidColorBrush x:Key="GreenBg" Color="#FF0B382B"/>
+    <SolidColorBrush x:Key="Yellow" Color="#FFFFB451"/>
+    <SolidColorBrush x:Key="YellowBg" Color="#FF3C2607"/>
+    <SolidColorBrush x:Key="Red" Color="#FFFF7C82"/>
+    <SolidColorBrush x:Key="RedBg" Color="#FF41161B"/>
+    <SolidColorBrush x:Key="Focus" Color="#FF8AC4FF"/>
+    <SolidColorBrush x:Key="FocusGlow" Color="#332F8CFF"/>
 
-    <SolidColorBrush x:Key="WindowCanvasBrush" Color="#FF0D0F13"/>
-    <SolidColorBrush x:Key="HeroSurfaceBrush" Color="#FF141820"/>
-    <SolidColorBrush x:Key="SurfaceCardBrush" Color="#FF14181E"/>
-    <SolidColorBrush x:Key="InsetCardBrush" Color="#FF101318"/>
-    <SolidColorBrush x:Key="DisabledSurfaceBrush" Color="#FF171B22"/>
-    <SolidColorBrush x:Key="OverlayScrimBrush" Color="#CC0D0F13"/>
-    <SolidColorBrush x:Key="AccentLineBrush" Color="#992563EB"/>
+    <SolidColorBrush x:Key="WindowCanvasBrush" Color="#FF070E18"/>
+    <SolidColorBrush x:Key="HeroSurfaceBrush" Color="#FF0C1C2B"/>
+    <SolidColorBrush x:Key="SurfaceCardBrush" Color="#FF0B1623"/>
+    <SolidColorBrush x:Key="InsetCardBrush" Color="#FF08111B"/>
+    <SolidColorBrush x:Key="DisabledSurfaceBrush" Color="#FF111C28"/>
+    <SolidColorBrush x:Key="OverlayScrimBrush" Color="#CC07101A"/>
+    <SolidColorBrush x:Key="AccentLineBrush" Color="#AA2F8CFF"/>
 
     <DropShadowEffect x:Key="WindowShadow" BlurRadius="28" ShadowDepth="0" Opacity="0.42" Color="#FF000000"/>
     <DropShadowEffect x:Key="SurfaceShadow" BlurRadius="18" ShadowDepth="0" Opacity="0.14" Color="#FF000000"/>
@@ -81,28 +81,64 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceCardBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="CornerRadius" Value="10"/>
         <Setter Property="Padding" Value="16,14"/>
     </Style>
 
     <Style x:Key="InsetCard" TargetType="Border" BasedOn="{StaticResource SurfaceCard}">
         <Setter Property="Background" Value="{DynamicResource InsetCardBrush}"/>
-        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="CornerRadius" Value="10"/>
         <Setter Property="Padding" Value="14,12"/>
     </Style>
 
     <Style x:Key="MetricCard" TargetType="Border" BasedOn="{StaticResource SurfaceCard}">
         <Setter Property="Background" Value="{DynamicResource BgMedium}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
-        <Setter Property="CornerRadius" Value="8"/>
-        <Setter Property="Padding" Value="14,12"/>
+        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="Padding" Value="13,11"/>
     </Style>
 
     <Style x:Key="HeroCard" TargetType="Border" BasedOn="{StaticResource SurfaceCard}">
         <Setter Property="Background" Value="{DynamicResource HeroSurfaceBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderLight}"/>
-        <Setter Property="CornerRadius" Value="12"/>
-        <Setter Property="Padding" Value="22,20"/>
+        <Setter Property="CornerRadius" Value="14"/>
+        <Setter Property="Padding" Value="20,18"/>
+    </Style>
+
+    <Style x:Key="WorkflowNode" TargetType="Border">
+        <Setter Property="Width" Value="34"/>
+        <Setter Property="Height" Value="34"/>
+        <Setter Property="Background" Value="{DynamicResource SurfaceInset}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderLight}"/>
+        <Setter Property="BorderThickness" Value="2"/>
+        <Setter Property="CornerRadius" Value="17"/>
+    </Style>
+
+    <Style x:Key="WorkflowNodeNumber" TargetType="TextBlock">
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <Style x:Key="WorkflowStepLabel" TargetType="TextBlock">
+        <Setter Property="Margin" Value="0,6,0,0"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <Style x:Key="WorkflowStepDetail" TargetType="TextBlock">
+        <Setter Property="Margin" Value="5,3,5,0"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="LineHeight" Value="14"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        <Setter Property="TextWrapping" Value="NoWrap"/>
     </Style>
 
     <Style x:Key="NavigationListBox" TargetType="ListBox">
@@ -114,8 +150,8 @@
     </Style>
 
     <Style x:Key="NavigationListItem" TargetType="ListBoxItem">
-        <Setter Property="Height" Value="46"/>
-        <Setter Property="Margin" Value="0,0,0,4"/>
+        <Setter Property="Height" Value="48"/>
+        <Setter Property="Margin" Value="0,0,0,5"/>
         <Setter Property="Padding" Value="12,0"/>
         <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
         <Setter Property="Background" Value="Transparent"/>
@@ -131,7 +167,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="8">
+                            CornerRadius="10">
                         <Grid>
                             <Border x:Name="indicator"
                                     Width="3"
@@ -385,6 +421,84 @@
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="border" Property="Opacity" Value="0.88"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource Focus}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource DisabledSurfaceBrush}"/>
+                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource Border}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextDimmer}"/>
+                            <Setter Property="Cursor" Value="No"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ActivityDisclosureToggle" TargetType="ToggleButton">
+        <Setter Property="Height" Value="34"/>
+        <Setter Property="Padding" Value="12,0"/>
+        <Setter Property="FontSize" Value="12.5"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+        <Setter Property="Background" Value="{DynamicResource BgMedium}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8"
+                            Padding="{TemplateBinding Padding}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter HorizontalAlignment="Left"
+                                              VerticalAlignment="Center"/>
+                            <Path x:Name="chevron"
+                                  Grid.Column="1"
+                                  Width="10"
+                                  Height="6"
+                                  Margin="12,0,2,0"
+                                  VerticalAlignment="Center"
+                                  Data="M 0 0 L 5 5 L 10 0"
+                                  Stroke="{DynamicResource TextDim}"
+                                  StrokeThickness="2"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  RenderTransformOrigin="0.5,0.5">
+                                <Path.RenderTransform>
+                                    <RotateTransform Angle="0"/>
+                                </Path.RenderTransform>
+                            </Path>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource BgLight}"/>
+                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource BorderLight}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentBg}"/>
+                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentSoft}"/>
+                            <Setter TargetName="chevron" Property="Stroke" Value="{DynamicResource Accent}"/>
+                            <Setter TargetName="chevron" Property="RenderTransform">
+                                <Setter.Value>
+                                    <RotateTransform Angle="180"/>
+                                </Setter.Value>
+                            </Setter>
+                            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource Focus}"/>

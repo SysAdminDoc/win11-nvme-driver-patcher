@@ -61,6 +61,9 @@ public sealed class AccessibilitySmokeTests
                 AssertNamedControl(window, "Details tabs");
                 AssertNamedControl(window, "Workspace tabs");
                 AssertNamedControl(window, "Primary navigation");
+                AssertNamedControl(window, "Safety journey");
+                AssertNamedControl(window, "Session activity monitor");
+                AssertNamedControl(window, "Show or hide technical activity log");
                 AssertNamedControl(window, "Readiness refresh overlay");
 
                 AssertFocusOrder(window, "Apply patch", "Remove patch");
@@ -88,12 +91,28 @@ public sealed class AccessibilitySmokeTests
                     "UpdateAdaptiveLayout",
                     BindingFlags.Instance | BindingFlags.NonPublic);
                 Assert.NotNull(updateAdaptiveLayout);
+
+                var snapshotDirectory = Environment.GetEnvironmentVariable("NVME_UI_SNAPSHOT_DIR");
+                if (!string.IsNullOrWhiteSpace(snapshotDirectory))
+                    SaveWorkspaceSnapshots(window, root, workspace, updateAdaptiveLayout, snapshotDirectory);
+
                 updateAdaptiveLayout.Invoke(window, null);
                 var activityRail = Assert.IsType<Border>(window.FindName("ActivityRail"));
                 Assert.Equal(1, Grid.GetRow(activityRail));
                 Assert.Equal(0, Grid.GetColumn(activityRail));
                 Assert.Equal(1, Grid.GetRowSpan(activityRail));
                 Assert.Equal(3, Grid.GetColumnSpan(activityRail));
+
+                var activityRow = Assert.IsType<RowDefinition>(window.FindName("WorkspaceActivityRow"));
+                var activitySummary = Assert.IsType<StackPanel>(window.FindName("ActivityRailSummary"));
+                var activityToggle = Assert.IsType<System.Windows.Controls.Primitives.ToggleButton>(
+                    window.FindName("ActivityLogToggle"));
+                Assert.Equal(new GridLength(112), activityRow.Height);
+                Assert.Equal(Visibility.Collapsed, activitySummary.Visibility);
+
+                activityToggle.IsChecked = true;
+                updateAdaptiveLayout.Invoke(window, null);
+                Assert.Equal(new GridLength(240), activityRow.Height);
             }
             finally
             {
@@ -102,6 +121,49 @@ public sealed class AccessibilitySmokeTests
                 // test in the assembly and its lifetime belongs to WpfCollection's fixture.
             }
         });
+    }
+
+    private static void SaveWorkspaceSnapshots(
+        MainWindow window,
+        Grid root,
+        TabControl workspace,
+        MethodInfo updateAdaptiveLayout,
+        string directory)
+    {
+        var pages = new[]
+        {
+            "overview",
+            "drives",
+            "recovery",
+            "tuning",
+            "diagnostics",
+            "settings"
+        };
+
+        foreach (var (mode, suffix) in new[]
+                 {
+                     (AppThemeMode.Dark, "dark"),
+                     (AppThemeMode.Light, "light")
+                 })
+        {
+            ThemeService.ApplyMode(mode);
+            for (var index = 0; index < pages.Length; index++)
+            {
+                workspace.SelectedIndex = index;
+                root.Measure(new Size(1680, 1360));
+                root.Arrange(new Rect(0, 0, 1680, 1360));
+                root.UpdateLayout();
+                SavePng(root, Path.Combine(directory, $"{pages[index]}-{suffix}.png"));
+            }
+        }
+
+        ThemeService.ApplyMode(AppThemeMode.Dark);
+        workspace.SelectedIndex = 5;
+        updateAdaptiveLayout.Invoke(window, null);
+        root.Measure(new Size(1150, 900));
+        root.Arrange(new Rect(0, 0, 1150, 900));
+        root.UpdateLayout();
+        SavePng(root, Path.Combine(directory, "settings-compact-dark.png"));
     }
 
     private static void AssertThemeResources(ResourceDictionary resources, AppThemeMode mode)

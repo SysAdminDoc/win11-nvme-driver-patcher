@@ -186,8 +186,10 @@
 
                     <Border x:Name="TitleBarRegion"
                             Grid.Row="0"
-                            Padding="24,18,24,0"
+                            Padding="24,16,24,12"
                             Background="Transparent"
+                            BorderBrush="{DynamicResource Border}"
+                            BorderThickness="0,0,0,1"
                             MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -862,10 +864,32 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
+                            <Canvas Grid.RowSpan="2"
+                                    IsHitTestVisible="False"
+                                    ClipToBounds="True"
+                                    Opacity="0.16">
+                                <Path Data="M 620,18 C 760,0 860,52 1010,28 S 1210,8 1320,52"
+                                      Stroke="{DynamicResource AccentSoft}"
+                                      StrokeThickness="1"
+                                      Fill="Transparent"/>
+                                <Path Data="M 590,42 C 740,18 850,76 1015,52 S 1215,28 1340,78"
+                                      Stroke="{DynamicResource AccentSoft}"
+                                      StrokeThickness="1"
+                                      Fill="Transparent"/>
+                                <Path Data="M 650,68 C 790,45 900,100 1060,78 S 1240,58 1360,104"
+                                      Stroke="{DynamicResource BorderLight}"
+                                      StrokeThickness="1"
+                                      Fill="Transparent"/>
+                                <Path Data="M 930,160 C 1020,120 1110,120 1180,166 S 1290,208 1380,170"
+                                      Stroke="{DynamicResource BorderLight}"
+                                      StrokeThickness="1"
+                                      Fill="Transparent"/>
+                            </Canvas>
+
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="260"/>
                                 </Grid.ColumnDefinitions>
 
                                 <StackPanel VerticalAlignment="Center">
@@ -873,7 +897,7 @@
                                         <TextBlock Text="NATIVE NVME STATUS" Style="{StaticResource SectionEyebrow}"/>
                                         <Border Margin="10,-3,0,0"
                                                 Padding="8,4"
-                                                Background="{DynamicResource GreenBg}"
+                                                Background="{DynamicResource SurfaceInset}"
                                                 BorderBrush="{Binding StatusColor, Converter={StaticResource StrToBrush}}"
                                                 BorderThickness="1"
                                                 CornerRadius="10"
@@ -892,22 +916,110 @@
                                         </Border>
                                     </StackPanel>
                                     <TextBlock Text="{Binding StatusText}"
-                                               Margin="0,10,0,0"
+                                               Margin="0,8,0,0"
                                                Foreground="{DynamicResource TextPrimary}"
                                                FontSize="27"
                                                FontWeight="SemiBold"
                                                TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Text="{Binding StatusSummaryText}"
-                                               Margin="0,7,0,0"
-                                               MaxWidth="720"
-                                               HorizontalAlignment="Left"
-                                               Foreground="{DynamicResource TextMuted}"
+                                                Margin="0,7,0,0"
+                                                MaxWidth="720"
+                                                HorizontalAlignment="Left"
+                                                Foreground="{DynamicResource TextMuted}"
                                                FontSize="13"
-                                               LineHeight="19"
-                                               TextWrapping="Wrap"/>
+                                                LineHeight="19"
+                                                TextWrapping="Wrap"/>
 
-                                    <Border Margin="0,12,0,0"
-                                            Padding="10,8"
+                                    <Grid Margin="0,12,0,0"
+                                          MaxWidth="720"
+                                          HorizontalAlignment="Left"
+                                          AutomationProperties.Name="Safety journey">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="28"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="28"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="28"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0">
+                                            <Border Style="{StaticResource WorkflowNode}"
+                                                    BorderBrush="{Binding ScanStageColor, Converter={StaticResource StrToBrush}}">
+                                                <TextBlock Text="1"
+                                                           Foreground="{Binding ScanStageColor, Converter={StaticResource StrToBrush}}"
+                                                           Style="{StaticResource WorkflowNodeNumber}"/>
+                                            </Border>
+                                            <TextBlock Text="Scan" Style="{StaticResource WorkflowStepLabel}"/>
+                                            <TextBlock Text="{Binding ScanStageStateText}"
+                                                       ToolTip="{Binding ScanStageDetailText}"
+                                                       Style="{StaticResource WorkflowStepDetail}"/>
+                                        </StackPanel>
+
+                                        <Border Grid.Column="1"
+                                                Height="1"
+                                                Margin="0,17,0,0"
+                                                VerticalAlignment="Top"
+                                                Background="{DynamicResource BorderLight}"/>
+
+                                        <StackPanel Grid.Column="2">
+                                            <Border Style="{StaticResource WorkflowNode}"
+                                                    BorderBrush="{Binding PreparationStageColor, Converter={StaticResource StrToBrush}}">
+                                                <TextBlock Text="2"
+                                                           Foreground="{Binding PreparationStageColor, Converter={StaticResource StrToBrush}}"
+                                                           Style="{StaticResource WorkflowNodeNumber}"/>
+                                            </Border>
+                                            <TextBlock Text="Protect" Style="{StaticResource WorkflowStepLabel}"/>
+                                            <TextBlock Text="{Binding PreparationStageStateText}"
+                                                       MaxHeight="30"
+                                                       ToolTip="{Binding PreparationStageDetailText}"
+                                                       Style="{StaticResource WorkflowStepDetail}"/>
+                                        </StackPanel>
+
+                                        <Border Grid.Column="3"
+                                                Height="1"
+                                                Margin="0,17,0,0"
+                                                VerticalAlignment="Top"
+                                                Background="{DynamicResource BorderLight}"/>
+
+                                        <StackPanel Grid.Column="4">
+                                            <Border Style="{StaticResource WorkflowNode}"
+                                                    BorderBrush="{Binding RestartStageColor, Converter={StaticResource StrToBrush}}">
+                                                <TextBlock Text="3"
+                                                           Foreground="{Binding RestartStageColor, Converter={StaticResource StrToBrush}}"
+                                                           Style="{StaticResource WorkflowNodeNumber}"/>
+                                            </Border>
+                                            <TextBlock Text="Apply" Style="{StaticResource WorkflowStepLabel}"/>
+                                            <TextBlock Text="{Binding RestartStageStateText}"
+                                                       MaxHeight="30"
+                                                       ToolTip="{Binding RestartStageDetailText}"
+                                                       Style="{StaticResource WorkflowStepDetail}"/>
+                                        </StackPanel>
+
+                                        <Border Grid.Column="5"
+                                                Height="1"
+                                                Margin="0,17,0,0"
+                                                VerticalAlignment="Top"
+                                                Background="{DynamicResource BorderLight}"/>
+
+                                        <StackPanel Grid.Column="6">
+                                            <Border Style="{StaticResource WorkflowNode}"
+                                                    BorderBrush="{Binding ValidationStageColor, Converter={StaticResource StrToBrush}}">
+                                                <TextBlock Text="4"
+                                                           Foreground="{Binding ValidationStageColor, Converter={StaticResource StrToBrush}}"
+                                                           Style="{StaticResource WorkflowNodeNumber}"/>
+                                            </Border>
+                                            <TextBlock Text="Verify" Style="{StaticResource WorkflowStepLabel}"/>
+                                            <TextBlock Text="{Binding ValidationStageStateText}"
+                                                       MaxHeight="30"
+                                                       ToolTip="{Binding ValidationStageDetailText}"
+                                                       Style="{StaticResource WorkflowStepDetail}"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Border Margin="0,10,0,0"
+                                            Padding="10,7"
                                             MaxWidth="720"
                                             HorizontalAlignment="Left"
                                             Background="{DynamicResource SurfaceInset}"
@@ -934,7 +1046,7 @@
                                         </Grid>
                                     </Border>
 
-                                    <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
+                                    <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
                                         <Button Content="{Binding ApplyButtonText}"
                                                 MinWidth="142"
                                                 Margin="0,0,8,0"
@@ -960,33 +1072,96 @@
                                     </StackPanel>
                                 </StackPanel>
 
-                                <Grid Grid.Column="1" VerticalAlignment="Center">
-                                    <Ellipse Width="132"
-                                             Height="132"
-                                             HorizontalAlignment="Center"
-                                             Fill="{DynamicResource AccentBg}"
-                                             Stroke="{DynamicResource BorderLight}"
-                                             StrokeThickness="1"/>
-                                    <Border Width="76"
-                                            Height="88"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Background="{DynamicResource BgMedium}"
-                                            BorderBrush="{DynamicResource Accent}"
-                                            BorderThickness="2"
-                                            CornerRadius="38,38,26,26">
-                                        <TextBlock Text="&#xE73E;"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"
-                                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                                   FontSize="32"
-                                                   Foreground="{DynamicResource Accent}"/>
-                                    </Border>
-                                </Grid>
+                                <Border Grid.Column="1"
+                                        Margin="22,0,0,0"
+                                        Padding="17,16"
+                                        VerticalAlignment="Stretch"
+                                        Background="{DynamicResource SurfaceInset}"
+                                        BorderBrush="{DynamicResource Border}"
+                                        BorderThickness="1"
+                                        CornerRadius="11">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="44"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Width="38"
+                                                    Height="38"
+                                                    HorizontalAlignment="Left"
+                                                    CornerRadius="10">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="{DynamicResource YellowBg}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding RecoveryTabBadgeText}" Value="Ready">
+                                                                <Setter Property="Background" Value="{DynamicResource GreenBg}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="&#xEA18;"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                                           FontSize="17"
+                                                           Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"/>
+                                            </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="RECOVERY STATUS" Style="{StaticResource SectionEyebrow}"/>
+                                                <TextBlock Text="{Binding RecoveryTabBadgeText}"
+                                                           Margin="0,4,0,0"
+                                                           Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"
+                                                           FontSize="18"
+                                                           FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <TextBlock Text="{Binding RecoveryKitStatusText}"
+                                                   Margin="0,13,0,0"
+                                                   MaxHeight="52"
+                                                   Foreground="{DynamicResource TextMuted}"
+                                                   FontSize="11.5"
+                                                   LineHeight="17"
+                                                   TextWrapping="Wrap"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding RecoveryKitStatusText}"/>
+
+                                        <Border Height="1"
+                                                Margin="0,14,0,12"
+                                                Background="{DynamicResource Border}"/>
+
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Ellipse Width="7"
+                                                     Height="7"
+                                                     Margin="0,4,9,0"
+                                                     VerticalAlignment="Top"
+                                                     Fill="{DynamicResource Accent}"/>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="Post-reboot verification"
+                                                           Foreground="{DynamicResource TextSecondary}"
+                                                           FontSize="11.5"
+                                                           FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding VerificationScriptStatusText}"
+                                                           Margin="0,3,0,0"
+                                                           MaxHeight="34"
+                                                           Foreground="{DynamicResource TextDim}"
+                                                           FontSize="10.5"
+                                                           TextWrapping="Wrap"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding VerificationScriptStatusText}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
                             </Grid>
 
-                            <UniformGrid Grid.Row="1" Margin="0,20,0,0" Columns="3">
-                                <Border Margin="0,0,6,0" Style="{StaticResource MetricCard}">
+                            <UniformGrid Grid.Row="1" Margin="0,12,0,0" Columns="4">
+                                <Border Margin="0,0,5,0" Style="{StaticResource MetricCard}">
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                         <Border Width="30" Height="30" Background="{DynamicResource AccentBg}" CornerRadius="7">
@@ -1010,11 +1185,33 @@
                                         </StackPanel>
                                     </Grid>
                                 </Border>
-                                <Border Margin="6,0,0,0" Style="{StaticResource MetricCard}">
+                                <Border Margin="5,0,3,0" Style="{StaticResource MetricCard}">
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                        <Border Width="30" Height="30" Background="{DynamicResource YellowBg}" CornerRadius="7">
-                                            <TextBlock Text="&#xEA18;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Green}"/>
+                                        <Border Width="30" Height="30" Background="{DynamicResource AccentBg}" CornerRadius="7">
+                                            <TextBlock Text="&#xE968;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Accent}"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="DRIVER PATH" Style="{StaticResource SectionEyebrow}"/>
+                                            <TextBlock Text="{Binding DriverLabelText}" Margin="0,5,0,0" Foreground="{DynamicResource TextPrimary}" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Border Margin="5,0,0,0" Style="{StaticResource MetricCard}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Width="30" Height="30" CornerRadius="7">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="{DynamicResource YellowBg}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding RecoveryTabBadgeText}" Value="Ready">
+                                                            <Setter Property="Background" Value="{DynamicResource GreenBg}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="&#xEA18;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"/>
                                         </Border>
                                         <StackPanel Grid.Column="1">
                                             <TextBlock Text="RECOVERY" Style="{StaticResource SectionEyebrow}"/>
@@ -1652,7 +1849,7 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition x:Name="ActivityRailSpacerColumn" Width="10"/>
-                                    <ColumnDefinition x:Name="ActivityRailColumn" Width="400"/>
+                                    <ColumnDefinition x:Name="ActivityRailColumn" Width="320"/>
                                 </Grid.ColumnDefinitions>
 
                                 <StackPanel Visibility="Collapsed">
@@ -2592,14 +2789,25 @@
                                         Grid.Row="0"
                                         Grid.Column="2"
                                         Grid.RowSpan="2"
-                                        Padding="12"
-                                        Background="{DynamicResource SurfaceInset}"
-                                        BorderBrush="{DynamicResource Border}"
-                                        BorderThickness="1"
-                                        CornerRadius="8"
-                                        AutomationProperties.Name="Always visible activity log">
+                                        AutomationProperties.Name="Session activity monitor">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Padding" Value="14"/>
+                                            <Setter Property="Background" Value="{DynamicResource SurfaceInset}"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Setter Property="CornerRadius" Value="8"/>
+                                            <Setter Property="VerticalAlignment" Value="Top"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsChecked, ElementName=ActivityLogToggle}" Value="True">
+                                                    <Setter Property="VerticalAlignment" Value="Stretch"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
                                     <Grid>
                                         <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="*"/>
@@ -2613,11 +2821,16 @@
                                             </Grid.ColumnDefinitions>
 
                                             <StackPanel>
+                                                <TextBlock x:Name="ActivityRailEyebrow"
+                                                           Text="SESSION MONITOR"
+                                                           Style="{StaticResource SectionEyebrow}"/>
                                                 <TextBlock Text="Activity"
+                                                           Margin="0,4,0,0"
                                                            Foreground="{DynamicResource TextPrimary}"
-                                                           FontSize="15"
+                                                           FontSize="17"
                                                            FontWeight="SemiBold"/>
-                                                <TextBlock Text="{Binding LogRetentionText}"
+                                                <TextBlock x:Name="LogRetentionCaption"
+                                                           Text="{Binding LogRetentionText}"
                                                            Margin="0,4,0,0"
                                                            Foreground="{DynamicResource TextDim}"
                                                            FontSize="10.5"
@@ -2631,136 +2844,195 @@
                                                         Margin="12,0,0,0"
                                                         Orientation="Horizontal"
                                                         VerticalAlignment="Top">
-                                                <Border Padding="6,3"
-                                                        Background="{DynamicResource BgMedium}"
-                                                        BorderBrush="{DynamicResource Border}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="4">
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding LogEntryCount}"
-                                                                   Foreground="{DynamicResource TextPrimary}"
-                                                                   FontSize="12"
-                                                                   FontWeight="SemiBold"/>
-                                                        <TextBlock Text=" log"
-                                                                   Margin="3,0,0,0"
-                                                                   Foreground="{DynamicResource TextDim}"
-                                                                   FontSize="10.5"/>
-                                                    </StackPanel>
+                                                <Border Style="{StaticResource StatusChipBorder}"
+                                                        BorderBrush="{Binding ActivityTabBadgeColor, Converter={StaticResource StrToBrush}}">
+                                                    <TextBlock Text="{Binding ActivityTabBadgeText}"
+                                                               Style="{StaticResource StatusChipText}"
+                                                               Foreground="{Binding ActivityTabBadgeColor, Converter={StaticResource StrToBrush}}"/>
                                                 </Border>
-                                                <Border Margin="6,0,0,0"
-                                                        Padding="6,3"
-                                                        Background="{DynamicResource BgMedium}"
-                                                        BorderBrush="{DynamicResource Border}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="4">
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding LogWarningCount}"
-                                                                   Foreground="{DynamicResource Yellow}"
-                                                                   FontSize="12"
-                                                                   FontWeight="SemiBold"/>
-                                                        <TextBlock Text=" warn"
-                                                                   Margin="3,0,0,0"
-                                                                   Foreground="{DynamicResource TextDim}"
-                                                                   FontSize="10.5"/>
-                                                    </StackPanel>
-                                                </Border>
-                                                <Border Margin="6,0,0,0"
-                                                        Padding="6,3"
-                                                        Background="{DynamicResource BgMedium}"
-                                                        BorderBrush="{DynamicResource Border}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="4">
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding LogErrorCount}"
-                                                                   Foreground="{DynamicResource Red}"
-                                                                   FontSize="12"
-                                                                   FontWeight="SemiBold"/>
-                                                        <TextBlock Text=" err"
-                                                                   Margin="3,0,0,0"
-                                                                   Foreground="{DynamicResource TextDim}"
-                                                                   FontSize="10.5"/>
-                                                    </StackPanel>
-                                                </Border>
-                                                <Border Width="3"
-                                                        Height="18"
-                                                        Margin="8,2,2,0"
-                                                        Background="{Binding ActivityTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                        CornerRadius="0"/>
                                             </StackPanel>
                                         </Grid>
 
-                                        <Grid Grid.Row="1" Margin="0,6,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="8"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="8"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
+                                        <StackPanel x:Name="ActivityRailSummary"
+                                                    Grid.Row="1"
+                                                    Margin="0,12,0,0">
+                                            <Border Padding="12"
+                                                    Background="{DynamicResource BgMedium}"
+                                                    BorderBrush="{Binding ActivityTabBadgeColor, Converter={StaticResource StrToBrush}}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="8"
+                                                    AutomationProperties.Name="Session activity summary">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="3"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Background="{Binding ActivityTabBadgeColor, Converter={StaticResource StrToBrush}}"
+                                                            CornerRadius="0"/>
+                                                    <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                                        <TextBlock Text="SESSION SIGNAL"
+                                                                   Style="{StaticResource SectionEyebrow}"/>
+                                                        <TextBlock Text="{Binding ActivitySummaryText}"
+                                                                   Margin="0,5,0,0"
+                                                                   Foreground="{DynamicResource TextSecondary}"
+                                                                   FontSize="12"
+                                                                   LineHeight="17"
+                                                                   TextWrapping="Wrap"/>
+                                                        <WrapPanel Margin="0,10,0,0">
+                                                            <TextBlock Foreground="{DynamicResource TextPrimary}"
+                                                                       FontSize="11.5"
+                                                                       FontWeight="SemiBold">
+                                                                <Run Text="{Binding LogEntryCount, Mode=OneWay}"/>
+                                                                <Run Text=" events"/>
+                                                            </TextBlock>
+                                                            <TextBlock Margin="12,0,0,0"
+                                                                       Foreground="{DynamicResource Yellow}"
+                                                                       FontSize="11.5"
+                                                                       FontWeight="SemiBold">
+                                                                <Run Text="{Binding LogWarningCount, Mode=OneWay}"/>
+                                                                <Run Text=" advisories"/>
+                                                            </TextBlock>
+                                                            <TextBlock Margin="12,0,0,0"
+                                                                       Foreground="{DynamicResource Red}"
+                                                                       FontSize="11.5"
+                                                                       FontWeight="SemiBold">
+                                                                <Run Text="{Binding LogErrorCount, Mode=OneWay}"/>
+                                                                <Run Text=" issues"/>
+                                                            </TextBlock>
+                                                        </WrapPanel>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
 
-                                            <Button Content="Copy"
-                                                    Grid.Column="0"
-                                                    MinWidth="0"
-                                                    AutomationProperties.Name="Copy activity log"
-                                                    Command="{Binding CopyLogCommand}">
-                                                <Button.Style>
-                                                    <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding LogEntryCount}" Value="0">
-                                                                <Setter Property="IsEnabled" Value="False"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Button.Style>
-                                            </Button>
-                                            <Button Content="Export"
-                                                    Grid.Column="2"
-                                                    MinWidth="0"
-                                                    AutomationProperties.Name="Export activity log"
-                                                    Command="{Binding ExportLogCommand}">
-                                                <Button.Style>
-                                                    <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding LogEntryCount}" Value="0">
-                                                                <Setter Property="IsEnabled" Value="False"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Button.Style>
-                                            </Button>
-                                            <Button Content="Clear"
-                                                    Grid.Column="4"
-                                                    MinWidth="0"
-                                                    AutomationProperties.Name="Clear activity log"
-                                                    Click="ClearLog_Click">
-                                                <Button.Style>
-                                                    <Style TargetType="Button" BasedOn="{StaticResource WarningSecondaryButton}">
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding LogEntryCount}" Value="0">
-                                                                <Setter Property="IsEnabled" Value="False"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Button.Style>
-                                            </Button>
-                                        </Grid>
+                                            <Border Margin="0,8,0,0"
+                                                    Padding="12,10"
+                                                    Background="{DynamicResource SurfaceCardBrush}"
+                                                    BorderBrush="{DynamicResource Border}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="8"
+                                                    AutomationProperties.Name="Latest session event">
+                                                <StackPanel>
+                                                    <TextBlock Text="LATEST EVENT"
+                                                               Style="{StaticResource SectionEyebrow}"/>
+                                                    <TextBlock Text="{Binding LatestActivityText}"
+                                                               Margin="0,5,0,0"
+                                                               MaxHeight="38"
+                                                               Foreground="{DynamicResource TextMuted}"
+                                                               FontSize="11.5"
+                                                               LineHeight="17"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
 
-                                        <Border Grid.Row="2"
-                                                Margin="0,6,0,0"
-                                                Padding="8"
-                                                CornerRadius="8">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="{DynamicResource BgDarkest}"/>
-                                                    <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
-                                                    <Setter Property="BorderThickness" Value="1"/>
+                                        <ToggleButton x:Name="ActivityLogToggle"
+                                                      Grid.Row="2"
+                                                      Margin="0,10,0,0"
+                                                      Style="{StaticResource ActivityDisclosureToggle}"
+                                                      AutomationProperties.Name="Show or hide technical activity log"
+                                                      IsChecked="False"
+                                                      Checked="ActivityLogToggle_StateChanged"
+                                                      Unchecked="ActivityLogToggle_StateChanged">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Technical log"/>
+                                                <TextBlock Margin="6,0,0,0"
+                                                           Foreground="{DynamicResource TextDim}">
+                                                    <Run Text="·"/>
+                                                    <Run Text="{Binding LogEntryCount, Mode=OneWay}"/>
+                                                    <Run Text=" entries"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </ToggleButton>
+
+                                        <Grid Grid.Row="3" Margin="0,8,0,0">
+                                            <Grid.Style>
+                                                <Style TargetType="Grid">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
                                                     <Style.Triggers>
-                                                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                                            <Setter Property="BorderBrush" Value="{DynamicResource Focus}"/>
-                                                        </Trigger>
+                                                        <DataTrigger Binding="{Binding IsChecked, ElementName=ActivityLogToggle}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
-                                            </Border.Style>
+                                            </Grid.Style>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="8"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="8"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Button Content="Copy"
+                                                        Grid.Column="0"
+                                                        MinWidth="0"
+                                                        AutomationProperties.Name="Copy activity log"
+                                                        Command="{Binding CopyLogCommand}">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding LogEntryCount}" Value="0">
+                                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                                <Button Content="Export"
+                                                        Grid.Column="2"
+                                                        MinWidth="0"
+                                                        AutomationProperties.Name="Export activity log"
+                                                        Command="{Binding ExportLogCommand}">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding LogEntryCount}" Value="0">
+                                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                                <Button Content="Clear"
+                                                        Grid.Column="4"
+                                                        MinWidth="0"
+                                                        AutomationProperties.Name="Clear activity log"
+                                                        Click="ClearLog_Click">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource WarningSecondaryButton}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding LogEntryCount}" Value="0">
+                                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                            </Grid>
+
+                                            <Border Grid.Row="1"
+                                                    Margin="0,8,0,0"
+                                                    Padding="8"
+                                                    Background="{DynamicResource BgDarkest}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="8">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource Focus}"/>
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
                                             <Grid>
                                                 <ScrollViewer x:Name="ActivityRailLogScroller"
                                                               VerticalScrollBarVisibility="Auto">
@@ -2816,12 +3088,13 @@
                                                                    FontSize="11.5"
                                                                    TextAlignment="Center"
                                                                    TextWrapping="Wrap"/>
-                                                    </StackPanel>
-                                                </Border>
-                                            </Grid>
-                                        </Border>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                        </Grid>
 
-                                        <StackPanel Grid.Row="3"
+                                        <StackPanel Grid.Row="4"
                                                     Margin="0,6,0,0"
                                                     Visibility="{Binding ProgressVisible, Converter={StaticResource BoolVis}}">
                                             <ProgressBar Height="6"
