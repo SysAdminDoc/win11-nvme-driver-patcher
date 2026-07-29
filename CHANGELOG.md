@@ -2,6 +2,26 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Recovery kit no longer hangs when another `find.exe` is ahead of it on PATH** — the integrity
+  guard counted its payload with `dir /b /s /a-d | find /c /v ""`. On any machine with Git for
+  Windows (or other coreutils) on PATH, the bare `find` resolved to GNU find, which read `/c` as a
+  directory and recursively walked the whole drive, so the guard never returned and the kit's
+  removal path never ran. The count now uses the `for /r` cmd builtin, removing the external
+  dependency entirely.
+- **Every external tool in a generated recovery script is invoked by absolute path** — `reg`,
+  `certutil`, `find`, and the `where` availability probe all resolved through PATH. The recovery
+  kit is the elevated last-resort removal path, so a shadowing binary earlier on PATH was both a
+  correctness bug and a binary-planting vector. All of them are now called as
+  `%SystemRoot%\System32\<tool>.exe`, and a test asserts no bare tool name survives at a command
+  position in either generated script.
+- **Legacy PowerShell boundary gate runs under Windows PowerShell 5.1** — `$PSScriptRoot` is empty
+  while param-block defaults bind on 5.1, so running the release gate directly with
+  `powershell -File` crashed in `Split-Path` instead of validating. The default is now resolved in
+  the script body.
+
 ## [5.1.0] — 2026-07-22
 
 ### Fixed

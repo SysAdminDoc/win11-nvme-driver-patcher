@@ -8,6 +8,15 @@ public static class RecoveryKitService
     internal const string MutationScriptFileName = "Apply_Recovery_Mutation.bat";
     internal const string GuardScriptFileName = "Remove_NVMe_Patch.bat";
 
+    // Every external tool in a generated script is invoked by absolute path. A bare `find`,
+    // `reg`, or `certutil` resolves through PATH, and PATH commonly contains a shadowing
+    // binary first: Git for Windows ships GNU find.exe/sort.exe in usr\bin, so `find /c /v ""`
+    // was being handed to GNU find, which read "/c" as a directory and walked the whole drive
+    // instead of counting piped lines — the integrity gate hung forever rather than verifying.
+    // The kit is also the elevated last-resort recovery path, so resolving tools by absolute
+    // path doubles as a binary-planting guard. Prefer cmd builtins where one exists.
+    internal const string Sys32 = @"%SystemRoot%\System32";
+
     public static string? Export(string outputDir, Action<string>? log = null)
     {
         if (string.IsNullOrWhiteSpace(outputDir))
@@ -249,10 +258,10 @@ FILES:
         string overridesRel = OverridesRelativePath();
         var sb = new System.Text.StringBuilder();
         foreach (var id in RecoveryFeatureIds())
-            sb.Append($"{indent}reg delete \"{regBase}\\{overridesRel}\" /v {id} /f 2>nul\r\n");
+            sb.Append($"{indent}\"{Sys32}\\reg.exe\" delete \"{regBase}\\{overridesRel}\" /v {id} /f 2>nul\r\n");
         foreach (var leaf in new[] { AppConfig.SafeBootGuid, AppConfig.SafeBootServiceName })
             foreach (var store in new[] { "Minimal", "Network" })
-                sb.Append($"{indent}reg delete \"{regBase}\\Control\\SafeBoot\\{store}\\{leaf}\" /f 2>nul\r\n");
+                sb.Append($"{indent}\"{Sys32}\\reg.exe\" delete \"{regBase}\\Control\\SafeBoot\\{store}\\{leaf}\" /f 2>nul\r\n");
         return sb.ToString();
     }
 
@@ -261,7 +270,7 @@ FILES:
         string winreDeletes = BatDeletes(@"HKLM\OFFLINE_SYS\ControlSet00%%N", "    ");
         string windowsDeletes = BatDeletes(@"HKLM\SYSTEM\%CS%", "");
 
-        var bat = @"@echo off
+        var bat = $@"@echo off
 echo ============================================
 echo  NVMe Driver Patcher - Recovery Kit
 echo  Removes all native NVMe registry patches
@@ -270,7 +279,7 @@ echo.
 
 rem Detect WinRE/WinPE. HKLM\SYSTEM\CurrentControlSet exists in both full Windows
 rem and the recovery environment, so it is not a reliable discriminator.
-reg query ""HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinPE"" >nul 2>&1
+""{Sys32}\reg.exe"" query ""HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinPE"" >nul 2>&1
 if %errorlevel% neq 0 (
     echo Detected: Running in Windows
     set ""CS=CurrentControlSet""
@@ -298,7 +307,7 @@ exit /b 1
 
 :found_win
 echo Loading offline registry hive...
-reg load HKLM\OFFLINE_SYS ""%WINFOUND%:\Windows\System32\config\SYSTEM"" >nul 2>&1
+""{Sys32}\reg.exe"" load HKLM\OFFLINE_SYS ""%WINFOUND%:\Windows\System32\config\SYSTEM"" >nul 2>&1
 if %errorlevel% neq 0 (
     echo ERROR: Failed to load registry hive.
     pause
@@ -307,9 +316,9 @@ if %errorlevel% neq 0 (
 
 rem Sweep ControlSet001..ControlSet009 -- covers boxes where the index has rolled past 003.
 for /L %%N in (1,1,9) do (
-" + winreDeletes + @")
+" + winreDeletes + $@")
 
-reg unload HKLM\OFFLINE_SYS >nul 2>&1
+""{Sys32}\reg.exe"" unload HKLM\OFFLINE_SYS >nul 2>&1
 goto :done
 
 :do_remove
@@ -352,8 +361,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 echo Verifying NVMe recovery payload integrity...
-where certutil.exe >nul 2>&1
-if errorlevel 1 (
+if not exist "{Sys32}\certutil.exe" (
     echo ERROR: certutil.exe is unavailable; recovery mutation is blocked.
     exit /b 2
 )
@@ -361,8 +369,10 @@ if not exist "{GeneratedArtifactManifestService.ManifestFileName}" (
     echo ERROR: {GeneratedArtifactManifestService.ManifestFileName} is missing; recovery mutation is blocked.
     exit /b 2
 )
-set "FILECOUNT="
-for /f %%C in ('dir /b /s /a-d 2^>nul ^| find /c /v ""') do set "FILECOUNT=%%C"
+rem Counted with the `for /r` builtin rather than `dir | find`: a shadowing find.exe
+rem earlier on PATH (Git for Windows ships GNU find) never returns a count here.
+set /a FILECOUNT=0
+for /r %%F in (*) do set /a FILECOUNT+=1
 if not "!FILECOUNT!"=="5" (
     echo ERROR: Expected exactly 5 recovery-kit files but found !FILECOUNT!.
     echo Recovery mutation is blocked because the payload has missing or unexpected files.
@@ -382,7 +392,7 @@ for %%I in ("%~1") do if not "%%~zI"=="%~2" (
     exit /b 1
 )
 set "ACTUAL_HASH="
-for /f "skip=1 tokens=* delims=" %%H in ('certutil.exe -hashfile "%~1" SHA256 2^>nul') do if not defined ACTUAL_HASH set "ACTUAL_HASH=%%H"
+for /f "skip=1 tokens=* delims=" %%H in ('"{Sys32}\certutil.exe" -hashfile "%~1" SHA256 2^>nul') do if not defined ACTUAL_HASH set "ACTUAL_HASH=%%H"
 set "ACTUAL_HASH=!ACTUAL_HASH: =!"
 if /I not "!ACTUAL_HASH!"=="%~3" (
     echo ERROR: "%~1" failed SHA-256 verification.
