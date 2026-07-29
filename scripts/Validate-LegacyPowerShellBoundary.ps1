@@ -3,10 +3,19 @@
 # but it must never regain an enable, reinstall, forced-bind, FeatureStore, or hot-swap path.
 [CmdletBinding()]
 param(
-    [string]$ScriptPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'NVMe_Driver_Patcher.ps1')
+    [string]$ScriptPath
 )
 
 $ErrorActionPreference = 'Stop'
+
+# $PSScriptRoot is empty inside param-block defaults on Windows PowerShell 5.1 (it is only
+# populated once binding completes), so the default must be resolved here in the script body.
+# Resolving it in the param default made a direct `powershell -File ...` run of this release
+# gate crash instead of validating.
+if ([string]::IsNullOrWhiteSpace($ScriptPath)) {
+    $ScriptPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'NVMe_Driver_Patcher.ps1'
+}
+
 $resolved = (Resolve-Path -LiteralPath $ScriptPath).Path
 $source = [System.IO.File]::ReadAllText($resolved)
 $tokens = $null
