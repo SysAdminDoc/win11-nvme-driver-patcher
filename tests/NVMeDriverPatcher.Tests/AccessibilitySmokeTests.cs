@@ -14,15 +14,16 @@ using NVMeDriverPatcher.Views;
 
 namespace NVMeDriverPatcher.Tests;
 
+[Collection(WpfCollection.Name)]
 public sealed class AccessibilitySmokeTests
 {
     [Fact]
     public void CriticalSafetyUi_LoadsThemesAndKeepsNamedFocusableActions()
     {
-        RunSta(() =>
+        WpfTestHost.Run(() =>
         {
-            var app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-            app.InitializeComponent();
+            // The single Application lives in WpfTestHost — WPF allows only one per AppDomain.
+            var app = System.Windows.Application.Current!;
 
             foreach (var mode in new[] { AppThemeMode.Dark, AppThemeMode.Light, AppThemeMode.HighContrast })
             {
@@ -97,7 +98,8 @@ public sealed class AccessibilitySmokeTests
             finally
             {
                 try { window.Close(); } catch { }
-                app.Shutdown();
+                // Do NOT shut the Application down here — it is shared with every other WPF
+                // test in the assembly and its lifetime belongs to WpfCollection's fixture.
             }
         });
     }
@@ -222,31 +224,4 @@ public sealed class AccessibilitySmokeTests
         }
     }
 
-    private static void RunSta(Action action)
-    {
-        ExceptionDispatchInfo? error = null;
-        var completed = false;
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                action();
-            }
-            catch (Exception ex)
-            {
-                error = ExceptionDispatchInfo.Capture(ex);
-            }
-            finally
-            {
-                completed = true;
-            }
-        });
-
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-
-        Assert.True(thread.Join(TimeSpan.FromSeconds(30)), "Accessibility smoke timed out.");
-        Assert.True(completed, "Accessibility smoke did not complete.");
-        error?.Throw();
-    }
 }

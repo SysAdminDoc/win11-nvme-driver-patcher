@@ -721,27 +721,53 @@ public static class PatchService
     // Legacy fallback for patches applied before SafeBoot journalling. Deletes the app's subkey
     // ONLY when it has no OS-owned named values (issue #13): a key Windows populated with a
     // "NvmeDisk" value must never be blown away by our uninstall.
-    private static void RemoveOwnedSafeBootKey(RegistryKey hklm, string parentPath, string leaf, string label, ref int removedCount, Action<string>? log)
+    internal static void RemoveOwnedSafeBootKey(RegistryKey hklm, string parentPath, string leaf, string label, ref int removedCount, Action<string>? log)
     {
+        bool existed;
+        bool hasForeignValues = false;
+
+        // Inspection phase. A denial here means Windows ACL-protects the key, so we cannot
+        // even look at it — and therefore certainly did not create it.
         try
         {
             using var parent = hklm.OpenSubKey(parentPath, writable: true);
             if (parent is null) return;
 
-            bool existed;
-            bool hasForeignValues = false;
-            using (var probe = parent.OpenSubKey(leaf))
-            {
-                existed = probe is not null;
-                if (probe is not null)
-                    hasForeignValues = probe.GetValueNames().Any(n => n.Length > 0);
-            }
+            using var probe = parent.OpenSubKey(leaf);
+            existed = probe is not null;
+            if (probe is not null)
+                hasForeignValues = probe.GetValueNames().Any(n => n.Length > 0);
+        }
+        catch (Exception ex) when (IsAccessDenied(ex))
+        {
+            // Recent Windows builds ship these SafeBoot GUID keys themselves (26200.8737+
+            // carries a "NvmeDisk" value) and ACL-protect them, so even an elevated process
+            // cannot open them. That is not an uninstall failure: the key is OS-owned, we
+            // never created it, and there is nothing of ours to remove. Reporting it as
+            // [FAIL] made a clean removal look broken (issue #13). Never take ownership or
+            // rewrite the ACL on a boot-critical key.
+            log?.Invoke($"  [PRESERVED] {label} — OS-owned and ACL-protected by Windows; nothing to remove");
+            return;
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"  [FAIL] {label}: {ex.Message}");
+            return;
+        }
 
-            if (!existed)
-            {
-                log?.Invoke($"  [ABSENT] {label}");
-                return;
-            }
+        if (!existed)
+        {
+            log?.Invoke($"  [ABSENT] {label}");
+            return;
+        }
+
+        // Mutation phase. A denial here is reported honestly: the key may hold our state and
+        // we could not clear it, so the user needs to know the removal was incomplete.
+        try
+        {
+            using var parent = hklm.OpenSubKey(parentPath, writable: true);
+            if (parent is null) return;
+
             if (hasForeignValues)
             {
                 // OS owns this key — remove only our default value, keep the key + foreign values.
@@ -751,12 +777,17 @@ public static class PatchService
                 removedCount++;
                 return;
             }
+
             parent.DeleteSubKeyTree(leaf, throwOnMissingSubKey: false);
             log?.Invoke($"  [REMOVED] {label}");
             removedCount++;
         }
         catch (Exception ex) { log?.Invoke($"  [FAIL] {label}: {ex.Message}"); }
     }
+
+    /// <summary>True when the registry refused access rather than the operation genuinely failing.</summary>
+    internal static bool IsAccessDenied(Exception ex) =>
+        ex is UnauthorizedAccessException or System.Security.SecurityException;
 
     private static List<string> ProbeSafeBootResidue(string? workingDir)
     {
