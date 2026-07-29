@@ -329,7 +329,7 @@ internal sealed class WmiBitLockerPlatform : IBitLockerPlatform
         {
             var script =
                 $"BackupToAAD-BitLockerKeyProtector -MountPoint '{mount}' -KeyProtectorId '{id}' -Confirm:$false -ErrorAction Stop | Out-Null";
-            var psi = new ProcessStartInfo("powershell.exe")
+            var psi = new ProcessStartInfo(SystemToolPathService.PowerShell)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,

@@ -359,7 +359,7 @@ public static class PatchService
     {
         try
         {
-            var psi = new ProcessStartInfo("manage-bde")
+            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("manage-bde.exe"))
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -968,7 +968,7 @@ public static class PatchService
     internal static ProcessStartInfo CreateRestorePointStartInfo(string? description)
     {
         var safeDesc = SanitizeRestorePointDescription(description);
-        var psi = new ProcessStartInfo("powershell.exe")
+        var psi = new ProcessStartInfo(SystemToolPathService.PowerShell)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -1022,7 +1022,7 @@ public static class PatchService
         {
             // Pass args via ArgumentList so each argument is individually escaped —
             // defense-in-depth even though delaySeconds is already clamped.
-            var psi = new ProcessStartInfo("shutdown.exe")
+            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("shutdown.exe"))
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -1075,7 +1075,7 @@ public static class PatchService
     {
         try
         {
-            var psi = new ProcessStartInfo("shutdown.exe")
+            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("shutdown.exe"))
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,

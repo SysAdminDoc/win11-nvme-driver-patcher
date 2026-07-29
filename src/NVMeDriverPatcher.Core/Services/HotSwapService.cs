@@ -351,7 +351,7 @@ public static partial class HotSwapService
 
         try
         {
-            var psi = new ProcessStartInfo("mountvol")
+            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("mountvol.exe"))
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -421,7 +421,7 @@ public static partial class HotSwapService
 
         try
         {
-            var psi = new ProcessStartInfo("mountvol")
+            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("mountvol.exe"))
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,

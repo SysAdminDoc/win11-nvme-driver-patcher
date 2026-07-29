@@ -53,7 +53,7 @@ public static class SchedulerService
     {
         try
         {
-            var psi = new ProcessStartInfo("schtasks.exe")
+            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("schtasks.exe"))
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -87,7 +87,7 @@ public static class SchedulerService
     {
         try
         {
-            var psi = new ProcessStartInfo("schtasks.exe")
+            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("schtasks.exe"))
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,

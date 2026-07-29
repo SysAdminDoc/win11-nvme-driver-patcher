@@ -385,7 +385,7 @@ public static class DriveService
         try
         {
             var systemDrive = NormalizeDriveRoot(Environment.GetEnvironmentVariable("SystemDrive")) ?? "C:\\";
-            var psi = new ProcessStartInfo("fsutil")
+            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("fsutil.exe"))
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

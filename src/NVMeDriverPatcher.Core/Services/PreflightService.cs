@@ -608,7 +608,7 @@ public static class PreflightService
     {
         try
         {
-            var psi = new ProcessStartInfo("bcdedit.exe")
+            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("bcdedit.exe"))
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,

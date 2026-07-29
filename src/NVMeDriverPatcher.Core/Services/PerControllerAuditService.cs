@@ -318,7 +318,7 @@ public static class PerControllerAuditService
     {
         try
         {
-            var startInfo = new ProcessStartInfo("pnputil.exe")
+            var startInfo = new ProcessStartInfo(SystemToolPathService.Resolve("pnputil.exe"))
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
