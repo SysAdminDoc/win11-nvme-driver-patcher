@@ -90,6 +90,11 @@ Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the 
 
 Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be included via checkbox. **Recommended** -- without it, the new I/O scheduler may not activate and results can be inconsistent.
 
+Since v4.6.1 the patch also writes two **service-name** SafeBoot entries for KB5079391 / 25H2
+(`SafeBoot\Minimal\nvmedisk` and `SafeBoot\Network\nvmedisk`). They are not counted in the five
+components above, but removal must delete them too — the Recovery Kit and `remove` both do.
+`NVMeDriverPatcher.Cli upgrade-safeboot` adds them to a machine patched before v4.6.1.
+
 > **Important:** The SafeBoot keys are critical. Without them, your system cannot boot into Safe Mode after enabling Native NVMe. Many manual guides omit these keys -- this tool includes them automatically.
 
 ## Features
@@ -402,9 +407,20 @@ for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Policies\Microso
 for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f
 for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /f
 for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /f
+for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Minimal\nvmedisk" /f
+for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Network\nvmedisk" /f
 reg unload HKLM\OFFLINE
 ```
 4. Restart
+
+> The last two deletes remove the KB5079391-era **service-name** SafeBoot entries that every
+> patch has written since v4.6.1. The Recovery Kit removes all four leaves; delete only the two
+> GUID keys and the patch is not fully reverted.
+>
+> **If you enabled the patch through the FeatureStore fallback**, these registry deletions are not
+> enough on their own — the fallback writes FeatureStore configuration that the overrides above do
+> not touch, so `nvmedisk` can still bind after reboot. Use the Recovery Kit, or run
+> `NVMeDriverPatcher.Cli remove` once Windows boots, which resets the fallback as well.
 
 **Option 3: Wait for auto-recovery**
 Windows automatically disables the native NVMe driver after 2-3 consecutive failed boots and reverts to the legacy stack.

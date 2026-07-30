@@ -2,6 +2,17 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **README manual WinRE recovery left the patch partially applied** — the hand-run `reg delete`
+  sequence removed only the two GUID-class SafeBoot keys. Every patch since v4.6.1 also writes
+  `SafeBoot\Minimal\nvmedisk` and `SafeBoot\Network\nvmedisk` (KB5079391 / 25H2), and the Recovery
+  Kit removes all four leaves — so the documented manual fallback did not match what the tool
+  itself does. Added the two missing deletes, plus a warning that a FeatureStore-fallback install
+  cannot be reverted by registry deletions alone (`nvmedisk` can still bind after reboot).
+  Documented the service-name entries in the registry-components section.
+
 ## [5.2.0] — 2026-07-29
 
 ### Added
