@@ -2,7 +2,7 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
-## [Unreleased]
+## [5.3.0] - 2026-08-02
 
 ### Changed
 - **Bundled `windows_build_rules.json` re-verified and refreshed (2026-08-02)** - every rule was

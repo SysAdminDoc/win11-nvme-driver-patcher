@@ -190,8 +190,13 @@ Invoke-Checked winget.exe @('validate', '--manifest', (Join-Path $publishRoot 'w
 $chocoStage = Join-Path $publishRoot 'chocolatey-package'
 $nuspec = Join-Path $chocoStage 'nvme-driver-patcher.nuspec'
 
+# Absolute path only. Falling back to a bare name would resolve nuget.exe through the current
+# directory and $PATH while producing signed-for-distribution release metadata -- and would fail
+# here with a CommandNotFoundException rather than saying what is actually missing.
 $nuget = Join-Path $env:USERPROFILE 'repos/nuget.exe'
-if (-not (Test-Path -LiteralPath $nuget)) { $nuget = 'nuget.exe' }
+if (-not (Test-Path -LiteralPath $nuget -PathType Leaf)) {
+    throw "nuget.exe not found at '$nuget'. Download it from https://dist.nuget.org/win-x86-commandline/latest/nuget.exe (the Chocolatey package step needs it)."
+}
 Invoke-Checked $nuget @(
     'pack',
     $nuspec,
