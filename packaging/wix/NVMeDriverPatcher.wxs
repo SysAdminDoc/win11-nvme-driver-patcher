@@ -105,6 +105,19 @@
       <Component Id="IconFile" Guid="*">
         <File Source="$(var.PublishDir)\icon.ico" KeyPath="yes" />
       </Component>
+      <!--
+        The shipped PowerShell module resolves the CLI exe from this value rather than from
+        the current directory or $PATH: both exes are requireAdministrator, so a planted
+        NVMeDriverPatcher.Cli.exe found by a relative lookup would run elevated.
+      -->
+      <Component Id="InstallLocationReg" Guid="*">
+        <RegistryValue Root="HKLM"
+                       Key="Software\SysAdminDoc\NVMeDriverPatcher"
+                       Name="InstallLocation"
+                       Type="string"
+                       Value="[INSTALLFOLDER]"
+                       KeyPath="yes" />
+      </Component>
     </ComponentGroup>
 
     <ComponentGroup Id="TrayFiles" Directory="INSTALLFOLDER">

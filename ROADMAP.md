@@ -31,45 +31,6 @@ candidates, not confirmed vulnerabilities — **reproduce each one against the c
 fixing it**, and delete the item outright if it does not hold up. Nineteen raw candidates deduped
 to the eleven distinct issues below.
 
-## P0 — Watchdog service installer launches `sc.exe` by bare name, defeating the repo's own anti-planting rule
-  Why: `RunSc` in the watchdog passes the bare string `sc.exe` to `ProcessStartInfo`, so Windows
-  resolves it through the executable directory and the current working directory before
-  `System32`. The control verbs (`/install`, `/uninstall`) only ever run elevated — the manifest is
-  `requireAdministrator` and the WiX custom action runs them as SYSTEM with `Impersonate="no"` — so
-  a planted `sc.exe` inherits that token. `RunSc` is called six times during `/install`, and a
-  planted stub can return success to hide that no service was ever registered. This directly
-  violates the documented invariant in CLAUDE.md ("never pass a bare tool name to
-  `ProcessStartInfo`"), which means the guard test is not catching what it claims to.
-  Exposure: highest for the standalone released `*-win-x64.exe` run from Downloads, a portable
-  folder, or a USB stick (a path the project supports via `PortableModeService`); an MSI install
-  into Program Files is not exposed via the exe directory, but still is via the working directory
-  of the elevated console that invokes the verb.
-  Touches: `src/NVMeDriverPatcher.Watchdog/Program.cs:158` (`RunProcess`/`RunSc`) — route through
-  `SystemToolPathService.Resolve("sc.exe")` like every other shipped call site, or drop the
-  shell-out for the `System.ServiceProcess`/advapi32 service APIs.
-  Also fix the gate: `SystemToolPathServiceTests.NoShippedSourceLaunchesAToolByBareName` scans
-  `src/` and was green while this shipped — its `new ProcessStartInfo` regex does not match how the
-  watchdog constructs the call. Widen the detector, and self-check it against this defect's exact
-  shape (the same way the recovery-kit absolute-path test self-checks).
-  Acceptance: the watchdog resolves `sc.exe` to `%SystemRoot%\System32\sc.exe`; the widened
-  regression test fails against the old code and passes against the new; a fake `sc.exe` dropped
-  beside the exe and in the CWD is provably not executed during `/install`.
-  Complexity: S (fix), M (test detector is the real work)
-
-## P1 — Shipped PowerShell module resolves the privileged CLI from the current directory and `$PATH`
-  Why: `Invoke-Cli` builds its candidate list for `NVMeDriverPatcher.Cli.exe` starting from a bare
-  relative path and falls back to a `Get-Command` `$PATH` lookup, then executes whatever it finds.
-  The module is written to be used from an elevated session, so this is the same binary-planting
-  class as the P0 above, in the packaging surface rather than in `src/` — which is exactly why the
-  `src/`-only regression scan never saw it.
-  Touches: `packaging/powershell/NVMeDriverPatcher.psm1:38`. Drop the bare relative candidate and
-  the `$PATH` fallback; resolve only from `$PSScriptRoot` and the MSI's recorded install location
-  (HKLM install path / `%ProgramFiles%\NVMe Driver Patcher\`), require a fully-qualified path, and
-  reject any resolved path whose directory is writable by non-administrators.
-  Acceptance: a planted `NVMeDriverPatcher.Cli.exe` in the CWD and on `$PATH` is not invoked; the
-  bare-name regression gate is extended to cover `packaging/` (and `scripts/`), not just `src/`.
-  Complexity: S
-
 ## P1 — MSI never ACL-hardens `INSTALLFOLDER`, yet runs an auto-start service and a SYSTEM custom action from it
   Why: `INSTALLFOLDER` is user-selectable and inherits its parent's DACL, so an install to a
   non-Program-Files path leaves the watchdog binary writable by a standard user while the MSI
@@ -165,17 +126,6 @@ to the eleven distinct issues below.
   return 413 immediately, read through a size-capped reader, and drop the `JSON.stringify` round-trip.
   Acceptance: an oversized body is rejected without being parsed.
   Complexity: S
-
-## P3 — Extend the bare-name execution gate beyond `src/`
-  Why: the P0 and P1 items above are the same defect class in two places, and the existing
-  `NoShippedSourceLaunchesAToolByBareName` scan covers neither — one because its regex misses the
-  call shape, the other because the scan never looks outside `src/`. Fixing the two call sites
-  without widening the gate leaves the next one to be found by the next scan.
-  Touches: `tests/NVMeDriverPatcher.Tests/SystemToolPathServiceTests.cs` — scan `src/`,
-  `packaging/`, and `scripts/`, cover `.ps1`/`.psm1` invocation as well as `ProcessStartInfo`, and
-  assert the detector fires on both known defect shapes.
-  Acceptance: the widened gate fails on the pre-fix tree at both sites and passes after.
-  Complexity: M
 
 ## P3 — Re-run the security scan to completion once the above are addressed
   Why: the run these items came from was stopped before its verification panel, so nothing here
