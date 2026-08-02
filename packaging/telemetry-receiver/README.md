@@ -3,11 +3,13 @@
 Everything you need to stand up a privacy-respecting receiver for the opt-in compat reports
 that `NVMeDriverPatcher.Cli telemetry --endpoint=<url>` POSTs.
 
-- `cloudflare-worker.js` — the worker code. Validates schema, rehashes anonId with a SALT
-  secret, stores each submission in Workers KV keyed by `YYYY-MM-DD/<keyHash>` with a
-  1-year TTL. Includes IP-based rate limiting (10 req/min per IP) and a summary aggregation
-  endpoint.
-- `wrangler.toml` — deploy config. Fill in `account_id` and the KV namespace ID.
+- `cloudflare-worker.js` — the worker code. Validates every submission against the shipped schema,
+  derives a keyed HMAC of `anonId` using the mandatory `SECRET`, and stores a **normalized
+  projection** (never the request body) in Workers KV keyed by `YYYY-MM-DD/<hmac>` with a 1-year
+  TTL. Rate limiting covers every route, and a summary aggregation endpoint serves a cached
+  aggregate.
+- `wrangler.toml` — deploy config. Fill in `account_id` and the KV namespace ID, and keep both
+  rate-limit bindings.
 
 ## Deploy
 
@@ -17,16 +19,24 @@ wrangler login
 wrangler kv:namespace create COMPAT
 # Copy the returned ID into wrangler.toml
 
-wrangler secret put SALT   # paste a long random string
+wrangler secret put SECRET   # paste a long random string -- REQUIRED, see Privacy below
 wrangler deploy
 ```
 
 ## CORS allowlist (browser submissions)
 
-By default the worker grants **no** browser origin — it returns an `Access-Control-Allow-Origin`
-header only to origins you explicitly allowlist, so a random website cannot drive a cross-origin
-`POST` of fake telemetry (the app sends `Content-Type: application/json`, which always triggers a
-CORS preflight; an unauthorized origin's preflight gets no grant and the browser blocks the POST).
+The allowlist is a **request-blocking** control, not just a response-header decision. A request
+carrying an `Origin` header that is not on the list is refused with `403` before any work happens
+and before any KV write.
+
+This distinction matters: omitting `Access-Control-Allow-Origin` only stops an unauthorized site
+*reading* the response — the request still lands. Earlier versions of this worker did exactly that
+and described it as protection, so any website could make its visitors submit telemetry records
+with a simple `POST`. The worker additionally requires `Content-Type: application/json`, which is
+not a CORS-safelisted media type, so a cross-origin request can never be a "simple" POST that skips
+preflight; anything else is refused with `415`.
+
+By default the worker allowlists **no** browser origin.
 
 To allow a web dashboard, set a comma-separated `ALLOWED_ORIGINS` var with exact origins:
 
@@ -48,28 +58,49 @@ Your endpoints:
 | GET | `/nvme/compat/summary` | Public aggregation: top controllers, verdict counts |
 | OPTIONS | `/nvme/compat` | CORS preflight |
 
-## Rate Limiting
+## Rate limiting
 
-IP-based rate limiting is built in: each IP gets 10 submissions per 60-second window.
-IPs are hashed before any storage — no raw addresses are persisted.
+Both Cloudflare Workers Rate Limiting bindings in `wrangler.toml` are **required**. `limit()` checks
+and consumes a token atomically, so there is no check-then-write window, and no IP-derived value is
+persisted in your KV namespace.
 
-Two backends, selected automatically:
+| Binding | Route | Default budget |
+|---------|-------|----------------|
+| `RATE_LIMITER` | `POST /nvme/compat` | 10 / 60s per IP |
+| `SUMMARY_RATE_LIMITER` | `GET /nvme/compat/summary` | 3 / 60s per IP |
 
-- **Preferred — Cloudflare Workers Rate Limiting binding.** Bind it as `RATE_LIMITER` (see the
-  commented `[[unsafe.bindings]]` block in `wrangler.toml`). The worker calls `RATE_LIMITER.limit()`,
-  which checks and consumes a token atomically, so there is no check-then-write race.
-- **Fallback — best-effort KV counter.** When no `RATE_LIMITER` binding is present, the worker uses
-  ephemeral KV keys (`ratelimit:<hash>`) that auto-expire after the window. This is approximate:
-  concurrent bursts from one IP can slip through between the read and the write. Acceptable for an
-  opt-in receiver; switch to the binding for a hard guarantee. The decision (`rateLimitVerdict`) is
-  unit-tested for the limit boundary and window reset.
+The gate runs **before** route dispatch, so every route is covered. The summary gets its own,
+tighter budget because it is the most expensive endpoint.
 
-## Summary pagination
+A deployment missing either binding **fails closed** (`500`) rather than degrading. The previous
+best-effort KV counter has been removed entirely: it read the counter, then read and durably wrote
+the whole request body, and only afterwards incremented — so concurrent requests all observed the
+pre-increment value and the budget was bypassed by parallelism. It also persisted an IP-derived KV
+key, which the privacy section below no longer has to qualify.
 
-`GET /nvme/compat/summary` paginates the full KV keyspace by following list cursors, so a dataset
-larger than one 1000-key list page is no longer silently dropped. It reads up to
-`MAX_SUMMARY_RECORDS` (5000) stored records and reports `scannedKeys`, `summarizedRecords`, and a
-`truncated` flag so any cap is explicit rather than silent. The cursor-follow is unit-tested.
+## Submission validation
+
+Every field is checked against `packaging/schemas/telemetry_payload.schema.json` before anything is
+stored, and only a normalized projection is written:
+
+- unknown top-level and per-controller fields are **rejected**, not stored;
+- `controllers` is capped at 16 entries;
+- `model` (max 64 chars) and `firmware` (max 32) must match a narrow identifier allowlist;
+- `verification`, `profile` and `watchdog` must be one of their enum values;
+- `anonId` and `submittedAt` are **dropped** from what is persisted.
+
+This is what stops an anonymous client dictating the content and cardinality of the public summary,
+which republishes these strings. The body size is gated on `Content-Length` and again through a
+capped reader **before** parsing, so an oversized payload is rejected without being deserialized.
+
+## Summary pagination and caching
+
+`GET /nvme/compat/summary` paginates the KV keyspace by following list cursors, so a dataset larger
+than one 1000-key list page is not silently dropped. It stops after `MAX_SUMMARY_LIST_PAGES` (50)
+pages, reads up to `MAX_SUMMARY_RECORDS` (5000) stored records, and reports `scannedKeys`,
+`summarizedRecords` and a `truncated` flag so any cap is explicit rather than silent. The computed
+aggregate is cached for 5 minutes, so N concurrent readers cause one namespace scan rather than N.
+The cursor-follow, the page ceiling and the cache are all tested.
 
 ## Submission payload shape
 
@@ -130,12 +161,19 @@ controller rows but one `totalSubmissions`. `verification` is bucketed per submi
 
 ## Privacy
 
-- No PII — the client never sends serials, machine names, drive letters, or user names.
-  See `src/NVMeDriverPatcher/Services/CompatTelemetryService.cs` for the exact payload.
-- No IP storage — rate-limit keys are hashed and auto-expire; submission records contain
-  no network-level identifiers.
-- The SALT secret ensures anonId hashes cannot be reversed or cross-referenced across
-  different deployments.
+- **No PII** — the client never sends serials, machine names, drive letters, or user names.
+  See `src/NVMeDriverPatcher.Core/Services/CompatTelemetryService.cs` for the exact payload.
+- **No IP-derived value is persisted at all.** Throttling goes through the rate-limiting bindings,
+  which keep their counters outside your KV namespace. Earlier versions stored an **unkeyed,
+  unsalted** SHA-256 of the submitter's IP as a KV key; the IPv4 space is small enough to enumerate
+  exhaustively, so that was reversible and the "no IP addresses are stored" claim did not hold.
+- **The raw `anonId` is never stored.** It is turned into a keyed HMAC over the per-deployment
+  `SECRET`, and only the digest becomes a KV key. Earlier versions wrote the raw `anonId` into the
+  record value next to its own hash, which nullified the design for the record's whole lifetime.
+- **`SECRET` is mandatory.** It previously defaulted to the empty string, so a deployment that
+  forgot the secret hashed with an empty key and failed open. The worker now returns `500` instead
+  of serving. Rotating `SECRET` makes existing records unreachable from any future submission by
+  the same client — a privacy property, not a bug.
 
 ## Opting your users out
 
