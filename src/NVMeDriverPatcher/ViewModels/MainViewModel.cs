@@ -22,6 +22,8 @@ public partial class MainViewModel : ObservableObject
     private const string NoRecoveryKitText = "No recovery kit is ready yet. Generate one before a risky reboot or remote handoff.";
     private const string NoVerificationScriptText = "No verification script is ready yet. Generate one so post-reboot checks stay predictable.";
     private const string NoDiagnosticsReportText = "No diagnostics report is saved yet. Export one when you need a support-ready snapshot.";
+    private const string SafeProfileHelpText = "Safe profile writes only feature flag 735209102, plus the Safe Boot entries used for rollback — enough to swap the driver, with no community boot-crash reports against it. This is what you want on a daily-driver machine.";
+    private const string FullProfileHelpText = "Full profile adds 1853569164 (UxAccOptimization) and 156965516 (Standalone_Future). Higher peak performance on some drives; community boot-crash reports cluster on these two flags. Try Safe profile first — you can always opt in later.";
 
     public AppConfig Config { get; }
 
@@ -143,8 +145,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _restartDelayText = "30";
     [ObservableProperty] private bool _isSafeModeSelected = true;
     [ObservableProperty] private bool _isFullModeSelected;
-    [ObservableProperty] private string _patchProfileHelpText =
-        "Safe Mode writes only 735209102 — enough to swap the driver with no boot-crash reports tied to it.";
+    [ObservableProperty] private string _patchProfileHelpText = SafeProfileHelpText;
 
     // Lit when post-reboot verification detects that the override was blocked. Surfaces a
     // persistent fallback affordance on the Overview card so the user can
@@ -256,8 +257,8 @@ public partial class MainViewModel : ObservableObject
     private void RefreshPatchProfileHelpText()
     {
         PatchProfileHelpText = Config.PatchProfile == PatchProfile.Safe
-            ? "Safe Mode writes only 735209102 — enough to swap the driver with no boot-crash reports tied to it. This is what you want on a daily-driver machine."
-            : "Full Mode adds 1853569164 (UxAccOptimization) and 156965516 (Standalone_Future). Higher peak performance on some drives; community boot-crash reports cluster on these two flags. Try Safe Mode first — you can always opt in later.";
+            ? SafeProfileHelpText
+            : FullProfileHelpText;
     }
 
     public void Log(string message, string level = "INFO")

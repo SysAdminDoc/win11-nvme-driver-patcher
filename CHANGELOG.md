@@ -133,6 +133,8 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **Non-structural history database failures vanished in Release builds** — swallowed database
   errors now leave a dated, single-line record in the rotating diagnostics log, and support bundles
   include sanitized current and retained application logs for triage.
+- **Patch profile help text said “Safe Mode”** — the settings explanation now says “Safe profile,”
+  distinguishes its feature flag from Windows Safe Mode, and names the Safe Boot rollback entries.
 
 ## [5.2.0] — 2026-07-29
 
