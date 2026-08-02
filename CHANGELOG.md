@@ -138,6 +138,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **Benchmark status updates repeatedly reparsed history on the UI thread** — a timestamp/size-aware
   cache now keeps the visible chart responsive during readiness updates and invalidates after a new
   benchmark result is saved.
+- **Visual regressions lacked executable gates** — the offscreen accessibility harness now asserts
+  compact Settings bounds and action placement, while the theme parser checks foreground/background
+  contrast across Dark, Light, and High Contrast states.
 
 ## [5.2.0] — 2026-07-29
 
