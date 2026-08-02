@@ -17,6 +17,7 @@ public partial class TelemetryView : UserControl
     private static readonly Regex RxDigitsOnly = new(@"[^0-9]", RegexOptions.Compiled);
 
     private bool _suppressDriveSelectionNotification;
+    private bool _themeSubscribed;
     private List<(DateTime Time, int TempC)> _lastTempHistory = [];
     private List<(DateTime Time, int WearPct)> _lastWearHistory = [];
 
@@ -25,7 +26,7 @@ public partial class TelemetryView : UserControl
     public TelemetryView()
     {
         InitializeComponent();
-        ThemeService.ThemeChanged += ThemeService_ThemeChanged;
+        Loaded += TelemetryView_Loaded;
         Unloaded += TelemetryView_Unloaded;
         SetupChartDefaults();
         Reset();
@@ -313,10 +314,22 @@ public partial class TelemetryView : UserControl
         UpdateWearHistory(_lastWearHistory);
     }
 
+    private void TelemetryView_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (_themeSubscribed)
+            return;
+
+        ThemeService.ThemeChanged += ThemeService_ThemeChanged;
+        _themeSubscribed = true;
+    }
+
     private void TelemetryView_Unloaded(object sender, RoutedEventArgs e)
     {
+        if (!_themeSubscribed)
+            return;
+
         ThemeService.ThemeChanged -= ThemeService_ThemeChanged;
-        Unloaded -= TelemetryView_Unloaded;
+        _themeSubscribed = false;
     }
 
     private void DriveSelector_Changed(object sender, SelectionChangedEventArgs e)

@@ -123,6 +123,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   window chrome default uses the muted text token, and the close-button hover uses a readable danger
   surface. A parser-based gate checks every declared theme foreground/background state across Dark,
   Light, and High Contrast palettes.
+- **Benchmark and telemetry charts stopped following theme changes after tab switches** — chart views
+  now subscribe to the static theme event while loaded and detach only while unloaded, so returning
+  to a workspace tab restores live axis and series colors. A WPF lifecycle regression test covers the
+  unload/reload sequence.
 
 ## [5.2.0] — 2026-07-29
 

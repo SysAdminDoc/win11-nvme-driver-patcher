@@ -24,40 +24,6 @@ being written down. **Six suspicions were investigated and discarded as false po
 than logged (see "Checked and found clean" at the end) — that list is deliberately included so a
 future pass does not re-raise them.
 
-- [ ] P2 — Benchmark and telemetry chart views permanently stop following theme changes after the first workspace tab switch
-  Category: visual
-  Where: `src/NVMeDriverPatcher/Views/BenchmarkComparisonView.xaml.cs:19-21` (constructor) and
-  `:149-153` (`BenchmarkComparisonView_Unloaded`);
-  `src/NVMeDriverPatcher/Views/TelemetryView.xaml.cs:27-29` (constructor) and `:315-319`
-  (`TelemetryView_Unloaded`).
-  Problem: both views subscribe to the **static** `ThemeService.ThemeChanged` in their
-  *constructor*, then in `Unloaded` unsubscribe **and** remove the `Unloaded` handler itself. There
-  is no `Loaded` handler, so nothing ever re-subscribes. Both controls live inside the
-  `WorkspaceTabs` `TabControl`, which swaps its content presenter on tab change and raises
-  `Unloaded` on the tab being left. After the user switches away from Benchmarks or Telemetry once,
-  that view is detached from theme notifications for the rest of the session: its Skia/LiveCharts
-  axis paints, labels and separators keep the colours captured under the previously active theme.
-  Switching Dark→Light afterwards leaves light-on-light (or dark-on-dark) chart text.
-  Evidence: traced the ancestry of both controls in `MainWindow.xaml` — `BenchmarkView` (line 2020)
-  and `TelemetryPanelControl` (line 2102) are both descendants of `TabControl x:Name="WorkspaceTabs"`
-  (line 1862). `MainWindow.xaml.cs:609-631` switches `WorkspaceTabs.SelectedIndex` between the
-  benchmark, telemetry and recovery tabs. The chart colours are resolved per render through
-  `ResolveSkColor`/`ResolveBrush` (`BenchmarkComparisonView.xaml.cs:163-171`), and the only thing
-  that triggers a re-render on a theme change is the handler that has been detached.
-  Note the `Visibility="Collapsed"` on the enclosing `BenchmarkWorkspacePanel`/
-  `TelemetryWorkspacePanel` grids is *not* the trigger — collapsed elements stay loaded; the tab
-  switch is.
-  Fix: make the subscription symmetric with the element lifetime — subscribe in a `Loaded` handler
-  and unsubscribe in `Unloaded`, and stop removing the `Unloaded` handler itself. (A weak-event
-  wrapper around the static event is the alternative if repeated Loaded/Unloaded churn is a
-  concern; symmetric Loaded/Unloaded is sufficient here and matches the existing style.)
-  Acceptance: with the app on the Benchmarks tab, switch to Telemetry and back, then change theme —
-  chart axis labels and separators re-render in the new theme. A regression test can assert that
-  after raising `Unloaded` then `Loaded` on the view, a `ThemeService.ApplyMode` call still
-  triggers the view's re-render path.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P2 — `BrushResources` carries a second, stale copy of the dark palette: 33 of 34 tokens disagree with `DarkTheme.xaml`
   Category: visual
   Where: `src/NVMeDriverPatcher/Views/BrushResources.cs:11-48` (`SemanticFallbacks`) versus
