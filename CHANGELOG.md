@@ -5,6 +5,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [5.3.0] - 2026-08-02
 
 ### Changed
+- **Unaudited-surface follow-up completed (2026-08-02)** - the offscreen workspace snapshot gate now
+  renders and asserts Dark, Light and High Contrast pages; WPF startup was placement-proved on the
+  exact isolated virtual display and private desktop; the tray agent, all 85 Core service files and
+  the 208 KB legacy PowerShell artifact received static/contract review; and malformed artifact-
+  manifest, WinPE controller-report and recovery-kit manifest inputs are covered by fail-closed
+  tests. No new findings were identified. Live pointer/keyboard interaction remains outside the
+  mandatory invisible verification contract.
 - **Bundled `windows_build_rules.json` re-verified and refreshed (2026-08-02)** - every rule was
   dated `2026-07-14`, and `BuildActionPolicyService` treats a review date older than 30 days as
   stale, so on **2026-08-13** apply would have become verify/rollback-only on every build with no

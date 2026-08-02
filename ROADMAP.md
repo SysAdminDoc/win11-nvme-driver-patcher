@@ -24,29 +24,6 @@ being written down. **Six suspicions were investigated and discarded as false po
 than logged (see "Checked and found clean" at the end) — that list is deliberately included so a
 future pass does not re-raise them.
 
-- [ ] P3 — Unaudited surfaces from the 2026-08-02 pass — needs a follow-up
-  Category: docs
-  Where: repository-wide.
-  Problem: this pass did not reach everything, and the gaps should be explicit rather than implied
-  as clean. Not covered: (a) the **running elevated GUI** — both shipped exes carry a
-  `requireAdministrator` manifest and this environment is non-elevated, so all UI observation came
-  from the in-process `AccessibilitySmokeTests` render harness; no live interaction, hover/focus
-  states, toast behaviour, dialog flows, or keyboard navigation was exercised against a real
-  window. (b) The **HighContrast theme was never rendered** — the snapshot harness only emits Dark
-  and Light, so high-contrast layout/visuals are unverified beyond resource-key presence and static
-  contrast maths. (c) The **tray agent** (`NVMeDriverPatcher.Tray`) received no review.
-  (d) Roughly 70 of the 85 `Core` services were not read line-by-line — the pass targeted the
-  largest and most safety-adjacent ones plus pattern sweeps. (e) `NVMe_Driver_Patcher.ps1` (208 KB
-  legacy read/recover-only artifact) was not reviewed beyond its release gate. (f) No fuzzing or
-  malformed-input testing of the recovery-kit / WinPE / manifest parsers.
-  Fix: schedule a follow-up pass covering (a)-(f); the highest value is (a) and (b), since the
-  harness could be extended to emit HighContrast snapshots cheaply by adding
-  `AppThemeMode.HighContrast` to the loop in `AccessibilitySmokeTests.SaveWorkspaceSnapshots:143-147`.
-  Acceptance: a subsequent audit records coverage for each of (a)-(f) or converts them into
-  concrete findings.
-  Confidence: Verified
-  Effort: M
-
 ### Checked and found clean — do not re-raise without new evidence
 
 Recorded so a later pass does not spend effort re-deriving these, and does not "fix" working code:

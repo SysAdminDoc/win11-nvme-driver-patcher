@@ -171,7 +171,8 @@ public sealed class AccessibilitySmokeTests
         foreach (var (mode, suffix) in new[]
                  {
                      (AppThemeMode.Dark, "dark"),
-                     (AppThemeMode.Light, "light")
+                     (AppThemeMode.Light, "light"),
+                     (AppThemeMode.HighContrast, "high-contrast")
                  })
         {
             ThemeService.ApplyMode(mode);
@@ -184,6 +185,12 @@ public sealed class AccessibilitySmokeTests
                 SavePng(root, Path.Combine(directory, $"{pages[index]}-{suffix}.png"));
             }
         }
+
+        foreach (var suffix in new[] { "dark", "light", "high-contrast" })
+        foreach (var page in pages)
+            Assert.True(
+                File.Exists(Path.Combine(directory, $"{page}-{suffix}.png")),
+                $"Expected {suffix} snapshot for {page} was not written.");
 
         ThemeService.ApplyMode(AppThemeMode.Dark);
         workspace.SelectedIndex = 5;
