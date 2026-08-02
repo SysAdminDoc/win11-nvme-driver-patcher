@@ -119,6 +119,30 @@ public static class DiagnosticsService
                 }
                 catch { }
 
+                // Rotating application logs. These are sanitized before entering a shareable
+                // bundle so history-write errors remain useful without exposing local profile
+                // paths from exception messages.
+                try
+                {
+                    foreach (var logName in LogRotationService.ManagedLogNames)
+                    {
+                        for (int generation = 0; generation <= LogRotationService.DefaultRetainCount; generation++)
+                        {
+                            var fileName = generation == 0 ? logName : $"{logName}.{generation}";
+                            var path = Path.Combine(workingDir, fileName);
+                            if (!File.Exists(path)) continue;
+
+                            var sanitizedLog = TryCreateShareableLogText(path);
+                            if (!string.IsNullOrWhiteSpace(sanitizedLog))
+                                AddTextEntry(zip, $"logs/{fileName}", sanitizedLog);
+                            else
+                                AddTextEntry(zip, $"logs/{fileName}.omitted.txt",
+                                    $"{fileName} was present, but it could not be sanitized safely for inclusion in a shareable bundle.");
+                        }
+                    }
+                }
+                catch { }
+
                 // Recent registry backups (.reg files in working dir, newest 5 — don't balloon the zip).
                 try
                 {
@@ -177,6 +201,7 @@ public static class DiagnosticsService
                 manifest.AppendLine("  diagnostics.txt   Shareable system + patch report");
                 manifest.AppendLine("  config.json       App configuration with local paths redacted");
                 manifest.AppendLine("  crash/*           Crash logs (if present)");
+                manifest.AppendLine("  logs/*            Redacted rotating application logs (if present)");
                 manifest.AppendLine("  registry/*.reg    Up to 5 most-recent registry backups");
                 manifest.AppendLine("  data/nvmepatcher.db  Validated point-in-time SQLite Online Backup snapshot (if present)");
                 manifest.AppendLine("  data/benchmark_results.json  Benchmark history cache (if present)");
@@ -359,6 +384,7 @@ public static class DiagnosticsService
         if (relativePath.Equals("MANIFEST.txt", StringComparison.OrdinalIgnoreCase)) return "human-readable-index";
         if (relativePath.EndsWith("-omitted.txt", StringComparison.OrdinalIgnoreCase)) return "omission-notice";
         if (relativePath.StartsWith("crash/", StringComparison.OrdinalIgnoreCase)) return "redacted-crash-log";
+        if (relativePath.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)) return "redacted-application-log";
         if (relativePath.StartsWith("registry/", StringComparison.OrdinalIgnoreCase)) return "registry-backup";
         if (relativePath.StartsWith("data/", StringComparison.OrdinalIgnoreCase)) return "diagnostic-data";
         return "support-evidence";

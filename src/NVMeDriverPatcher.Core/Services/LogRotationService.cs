@@ -20,6 +20,8 @@ public static class LogRotationService
         "diagnostics.log"
     };
 
+    internal static IReadOnlyList<string> ManagedLogNames => ManagedLogs;
+
     public static void RotateAll(AppConfig config, long maxBytesPerFile = DefaultMaxBytesPerFile, int retain = DefaultRetainCount)
     {
         var dir = string.IsNullOrWhiteSpace(config.WorkingDir) ? AppConfig.GetWorkingDir() : config.WorkingDir;
