@@ -142,6 +142,51 @@ public sealed class SystemToolPathServiceTests
         }
     }
 
+    /// <summary>
+    /// The PowerShell surface's version of the same defect: resolving a privileged executable
+    /// through the current directory or <c>$PATH</c>. The module is written for an elevated
+    /// session, so either lookup would run a planted binary with administrator rights.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately matches launch and lookup shapes rather than any <c>.exe</c> literal: the
+    /// validation scripts carry allowlists of forbidden and required tool names, and flagging a
+    /// name being *compared* would make the gate noisy enough to be disabled.
+    /// </remarks>
+    private static readonly Regex PowerShellPathLookup = new(
+        @"Get-Command\s+(-Name\s+)?['""]?[A-Za-z0-9_.\-]+\.exe" +           // $PATH lookup
+        @"|(&|Start-Process\s+(-FilePath\s+)?)\s*['""][A-Za-z0-9_.\-]+\.exe['""]", // bare-name launch
+        RegexOptions.Compiled);
+
+    [Fact]
+    public void NoShippedPackagingScriptResolvesAToolThroughPathOrTheCurrentDirectory()
+    {
+        // The src/-only scan never looked here, which is why the module shipped a $PATH fallback
+        // for the requireAdministrator CLI exe.
+        Assert.Matches(PowerShellPathLookup, "    $cmd = Get-Command -Name 'NVMeDriverPatcher.Cli.exe'");
+        Assert.Matches(PowerShellPathLookup, "    $sandbox = Get-Command WindowsSandbox.exe");
+        Assert.Matches(PowerShellPathLookup, "    & 'NVMeDriverPatcher.Cli.exe' status");
+        Assert.Matches(PowerShellPathLookup, "    Start-Process -FilePath 'sc.exe'");
+        // ...but stays quiet on a fully qualified launch and on a name merely being compared.
+        Assert.DoesNotMatch(PowerShellPathLookup, "    (Join-Path $PSScriptRoot 'NVMeDriverPatcher.Cli.exe')");
+        Assert.DoesNotMatch(PowerShellPathLookup, "    'pnputil.exe'");
+        Assert.DoesNotMatch(PowerShellPathLookup, "    & $cli $Command @Arguments");
+
+        var offenders = new[] { "packaging", "scripts" }
+            .Select(root => Path.Combine(RepoRoot(), root))
+            .Where(Directory.Exists)
+            .SelectMany(root => Directory.EnumerateFiles(root, "*.ps*1", SearchOption.AllDirectories))
+            .SelectMany(path => File.ReadAllLines(path)
+                .Select((line, index) => (path, line, number: index + 1))
+                .Where(entry => !entry.line.TrimStart().StartsWith("#", StringComparison.Ordinal))
+                .Where(entry => PowerShellPathLookup.IsMatch(entry.line))
+                .Select(entry => $"{Path.GetFileName(entry.path)}:{entry.number}"))
+            .ToList();
+
+        Assert.True(
+            offenders.Count == 0,
+            $"These lines resolve an executable through $PATH or a relative candidate; use a fully qualified trusted path: {string.Join(", ", offenders)}");
+    }
+
     private static bool IsOffendingLine(string line)
     {
         var code = line.TrimStart();

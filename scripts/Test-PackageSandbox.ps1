@@ -9,8 +9,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$sandboxCommand = Get-Command WindowsSandbox.exe -ErrorAction SilentlyContinue
-if ($null -eq $sandboxCommand) {
+# Resolved to System32 rather than looked up on $PATH: this script runs elevated, so an earlier
+# $PATH entry holding a WindowsSandbox.exe would be launched with administrator rights.
+$sandboxExe = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'WindowsSandbox.exe'
+if (-not (Test-Path -LiteralPath $sandboxExe -PathType Leaf)) {
     throw 'Windows Sandbox is unavailable. Enable Containers-DisposableClientVM, restart, and rerun this smoke.'
 }
 
@@ -159,7 +161,7 @@ try {
 "@
     $wsbPath = Join-Path $workspace 'package-smoke.wsb'
     Set-Content -LiteralPath $wsbPath -Value $wsb -Encoding UTF8
-    $sandbox = Start-Process -FilePath $sandboxCommand.Source -ArgumentList $wsbPath -PassThru
+    $sandbox = Start-Process -FilePath $sandboxExe -ArgumentList $wsbPath -PassThru
 
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while (-not (Test-Path -LiteralPath $resultPath) -and [DateTime]::UtcNow -lt $deadline) {

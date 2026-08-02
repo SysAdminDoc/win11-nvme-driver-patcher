@@ -4,6 +4,34 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 
 ## [Unreleased]
 
+### Security
+- **Elevated tool launches resolved through PATH and the current directory** — the watchdog
+  service installer passed the bare string `sc.exe` to `ProcessStartInfo`, so Windows searched the
+  executable directory and the working directory before `System32`. Every control verb runs
+  elevated (the manifest is `requireAdministrator`, and the MSI custom action runs them as SYSTEM
+  with `Impersonate="no"`), so a planted `sc.exe` inherited that token — and because `/install`
+  calls it six times, a stub returning success could hide that no service was ever registered.
+  Exposure was highest for the standalone `*-win-x64.exe` run from Downloads, a portable folder, or
+  a USB stick. The same defect was live in the WinRE probe (`reagentc.exe`, `bcdedit.exe`), WinRE
+  driver injection (`dism.exe`) and the WinPE media builder (`cmd.exe`, `pnputil.exe`, `dism.exe`).
+  All now resolve through `SystemToolPathService`.
+- **The regression gate that should have caught it was shape-blind** — it only matched a string
+  literal sitting directly inside `new ProcessStartInfo(`, so a single level of indirection hid
+  every one of the above. It now flags any unresolved `"*.exe"` literal, excludes the non-launch
+  shapes (asset names, `ProcessPath` fallbacks, path composition, comparisons), reports `file:line`,
+  and self-checks against all four real defect shapes.
+- **PowerShell module resolved the privileged CLI from the current directory and `$PATH`** —
+  `Get-CliPath` tried a bare relative candidate and then a `Get-Command` lookup, executing whatever
+  it found; the module is written for an elevated session, so this was the same binary-planting
+  class in the packaging surface. It now accepts only fully qualified paths from `$PSScriptRoot`,
+  the install location the MSI records in `HKLM\Software\SysAdminDoc\NVMeDriverPatcher`, and the
+  default per-machine directory — and refuses any candidate whose directory grants write access to
+  a non-administrative principal. `scripts/Test-PackageSandbox.ps1` no longer resolves
+  `WindowsSandbox.exe` through `$PATH`.
+- **Bare-name execution gate extended beyond `src/`** — it now also scans `packaging/` and
+  `scripts/` for `$PATH` lookups and bare-name launches in `.ps1`/`.psm1`, which is why neither
+  PowerShell defect above was visible to the previous scan.
+
 ### Fixed
 - **README manual WinRE recovery left the patch partially applied** — the hand-run `reg delete`
   sequence removed only the two GUID-class SafeBoot keys. Every patch since v4.6.1 also writes
