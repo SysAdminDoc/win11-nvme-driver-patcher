@@ -153,8 +153,9 @@ public sealed class SystemToolPathServiceTests
     /// name being *compared* would make the gate noisy enough to be disabled.
     /// </remarks>
     private static readonly Regex PowerShellPathLookup = new(
-        @"Get-Command\s+(-Name\s+)?['""]?[A-Za-z0-9_.\-]+\.exe" +           // $PATH lookup
-        @"|(&|Start-Process\s+(-FilePath\s+)?)\s*['""][A-Za-z0-9_.\-]+\.exe['""]", // bare-name launch
+        @"Get-Command\s+(-Name\s+)?['""]?[A-Za-z0-9_.\-]+\.exe" +                   // $PATH lookup
+        @"|&\s*['""]?[A-Za-z0-9_.\-]+\.exe" +                                       // & tool.exe
+        @"|Start-Process\s+(-FilePath\s+)?['""][A-Za-z0-9_.\-]+\.exe['""]",         // Start-Process 'tool.exe'
         RegexOptions.Compiled);
 
     [Fact]
@@ -165,26 +166,57 @@ public sealed class SystemToolPathServiceTests
         Assert.Matches(PowerShellPathLookup, "    $cmd = Get-Command -Name 'NVMeDriverPatcher.Cli.exe'");
         Assert.Matches(PowerShellPathLookup, "    $sandbox = Get-Command WindowsSandbox.exe");
         Assert.Matches(PowerShellPathLookup, "    & 'NVMeDriverPatcher.Cli.exe' status");
+        Assert.Matches(PowerShellPathLookup, "    $output = & sc.exe $Command $serviceName"); // unquoted
         Assert.Matches(PowerShellPathLookup, "    Start-Process -FilePath 'sc.exe'");
         // ...but stays quiet on a fully qualified launch and on a name merely being compared.
         Assert.DoesNotMatch(PowerShellPathLookup, "    (Join-Path $PSScriptRoot 'NVMeDriverPatcher.Cli.exe')");
         Assert.DoesNotMatch(PowerShellPathLookup, "    'pnputil.exe'");
         Assert.DoesNotMatch(PowerShellPathLookup, "    & $cli $Command @Arguments");
+        Assert.DoesNotMatch(PowerShellPathLookup, "    $output = & $scExe $Command $serviceName");
 
         var offenders = new[] { "packaging", "scripts" }
             .Select(root => Path.Combine(RepoRoot(), root))
             .Where(Directory.Exists)
             .SelectMany(root => Directory.EnumerateFiles(root, "*.ps*1", SearchOption.AllDirectories))
-            .SelectMany(path => File.ReadAllLines(path)
-                .Select((line, index) => (path, line, number: index + 1))
-                .Where(entry => !entry.line.TrimStart().StartsWith("#", StringComparison.Ordinal))
+            .SelectMany(path => ExecutableScriptLines(File.ReadAllLines(path))
                 .Where(entry => PowerShellPathLookup.IsMatch(entry.line))
-                .Select(entry => $"{Path.GetFileName(entry.path)}:{entry.number}"))
+                .Select(entry => $"{Path.GetFileName(path)}:{entry.number}"))
             .ToList();
 
         Assert.True(
             offenders.Count == 0,
             $"These lines resolve an executable through $PATH or a relative candidate; use a fully qualified trusted path: {string.Join(", ", offenders)}");
+    }
+
+    /// <summary>
+    /// Script lines the file itself executes, with comments and here-string bodies removed.
+    /// </summary>
+    /// <remarks>
+    /// A here-string is a string literal, not code this script runs. The one that matters here is
+    /// <c>Test-PackageSandbox.ps1</c>'s guest bootstrap, which is written into a Windows Sandbox
+    /// this script creates fresh from a clean image — there is no host <c>$PATH</c> to plant, and
+    /// <c>winget.exe</c> is an app-execution alias with no fixed absolute path to resolve to.
+    /// If a here-string ever becomes a host-side payload, that is the point to revisit this.
+    /// </remarks>
+    private static IEnumerable<(string line, int number)> ExecutableScriptLines(string[] lines)
+    {
+        var inHereString = false;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].Trim();
+            if (inHereString)
+            {
+                if (trimmed is "'@" or "\"@") inHereString = false;
+                continue;
+            }
+            if (lines[i].EndsWith("@'", StringComparison.Ordinal) || lines[i].EndsWith("@\"", StringComparison.Ordinal))
+            {
+                inHereString = true;
+                continue;
+            }
+            if (trimmed.StartsWith("#", StringComparison.Ordinal)) continue;
+            yield return (lines[i], i + 1);
+        }
     }
 
     private static bool IsOffendingLine(string line)

@@ -31,21 +31,6 @@ candidates, not confirmed vulnerabilities — **reproduce each one against the c
 fixing it**, and delete the item outright if it does not hold up. Nineteen raw candidates deduped
 to the eleven distinct issues below.
 
-## P1 — MSI never ACL-hardens `INSTALLFOLDER`, yet runs an auto-start service and a SYSTEM custom action from it
-  Why: `INSTALLFOLDER` is user-selectable and inherits its parent's DACL, so an install to a
-  non-Program-Files path leaves the watchdog binary writable by a standard user while the MSI
-  registers it as an auto-start service and invokes it from a deferred SYSTEM custom action —
-  a straight write-to-SYSTEM-execution path. `PROGRAMDATAFOLDER` already gets the correct
-  treatment, so the pattern to copy is in the same file.
-  Touches: `packaging/wix/NVMeDriverPatcher.wxs:121` (`ComponentGroup:WatchdogFiles` /
-  `Component:WatchdogExe`) — apply an explicit `PermissionEx` DACL (SYSTEM + Administrators full,
-  Users read+execute), or add a LaunchCondition that refuses the WatchdogService feature when the
-  resolved `INSTALLFOLDER` is outside `ProgramFiles64Folder`.
-  Acceptance: after an install to a user-writable path, the watchdog directory denies write to
-  standard users (or the service feature refuses to install there); covered by an installer test
-  alongside the existing `InstallerContentTests`.
-  Complexity: M
-
 ## P2 — Telemetry worker stores unvalidated request bodies and republishes them as the public compat summary
   Why: `POST /nvme/compat` checks only `schemaVersion`, the `anonId` regex, and a 16 KiB total
   size, then writes the entire parsed body to KV verbatim with a one-year TTL. The anonymous
