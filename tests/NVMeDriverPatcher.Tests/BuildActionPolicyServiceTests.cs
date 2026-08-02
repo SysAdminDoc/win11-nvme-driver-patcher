@@ -1,3 +1,4 @@
+using System.Globalization;
 using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.Tests;
@@ -117,5 +118,39 @@ public sealed class BuildActionPolicyServiceTests
         // Use a clock near the rules' review dates so this asserts the path classification, not staleness.
         var policy = BuildActionPolicyService.Evaluate(ruleset, rule, new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc));
         Assert.Equal(mutationAllowed, policy.MutationAllowed);
+    }
+
+    [Fact]
+    public void BundledRules_AreNotStaleOnTheDayTheyWereReviewed()
+    {
+        // Every bundled rule carries the same review date, so the whole ruleset expires on one day:
+        // apply becomes verify/rollback-only on every build with no code change, no release and no
+        // user action. This asserts the shipped ruleset is usable when reviewed, and that the review
+        // dates are parseable at all -- BuildActionPolicyService treats an unparseable date as stale.
+        // The recurring expiry itself is caught before it reaches users by
+        // scripts/Validate-BuildRulesFreshness.ps1, which is a release gate rather than a
+        // wall-clock-sensitive test.
+        var ruleset = WindowsBuildRulesService.LoadRuleset(AppContext.BaseDirectory);
+        Assert.NotEmpty(ruleset.Rules);
+
+        foreach (var rule in ruleset.Rules)
+        {
+            Assert.True(
+                DateTime.TryParseExact(
+                    rule.LastReviewed, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var reviewed),
+                $"[{rule.Id}] lastReviewed '{rule.LastReviewed}' is not a yyyy-MM-dd date, so the rule is permanently stale.");
+
+            Assert.False(
+                BuildActionPolicyService.Evaluate(ruleset, rule, reviewed).Stale,
+                $"[{rule.Id}] is stale on its own review date.");
+
+            // Still usable a fortnight after review, so a release does not strand users immediately.
+            Assert.False(
+                BuildActionPolicyService.Evaluate(ruleset, rule, reviewed.AddDays(14)).Stale,
+                $"[{rule.Id}] goes stale within 14 days of review.");
+
+            Assert.False(string.IsNullOrWhiteSpace(rule.SourceUrl), $"[{rule.Id}] has no sourceUrl to re-verify against.");
+        }
     }
 }

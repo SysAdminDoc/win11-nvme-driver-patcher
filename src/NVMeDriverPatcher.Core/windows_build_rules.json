@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updated": "2026-07-14",
+  "updated": "2026-08-02",
   "note": "Per-build expected enablement behavior for Microsoft's native NVMe driver on Windows client. First matching rule wins (rules are ordered most-specific first). 'expectedPath' values: registry-override | vivetool-fallback | none-known | official-optin. Microsoft changes this behavior out-of-band — update this file (an administrator-owned copy in %ProgramData%\\NVMePatcher\\State takes precedence over the bundled one).",
   "rules": [
     {
@@ -14,7 +14,7 @@
       "summary": "Windows Server 2025: native NVMe is an official, supported opt-in feature (GA after the October 2025 cumulative). Use Microsoft's documented enablement, not client-style overrides.",
       "sourceUrl": "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353",
       "confidence": "verified",
-      "lastReviewed": "2026-07-14"
+      "lastReviewed": "2026-08-02"
     },
     {
       "id": "26300-feature-flags-page",
@@ -24,10 +24,10 @@
       "minUbr": 0,
       "maxUbr": 999999,
       "expectedPath": "none-known",
-      "summary": "Build 26300+ ships a native 'Feature flags' page (Settings > Windows Update > Windows Insider Program). Check there first — Microsoft may expose native NVMe as an official toggle, which is preferable to these overrides. The GenNvmeDisk compatible ID is still removed on these trains, so the registry and ViVeTool routes do not bind the driver; treat this tool as verify/monitor/rollback until an official toggle appears.",
-      "sourceUrl": "https://www.elevenforum.com/t/windows-11-25h2-nvmedisk-sys-driver-support.46678/",
+      "summary": "Build 26300+ (26H2 Experimental) ships a native 'Feature flags' page (Settings > Windows Update > Windows Insider Program) — confirmed in Microsoft's own release notes. Check there first: Microsoft may expose native NVMe as an official toggle, which is preferable to these overrides. As of the 2026-08-02 review it is not listed there, and the GenNvmeDisk compatible ID is still removed on these trains (ViVe issue 164), so the registry and ViVeTool routes do not bind the driver; treat this tool as verify/monitor/rollback until an official toggle appears.",
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows-insider/release-notes/experimental/preview-build-26300-9032",
       "confidence": "community-reported",
-      "lastReviewed": "2026-07-14"
+      "lastReviewed": "2026-08-02"
     },
     {
       "id": "post-26200-trains-bind-blocked",
@@ -40,7 +40,7 @@
       "summary": "Insider trains newer than 26200 (26H1 28020/28120 and later) inherit the GenNvmeDisk compatible-ID removal — no working enablement path is known. Wait for Microsoft's official client rollout.",
       "sourceUrl": "https://github.com/thebookisclosed/ViVe/issues/164",
       "confidence": "community-reported",
-      "lastReviewed": "2026-07-14"
+      "lastReviewed": "2026-08-02"
     },
     {
       "id": "26200-bind-blocked",
@@ -53,7 +53,7 @@
       "summary": "Builds 26200.8524+ (and newer Insider trains): stornvme no longer exposes the GenNvmeDisk compatible ID, so nvmedisk.inf cannot match — registry AND ViVeTool routes both enable flags that have no effect. No working enablement path is known; wait for Microsoft's official client rollout.",
       "sourceUrl": "https://github.com/thebookisclosed/ViVe/issues/164",
       "confidence": "community-reported",
-      "lastReviewed": "2026-07-14"
+      "lastReviewed": "2026-08-02"
     },
     {
       "id": "25h2-vivetool-new-ids",
@@ -67,7 +67,7 @@
       "summary": "25H2 (26200.x before .8524): the registry override is neutered; the FeatureStore fallback works with the newer ID set (55369237 + 48433719 + 49453572 — 60786016 reportedly no longer exists on these builds).",
       "sourceUrl": "https://www.elevenforum.com/t/windows-11-25h2-nvmedisk-sys-driver-support.46678/",
       "confidence": "community-reported",
-      "lastReviewed": "2026-07-14"
+      "lastReviewed": "2026-08-02"
     },
     {
       "id": "24h2-26100-8106-fallback",
@@ -81,7 +81,7 @@
       "summary": "Windows 11 build 26100.8106 is the directly evidenced 24H2 block point: FeatureManagement override keys no longer bind, while the FeatureStore fallback was reported working. This exact rule must not be extrapolated to adjacent UBRs.",
       "sourceUrl": "https://forums.mydigitallife.net/threads/discussion-windows-11-26x00-native-nvme-driver-discussion.89933/page-10",
       "confidence": "community-verified",
-      "lastReviewed": "2026-07-14"
+      "lastReviewed": "2026-08-02"
     },
     {
       "id": "24h2-client-unverified",
@@ -94,7 +94,7 @@
       "summary": "No primary Microsoft client matrix or sufficiently precise public evidence establishes a working enablement path for this 24H2 build/UBR. Do not extrapolate from 26100.8106; verify, monitor, or roll back only until an exact rule is sourced.",
       "sourceUrl": "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353",
       "confidence": "conservative-default",
-      "lastReviewed": "2026-07-14"
+      "lastReviewed": "2026-08-02"
     },
     {
       "id": "pre-24h2",
@@ -107,7 +107,7 @@
       "summary": "Pre-24H2 client builds have no sourced working enablement interval and may lack complete native NVMe components. The tool is verify/monitor/rollback-only; writing override keys is not evidence that the driver can bind.",
       "sourceUrl": "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353",
       "confidence": "conservative-default",
-      "lastReviewed": "2026-07-14"
+      "lastReviewed": "2026-08-02"
     }
   ]
 }

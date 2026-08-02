@@ -8,21 +8,6 @@ Living document — **incomplete work only**. Shipped items are deleted (git his
 
 Items waiting on external resources (hardware, VMs, live validation, credentials) live in [Roadmap_Blocked.md](Roadmap_Blocked.md).
 
-## P2 — Refresh `windows_build_rules.json` review dates before they go stale on 2026-08-13
-  Why: `BuildActionPolicyService` treats a rule whose `lastReviewed` is more than 30 days old as
-  stale, and a stale rule is verify/rollback-only. Every bundled rule is dated `2026-07-14`, so on
-  **2026-08-13** apply becomes globally blocked on every build with no code change and no user
-  action — the tool silently stops being able to do its primary job.
-  Touches: `src/NVMeDriverPatcher.Core/windows_build_rules.json` (`updated` + each rule's
-  `lastReviewed`), after re-verifying each rule's `sourceUrl` still supports its `expectedPath`.
-  Acceptance: each rule's verdict is re-confirmed against its source (or corrected), dates are
-  refreshed, and `BuildActionPolicyService` reports no stale-rule block on a current build.
-  Note: this recurs every 30 days — consider whether the staleness window should be widened or the
-  refresh should become a release-gate checklist item rather than a silent expiry.
-  Complexity: S (re-verification is the work, not the edit)
-
----
-
 # Security backlog — 2026-07-30 scan (rev `1d46be5`)
 
 **Unverified.** These came out of a multi-agent security scan of the whole tree that was stopped
