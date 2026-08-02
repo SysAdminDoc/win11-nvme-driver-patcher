@@ -24,32 +24,6 @@ being written down. **Six suspicions were investigated and discarded as false po
 than logged (see "Checked and found clean" at the end) — that list is deliberately included so a
 future pass does not re-raise them.
 
-- [ ] P3 — Settings help text calls the Safe *profile* "Safe Mode", colliding with Windows Safe Mode in a tool that writes SafeBoot keys
-  Category: ux
-  Where: `src/NVMeDriverPatcher/ViewModels/MainViewModel.cs:147` and `:259`
-  (`PatchProfileHelpText`); the controls it describes are
-  `src/NVMeDriverPatcher/Views/MainWindow.xaml:2653` and `:2658`.
-  Problem: the radio buttons, the `PatchProfile` enum and the CLI flags all use "Safe profile" /
-  `--safe`. The help text directly beneath them reads "**Safe Mode** writes only 735209102 — enough
-  to swap the driver with no boot-crash reports tied to it." In this specific product "Safe Mode"
-  is not a synonym: the tool writes `SafeBoot\Minimal` and `SafeBoot\Network` registry entries and
-  its entire documented rollback story is "boot into Windows Safe Mode and run the recovery kit". A
-  user reading this line can reasonably conclude the radio button controls Windows Safe Mode
-  behaviour rather than which feature flags get written. The phrase "no boot-crash reports tied to
-  it" is also doing too much work for a first-run reader.
-  Evidence: confirmed both strings and both radio labels by grep; verified in the rendered
-  `settings-light.png` / `settings-compact-dark.png` snapshots that this help line sits immediately
-  under the "Safe profile (recommended)" / "Full profile" radios, so the two terms appear together
-  on screen.
-  Fix: replace "Safe Mode" with "Safe profile" in both strings so the help text matches the control
-  label, the enum and the CLI flag. Suggested: "Safe profile writes only feature flag 735209102,
-  plus the Safe Boot entries used for rollback — enough to swap the driver, and the profile with no
-  community boot-crash reports against it. This is what you want on a daily-driver machine."
-  Acceptance: no user-facing string uses "Safe Mode" to mean the patch profile; `grep -rn "Safe Mode"
-  src/NVMeDriverPatcher` returns only strings that genuinely refer to Windows Safe Mode / Safe Boot.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — Every status-text update re-reads and re-parses the benchmark history file on the UI thread
   Category: perf
   Where: `src/NVMeDriverPatcher/Views/MainWindow.xaml.cs:633-648` (`ViewModel_PropertyChanged`) →
