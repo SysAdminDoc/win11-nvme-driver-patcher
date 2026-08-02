@@ -25,6 +25,7 @@
     <MediaTemplate EmbedCab="yes" />
 
     <Feature Id="Main" Title="NVMe Driver Patcher" Level="1" Display="expand">
+      <ComponentGroupRef Id="InstallFolderSecurity" />
       <ComponentGroupRef Id="MainFiles" />
       <ComponentGroupRef Id="Shortcuts" />
       <ComponentGroupRef Id="EventLogSource" />
@@ -89,6 +90,25 @@
       Component groups reference the published output of `dotnet publish`. The build pipeline
       is expected to place the assets at $(var.PublishDir)\... before invoking `wix build`.
     -->
+    <!--
+      INSTALLFOLDER is user-selectable through WixUI_InstallDir, and a directory created outside
+      ProgramFiles64Folder inherits its parent's DACL - so an install to, say, C:\Tools would leave
+      every shipped binary writable by a standard user while the MSI registers the watchdog as an
+      auto-start service and invokes it from a deferred SYSTEM custom action. That is a direct
+      write-to-SYSTEM-execution path. Pin the same protected DACL PROGRAMDATAFOLDER already gets:
+      SYSTEM and Administrators full, Users read+execute, no inheritance from the parent. The ACEs
+      are OICI so the binaries MSI drops in here inherit them, and the owner is forced to
+      Administrators - a standard user who pre-created the target directory would otherwise keep
+      WRITE_DAC through ownership and could put the write right back.
+    -->
+    <ComponentGroup Id="InstallFolderSecurity" Directory="INSTALLFOLDER">
+      <Component Id="InstallFolderPermissions" Guid="B4E1B8B0-1C67-4A2E-9C25-7A0C6F2D4E11">
+        <CreateFolder>
+          <PermissionEx Sddl="O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)" />
+        </CreateFolder>
+      </Component>
+    </ComponentGroup>
+
     <ComponentGroup Id="MainFiles" Directory="INSTALLFOLDER">
       <Component Id="MainExe" Guid="*">
         <File Source="$(var.PublishDir)\NVMeDriverPatcher.exe" KeyPath="yes" />

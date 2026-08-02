@@ -28,6 +28,17 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   default per-machine directory — and refuses any candidate whose directory grants write access to
   a non-administrative principal. `scripts/Test-PackageSandbox.ps1` no longer resolves
   `WindowsSandbox.exe` through `$PATH`.
+- **MSI never ACL-hardened `INSTALLFOLDER`** - the directory is user-selectable through
+  WixUI_InstallDir and inherited its parent's DACL, so an install outside Program Files left every
+  shipped binary writable by a standard user while the MSI registered the watchdog as an auto-start
+  service and invoked it from a deferred SYSTEM custom action: a direct write-to-SYSTEM-execution
+  path. It now carries the same protected DACL `PROGRAMDATAFOLDER` already had (owner
+  Administrators, SYSTEM/Administrators full, Users read+execute, no inheritance). Verified in the
+  compiled MSI's `MsiLockPermissionsEx` table, and `scripts/Test-InstallFolderAcl.ps1` proves it
+  lands at install time by installing into a deliberately user-writable parent.
+- **Watchdog packaging smoke launched `sc.exe` by bare name while running elevated** - a planted
+  stub returning success would have made every SCM assertion in it pass against a service that was
+  never registered. It now resolves `sc.exe` from System32.
 - **Bare-name execution gate extended beyond `src/`** — it now also scans `packaging/` and
   `scripts/` for `$PATH` lookups and bare-name launches in `.ps1`/`.psm1`, which is why neither
   PowerShell defect above was visible to the previous scan.

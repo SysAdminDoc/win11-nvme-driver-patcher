@@ -10,12 +10,16 @@ param(
 $ErrorActionPreference = 'Stop'
 $serviceName = 'NVMeDriverPatcherWatchdog'
 $exePath = (Resolve-Path $WatchdogExe).Path
+# Resolved to System32, not looked up on $PATH: this smoke runs elevated, so a planted sc.exe in an
+# earlier PATH entry or in the working directory would run with administrator rights -- and a stub
+# returning success would make every SCM assertion below pass against a service that is not there.
+$scExe = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'sc.exe'
 $installedBySmoke = $false
 $startedBySmoke = $false
 
 function Invoke-ScQuery {
     param([Parameter(Mandatory)] [string]$Command)
-    $output = & sc.exe $Command $serviceName 2>&1
+    $output = & $scExe $Command $serviceName 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "sc.exe $Command failed ($LASTEXITCODE): $($output -join ' ')"
     }
@@ -60,7 +64,7 @@ try {
     $serviceKey = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName"
     if ($serviceKey.ServiceSidType -ne 3) { throw 'Service SID type is not Restricted (3).' }
 
-    $sidOutput = & sc.exe showsid $serviceName 2>&1
+    $sidOutput = & $scExe showsid $serviceName 2>&1
     if ($LASTEXITCODE -ne 0) { throw "sc.exe showsid failed: $($sidOutput -join ' ')" }
     $serviceSid = [regex]::Match(($sidOutput -join "`n"), 'S-1-5-80-(?:\d+-){4}\d+').Value
     if ([string]::IsNullOrWhiteSpace($serviceSid)) { throw 'Service SID could not be resolved.' }
