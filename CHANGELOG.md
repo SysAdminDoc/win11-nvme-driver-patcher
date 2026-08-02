@@ -130,6 +130,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **Code-drawn color fallbacks could drift from the active palette** — the stale semantic fallback
   table is gone; brush resolution now consults the application theme before using one neutral generic
   fallback, keeping Skia/LiveCharts surfaces on the same palette as the rest of the window.
+- **Non-structural history database failures vanished in Release builds** — swallowed database
+  errors now leave a dated, single-line record in the rotating diagnostics log, and support bundles
+  include sanitized current and retained application logs for triage.
 
 ## [5.2.0] — 2026-07-29
 

@@ -42,12 +42,15 @@ public static class DataService
         return state.IsAvailable;
     }
 
-    private static void RecordStructuralFailure(string operation, Exception ex)
+    internal static void RecordStructuralFailure(string operation, Exception ex, string? workingDir = null)
     {
         var structural = ex is InvalidDataException ||
                          ex is SqliteException { SqliteErrorCode: 1 or 11 or 26 };
         if (!structural)
+        {
+            WriteNonStructuralFailure(operation, ex, workingDir);
             return;
+        }
 
         lock (StateSync)
         {
@@ -60,6 +63,26 @@ public static class DataService
                     ? "Close the app, preserve nvmepatcher.db for support, then move it aside to create a fresh history database."
                     : $"Close the app and restore the validated backup '{prior.BackupPath}' over nvmepatcher.db.",
                 prior.BackupPath);
+        }
+    }
+
+    private static void WriteNonStructuralFailure(string operation, Exception ex, string? workingDir)
+    {
+        try
+        {
+            var dir = string.IsNullOrWhiteSpace(workingDir) ? AppConfig.GetWorkingDir() : workingDir;
+            Directory.CreateDirectory(dir);
+            var logPath = Path.Combine(dir, "diagnostics.log");
+            var detail = ex.Message.ReplaceLineEndings(" ");
+            var entry = $"[{DateTime.UtcNow:O}] [DataService] {operation} failed: {ex.GetType().Name}: {detail}{Environment.NewLine}";
+
+            lock (StateSync)
+                File.AppendAllText(logPath, entry, new System.Text.UTF8Encoding(false));
+        }
+        catch
+        {
+            // History persistence is already best-effort; logging must never turn a swallowed
+            // database failure into a new user-facing failure.
         }
     }
 

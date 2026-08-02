@@ -232,6 +232,31 @@ public sealed class DiagnosticsServiceTests : IDisposable
     }
 
     [Fact]
+    public void ExportBundle_IncludesRedactedRotatingApplicationLog()
+    {
+        var logPath = Path.Combine(_tempRoot, "diagnostics.log");
+        File.WriteAllText(logPath,
+            "[2026-08-02T12:00:00Z] [DataService] Saving benchmark history failed: IOException: denied at C:\\Users\\alice\\AppData\\Local\\NVMePatcher\\nvmepatcher.db");
+        var outputPath = Path.Combine(_tempRoot, "support-with-log.zip");
+
+        var bundle = DiagnosticsService.ExportBundle(
+            _tempRoot,
+            preflight: new PreflightResult(),
+            logHistory: [],
+            outputPath: outputPath);
+
+        Assert.Equal(outputPath, bundle);
+        using var zip = ZipFile.OpenRead(outputPath);
+        var entry = zip.GetEntry("logs/diagnostics.log");
+        Assert.NotNull(entry);
+        using var reader = new StreamReader(entry!.Open());
+        var sanitized = reader.ReadToEnd();
+        Assert.Contains("Saving benchmark history failed", sanitized, StringComparison.Ordinal);
+        Assert.Contains(@"C:\Users\[redacted]\AppData\Local\NVMePatcher\nvmepatcher.db", sanitized, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"C:\Users\alice\", sanitized, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ExportBundle_UsesOneValidatedSnapshotDuringConcurrentWalWrites()
     {
         var databasePath = Path.Combine(_tempRoot, "nvmepatcher.db");

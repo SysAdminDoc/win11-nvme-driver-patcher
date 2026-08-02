@@ -24,37 +24,6 @@ being written down. **Six suspicions were investigated and discarded as false po
 than logged (see "Checked and found clean" at the end) — that list is deliberately included so a
 future pass does not re-raise them.
 
-- [ ] P3 — Non-structural history-database failures leave no trace at all in Release builds
-  Category: reliability
-  Where: `src/NVMeDriverPatcher.Core/Services/DataService.cs:45-62` (`RecordStructuralFailure`) and
-  every catch block that follows it (`:96-98`, `:115-117`, `:159-161`, `:182-184`, `:224-226`,
-  `:248-250`, `:268-270`, `:292-294`, `:321-323`, `:349-351`, `:379-381`, `:398-400`, `:424-426`).
-  Problem: each catch calls `RecordStructuralFailure(...)` and then
-  `System.Diagnostics.Debug.WriteLine(...)`. `RecordStructuralFailure` deliberately returns early
-  unless the exception is `InvalidDataException` or a `SqliteException` with error code 1, 11 or 26
-  — so genuine but *non-structural* failures (`SQLITE_FULL` 13 on a full disk, `SQLITE_BUSY` 5
-  under contention with the tray agent / watchdog / CLI, `SQLITE_READONLY` 8 from a ProgramData ACL
-  problem, `IOException`, `DbUpdateException`) fall through to the `Debug.WriteLine` alone.
-  `System.Diagnostics.Debug` methods are `[Conditional("DEBUG")]`, so in a Release build the call
-  is removed by the compiler and the failure produces **no log line, no state change, no entry in
-  the support bundle**. A user's benchmark, telemetry sample or snapshot is silently discarded and
-  the diagnostics ZIP shipped to support contains no evidence it ever happened.
-  Evidence: read the full guard at `:45-49` — `if (!structural) return;`. Confirmed the only other
-  handling in each catch is `Debug.WriteLine`. Confirmed these writes are non-load-bearing for
-  safety (rollback uses the `.reg` backups, the mutation ledger and the SafeBoot journal;
-  `PatchService.cs:134` and `:469` already wrap `SaveSnapshot` in their own `try { } catch { }`),
-  which is why this is P3 and not a data-safety item — the defect is diagnosability, not integrity.
-  Fix: in the non-structural branch, write one line to the app's existing rotating log (the file
-  set `LogRotationService.RotateAll` manages and `DiagnosticsService.ExportBundleAsync` collects)
-  including the operation name, exception type and message, so the failure survives into the
-  support bundle. Do not change the swallow-and-continue behaviour or promote these to dialogs —
-  history writes are correctly non-fatal.
-  Acceptance: with the history database made read-only, a benchmark save in a Release build leaves
-  a dated entry naming the failed operation in the rotating log, and that entry appears in the
-  exported support bundle; the app still does not crash or block.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — Settings help text calls the Safe *profile* "Safe Mode", colliding with Windows Safe Mode in a tool that writes SafeBoot keys
   Category: ux
   Where: `src/NVMeDriverPatcher/ViewModels/MainViewModel.cs:147` and `:259`
