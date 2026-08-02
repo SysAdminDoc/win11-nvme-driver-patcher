@@ -111,7 +111,7 @@ public sealed class WinPERecoveryBuilderServiceTests
                 inventory,
                 (file, args, _, _) =>
                 {
-                    Assert.Equal("pnputil.exe", file);
+                    Assert.Equal(SystemToolPathService.Resolve("pnputil.exe"), file);
                     calls.Add(args);
                     Directory.CreateDirectory(args[2]);
                     File.WriteAllText(Path.Combine(args[2], "iaStorVD.inf"), "[Version]\r\nSignature=\"$Windows NT$\"");
@@ -175,7 +175,7 @@ public sealed class WinPERecoveryBuilderServiceTests
                 Inventory(controller),
                 (file, args, _, _) =>
                 {
-                    Assert.Equal("dism.exe", file);
+                    Assert.Equal(SystemToolPathService.Resolve("dism.exe"), file);
                     calls.Add(args);
                     if (args.Contains("/Commit"))
                         startnetPresentAtCommit = File.Exists(WinPERecoveryBuilderService.StartnetTargetPath(

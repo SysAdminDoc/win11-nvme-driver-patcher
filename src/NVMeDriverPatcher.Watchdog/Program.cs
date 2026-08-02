@@ -142,8 +142,12 @@ internal static class Program
         return 1;
     }
 
+    // sc.exe must resolve to System32, never through PATH or the executable/current directory:
+    // every control verb runs elevated (requireAdministrator manifest, and the MSI custom action
+    // runs it as SYSTEM with Impersonate="no"), so a planted sc.exe would inherit that token, and
+    // a planted stub can return success to hide that no service was ever registered.
     private static int RunSc(params string[] args)
-        => RunProcess("sc.exe", args);
+        => RunProcess(SystemToolPathService.Resolve("sc.exe"), args);
 
     private static int RunProcess(string executable, params string[] args)
     {

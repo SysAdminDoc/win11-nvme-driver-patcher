@@ -165,7 +165,7 @@ public static class WinPERecoveryBuilderService
 
             log?.Invoke("[INFO] Running copype.cmd...");
             await RunProcessAsync(
-                "cmd.exe",
+                SystemToolPathService.Resolve("cmd.exe"),
                 new[] { "/c", copypeCmd, options.Architecture, stagingTreeDir },
                 timeoutSeconds: 120,
                 cancellationToken: cancellationToken);
@@ -235,7 +235,7 @@ public static class WinPERecoveryBuilderService
                 var makeMedia = Path.Combine(winPeRoot!, "MakeWinPEMedia.cmd");
                 log?.Invoke("[INFO] Producing ISO via MakeWinPEMedia /ISO...");
                 await RunProcessAsync(
-                    "cmd.exe",
+                    SystemToolPathService.Resolve("cmd.exe"),
                     new[] { "/c", makeMedia, "/ISO", stagingTreeDir, temporaryIsoPath! },
                     timeoutSeconds: 300,
                     cancellationToken: cancellationToken);
@@ -357,7 +357,7 @@ public static class WinPERecoveryBuilderService
                 Directory.CreateDirectory(packageDir);
                 log?.Invoke($"[INFO] Exporting bound controller package {infName}...");
                 await runner(
-                    "pnputil.exe",
+                    SystemToolPathService.Resolve("pnputil.exe"),
                     ["/export-driver", infName, packageDir],
                     120,
                     cancellationToken).ConfigureAwait(false);
@@ -406,7 +406,7 @@ public static class WinPERecoveryBuilderService
         {
             Directory.CreateDirectory(mountDir);
             log?.Invoke("[INFO] Mounting boot.wim for controller and startnet injection...");
-            await runner("dism.exe",
+            await runner(SystemToolPathService.Resolve("dism.exe"),
                 ["/Mount-Image", $"/ImageFile:{bootWim}", "/Index:1", $"/MountDir:{mountDir}"],
                 300, cancellationToken).ConfigureAwait(false);
             mounted = true;
@@ -450,7 +450,7 @@ public static class WinPERecoveryBuilderService
                             $"Exported controller INF hash changed (expected {expectedHash}; found {actualHash}).");
 
                     log?.Invoke($"[INFO] Injecting controller INF {relativeInf} into boot.wim...");
-                    await runner("dism.exe",
+                    await runner(SystemToolPathService.Resolve("dism.exe"),
                         [$"/Image:{mountDir}", "/Add-Driver", $"/Driver:{infPath}"],
                         300, cancellationToken).ConfigureAwait(false);
                     MarkPackageGroup(packageGroup, WinPEControllerCoverage.Injected,
@@ -470,7 +470,7 @@ public static class WinPERecoveryBuilderService
                 throw new InvalidDataException("boot.wim controller coverage incomplete: " +
                     string.Join("; ", missing.Select(c => $"{c.FriendlyName}: {c.Detail}")));
 
-            await runner("dism.exe",
+            await runner(SystemToolPathService.Resolve("dism.exe"),
                 ["/Unmount-Image", $"/MountDir:{mountDir}", "/Commit"],
                 300, cancellationToken).ConfigureAwait(false);
             mounted = false;
@@ -482,7 +482,7 @@ public static class WinPERecoveryBuilderService
             {
                 try
                 {
-                    await runner("dism.exe",
+                    await runner(SystemToolPathService.Resolve("dism.exe"),
                         ["/Unmount-Image", $"/MountDir:{mountDir}", "/Discard"],
                         180, CancellationToken.None).ConfigureAwait(false);
                     mounted = false;
