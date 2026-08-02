@@ -24,46 +24,6 @@ being written down. **Six suspicions were investigated and discarded as false po
 than logged (see "Checked and found clean" at the end) — that list is deliberately included so a
 future pass does not re-raise them.
 
-- [ ] P2 — Primary action button text fails WCAG AA in the default theme, and gets worse on hover
-  Category: a11y
-  Where: `src/NVMeDriverPatcher/Themes/DarkTheme.xaml` — `Accent` (`#FF2F8CFF`) and `AccentHover`
-  (`#FF58A5FF`) tokens, consumed by `<Style x:Key="ActionButton">` (`Foreground` =
-  `AccentForeground` `#FFFFFFFF`, `Background` = `Accent`, `FontSize` = 12.5, `FontWeight` =
-  SemiBold, hover trigger swaps `Background` to `AccentHover`). Same tokens also drive
-  `MainWindow.xaml` primary CTAs: Apply Patch, Run Benchmark, Create, Generate, Export, Bundle ZIP.
-  Problem: white on `Accent` measures **3.32:1** and white on `AccentHover` measures **2.55:1**.
-  At 12.5px SemiBold this is *normal* text under WCAG (large text starts at 18.66px bold / 24px
-  regular), so the requirement is 4.5:1 — the app's most important control fails AA at rest and
-  degrades further on hover, dropping below even the 3:1 non-text floor. This affects the **default**
-  theme; Light (5.17:1 rest / 6.70:1 hover) and HighContrast (12.93:1 / 15.27:1) both pass, so the
-  problem is invisible unless the dark palette is measured specifically.
-  Two lesser instances share the root cause — control style token pairs were never contrast-checked:
-  `WindowChromeButton` (`TextDim` on `BgLight`, 4.17:1, Dark) and `CloseWindowChromeButton`'s hover
-  (`TextPrimary` on `Red`: 2.33:1 Dark, 2.89:1 Light, 2.27:1 HighContrast — an icon, so the bar is
-  3:1, still failing).
-  Evidence: computed WCAG 2.x relative-luminance ratios directly from the theme hex values for
-  every `Foreground`/`Background` pair declared in the button styles, across all three theme
-  dictionaries. This is a **regression**: `git show e53ca71^:…/DarkTheme.xaml` has `Accent` =
-  `#FF2563EB`, which is 5.17:1 with white and passed; commit `e53ca71` (the v5.2.0 journey-rail
-  feature) brightened it to `#FF2F8CFF`, taking it to 3.32:1. The buttons are visible in the
-  rendered `overview-dark.png` snapshot (white "Apply Patch" / "Run Benchmark" on the blue fill).
-  Fix: darken the accent ramp used for filled buttons and make hover go **darker** rather than
-  lighter (the current hover lightens, which is exactly what pushes it to 2.55:1). A verified ramp
-  that keeps the existing hue and saturation: rest `#FF006EF6` (4.60:1 with white), hover
-  `#FF0057C4` (6.64:1), pressed `#FF00489F` (8.65:1); the rest fill still reads as a control
-  against the darkest surfaces (4.20:1 vs `#FF070E18`, 3.95:1 vs `#FF0B1623`, both above the 3:1
-  non-text floor). If the brighter `#FF2F8CFF` must be kept for accent *lines and focus rings*,
-  introduce a separate token for the button fill rather than reusing `Accent`. Also darken `Red`
-  (or use `AccentForeground`-style dark text) for the close-button hover, and lift
-  `WindowChromeButton` from `TextDim` to `TextMuted`.
-  Acceptance: white-on-fill measures >= 4.5:1 for `ActionButton` in rest, hover and pressed states in
-  all three themes; the close-button hover pairing reaches >= 3:1. Add a unit test that parses each
-  theme dictionary, computes the contrast for every `Foreground`/`Background` pair declared in a
-  `Style`, and fails below the threshold implied by that style's `FontSize` — that gate is what
-  stops the next palette refresh from regressing this silently.
-  Confidence: Verified
-  Effort: M
-
 - [ ] P2 — Benchmark and telemetry chart views permanently stop following theme changes after the first workspace tab switch
   Category: visual
   Where: `src/NVMeDriverPatcher/Views/BenchmarkComparisonView.xaml.cs:19-21` (constructor) and

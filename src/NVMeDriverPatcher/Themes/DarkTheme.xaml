@@ -18,6 +18,9 @@
     <SolidColorBrush x:Key="Accent" Color="#FF2F8CFF"/>
     <SolidColorBrush x:Key="AccentHover" Color="#FF58A5FF"/>
     <SolidColorBrush x:Key="AccentForeground" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="ActionButtonBackground" Color="#FF006EF6"/>
+    <SolidColorBrush x:Key="ActionButtonHover" Color="#FF0057C4"/>
+    <SolidColorBrush x:Key="ActionButtonPressed" Color="#FF00489F"/>
     <SolidColorBrush x:Key="AccentBg" Color="#FF0C2C4D"/>
     <SolidColorBrush x:Key="AccentSoft" Color="#FF154B7C"/>
     <SolidColorBrush x:Key="Green" Color="#FF51E0AA"/>
@@ -274,7 +277,7 @@
     <Style x:Key="WindowChromeButton" TargetType="Button">
         <Setter Property="Width" Value="32"/>
         <Setter Property="Height" Value="30"/>
-        <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="1"/>
@@ -326,7 +329,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="{DynamicResource Red}"/>
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource RedBg}"/>
                             <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource Red}"/>
                             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
                         </Trigger>
@@ -350,8 +353,8 @@
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Foreground" Value="{DynamicResource AccentForeground}"/>
-        <Setter Property="Background" Value="{DynamicResource Accent}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+        <Setter Property="Background" Value="{DynamicResource ActionButtonBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ActionButtonBackground}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocusVisual}"/>
         <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
@@ -368,11 +371,12 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentHover}"/>
-                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentHover}"/>
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource ActionButtonHover}"/>
+                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource ActionButtonHover}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="border" Property="Opacity" Value="0.88"/>
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource ActionButtonPressed}"/>
+                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource ActionButtonPressed}"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource Focus}"/>

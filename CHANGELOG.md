@@ -118,6 +118,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   rows, and keeps the workspace activity row from consuming an unused second star row. The retired
   `OverviewTabs` subtree and its dangling code-behind mutations are removed; the offscreen
   accessibility harness now proves the compact card and both action buttons remain visible.
+- **Dark primary actions fell below WCAG AA contrast** — filled action buttons now use a dedicated
+  darkening rest/hover/pressed ramp while preserving the brighter accent for lines and focus, the
+  window chrome default uses the muted text token, and the close-button hover uses a readable danger
+  surface. A parser-based gate checks every declared theme foreground/background state across Dark,
+  Light, and High Contrast palettes.
 
 ## [5.2.0] — 2026-07-29
 
