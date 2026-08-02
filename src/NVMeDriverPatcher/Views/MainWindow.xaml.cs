@@ -20,6 +20,8 @@ public partial class MainWindow : Window
     private const int DwmwaTextColor = 36;
 
     private readonly MainViewModel _vm;
+    private readonly BenchmarkHistoryCache _benchmarkHistoryCache = new();
+    private List<BenchmarkResult>? _renderedBenchmarkHistory;
     private int? _selectedTelemetryDriveNumber;
     private int _telemetryWorkspaceRefreshId;
     private int _telemetryDataRefreshId;
@@ -613,8 +615,13 @@ public partial class MainWindow : Window
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainViewModel.BenchLabelText))
+            _benchmarkHistoryCache.Invalidate();
+
         // BenchLabelText and StatusText fire often during preflight; only refresh the
-        // benchmark chart panel when it's the visible tab. Saves the file read + chart relayout.
+        // benchmark chart panel when it's the visible tab. The cache avoids re-reading and
+        // re-parsing the JSON on every status update, while the label change invalidates it
+        // after a completed benchmark writes a new result.
         if ((e.PropertyName == nameof(MainViewModel.BenchLabelText) ||
              e.PropertyName == nameof(MainViewModel.StatusText)) &&
             WorkspaceTabs.SelectedIndex == 0)
@@ -703,14 +710,21 @@ public partial class MainWindow : Window
 
     private void RefreshBenchmarkWorkspace()
     {
-        var history = BenchmarkService.GetHistory(_vm.Config.WorkingDir);
+        var history = _benchmarkHistoryCache.Get(_vm.Config.WorkingDir);
         bool hasHistory = history.Count > 0;
 
         BenchmarkEmptyState.Visibility = hasHistory ? Visibility.Collapsed : Visibility.Visible;
         BenchmarkWorkspacePanel.Visibility = hasHistory ? Visibility.Visible : Visibility.Collapsed;
 
-        if (hasHistory)
+        if (!hasHistory)
+        {
+            _renderedBenchmarkHistory = null;
+        }
+        else if (!ReferenceEquals(_renderedBenchmarkHistory, history))
+        {
             BenchmarkView.UpdateChart(history);
+            _renderedBenchmarkHistory = history;
+        }
     }
 
     private async void RefreshTelemetry_Click(object sender, RoutedEventArgs e)

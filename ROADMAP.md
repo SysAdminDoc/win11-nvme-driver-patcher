@@ -24,36 +24,6 @@ being written down. **Six suspicions were investigated and discarded as false po
 than logged (see "Checked and found clean" at the end) — that list is deliberately included so a
 future pass does not re-raise them.
 
-- [ ] P3 — Every status-text update re-reads and re-parses the benchmark history file on the UI thread
-  Category: perf
-  Where: `src/NVMeDriverPatcher/Views/MainWindow.xaml.cs:633-648` (`ViewModel_PropertyChanged`) →
-  `:718-728` (`RefreshBenchmarkWorkspace`) → `BenchmarkService.GetHistory`
-  (`src/NVMeDriverPatcher.Core/Services/BenchmarkService.cs`).
-  Problem: `ViewModel_PropertyChanged` calls `RefreshBenchmarkWorkspace()` on every change to
-  `StatusText` or `BenchLabelText` while workspace tab 0 is selected — and tab 0 (Benchmarks) is
-  the default selection. `RefreshBenchmarkWorkspace()` synchronously calls
-  `BenchmarkService.GetHistory(...)`, which does `File.Exists` + `File.ReadAllText` +
-  `JsonSerializer.Deserialize` + a sanitize pass, then rebuilds the LiveCharts series via
-  `BenchmarkView.UpdateChart(history)`. All of this runs on the UI thread. `StatusText` is assigned
-  from 17 sites across the view models and updates repeatedly through a readiness refresh, which is
-  the app's startup path — so the default view does a file read, JSON parse and chart rebuild per
-  status tick.
-  Evidence: read the call chain; the existing comment at `:634-636` shows the frequency was already
-  known ("BenchLabelText and StatusText fire often during preflight") and was addressed only by
-  skipping the work when the tab is *not* visible — which leaves the default, visible case doing
-  the full read every time. `AccessibilitySmokeTests` asserts `Assert.Equal(0, workspace.SelectedIndex)`,
-  confirming tab 0 is the default.
-  Fix: cache the parsed history in the view model or `MainWindow` and only re-read when it actually
-  changes — invalidate on benchmark completion rather than on status text. At minimum, debounce
-  `RefreshBenchmarkWorkspace` (a `DispatcherTimer` trailing edge, matching the existing
-  `_settingsSaveDebouncer` pattern in `MainViewModel.Settings.cs:75-95`) and compare the file's
-  `LastWriteTimeUtc` before re-parsing.
-  Acceptance: during a full readiness refresh with the Benchmarks tab visible,
-  `BenchmarkService.GetHistory` is invoked at most once (or once per actual history change) rather
-  than once per status update; the chart still updates when a benchmark completes.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — No regression gate pins code-side colour tokens to the theme, or asserts the compact layout does not clip
   Category: testing
   Where: `tests/NVMeDriverPatcher.Tests/AccessibilitySmokeTests.cs` (the only UI-level test);

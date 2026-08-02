@@ -135,6 +135,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   include sanitized current and retained application logs for triage.
 - **Patch profile help text said “Safe Mode”** — the settings explanation now says “Safe profile,”
   distinguishes its feature flag from Windows Safe Mode, and names the Safe Boot rollback entries.
+- **Benchmark status updates repeatedly reparsed history on the UI thread** — a timestamp/size-aware
+  cache now keeps the visible chart responsive during readiness updates and invalidates after a new
+  benchmark result is saved.
 
 ## [5.2.0] — 2026-07-29
 
