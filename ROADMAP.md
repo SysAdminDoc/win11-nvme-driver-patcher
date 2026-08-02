@@ -24,29 +24,6 @@ being written down. **Six suspicions were investigated and discarded as false po
 than logged (see "Checked and found clean" at the end) — that list is deliberately included so a
 future pass does not re-raise them.
 
-- [ ] P3 — No regression gate pins code-side colour tokens to the theme, or asserts the compact layout does not clip
-  Category: testing
-  Where: `tests/NVMeDriverPatcher.Tests/AccessibilitySmokeTests.cs` (the only UI-level test);
-  no test covers `src/NVMeDriverPatcher/Views/BrushResources.cs`.
-  Problem: the two visual defects above both shipped silently because nothing tests for them.
-  `AccessibilitySmokeTests` loads all three themes, asserts a dozen resource keys exist, checks
-  automation names and focus order, and *renders* `settings-compact-dark.png` — but it makes no
-  assertion about the compact render, so the clipped action buttons pass CI. Separately, nothing
-  compares `BrushResources.SemanticFallbacks` against `DarkTheme.xaml`, which is why 33 tokens
-  drifted between two commits on the same day without failing anything.
-  Evidence: `AssertThemeResources` (`AccessibilitySmokeTests.cs:167-180`) only calls
-  `resources.Contains(key)` — presence, never value. `SaveWorkspaceSnapshots` writes PNGs and
-  asserts nothing about them. No test file references `BrushResources`.
-  Fix: add two tests in the existing style. (1) A drift gate parsing `DarkTheme.xaml` and asserting
-  every `SemanticFallbacks` entry matches — same shape as
-  `TelemetryReceiverSummaryTests.WorkerFieldAllowlists_MatchTheShippedSchema`. (2) A layout
-  assertion in `AccessibilitySmokeTests` that after `UpdateAdaptiveLayout` at 1150x900 each settings
-  card's `ActualHeight >= DesiredSize.Height` and its action buttons are within the card bounds.
-  Both must fail against the current tree and pass after the P1/P2 fixes.
-  Acceptance: both tests fail on the pre-fix tree and pass afterwards; total suite stays green.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — Unaudited surfaces from the 2026-08-02 pass — needs a follow-up
   Category: docs
   Where: repository-wide.
