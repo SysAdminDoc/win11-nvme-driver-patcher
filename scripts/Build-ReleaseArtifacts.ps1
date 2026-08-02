@@ -16,6 +16,12 @@ $repoRoot = if ($RepoRoot) { (Resolve-Path $RepoRoot).Path } else { (Resolve-Pat
 & (Join-Path $PSScriptRoot 'Validate-LegacyPowerShellBoundary.ps1') `
     -ScriptPath (Join-Path $repoRoot 'NVMe_Driver_Patcher.ps1')
 
+# Every bundled build rule carries the same review date, so the whole ruleset expires on one day and
+# apply silently becomes verify/rollback-only on every build. Fail the release here rather than let
+# that reach users: re-verify each rule against its sourceUrl, then refresh the dates.
+& (Join-Path $PSScriptRoot 'Validate-BuildRulesFreshness.ps1') -RepoRoot $repoRoot
+if ($LASTEXITCODE -ne 0) { throw 'Bundled windows_build_rules.json is stale or about to go stale; refusing to build a release.' }
+
 if ([string]::IsNullOrWhiteSpace($Version)) {
     [xml]$props = Get-Content -Raw (Join-Path $repoRoot 'Directory.Build.props')
     $Version = [string]$props.Project.PropertyGroup.VersionPrefix

@@ -4,6 +4,25 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 
 ## [Unreleased]
 
+### Changed
+- **Bundled `windows_build_rules.json` re-verified and refreshed (2026-08-02)** - every rule was
+  dated `2026-07-14`, and `BuildActionPolicyService` treats a review date older than 30 days as
+  stale, so on **2026-08-13** apply would have become verify/rollback-only on every build with no
+  code change, no release and no user action. All eight verdicts were re-checked against their
+  sources and all still hold: Server 2025 native NVMe remains an official opt-in (GA, disabled by
+  default); the `GenNvmeDisk` compatible-ID removal still blocks binding on 26200.8524+, on later
+  Insider trains and on 26300; the 25H2 FeatureStore route (55369237 + 48433719 + 49453572) is
+  still reported working below 26200.8524; and 26100.8106 remains the evidenced 24H2 block point
+  with the FeatureStore fallback as the working path. The `26300-feature-flags-page` rule cited a
+  community thread that did not actually evidence the Feature flags page - it now cites Microsoft's
+  own Insider release notes, which document it, and records that native NVMe is not listed there.
+- **The 30-day staleness window is no longer a silent expiry** - it was doing its job (a rule
+  nobody has re-verified must not authorize a mutation), so the window stays at 30 days and
+  `scripts/Validate-BuildRulesFreshness.ps1` makes the expiry visible instead. It fails a release
+  whose bundled rules are already stale or would go stale within 14 days of shipping, and also
+  catches unparseable or future review dates and rules with no source to re-verify against. Wired
+  into `scripts/Build-ReleaseArtifacts.ps1` so a release cannot be cut without it.
+
 ### Security
 - **Elevated tool launches resolved through PATH and the current directory** — the watchdog
   service installer passed the bare string `sc.exe` to `ProcessStartInfo`, so Windows searched the
