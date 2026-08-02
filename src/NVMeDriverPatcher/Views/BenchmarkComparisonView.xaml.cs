@@ -13,11 +13,12 @@ namespace NVMeDriverPatcher.Views;
 public partial class BenchmarkComparisonView : UserControl
 {
     private List<BenchmarkResult> _lastHistory = [];
+    private bool _themeSubscribed;
 
     public BenchmarkComparisonView()
     {
         InitializeComponent();
-        ThemeService.ThemeChanged += ThemeService_ThemeChanged;
+        Loaded += BenchmarkComparisonView_Loaded;
         Unloaded += BenchmarkComparisonView_Unloaded;
     }
 
@@ -146,10 +147,22 @@ public partial class BenchmarkComparisonView : UserControl
         UpdateChart(_lastHistory);
     }
 
+    private void BenchmarkComparisonView_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (_themeSubscribed)
+            return;
+
+        ThemeService.ThemeChanged += ThemeService_ThemeChanged;
+        _themeSubscribed = true;
+    }
+
     private void BenchmarkComparisonView_Unloaded(object sender, RoutedEventArgs e)
     {
+        if (!_themeSubscribed)
+            return;
+
         ThemeService.ThemeChanged -= ThemeService_ThemeChanged;
-        Unloaded -= BenchmarkComparisonView_Unloaded;
+        _themeSubscribed = false;
     }
 
     private Brush DeltaBrush(double prev, double current)
