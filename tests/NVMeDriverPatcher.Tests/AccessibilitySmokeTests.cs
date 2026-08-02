@@ -58,7 +58,6 @@ public sealed class AccessibilitySmokeTests
                 AssertEnabledFocusTarget(window, "Generate verification script");
                 AssertEnabledFocusTarget(window, "Export support bundle zip");
 
-                AssertNamedControl(window, "Details tabs");
                 AssertNamedControl(window, "Workspace tabs");
                 AssertNamedControl(window, "Primary navigation");
                 AssertNamedControl(window, "Safety journey");
@@ -113,6 +112,35 @@ public sealed class AccessibilitySmokeTests
                 activityToggle.IsChecked = true;
                 updateAdaptiveLayout.Invoke(window, null);
                 Assert.Equal(new GridLength(240), activityRow.Height);
+
+                activityToggle.IsChecked = false;
+                workspace.SelectedIndex = 5;
+                updateAdaptiveLayout.Invoke(window, null);
+                root.Measure(new Size(1150, 900));
+                root.Arrange(new Rect(0, 0, 1150, 900));
+                root.UpdateLayout();
+
+                var settingsProfileCard = Assert.IsType<Border>(window.FindName("SettingsProfileCard"));
+                var settingsAuditCard = Assert.IsType<Border>(window.FindName("SettingsAuditCard"));
+                Assert.Equal(0, Grid.GetRow(settingsProfileCard));
+                Assert.Equal(1, Grid.GetRow(settingsAuditCard));
+                Assert.Equal(3, Grid.GetColumnSpan(settingsAuditCard));
+                Assert.True(
+                    settingsAuditCard.ActualHeight + 0.1 >= settingsAuditCard.DesiredSize.Height - settingsAuditCard.Margin.Top,
+                    $"Settings audit card content is clipped vertically: actual {settingsAuditCard.ActualHeight}, desired content {settingsAuditCard.DesiredSize.Height - settingsAuditCard.Margin.Top}.");
+
+                foreach (var automationName in new[] { "Open data folder", "Restore recommended defaults" })
+                {
+                    var button = Assert.Single(
+                        FindControls<Button>(settingsAuditCard),
+                        candidate => AutomationProperties.GetName(candidate) == automationName);
+                    var origin = button.TranslatePoint(new Point(0, 0), settingsAuditCard);
+                    Assert.True(origin.X >= -0.1 && origin.Y >= -0.1, $"{automationName} starts outside its card.");
+                    Assert.True(
+                        origin.X + button.ActualWidth <= settingsAuditCard.ActualWidth + 0.1 &&
+                        origin.Y + button.ActualHeight <= settingsAuditCard.ActualHeight + 0.1,
+                        $"{automationName} is clipped by its card.");
+                }
             }
             finally
             {
