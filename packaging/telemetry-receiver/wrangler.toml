@@ -1,5 +1,5 @@
 # wrangler.toml — sample config for the NVMe Driver Patcher compat-telemetry receiver.
-# Replace <account-id>, <KV-namespace-id>, and the SALT secret before deploying.
+# Replace <account-id> and <KV-namespace-id>, and set the SECRET, before deploying.
 
 name = "nvme-driver-patcher-compat"
 main = "cloudflare-worker.js"
@@ -8,18 +8,39 @@ compatibility_date = "2026-04-19"
 account_id = "<account-id>"
 
 [vars]
-# No vars required for the default deployment. `env.SALT` (below) rotates the anonId hash —
-# set it via `wrangler secret put SALT`.
+# Comma-separated exact origins allowed to call the endpoint from a browser, e.g.
+# "https://sysadmindoc.github.io". A request carrying any other Origin header is refused with 403
+# before any work happens. Leave empty unless you host a dashboard; the CLI sends no Origin.
+ALLOWED_ORIGINS = ""
 
 kv_namespaces = [
   { binding = "COMPAT", id = "<KV-namespace-id>" }
 ]
 
-# Optional but recommended: Cloudflare's Workers Rate Limiting binding. When present as
-# `RATE_LIMITER`, the worker uses it (atomic, no check-then-write race) instead of the
-# best-effort KV counter fallback. `simple` period must be 10 or 60 seconds.
-# [[unsafe.bindings]]
-# name = "RATE_LIMITER"
-# type = "ratelimit"
-# namespace_id = "1001"
-# simple = { limit = 10, period = 60 }
+# REQUIRED. `SECRET` keys the HMAC that turns a submitter's anonId into a KV key. Without it the
+# Worker refuses to serve rather than hashing with an empty key: an unkeyed digest of a value from
+# a small input space is reversible by enumeration, so it would not be pseudonymisation.
+#
+#   wrangler secret put SECRET
+#
+# Rotation is a deliberate act: it makes existing records unreachable by any future submission from
+# the same client, which is a privacy property rather than a bug.
+
+# REQUIRED. Cloudflare's Workers Rate Limiting binding. limit() checks AND consumes atomically, so
+# there is no check-then-write window for concurrent requests to slip through, and no IP-derived
+# value is persisted in the KV namespace. The Worker fails closed when this is absent; the KV
+# counter it replaced was racy and did persist one. `simple` period must be 10 or 60 seconds.
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+# REQUIRED. /nvme/compat/summary enumerates the KV namespace and recomputes the aggregate, so it
+# gets its own tighter budget instead of sharing the submit budget (it previously had no throttle
+# at all, because the route dispatch ran ahead of the rate-limit check).
+[[unsafe.bindings]]
+name = "SUMMARY_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1002"
+simple = { limit = 3, period = 60 }

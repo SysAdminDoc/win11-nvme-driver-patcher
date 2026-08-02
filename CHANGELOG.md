@@ -24,6 +24,49 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   into `scripts/Build-ReleaseArtifacts.ps1` so a release cannot be cut without it.
 
 ### Security
+- **Telemetry receiver stored unvalidated request bodies and republished them publicly** -
+  `POST /nvme/compat` checked only `schemaVersion`, the `anonId` regex and a 16 KiB total size,
+  then wrote the entire parsed body to KV verbatim with a one-year TTL, and
+  `GET /nvme/compat/summary` aggregated those records - so any anonymous client dictated the
+  content and the cardinality of a public endpoint. The shipped
+  `packaging/schemas/telemetry_payload.schema.json` was never enforced at ingest. Submissions are
+  now validated against it (unknown top-level and per-controller fields rejected, `controllers`
+  capped, `model`/`firmware` length-capped and allowlisted, `verification`/`profile`/`watchdog`
+  constrained to their enums) and only a normalized projection is persisted. A test asserts the
+  worker's allowlists and the shipped schema stay in agreement.
+- **The CORS allowlist was not a request-blocking control** - the worker omitted
+  `Access-Control-Allow-Origin` for non-allowlisted origins but still executed the KV write, and
+  omitting the header only stops an attacker reading the response, not the write landing. A simple
+  cross-origin `POST` therefore made any website's visitors submit records. A request carrying a
+  non-allowlisted `Origin` is now refused with `403` before any work, and `Content-Type:
+  application/json` is required (it is not CORS-safelisted, so a cross-origin request can never
+  skip preflight).
+- **Rate limiting was a check-then-write race, and the atomic limiter was disabled by default** -
+  the counter was read, the whole body was then read and durably written, and only afterwards was
+  the counter incremented, so concurrent requests all observed the pre-increment value. The
+  `RATE_LIMITER` binding was commented out in `wrangler.toml`, so a stock deployment silently
+  degraded to that racy path. Both limiter bindings are now required and the KV counter is gone; a
+  deployment missing either fails closed with `500` instead of degrading.
+- **`GET /nvme/compat/summary` ran ahead of the rate-limit gate** - the most expensive endpoint,
+  which enumerates the KV namespace and recomputes the aggregate per request, was the one route
+  with no throttle at all. The gate now runs before route dispatch so it covers every route, the
+  summary has its own tighter budget (`SUMMARY_RATE_LIMITER`), the computed aggregate is cached for
+  five minutes, and pagination stops at a page ceiling and reports `truncated` rather than scanning
+  an unbounded namespace.
+- **Telemetry privacy claims did not match the implementation** - three defects each contradicted a
+  documented guarantee. Submitter IPs were hashed with an **unkeyed, unsalted** SHA-256 and
+  persisted as KV keys, which the enumerable IPv4 space makes reversible, so "no IP addresses are
+  stored" did not hold; no IP-derived value is persisted at all now. `env.SALT` silently defaulted
+  to the empty string, so a deployment that forgot the secret hashed with no salt and failed open;
+  the renamed `SECRET` is mandatory and the worker returns `500` rather than serving without it.
+  And the raw `anonId` was stored verbatim inside the record value next to its own hash, nullifying
+  the design for the full one-year TTL; it is now keyed with HMAC and never persisted. The receiver
+  README has been corrected to describe the controls that actually exist.
+- **Request bodies were fully parsed and re-serialized before the size gate applied** -
+  `request.json()` deserialized an unbounded stream and only then was `JSON.stringify(body).length`
+  measured against the 16 KiB cap, so the parse cost was already paid and the re-serialization
+  doubled it. `Content-Length` is now checked first and the stream is read through a size-capped
+  reader, so an oversized body is rejected without being parsed.
 - **Elevated tool launches resolved through PATH and the current directory** — the watchdog
   service installer passed the bare string `sc.exe` to `ProcessStartInfo`, so Windows searched the
   executable directory and the working directory before `System32`. Every control verb runs
