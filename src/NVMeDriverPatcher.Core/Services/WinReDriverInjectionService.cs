@@ -7,7 +7,9 @@ namespace NVMeDriverPatcher.Services;
 public sealed class DismStep
 {
     public string Description { get; set; } = string.Empty;
-    public string Exe { get; set; } = "dism.exe";
+    // Resolved to System32 rather than left bare: WinRE injection runs elevated, so a
+    // PATH- or CWD-planted dism.exe would inherit that token.
+    public string Exe { get; set; } = SystemToolPathService.Resolve("dism.exe");
     public string[] Args { get; set; } = Array.Empty<string>();
 
     public string CommandLine => Exe + " " + string.Join(" ", Args);
@@ -220,7 +222,7 @@ public static class WinReDriverInjectionService
                 try
                 {
                     Write("[WARN] Discarding mounted WinRE image changes...");
-                    await runner("dism.exe",
+                    await runner(SystemToolPathService.Resolve("dism.exe"),
                         new[] { "/Unmount-Image", $"/MountDir:{plan.MountDir}", "/Discard" },
                         180,
                         CancellationToken.None).ConfigureAwait(false);
@@ -238,7 +240,7 @@ public static class WinReDriverInjectionService
                 try
                 {
                     Write("[WARN] Running DISM mountpoint cleanup...");
-                    await runner("dism.exe",
+                    await runner(SystemToolPathService.Resolve("dism.exe"),
                         new[] { "/Cleanup-Mountpoints" },
                         180,
                         CancellationToken.None).ConfigureAwait(false);

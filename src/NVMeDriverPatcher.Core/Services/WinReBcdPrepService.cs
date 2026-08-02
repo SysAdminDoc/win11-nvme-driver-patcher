@@ -68,7 +68,7 @@ public static class WinReBcdPrepService
         var info = new WinReProvisionInfo();
         try
         {
-            var reagentc = RunCapture("reagentc.exe", new[] { "/info" }, 20);
+            var reagentc = RunCapture(SystemToolPathService.Resolve("reagentc.exe"), new[] { "/info" }, 20);
             if (string.IsNullOrWhiteSpace(reagentc.Stdout))
             {
                 info.NeedsReagentcInstall = true;
@@ -83,7 +83,7 @@ public static class WinReBcdPrepService
 
             if (!string.IsNullOrEmpty(info.DeviceGuid))
             {
-                var bcd = RunCapture("bcdedit.exe", new[] { "/enum", info.DeviceGuid, "/v" }, 20);
+                var bcd = RunCapture(SystemToolPathService.Resolve("bcdedit.exe"), new[] { "/enum", info.DeviceGuid, "/v" }, 20);
                 var imgMatch = RxOsDevice.Match(bcd.Stdout);
                 if (imgMatch.Success)
                 {
@@ -111,7 +111,7 @@ public static class WinReBcdPrepService
     {
         try
         {
-            var result = RunCapture("reagentc.exe", new[] { "/enable" }, 30);
+            var result = RunCapture(SystemToolPathService.Resolve("reagentc.exe"), new[] { "/enable" }, 30);
             if (result.ExitCode == 0)
             {
                 log?.Invoke("[OK] WinRE enabled.");
