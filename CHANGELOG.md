@@ -2,7 +2,7 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
-## [5.3.0] - 2026-08-02
+## [5.4.0] - 2026-08-02
 
 ### Changed
 - **Unaudited-surface follow-up completed (2026-08-02)** - the offscreen workspace snapshot gate now

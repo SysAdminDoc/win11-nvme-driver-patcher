@@ -1,15 +1,15 @@
 {
-    "version":  "5.3.0",
+    "version":  "5.4.0",
     "description":  "Enable the Server 2025 Native NVMe driver on Windows 11 with full safety net",
     "homepage":  "https://github.com/SysAdminDoc/win11-nvme-driver-patcher",
     "license":  "MIT",
     "architecture":  {
                          "64bit":  {
-                                       "url":  "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.3.0/NVMeDriverPatcher.exe#/NVMeDriverPatcher.exe",
+                                       "url":  "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.4.0/NVMeDriverPatcher.exe#/NVMeDriverPatcher.exe",
                                        "hash":  "f318a65f5827c0f5de58a377c5318dd57ede8472e4f20bf882f65a3ae6f1e7e9"
                                    },
                          "arm64":  {
-                                       "url":  "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.3.0/NVMeDriverPatcher-win-arm64.exe#/NVMeDriverPatcher.exe",
+                                       "url":  "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v5.4.0/NVMeDriverPatcher-win-arm64.exe#/NVMeDriverPatcher.exe",
                                        "hash":  "610c5e69013b60ab24ce484e29b2751a1ac8aa4f450f6712c817b143c1eb05f5"
                                    }
                      },
