@@ -418,16 +418,11 @@ public partial class MainWindow : Window
         OverviewSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(16);
         MainContentSpacerColumn.Width = new GridLength(0);
         MainContentSplitter.Visibility = Visibility.Collapsed;
-        OverviewTabs.Visibility = Visibility.Collapsed;
-        MainContentSecondaryRow.Height = compact
-            ? new GridLength(1, GridUnitType.Star)
-            : GridLength.Auto;
+        MainContentSecondaryRow.Height = GridLength.Auto;
 
-        ControlsCard.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
         WorkspaceSurface.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
         FooterActionsPanel.Margin = compact ? new Thickness(0, 12, 0, 0) : new Thickness(0);
-        SettingsSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(12);
-        AuditAlertsCard.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
+        SettingsAuditCard.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
         ActivityRailSpacerColumn.Width = compact ? new GridLength(8) : new GridLength(10);
         ActivityRailColumn.Width = compact ? new GridLength(300) : new GridLength(320);
 
@@ -451,25 +446,17 @@ public partial class MainWindow : Window
             Grid.SetColumnSpan(ActivityRail, 3);
             ActivityRail.Margin = new Thickness(0, 10, 0, 0);
 
-            Grid.SetRow(ReadinessCard, 0);
-            Grid.SetColumn(ReadinessCard, 0);
-            Grid.SetColumnSpan(ReadinessCard, 3);
-
-            Grid.SetRow(ControlsCard, 1);
-            Grid.SetColumn(ControlsCard, 0);
-            Grid.SetColumnSpan(ControlsCard, 3);
-
             Grid.SetRow(WorkspaceSurface, 0);
             Grid.SetColumn(WorkspaceSurface, 0);
             Grid.SetColumnSpan(WorkspaceSurface, 3);
 
-            Grid.SetRow(PatchDefaultsCard, 0);
-            Grid.SetColumn(PatchDefaultsCard, 0);
-            Grid.SetColumnSpan(PatchDefaultsCard, 3);
+            Grid.SetRow(SettingsProfileCard, 0);
+            Grid.SetColumn(SettingsProfileCard, 0);
+            Grid.SetColumnSpan(SettingsProfileCard, 3);
 
-            Grid.SetRow(AuditAlertsCard, 1);
-            Grid.SetColumn(AuditAlertsCard, 0);
-            Grid.SetColumnSpan(AuditAlertsCard, 3);
+            Grid.SetRow(SettingsAuditCard, 1);
+            Grid.SetColumn(SettingsAuditCard, 0);
+            Grid.SetColumnSpan(SettingsAuditCard, 3);
         }
         else
         {
@@ -493,25 +480,17 @@ public partial class MainWindow : Window
             Grid.SetColumnSpan(ActivityRail, 1);
             ActivityRail.Margin = new Thickness(0);
 
-            Grid.SetRow(ReadinessCard, 0);
-            Grid.SetColumn(ReadinessCard, 0);
-            Grid.SetColumnSpan(ReadinessCard, 1);
-
-            Grid.SetRow(ControlsCard, 0);
-            Grid.SetColumn(ControlsCard, 2);
-            Grid.SetColumnSpan(ControlsCard, 1);
-
             Grid.SetRow(WorkspaceSurface, 0);
             Grid.SetColumn(WorkspaceSurface, 0);
             Grid.SetColumnSpan(WorkspaceSurface, 3);
 
-            Grid.SetRow(PatchDefaultsCard, 0);
-            Grid.SetColumn(PatchDefaultsCard, 0);
-            Grid.SetColumnSpan(PatchDefaultsCard, 1);
+            Grid.SetRow(SettingsProfileCard, 0);
+            Grid.SetColumn(SettingsProfileCard, 0);
+            Grid.SetColumnSpan(SettingsProfileCard, 1);
 
-            Grid.SetRow(AuditAlertsCard, 0);
-            Grid.SetColumn(AuditAlertsCard, 2);
-            Grid.SetColumnSpan(AuditAlertsCard, 1);
+            Grid.SetRow(SettingsAuditCard, 0);
+            Grid.SetColumn(SettingsAuditCard, 2);
+            Grid.SetColumnSpan(SettingsAuditCard, 1);
         }
     }
 

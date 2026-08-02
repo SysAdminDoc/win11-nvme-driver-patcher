@@ -113,6 +113,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   itself does. Added the two missing deletes, plus a warning that a FeatureStore-fallback install
   cannot be reverted by registry deletions alone (`nvmedisk` can still bind after reboot).
   Documented the service-name entries in the registry-components section.
+- **Compact Settings layout used hidden pre-redesign cards and left the live action row clipped** —
+  adaptive layout now targets the live profile and audit cards, gives the compact view real stacked
+  rows, and keeps the workspace activity row from consuming an unused second star row. The retired
+  `OverviewTabs` subtree and its dangling code-behind mutations are removed; the offscreen
+  accessibility harness now proves the compact card and both action buttons remain visible.
 
 ## [5.2.0] — 2026-07-29
 
