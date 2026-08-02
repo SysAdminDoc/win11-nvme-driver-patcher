@@ -24,40 +24,6 @@ being written down. **Six suspicions were investigated and discarded as false po
 than logged (see "Checked and found clean" at the end) — that list is deliberately included so a
 future pass does not re-raise them.
 
-- [ ] P2 — `BrushResources` carries a second, stale copy of the dark palette: 33 of 34 tokens disagree with `DarkTheme.xaml`
-  Category: visual
-  Where: `src/NVMeDriverPatcher/Views/BrushResources.cs:11-48` (`SemanticFallbacks`) versus
-  `src/NVMeDriverPatcher/Themes/DarkTheme.xaml`.
-  Problem: `BrushResources.SemanticFallbacks` hardcodes a complete 34-token palette used whenever
-  `owner.TryFindResource(key)` does not return a `Brush`. It is a duplicate source of truth for
-  colour and it has drifted from the theme it is supposed to mirror — **33 of 34 entries differ**;
-  only `AccentForeground` (`#FFFFFFFF`) still matches. Examples: `Accent` theme `#FF2F8CFF` vs code
-  `#FF2563EB`; `BgDarkest` `#FF070E18` vs `#FF0D0F13`; `Green` `#FF51E0AA` vs `#FF7AD7AE`; `Red`
-  `#FFFF7C82` vs `#FFF0A1A1`. Anything that ever falls back renders in the pre-v5.2.0 palette. The
-  table is consumed by the code-drawn surfaces (SkiaSharp/LiveCharts colours in
-  `BenchmarkComparisonView`, `TelemetryView`, `TuningPanel`, and `ThemedDialog`), which is exactly
-  where an off-brand colour would be least obvious.
-  Evidence: extracted both tables and diffed them programmatically (33 drifted / 1 matching).
-  `git log` pins the cause: `4d9647b` ("style: distinguish telemetry error tone; fix off-palette
-  chart fallback") deliberately synced this table on 2026-07-14, and `e53ca71`
-  ("feat: add a safety journey rail…", the v5.2.0 feature) then rewrote the `DarkTheme.xaml`
-  palette — `Accent` `#FF2563EB`→`#FF2F8CFF` — without touching `BrushResources.cs`. The guard a
-  previous audit installed has silently rotted because nothing pins the two together.
-  Reachability caveat: every key in the table exists in `DarkTheme.xaml`, which `App.xaml` merges
-  and which `LightTheme.xaml`/`HighContrastTheme.xaml` merge in turn, so `TryFindResource` is
-  expected to succeed in normal operation and the fallbacks are believed to be effectively dead
-  today. The defect is the un-pinned duplicate, not a currently-visible miscolour.
-  Fix: preferred — delete `SemanticFallbacks` and have `Resolve`/`ResolveColor` fall back to
-  `Application.Current?.Resources[key]` (still a real theme lookup), keeping only
-  `GenericFallbackHex` as the last resort. If the table is kept deliberately, add a unit test that
-  parses `DarkTheme.xaml` and asserts every `SemanticFallbacks` entry equals the theme's value for
-  the same key — the repo already uses exactly this drift-gate pattern in
-  `PowerShellModuleDriftTests` and `TelemetryReceiverSummaryTests.WorkerFieldAllowlists_MatchTheShippedSchema`.
-  Acceptance: either `SemanticFallbacks` no longer exists, or a new test fails when a
-  `DarkTheme.xaml` colour is changed without updating the code table, and passes once both agree.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — Non-structural history-database failures leave no trace at all in Release builds
   Category: reliability
   Where: `src/NVMeDriverPatcher.Core/Services/DataService.cs:45-62` (`RecordStructuralFailure`) and

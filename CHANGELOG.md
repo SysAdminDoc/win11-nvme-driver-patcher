@@ -127,6 +127,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   now subscribe to the static theme event while loaded and detach only while unloaded, so returning
   to a workspace tab restores live axis and series colors. A WPF lifecycle regression test covers the
   unload/reload sequence.
+- **Code-drawn color fallbacks could drift from the active palette** — the stale semantic fallback
+  table is gone; brush resolution now consults the application theme before using one neutral generic
+  fallback, keeping Skia/LiveCharts surfaces on the same palette as the rest of the window.
 
 ## [5.2.0] — 2026-07-29
 
