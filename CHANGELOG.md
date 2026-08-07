@@ -32,6 +32,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   boot may run Windows boot recovery, which can promote the pre-patch LastKnownGood control set
   and silently drop every patch key. Advisory warning, read-only, absent on healthy systems.
 
+### Fixed
+- `dry-run` / "Preview Changes" now shows the control-set mirror writes. Mirroring made the
+  preview under-report the real change set, which is precisely what that command exists to
+  prevent; both the install and uninstall previews now account for it.
+
 ### Changed
 - The post-reboot "Patch no longer present" verdict now names Windows boot recovery — a
   scheduled chkdsk, a deleted `bootstat.dat`, or repeated failed boots promoting LastKnownGood —
