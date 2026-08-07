@@ -166,6 +166,7 @@ class Program
                 "fallback" or "vivetool-fallback" or "apply-fallback" => FallbackCommand(config, forceUnsupportedBuild),
                 "recovery-kit" or "export-recovery-kit" => RecoveryKitCommand(config),
                 "verify" => VerifyCommand(config),
+                "persistence-guard" or "guard" => PersistenceGuardCommand(config, args),
                 "recovery-proof" => RecoveryProofCommand(config, json),
                 "preflight" or "critical-probes" => CriticalPreflightCommand(json),
                 "dry-run" or "preview" => DryRunCommand(config),
@@ -379,7 +380,49 @@ class Program
         var recovery = FallbackRecoveryCoordinator.RunOnce(config, msg => Console.WriteLine(msg));
         if (recovery.Attempted)
             Console.WriteLine($"Fallback recovery: {recovery.Summary}");
+
+        // Strictly last on this task: both consumers above can REMOVE the patch, and a revert
+        // they just performed must never be undone by the guard in the same run. The guard reads
+        // the ledger phase they leave behind, so ordering is the whole safety argument.
+        var guard = PersistenceGuardService.RunOnce(config, msg => Console.WriteLine(msg));
+        if (guard.Decision != PersistenceGuardDecision.Disabled &&
+            guard.Decision != PersistenceGuardDecision.NothingToDo)
+        {
+            Console.WriteLine($"Persistence guard: {guard.Summary}");
+        }
+
+        if (guard.Executed && !guard.Success) return 1;
         return outcome.Executed && !outcome.Success ? 1 : 0;
+    }
+
+    static int PersistenceGuardCommand(AppConfig config, string[] args)
+    {
+        var change = PersistenceGuardService.ParseSettingsArgs(args);
+        if (change.Error is not null)
+        {
+            Console.Error.WriteLine(change.Error);
+            return 3;
+        }
+
+        if (change.Enable is bool enable) config.PersistenceGuardEnabled = enable;
+        if (change.MaxReapplies is int max) config.PersistenceGuardMaxReapplies = max;
+        if (change.ResetBudget) config.PersistenceGuardConsecutiveReapplies = 0;
+
+        if (change.Mutates && !ConfigService.Save(config))
+        {
+            Console.Error.WriteLine("Persistence guard settings could not be saved.");
+            return 1;
+        }
+
+        Console.WriteLine("Persistence guard");
+        Console.WriteLine("=================");
+        Console.WriteLine($"  Enabled:              {(config.PersistenceGuardEnabled ? "yes" : "no")}");
+        Console.WriteLine($"  Re-apply budget:      {config.PersistenceGuardConsecutiveReapplies}/{config.PersistenceGuardMaxReapplies} used");
+        Console.WriteLine();
+        Console.WriteLine("  Restores a patch that Windows removed without an uninstall — usually a boot-recovery");
+        Console.WriteLine("  promotion of a pre-patch control set. Runs on the boot task, after the watchdog's");
+        Console.WriteLine("  auto-revert and the fallback reset, so a deliberate revert always wins.");
+        return 0;
     }
 
     static int GuardrailsCommand()
@@ -1239,6 +1282,9 @@ class Program
             return 1;
         }
 
+        // A human asked for this apply, which is the condition the guard's budget waits for.
+        PersistenceGuardService.ResetBudget(config);
+
         var result = PatchService.Install(
             config,
             preflight.NativeNVMeStatus,
@@ -1312,6 +1358,8 @@ class Program
         // instead of "Unknown -> Unknown".
         var nativeStatus = DriveService.TestNativeNVMeActive();
         var bypassStatus = DriveService.GetBypassIOStatus();
+        // A deliberate removal must never be undone by the guard on the next boot.
+        PersistenceGuardService.ResetBudget(config);
         var result = PatchService.Uninstall(config, nativeStatus, bypassStatus, msg => Console.WriteLine(msg));
         bool watchdogDisarmed = true;
         if (result.Success)

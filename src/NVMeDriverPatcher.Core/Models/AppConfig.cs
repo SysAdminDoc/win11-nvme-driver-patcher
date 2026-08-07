@@ -141,6 +141,20 @@ public class AppConfig
     public bool IncludeServerKey { get; set; }
     public bool SkipWarnings { get; set; }
     public bool CompatTelemetryEnabled { get; set; } = true;
+
+    // Persistence guard (issue #15). OFF by default: it re-arms a boot-critical driver without a
+    // human present, so it must be an explicit choice. See PersistenceGuardService.
+    public bool PersistenceGuardEnabled { get; set; }
+    private int _persistenceGuardMaxReapplies = Services.PersistenceGuardService.DefaultMaxConsecutiveReapplies;
+    /// <summary>Consecutive automatic re-applies before the guard stands down. Clamped: 0 disables
+    /// re-apply entirely, and an unbounded value would be a boot-loop generator.</summary>
+    public int PersistenceGuardMaxReapplies
+    {
+        get => _persistenceGuardMaxReapplies;
+        set => _persistenceGuardMaxReapplies = Math.Clamp(value, 0, 10);
+    }
+    /// <summary>Re-applies since the last deliberate user apply/remove. Reset by PersistenceGuardService.</summary>
+    public int PersistenceGuardConsecutiveReapplies { get; set; }
     public AppThemeMode ThemeMode { get; set; } = AppThemeMode.System;
     // Default to Safe — primary flag only. Users can opt into Full after reading the tradeoff.
     public PatchProfile PatchProfile { get; set; } = PatchProfile.Safe;

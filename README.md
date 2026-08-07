@@ -192,7 +192,7 @@ NVMeDriverPatcher.Cli.exe apply --safe
 .\NVMe_Driver_Patcher.ps1 -ExportRecoveryKit
 ```
 
-### Extended CLI (C# binary — 60 commands)
+### Extended CLI (C# binary — 61 commands)
 
 Run `NVMeDriverPatcher.Cli help` for the full grouped command reference.
 
@@ -202,6 +202,8 @@ NVMeDriverPatcher.Cli status                              # Patch state + build 
 NVMeDriverPatcher.Cli apply --safe                         # Apply with Safe Mode profile
 NVMeDriverPatcher.Cli apply --dry-run                      # Preview registry changes only
 NVMeDriverPatcher.Cli remove                               # Undo the patch
+NVMeDriverPatcher.Cli persistence-guard                    # Show the boot-time persistence guard
+NVMeDriverPatcher.Cli persistence-guard --on --max=2       # Restore a patch Windows removed on its own
 
 # Recovery
 NVMeDriverPatcher.Cli recovery-kit                         # Generate WinRE recovery kit

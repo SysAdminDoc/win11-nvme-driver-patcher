@@ -94,5 +94,31 @@
       <disabledValue><decimal value="0" /></disabledValue>
     </policy>
 
+    <policy name="PersistenceGuardEnabled"
+            class="Machine"
+            displayName="$(string.POL_PersistenceGuard)"
+            explainText="$(string.POL_PersistenceGuard_Explain)"
+            key="SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher"
+            valueName="PersistenceGuardEnabled">
+      <parentCategory ref="NVMeDriverPatcher" />
+      <supportedOn ref="SUPPORTED_Win11_22000" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+
+    <policy name="PersistenceGuardMaxReapplies"
+            class="Machine"
+            displayName="$(string.POL_PersistenceGuardMax)"
+            explainText="$(string.POL_PersistenceGuardMax_Explain)"
+            key="SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher">
+      <parentCategory ref="NVMeDriverPatcher" />
+      <supportedOn ref="SUPPORTED_Win11_22000" />
+      <elements>
+        <decimal id="PersistenceGuardMaxReapplies"
+                 valueName="PersistenceGuardMaxReapplies"
+                 minValue="0" maxValue="10" />
+      </elements>
+    </policy>
+
   </policies>
 </policyDefinitions>

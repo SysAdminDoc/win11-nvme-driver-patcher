@@ -11,6 +11,8 @@ public class PolicyOverlay
     public bool? WatchdogAutoRevert { get; set; }
     public int? WatchdogWindowHours { get; set; }
     public bool? CompatTelemetryEnabled { get; set; }
+    public bool? PersistenceGuardEnabled { get; set; }
+    public int? PersistenceGuardMaxReapplies { get; set; }
 
     public bool AnyApplied =>
         PatchProfile is not null || IncludeServerKey is not null || SkipWarnings is not null ||
@@ -43,6 +45,10 @@ public static class GpoPolicyService
             // wrapped values from a malformed GPO must not break watchdog timer math.
             overlay.WatchdogWindowHours = ReadIntDword(key, "WatchdogWindowHours", min: 1, max: 168);
             overlay.CompatTelemetryEnabled = ReadBoolDword(key, "CompatTelemetryEnabled");
+            overlay.PersistenceGuardEnabled = ReadBoolDword(key, "PersistenceGuardEnabled");
+            // Same bounds as AppConfig's clamp: 0 means detect-but-never-act, and an unbounded
+            // value from a malformed GPO must not become a boot-loop generator.
+            overlay.PersistenceGuardMaxReapplies = ReadIntDword(key, "PersistenceGuardMaxReapplies", min: 0, max: 10);
         }
         catch
         {
@@ -61,6 +67,8 @@ public static class GpoPolicyService
         if (overlay.IncludeServerKey is bool inc) config.IncludeServerKey = inc;
         if (overlay.SkipWarnings is bool skip) config.SkipWarnings = skip;
         if (overlay.CompatTelemetryEnabled is bool telem) config.CompatTelemetryEnabled = telem;
+        if (overlay.PersistenceGuardEnabled is bool guard) config.PersistenceGuardEnabled = guard;
+        if (overlay.PersistenceGuardMaxReapplies is int guardMax) config.PersistenceGuardMaxReapplies = guardMax;
 
         if (overlay.WatchdogAutoRevert is not null || overlay.WatchdogWindowHours is not null)
         {

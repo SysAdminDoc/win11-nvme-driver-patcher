@@ -90,6 +90,9 @@ public partial class MainViewModel
             ButtonsEnabled = false;
             ApplyEnabled = false;
 
+        // A human asked for this apply, which is the condition the guard's budget waits for.
+        PersistenceGuardService.ResetBudget(Config);
+
         var result = await Task.Run(() => PatchService.Install(
             Config,
             _preflight.NativeNVMeStatus,
@@ -230,6 +233,9 @@ public partial class MainViewModel
 
         ButtonsEnabled = false;
         RemoveEnabled = false;
+
+        // A deliberate removal must never be undone by the guard on the next boot.
+        PersistenceGuardService.ResetBudget(Config);
 
         var result = await Task.Run(() => PatchService.Uninstall(
             Config,
