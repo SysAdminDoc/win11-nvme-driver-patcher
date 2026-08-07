@@ -127,10 +127,39 @@ public static class SafeBootStateService
     }
 
     /// <summary>Capture the prior state of every managed key.</summary>
-    public static SafeBootJournal CaptureJournal(ISafeBootRegistry registry, string capturedUtc)
+    /// <summary>
+    /// Pure: every SafeBoot key the patch manages, including the per-control-set mirrors written
+    /// so a boot-recovery promotion cannot drop them (issue #15). Mirroring the journal as well as
+    /// the writes is what keeps uninstall byte-exact — restore iterates the journal, so a mirrored
+    /// key that never entered the journal would survive removal.
+    /// </summary>
+    public static IReadOnlyList<(string Path, string ExpectedDefault)> ManagedKeysFor(
+        IReadOnlyList<string>? mirrorControlSets)
+    {
+        if (mirrorControlSets is not { Count: > 0 }) return ManagedKeys;
+
+        var keys = new List<(string Path, string ExpectedDefault)>(ManagedKeys);
+        foreach (var controlSet in mirrorControlSets)
+        {
+            foreach (var (path, expected) in ManagedKeys)
+            {
+                var mirrored = ControlSetService.MirrorPath(path, controlSet);
+                if (mirrored is not null) keys.Add((mirrored, expected));
+            }
+        }
+        return keys;
+    }
+
+    public static SafeBootJournal CaptureJournal(ISafeBootRegistry registry, string capturedUtc) =>
+        CaptureJournal(registry, capturedUtc, mirrorControlSets: null);
+
+    public static SafeBootJournal CaptureJournal(
+        ISafeBootRegistry registry,
+        string capturedUtc,
+        IReadOnlyList<string>? mirrorControlSets)
     {
         var journal = new SafeBootJournal { CapturedUtc = capturedUtc };
-        foreach (var (path, expected) in ManagedKeys)
+        foreach (var (path, expected) in ManagedKeysFor(mirrorControlSets))
         {
             var snap = registry.Read(path);
             journal.Entries.Add(new SafeBootJournalEntry
