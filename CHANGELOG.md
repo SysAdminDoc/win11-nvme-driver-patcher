@@ -2,6 +2,25 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [5.5.0] - 2026-08-07
+
+### Added
+- Preflight `BootRecoveryRisk` check (issue #15): warns when a boot-time chkdsk is scheduled
+  (`chkdsk /f` rewrites the Session Manager `BootExecute` autochk entry) or when Windows has
+  marked a control set as a failed boot (`SYSTEM\Select\Failed`). Either signal means the next
+  boot may run Windows boot recovery, which can promote the pre-patch LastKnownGood control set
+  and silently drop every patch key. Advisory warning, read-only, absent on healthy systems.
+
+### Changed
+- The post-reboot "Patch no longer present" verdict now names Windows boot recovery — a
+  scheduled chkdsk, a deleted `bootstat.dat`, or repeated failed boots promoting LastKnownGood —
+  as a likely cause alongside uninstall and Windows updates, and states that re-applying is safe
+  (issue #15). Previously the attribution was misleadingly limited to "uninstalled or a Windows
+  update".
+- ROADMAP: the mutation half of issue #15 is specified as two prioritized items — mirroring
+  patch writes into every existing ControlSet00N (apply/remove symmetry), and an opt-in
+  boot-time persistence guard on the existing `BootVerify` task.
+
 ## [5.4.0] - 2026-08-02
 
 ### Changed

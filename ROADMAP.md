@@ -1,12 +1,52 @@
 # NVMe Driver Patcher — Roadmap
 
-Living document — **incomplete work only**. Shipped items are deleted (git history + [CHANGELOG.md](CHANGELOG.md) are the record). Blocked items live in [Roadmap_Blocked.md](Roadmap_Blocked.md). Current ship: **v5.4.0**.
+Living document — **incomplete work only**. Shipped items are deleted (git history + [CHANGELOG.md](CHANGELOG.md) are the record). Blocked items live in [Roadmap_Blocked.md](Roadmap_Blocked.md). Current ship: **v5.5.0**.
 
 **Scope rule:** every item must improve the core function — enabling, disabling, verifying, or rolling back Microsoft's native NVMe driver swap on Windows 11. No external integrations, no general-purpose storage tools, no theme/UI-locale polish. If an idea drifts into "separate tool that happens to live in the same exe," it doesn't belong here. Priority is by user impact / regret cost, not effort; S/M/L/XL are rough effort estimates.
 
 ---
 
 Items waiting on external resources (hardware, VMs, live validation, credentials) live in [Roadmap_Blocked.md](Roadmap_Blocked.md).
+
+---
+
+## P1 — Mirror patch writes into every existing ControlSet00N (issue #15, part 1)
+  Why: GitHub issue #15 — `chkdsk /f c:` or an offline `bootstat.dat` deletion makes the next
+  boot run Windows boot recovery, which can promote the LastKnownGood control set. Apply writes
+  only `SYSTEM\CurrentControlSet\...` while removal already sweeps `ControlSet001–009`
+  (`RecoveryKitService.cs:270`, README "for /L %N" removal), so a promoted pre-patch set simply
+  lacks every override and SafeBoot key and the machine "reverts" to stornvme. Writing the same
+  flags into every *existing* control set (enumerated, never created; skip the one
+  `SYSTEM\Select\Current` points at) makes recovery-boot promotion a non-event.
+  Evidence: `PatchService.BuildRequiredRegistryMutations` (`PatchService.cs:37-90`) targets
+  `AppConfig.cs:53-64` CurrentControlSet paths only; `PatchVerificationService.cs:237` classifies
+  the resulting keys-gone state as Reverted; v5.5.0 shipped the diagnosis half (preflight
+  `BootRecoveryRisk` check + honest Reverted attribution).
+  Touches: `PatchService.BuildRequiredRegistryMutations` (new `mirrorControlSets` parameter,
+  mirrors with `CountsTowardPatchTotal:false`), a `SYSTEM\Select`/subkey enumerator,
+  `MutationLedgerService.CaptureBaseline` + `RestoreOriginalState` (baseline must capture the
+  mirrored paths or exact-restore breaks — this is the hard part), `RecoveryKitService`
+  consistency, `DurableRegistryCommitServiceTests`.
+  Acceptance: Apply on a machine with ControlSet001+002 writes both sets and the ledger baseline
+  records both; RestoreOriginalState removes both exactly; simulated LastKnownGood promotion
+  (registry rename in a VM) leaves the patch keys present; verification totals unchanged.
+  Complexity: L (ledger baseline symmetry is the bulk)
+
+## P2 — Opt-in boot-time persistence guard (issue #15, part 2)
+  Why: Even with mirrored control sets, Startup Repair's driver-rollback diagnostics can remove
+  the keys outright. The `BootVerify` ONSTART/SYSTEM task already runs revert-only consumers;
+  a `PersistenceGuardService` re-applying a patch the ledger says the user never removed
+  (`VerificationOutcome.Reverted` + terminal ledger phase `Applied`/`Verified`) closes the loop.
+  Touches: new `PersistenceGuardService` (pure decision function + executor, mirroring
+  `AutoRevertService` shape), wired at `Cli/Program.cs` strictly AFTER `AutoRevertService.MaybeRun`
+  and `FallbackRecoveryCoordinator.RunOnce` so watchdog reverts always win; `AppConfig` opt-in
+  field (off by default, bump ConfigVersion), ADMX knob, CLI command (updates the
+  release-validated command count), README.
+  Acceptance: Guard refuses after N consecutive re-applies (persisted counter), hard-defers when
+  the watchdog is Unstable, honors `BuildActionPolicyService` and the fail-closed startup latch;
+  a deliberate `remove` is never overridden. Anti-boot-loop truth table unit-tested.
+  Complexity: L — and if validation requires live boot-failure reproduction, cut to
+  Roadmap_Blocked.md per the scope rule.
 
 ---
 
