@@ -14,6 +14,18 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   a reused baseline is never written beyond what it can restore. Control sets are only enumerated,
   never created, mirrors never count toward the patch total, and an unreadable `SYSTEM` hive
   simply yields no mirrors.
+- Opt-in boot-time persistence guard (issue #15). Control-set mirroring covers a promoted spare
+  set; it cannot cover Startup Repair deleting the keys outright. When post-reboot verification
+  says the patch is gone but the mutation ledger says the user never uninstalled it, the guard
+  re-applies. It is **off by default** — it re-arms a boot-critical driver with no human present —
+  and every gate is fail-closed: it runs strictly after the watchdog auto-revert and the
+  FeatureStore fallback reset so a deliberate revert always wins, defers when the watchdog reports
+  Unstable *or* cannot vouch for the machine at all, respects build policy and the fail-closed
+  startup-recovery latch, and spends a consecutive re-apply budget (default 2, `0` = detect and
+  log only) *before* mutating, so a machine that keeps losing the patch stops being re-patched
+  instead of being pushed into a boot loop. Any deliberate apply or removal resets the budget.
+  Configure with `persistence-guard --on|--off|--max=<0-10>|--reset`, or the two new ADMX policies.
+  Deliberately not wired into GUI startup: a launching user is present and can click Apply.
 - Preflight `BootRecoveryRisk` check (issue #15): warns when a boot-time chkdsk is scheduled
   (`chkdsk /f` rewrites the Session Manager `BootExecute` autochk entry) or when Windows has
   marked a control set as a failed boot (`SYSTEM\Select\Failed`). Either signal means the next

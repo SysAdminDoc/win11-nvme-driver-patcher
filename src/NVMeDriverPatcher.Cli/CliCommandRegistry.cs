@@ -46,6 +46,10 @@ public static class CliCommandRegistry
             "Show exactly what apply would change — no registry writes"),
         new("verify", [], CommandGroup.Lifecycle,
             "Generate post-reboot verification script"),
+        new("persistence-guard", ["guard"], CommandGroup.Lifecycle,
+            "Show or set the boot-time persistence guard that restores a patch Windows removed " +
+            "(--on, --off, --max=<0-10>, --reset)",
+            RiskLevel.Caution),
         new("recovery-proof", [], CommandGroup.Recovery,
             "Check recovery infrastructure readiness (exit: 0=ready, 1=not ready)"),
         new("preflight", ["critical-probes"], CommandGroup.Diagnostics,

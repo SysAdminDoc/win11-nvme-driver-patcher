@@ -26,6 +26,10 @@ Not configured = user choice, defaulting to Safe.</string>
       <string id="POL_SkipWarnings_Explain">Suppresses the pre-patch confirmation dialogs. Use only for imaging and attended lab deployments.</string>
 
       <string id="POL_WatchdogAutoRevert">Enable watchdog auto-revert on instability</string>
+      <string id="POL_PersistenceGuard">Enable boot-time persistence guard</string>
+      <string id="POL_PersistenceGuard_Explain">When enabled, a boot-time task restores the patch if Windows removed it without an uninstall - typically a boot-recovery promotion of a control set that predates the patch, which a scheduled chkdsk /f or a deleted bootstat.dat can trigger. The guard runs after the watchdog auto-revert and the FeatureStore fallback reset, so a deliberate revert always wins, and it stands down after the configured number of consecutive automatic re-applies.</string>
+      <string id="POL_PersistenceGuardMax">Persistence guard: consecutive re-apply limit</string>
+      <string id="POL_PersistenceGuardMax_Explain">How many times in a row the persistence guard may automatically re-apply the patch before standing down and requiring a manual apply. Set to 0 to detect the removal and log it without ever re-applying. Default is 2.</string>
       <string id="POL_WatchdogAutoRevert_Explain">When enabled, the post-patch watchdog can stage an automatic revert on the next boot if storage-stack event counts (Storport 129, disk 51/153, BugCheck 1001, Kernel-Power 41) exceed the configured threshold within the watchdog window.</string>
 
       <string id="POL_WatchdogWindowHours">Watchdog observation window (hours)</string>
