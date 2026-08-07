@@ -286,6 +286,18 @@ public static class PreflightService
         }
         catch { /* advisory */ }
 
+        // Boot recovery risk: a scheduled boot-time chkdsk (chkdsk /f), or a control set Windows
+        // has marked as failed, means the next boot may run boot recovery — which can promote the
+        // LastKnownGood control set. That set predates the patch, so its promotion silently drops
+        // every override and SafeBoot key and rebinds legacy stornvme (issue #15). Warning, only
+        // when a signal is actually present.
+        try
+        {
+            var bootRisk = ClassifyBootRecoveryRisk(ReadBootExecute(), ReadFailedControlSet());
+            if (bootRisk is not null) checks["BootRecoveryRisk"] = bootRisk;
+        }
+        catch { /* advisory */ }
+
         // Working-directory free space: the patch writes are tiny, but recovery kits, benchmark
         // files, diagnostics exports, support bundles, and logs all land in the working dir — a
         // full disk makes those fail silently. Warning, only when actually low.
@@ -474,6 +486,44 @@ public static class PreflightService
         if (windowsUpdateRebootRequired) sources.Add("Windows Update");
         return new(CheckStatus.Warning,
             $"Reboot pending ({string.Join(" + ", sources)}) — restart Windows first, then retry the patch");
+    }
+
+    /// <summary>
+    /// Pure: Warning when a scheduled boot-time chkdsk or a failed-control-set marker means the
+    /// next boot may run Windows boot recovery, which can promote the pre-patch LastKnownGood
+    /// control set and drop every patch key (issue #15). Null when neither signal is present.
+    /// The default BootExecute entry is exactly "autocheck autochk *"; chkdsk /f replaces or
+    /// augments it with volume-specific arguments.
+    /// </summary>
+    internal static PreflightCheck? ClassifyBootRecoveryRisk(IReadOnlyList<string>? bootExecute, int? failedControlSet)
+    {
+        var reasons = new List<string>();
+        if (bootExecute is not null && bootExecute.Any(static line =>
+                line.Contains("autochk", StringComparison.OrdinalIgnoreCase) &&
+                !line.Trim().Equals("autocheck autochk *", StringComparison.OrdinalIgnoreCase)))
+        {
+            reasons.Add("a boot-time disk check is scheduled (chkdsk /f)");
+        }
+        if (failedControlSet is > 0)
+            reasons.Add($"Windows marked ControlSet{failedControlSet:000} as a failed boot");
+        if (reasons.Count == 0) return null;
+        return new(CheckStatus.Warning,
+            $"Boot recovery risk: {string.Join(", and ", reasons)}. A recovery boot can promote a " +
+            "pre-patch control set, silently reverting to the legacy NVMe driver — re-run Verify " +
+            "after the next reboot and re-apply if the patch is gone");
+    }
+
+    private static IReadOnlyList<string>? ReadBootExecute()
+    {
+        using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+            @"SYSTEM\CurrentControlSet\Control\Session Manager");
+        return key?.GetValue("BootExecute") as string[];
+    }
+
+    private static int? ReadFailedControlSet()
+    {
+        using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\Select");
+        return key?.GetValue("Failed") as int?;
     }
 
     /// <summary>Pure: Warning when free space is known and below the floor, else null (unknown or healthy).</summary>

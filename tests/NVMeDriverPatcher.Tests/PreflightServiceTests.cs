@@ -26,6 +26,45 @@ public sealed class PreflightServiceTests
         Assert.False(PreflightService.AllCriticalPassed(new() { ["VeraCrypt"] = check }));
     }
 
+    // --- Boot-recovery-risk classification (issue #15) ---
+
+    [Fact]
+    public void ClassifyBootRecoveryRisk_HealthySignals_ReturnsNull()
+    {
+        Assert.Null(PreflightService.ClassifyBootRecoveryRisk(
+            new[] { "autocheck autochk *" }, failedControlSet: 0));
+        Assert.Null(PreflightService.ClassifyBootRecoveryRisk(null, null));
+    }
+
+    [Fact]
+    public void ClassifyBootRecoveryRisk_ScheduledChkdsk_Warns()
+    {
+        var check = PreflightService.ClassifyBootRecoveryRisk(
+            new[] { @"autocheck autochk /p \??\C:" }, failedControlSet: 0);
+        Assert.NotNull(check);
+        Assert.Equal(CheckStatus.Warning, check!.Status);
+        Assert.Contains("chkdsk /f", check.Message);
+        Assert.False(check.Critical);
+    }
+
+    [Fact]
+    public void ClassifyBootRecoveryRisk_FailedControlSet_WarnsAndNamesIt()
+    {
+        var check = PreflightService.ClassifyBootRecoveryRisk(
+            new[] { "autocheck autochk *" }, failedControlSet: 2);
+        Assert.NotNull(check);
+        Assert.Contains("ControlSet002", check!.Message);
+    }
+
+    [Fact]
+    public void ClassifyBootRecoveryRisk_NonAutochkBootExecuteEntries_AreIgnored()
+    {
+        // Third-party tools add their own BootExecute lines; only a modified autochk line
+        // means a disk check is scheduled.
+        Assert.Null(PreflightService.ClassifyBootRecoveryRisk(
+            new[] { "autocheck autochk *", "sdnclean64.exe" }, failedControlSet: 0));
+    }
+
     // --- Pending-reboot classification ---
 
     [Fact]
