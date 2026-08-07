@@ -36,7 +36,20 @@ public static class PatchService
 {
     internal static IReadOnlyList<DurableRegistryMutation> BuildRequiredRegistryMutations(
         PatchProfile profile,
-        bool includeServer)
+        bool includeServer) => BuildRequiredRegistryMutations(profile, includeServer, mirrorControlSets: null);
+
+    /// <summary>
+    /// The canonical write set. When <paramref name="mirrorControlSets"/> is non-empty every
+    /// CurrentControlSet-scoped write is duplicated into those control sets so that a boot-recovery
+    /// promotion of a spare set cannot silently drop the patch (issue #15). Mirrors never count
+    /// toward the patch total: they are durability insurance, not components the user asked for,
+    /// and a machine with a different number of spare control sets must not report a different
+    /// "applied N of M".
+    /// </summary>
+    internal static IReadOnlyList<DurableRegistryMutation> BuildRequiredRegistryMutations(
+        PatchProfile profile,
+        bool includeServer,
+        IReadOnlyList<string>? mirrorControlSets)
     {
         var mutations = new List<DurableRegistryMutation>();
         var featureIds = new List<string>(AppConfig.GetFeatureIDsForProfile(profile));
@@ -86,7 +99,36 @@ public static class PatchService
             "SafeBoot Network (service name) - 25H2 compatibility",
             CountsTowardPatchTotal: false));
 
+        if (mirrorControlSets is { Count: > 0 })
+            mutations.AddRange(BuildControlSetMirrors(mutations, mirrorControlSets));
+
         return mutations;
+    }
+
+    /// <summary>
+    /// Pure: the mirror copies of <paramref name="primary"/> for each control set. A mutation whose
+    /// path is not CurrentControlSet-scoped has no mirror and is skipped rather than guessed at.
+    /// </summary>
+    private static List<DurableRegistryMutation> BuildControlSetMirrors(
+        IReadOnlyList<DurableRegistryMutation> primary,
+        IReadOnlyList<string> mirrorControlSets)
+    {
+        var mirrors = new List<DurableRegistryMutation>();
+        foreach (var controlSet in mirrorControlSets)
+        {
+            foreach (var mutation in primary)
+            {
+                var mirroredPath = ControlSetService.MirrorPath(mutation.Path, controlSet);
+                if (mirroredPath is null) continue;
+                mirrors.Add(mutation with
+                {
+                    Path = mirroredPath,
+                    Label = $"{mutation.Label} [{controlSet}]",
+                    CountsTowardPatchTotal = false
+                });
+            }
+        }
+        return mirrors;
     }
 
     public static PatchOperationResult Install(
@@ -160,11 +202,22 @@ public static class PatchService
         // registry write. It captures all feature values (including pre-existing values), every
         // SafeBoot key, and—when readable—the FeatureStore state. Reapply reuses the first clean
         // baseline instead of overwriting it with already-patched state.
+        // Mirror the writes into every spare control set so a boot-recovery promotion cannot
+        // silently drop the patch (issue #15). Enumeration is advisory - an unreadable SYSTEM hive
+        // yields no mirrors and the patch proceeds exactly as it did before.
+        var mirrorControlSets = ControlSetService.GetMirrorTargets();
+        if (mirrorControlSets.Count > 0)
+        {
+            log?.Invoke($"Mirroring patch state into {mirrorControlSets.Count} spare control set(s): " +
+                        string.Join(", ", mirrorControlSets));
+        }
+
         var ledgerPreparation = MutationLedgerService.PrepareRegistryPatch(
             workingDir,
             profile,
             includeServer,
             featureIDsToApply,
+            mirrorControlSets,
             log);
         if (!ledgerPreparation.Success || ledgerPreparation.Ledger is null)
         {
@@ -235,8 +288,11 @@ public static class PatchService
             // SetValue may land even when Flush or a fresh read fails, so any failed batch
             // routes through the exact-baseline ledger restore before MarkApplied is reachable.
             mutationMayHaveLanded = true;
+            // Use the ledger's mirror set, not the freshly enumerated one: when an earlier clean
+            // baseline is reused, that baseline is what bounds the restorable write surface.
             var registryBatch = DurableRegistryCommitService.CommitAll(
-                BuildRequiredRegistryMutations(profile, includeServer),
+                BuildRequiredRegistryMutations(
+                    profile, includeServer, ledgerPreparation.Ledger.MirroredControlSets),
                 registryPlatform,
                 log);
             successCount = registryBatch.CountedCommitted;

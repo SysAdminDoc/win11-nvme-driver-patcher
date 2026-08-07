@@ -5,6 +5,15 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [5.5.0] - 2026-08-07
 
 ### Added
+- Patch writes are now mirrored into every spare `ControlSet00N`, not just `CurrentControlSet`
+  (issue #15). Windows boot recovery — triggered by a scheduled `chkdsk /f`, a deleted
+  `bootstat.dat`, or repeated failed boots — can promote the LastKnownGood control set, which was
+  cloned before the patch and therefore contained none of its keys; the machine then rebound the
+  legacy stornvme driver for no visible reason. Mirroring makes that promotion a non-event. The
+  mutation ledger captures the mirrored paths in the same pass, so uninstall stays byte-exact and
+  a reused baseline is never written beyond what it can restore. Control sets are only enumerated,
+  never created, mirrors never count toward the patch total, and an unreadable `SYSTEM` hive
+  simply yields no mirrors.
 - Preflight `BootRecoveryRisk` check (issue #15): warns when a boot-time chkdsk is scheduled
   (`chkdsk /f` rewrites the Session Manager `BootExecute` autochk entry) or when Windows has
   marked a control set as a failed boot (`SYSTEM\Select\Failed`). Either signal means the next

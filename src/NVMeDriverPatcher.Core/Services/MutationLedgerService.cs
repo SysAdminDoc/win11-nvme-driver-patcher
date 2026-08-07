@@ -74,6 +74,15 @@ public sealed class MutationOperationLedger
     public bool FeatureStoreTouched { get; set; }
     public bool BitLockerSuspensionPlanned { get; set; }
     public List<string> IntendedFeatureIds { get; set; } = new();
+
+    /// <summary>
+    /// The control sets this operation mirrored its writes into (issue #15). Persisted so a
+    /// recovery run restores exactly the set that was written, even if the machine's control sets
+    /// have changed since — the baseline itself is keyed by full path, and this records the intent
+    /// that produced those paths.
+    /// </summary>
+    public List<string> MirroredControlSets { get; set; } = new();
+
     public MutationBaseline Baseline { get; set; } = new();
 }
 
@@ -119,6 +128,15 @@ public static class MutationLedgerService
         bool includeServerKey,
         IEnumerable<string> intendedFeatureIds,
         Action<string>? log = null) =>
+        PrepareRegistryPatch(workingDir, profile, includeServerKey, intendedFeatureIds, null, log);
+
+    public static MutationPreparationResult PrepareRegistryPatch(
+        string workingDir,
+        PatchProfile profile,
+        bool includeServerKey,
+        IEnumerable<string> intendedFeatureIds,
+        IReadOnlyList<string>? mirrorControlSets,
+        Action<string>? log = null) =>
         Prepare(
             workingDir,
             MutationOperationKind.RegistryPatch,
@@ -126,6 +144,7 @@ public static class MutationLedgerService
             includeServerKey,
             intendedFeatureIds,
             requireFeatureStoreBaseline: false,
+            mirrorControlSets,
             log);
 
     public static MutationPreparationResult PrepareFeatureStoreFallback(
@@ -139,6 +158,7 @@ public static class MutationLedgerService
             includeServerKey: false,
             intendedFeatureIds.Select(id => id.ToString(CultureInfo.InvariantCulture)),
             requireFeatureStoreBaseline: true,
+            mirrorControlSets: null,
             log);
 
     private static MutationPreparationResult Prepare(
@@ -148,6 +168,7 @@ public static class MutationLedgerService
         bool includeServerKey,
         IEnumerable<string> intendedFeatureIds,
         bool requireFeatureStoreBaseline,
+        IReadOnlyList<string>? mirrorControlSets,
         Action<string>? log)
     {
         if (string.IsNullOrWhiteSpace(workingDir))
@@ -181,7 +202,14 @@ public static class MutationLedgerService
                     $"Interrupted mutation {prior.OperationId} must be recovered before another apply can begin.");
             }
 
-            var baseline = reuseBaseline ? prior!.Baseline : CaptureBaseline();
+            // The baseline defines what can be restored, so it also defines what may be written.
+            // Reusing an earlier clean baseline means inheriting the control sets IT captured —
+            // enumerating fresh here could mirror into a set the baseline never recorded, and
+            // RestoreOriginalState would then leave those keys behind.
+            var effectiveMirrors = reuseBaseline
+                ? (IReadOnlyList<string>)prior!.MirroredControlSets
+                : mirrorControlSets ?? [];
+            var baseline = reuseBaseline ? prior!.Baseline : CaptureBaseline(effectiveMirrors);
             if (baseline.SafeBoot.Entries.Any(entry => entry.AccessDenied))
                 return new(false, "SafeBoot pre-state could not be read exactly; refusing to mutate boot-critical state.");
 
@@ -209,6 +237,7 @@ public static class MutationLedgerService
                 IncludeServerKey = includeServerKey,
                 FeatureStoreTouched = kind == MutationOperationKind.FeatureStoreFallback,
                 IntendedFeatureIds = intendedFeatureIds.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                MirroredControlSets = effectiveMirrors.ToList(),
                 Baseline = baseline
             };
 
@@ -578,24 +607,46 @@ public static class MutationLedgerService
         return differences;
     }
 
-    private static MutationBaseline CaptureBaseline()
+    private static MutationBaseline CaptureBaseline() => CaptureBaseline(mirrorControlSets: null);
+
+    private static MutationBaseline CaptureBaseline(IReadOnlyList<string>? mirrorControlSets)
     {
         var baseline = new MutationBaseline
         {
             SafeBoot = SafeBootStateService.CaptureJournal(
-                new RealSafeBootRegistry(), DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture))
+                new RealSafeBootRegistry(),
+                DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                mirrorControlSets)
         };
 
         using (var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
         {
-            foreach (var id in AppConfig.FeatureIDs.Append(AppConfig.ServerFeatureID).Distinct())
-                baseline.RegistryValues.Add(CaptureRegistryValue(hklm, AppConfig.RegistrySubKey, id));
+            // Every path the mutation builder can write must be captured here, or
+            // RestoreOriginalState leaves the mirrors behind and uninstall stops being exact.
+            foreach (var subKey in FeatureOverrideSubKeys(mirrorControlSets))
+            {
+                foreach (var id in AppConfig.FeatureIDs.Append(AppConfig.ServerFeatureID).Distinct())
+                    baseline.RegistryValues.Add(CaptureRegistryValue(hklm, subKey, id));
+            }
         }
 
         var featureStore = CaptureFeatureStoreBaseline();
         baseline.FeatureStore = featureStore.Entries;
         baseline.FeatureStoreCaptureComplete = featureStore.Complete;
         return baseline;
+    }
+
+    /// <summary>Pure: the FeatureManagement Overrides subkeys a patch write can touch.</summary>
+    internal static IReadOnlyList<string> FeatureOverrideSubKeys(IReadOnlyList<string>? mirrorControlSets)
+    {
+        var paths = new List<string> { AppConfig.RegistrySubKey };
+        if (mirrorControlSets is not { Count: > 0 }) return paths;
+        foreach (var controlSet in mirrorControlSets)
+        {
+            var mirrored = ControlSetService.MirrorPath(AppConfig.RegistrySubKey, controlSet);
+            if (mirrored is not null) paths.Add(mirrored);
+        }
+        return paths;
     }
 
     private static (List<FeatureStoreConfigurationBaseline> Entries, bool Complete) CaptureFeatureStoreBaseline()
@@ -661,11 +712,13 @@ public static class MutationLedgerService
                         key.SetValue(value.ValueName, DecodeRegistryValue(value), (RegistryValueKind)value.Kind);
                         key.Flush();
                     }
-                    log?.Invoke($"  [LEDGER] Restored registry value {value.ValueName}.");
+                    log?.Invoke($"  [LEDGER] Restored registry value {value.KeyPath}\\{value.ValueName}.");
                 }
                 catch (Exception ex)
                 {
-                    failures.Add($"Registry {value.ValueName} ({ex.GetType().Name})");
+                    // Include the key path: mirrored control sets repeat every value name, so a
+                    // name-only failure cannot say which control set is still dirty.
+                    failures.Add($"Registry {value.KeyPath}\\{value.ValueName} ({ex.GetType().Name})");
                 }
             }
         }
