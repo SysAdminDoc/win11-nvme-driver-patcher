@@ -31,7 +31,18 @@ public class DryRunReport
 // anxious users can see the full change set before committing.
 public static class DryRunService
 {
-    public static DryRunReport PlanInstall(AppConfig config, PreflightResult? preflight = null)
+    public static DryRunReport PlanInstall(AppConfig config, PreflightResult? preflight = null) =>
+        PlanInstall(config, preflight, ControlSetService.GetMirrorTargets());
+
+    /// <summary>
+    /// Overload taking an explicit mirror set so the preview can be verified on any host. A
+    /// machine with a single control set has nothing to mirror, which would make a
+    /// live-enumeration test assert 0 == 0 and pass without exercising anything.
+    /// </summary>
+    internal static DryRunReport PlanInstall(
+        AppConfig config,
+        PreflightResult? preflight,
+        IReadOnlyList<string> mirrorControlSets)
     {
         var report = new DryRunReport
         {
@@ -81,6 +92,47 @@ public static class DryRunService
         });
         report.TotalCreates += 2;
 
+        // Apply mirrors every CurrentControlSet write into each spare control set (issue #15).
+        // A preview that omitted them would under-report the real change set, which is the whole
+        // thing this command exists to prevent.
+        foreach (var controlSet in mirrorControlSets)
+        {
+            foreach (var id in featureIDs)
+            {
+                var path = ControlSetService.MirrorPath(AppConfig.RegistrySubKey, controlSet);
+                if (path is null) continue;
+                int? current = ReadCurrentDword(path, id);
+                report.Items.Add(new DryRunPlanItem
+                {
+                    Action = "WRITE",
+                    Target = $@"HKEY_LOCAL_MACHINE\{path}",
+                    ValueName = id,
+                    Before = current is null ? "(absent)" : current.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    After = "1",
+                    Kind = "DWord",
+                    Note = $"Boot-recovery mirror ({controlSet})"
+                });
+                report.TotalWrites++;
+            }
+
+            foreach (var safeBootPath in new[] { AppConfig.SafeBootMinimalPath, AppConfig.SafeBootNetworkPath })
+            {
+                var path = ControlSetService.MirrorPath(safeBootPath, controlSet);
+                if (path is null) continue;
+                report.Items.Add(new DryRunPlanItem
+                {
+                    Action = "CREATE",
+                    Target = $@"HKEY_LOCAL_MACHINE\{path}",
+                    ValueName = "(default)",
+                    Before = "(absent)",
+                    After = AppConfig.SafeBootValue,
+                    Kind = "String",
+                    Note = $"Boot-recovery mirror ({controlSet})"
+                });
+                report.TotalCreates++;
+            }
+        }
+
         if (preflight is not null)
         {
             // Replay what the UI would show but without the live UI-only bits.
@@ -100,7 +152,10 @@ public static class DryRunService
         return report;
     }
 
-    public static DryRunReport PlanUninstall()
+    public static DryRunReport PlanUninstall() => PlanUninstall(ControlSetService.GetMirrorTargets());
+
+    /// <summary>Overload taking an explicit mirror set. See <see cref="PlanInstall"/>.</summary>
+    internal static DryRunReport PlanUninstall(IReadOnlyList<string> mirrorControlSets)
     {
         var report = new DryRunReport();
         foreach (var id in AppConfig.FeatureIDs.Append(AppConfig.ServerFeatureID))
@@ -139,6 +194,48 @@ public static class DryRunService
                 });
             }
         }
+
+        // Removal restores the ledger baseline, which includes the boot-recovery mirrors, so the
+        // preview has to show them or it under-reports the change set in the other direction.
+        foreach (var controlSet in mirrorControlSets)
+        {
+            var overridesPath = ControlSetService.MirrorPath(AppConfig.RegistrySubKey, controlSet);
+            if (overridesPath is not null)
+            {
+                foreach (var id in AppConfig.FeatureIDs.Append(AppConfig.ServerFeatureID))
+                {
+                    int? current = ReadCurrentDword(overridesPath, id);
+                    if (current is null) continue;
+                    report.Items.Add(new DryRunPlanItem
+                    {
+                        Action = "DELETE",
+                        Target = $@"HKEY_LOCAL_MACHINE\{overridesPath}",
+                        ValueName = id,
+                        Before = current.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        After = "(absent)",
+                        Kind = "DWord",
+                        Note = $"Boot-recovery mirror ({controlSet})"
+                    });
+                }
+            }
+
+            foreach (var safeBootPath in new[] { AppConfig.SafeBootMinimalPath, AppConfig.SafeBootNetworkPath })
+            {
+                var path = ControlSetService.MirrorPath(safeBootPath, controlSet);
+                if (path is null || !ProbeSubkeyExists(path)) continue;
+                report.Items.Add(new DryRunPlanItem
+                {
+                    Action = "DELETE",
+                    Target = $@"HKEY_LOCAL_MACHINE\{path}",
+                    ValueName = "(subkey)",
+                    Before = AppConfig.SafeBootValue,
+                    After = "(absent)",
+                    Kind = "Key",
+                    Note = $"Boot-recovery mirror ({controlSet})"
+                });
+            }
+        }
+
         report.Summary = $"Dry-run uninstall: {report.Items.Count} item(s) would be removed.";
         return report;
     }

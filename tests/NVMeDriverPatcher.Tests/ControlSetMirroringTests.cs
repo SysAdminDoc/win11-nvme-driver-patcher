@@ -181,6 +181,49 @@ public class ControlSetMirroringTests
     }
 
     [Fact]
+    public void DryRunPreviewAccountsForMirroring()
+    {
+        // The dry run's entire promise is "exactly what apply would write". Mirroring silently
+        // broke that promise once already; this is the gate that catches the next divergence.
+        //
+        // The mirror set is injected rather than enumerated: the build host has a single control
+        // set, so a live-enumeration version of this test would compare 0 to 0 and pass without
+        // exercising a single mirror row.
+        string[] mirrors = ["ControlSet002", "ControlSet003"];
+        var config = new AppConfig { PatchProfile = PatchProfile.Full, IncludeServerKey = true };
+
+        var withoutMirrors = DryRunService.PlanInstall(config, null, []);
+        var plan = DryRunService.PlanInstall(config, null, mirrors);
+
+        int perControlSet = AppConfig.GetFeatureIDsForProfile(PatchProfile.Full).Count() + 1 // + server key
+                            + 2;                                                             // + two SafeBoot keys
+        int mirrorRows = plan.Items.Count(i => i.Note.StartsWith("Boot-recovery mirror", StringComparison.Ordinal));
+
+        Assert.Equal(mirrors.Length * perControlSet, mirrorRows);
+        Assert.Equal(withoutMirrors.Items.Count + mirrorRows, plan.Items.Count);
+
+        // The counters must move with the rows, not just the list.
+        Assert.Equal(plan.Items.Count(i => i.Action == "WRITE"), plan.TotalWrites);
+        Assert.Equal(plan.Items.Count(i => i.Action == "CREATE"), plan.TotalCreates);
+
+        // Every mirrored row must name a real mirrored path, not the current control set.
+        foreach (var item in plan.Items.Where(i => i.Note.StartsWith("Boot-recovery mirror", StringComparison.Ordinal)))
+        {
+            Assert.DoesNotContain(@"\CurrentControlSet\", item.Target, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(mirrors, cs => item.Target.Contains(cs, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
+    public void DryRunPreviewWithNoSpareControlSetsIsUnchanged()
+    {
+        // The single-control-set machine (the common case) must see exactly the old preview.
+        var config = new AppConfig { PatchProfile = PatchProfile.Safe, IncludeServerKey = false };
+        var plan = DryRunService.PlanInstall(config, null, []);
+        Assert.DoesNotContain(plan.Items, i => i.Note.StartsWith("Boot-recovery mirror", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ManagedKeysFor_WithoutMirrors_IsTheOriginalSet()
     {
         Assert.Equal(SafeBootStateService.ManagedKeys, SafeBootStateService.ManagedKeysFor(null));
