@@ -18,7 +18,7 @@
 #>
 
 $ErrorActionPreference = 'Stop'
-$minVersion = [Version]'5.4.0'
+$minVersion = [Version]'5.5.0'
 
 $defaultExe = Join-Path ${env:ProgramFiles} 'NVMe Driver Patcher\NVMeDriverPatcher.exe'
 $altExe     = Join-Path ${env:ProgramFiles(x86)} 'NVMe Driver Patcher\NVMeDriverPatcher.exe'
