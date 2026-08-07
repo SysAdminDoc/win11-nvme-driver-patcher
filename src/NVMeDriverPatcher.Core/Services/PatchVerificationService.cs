@@ -236,10 +236,15 @@ public static class PatchVerificationService
 
         if (overrideKeyCount == 0)
         {
-            // User (or a Windows update) wiped the keys between reboot and now. Silent.
+            // User, a Windows update, or Windows' own boot-failure recovery wiped the keys
+            // between reboot and now. Silent.
             return (VerificationOutcome.Reverted,
                 "Patch no longer present",
-                "Registry keys are gone — likely uninstalled or reverted by a Windows update.");
+                "Registry keys are gone — likely uninstalled, reverted by a Windows update, or " +
+                "dropped by Windows boot recovery. A scheduled chkdsk of the system volume, a " +
+                "deleted bootstat.dat, or 2-3 failed boots can make Windows promote the " +
+                "LastKnownGood control set, which predates the patch and so does not contain its " +
+                "keys (issue #15). Re-applying the patch is safe.");
         }
 
         // Keys present + rebooted + driver NOT bound. This is the Feb/Mar 2026 block signature.
