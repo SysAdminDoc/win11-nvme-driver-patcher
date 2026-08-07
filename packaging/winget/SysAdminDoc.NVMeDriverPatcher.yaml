@@ -3,7 +3,7 @@
 #   winget validate --manifest publish/winget
 #   winget install --manifest publish/winget
 PackageIdentifier: SysAdminDoc.NVMeDriverPatcher
-PackageVersion: 5.5.0
+PackageVersion: 5.6.0
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.12.0

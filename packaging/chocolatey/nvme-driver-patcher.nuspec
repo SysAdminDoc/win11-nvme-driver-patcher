@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
   <metadata>
     <id>nvme-driver-patcher</id>
-    <version>5.5.0</version>
+    <version>5.6.0</version>
     <title>NVMe Driver Patcher</title>
     <authors>SysAdminDoc</authors>
     <owners>SysAdminDoc</owners>

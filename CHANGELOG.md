@@ -2,7 +2,7 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
-## [5.5.0] - 2026-08-07
+## [5.6.0] - 2026-08-07
 
 ### Added
 - Patch writes are now mirrored into every spare `ControlSet00N`, not just `CurrentControlSet`
@@ -26,16 +26,20 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   instead of being pushed into a boot loop. Any deliberate apply or removal resets the budget.
   Configure with `persistence-guard --on|--off|--max=<0-10>|--reset`, or the two new ADMX policies.
   Deliberately not wired into GUI startup: a launching user is present and can click Apply.
+### Fixed
+- `dry-run` / "Preview Changes" now shows the control-set mirror writes. Mirroring made the
+  preview under-report the real change set, which is precisely what that command exists to
+  prevent; both the install and uninstall previews now account for it.
+
+
+## [5.5.0] - 2026-08-07
+
+### Added
 - Preflight `BootRecoveryRisk` check (issue #15): warns when a boot-time chkdsk is scheduled
   (`chkdsk /f` rewrites the Session Manager `BootExecute` autochk entry) or when Windows has
   marked a control set as a failed boot (`SYSTEM\Select\Failed`). Either signal means the next
   boot may run Windows boot recovery, which can promote the pre-patch LastKnownGood control set
   and silently drop every patch key. Advisory warning, read-only, absent on healthy systems.
-
-### Fixed
-- `dry-run` / "Preview Changes" now shows the control-set mirror writes. Mirroring made the
-  preview under-report the real change set, which is precisely what that command exists to
-  prevent; both the install and uninstall previews now account for it.
 
 ### Changed
 - The post-reboot "Patch no longer present" verdict now names Windows boot recovery — a
