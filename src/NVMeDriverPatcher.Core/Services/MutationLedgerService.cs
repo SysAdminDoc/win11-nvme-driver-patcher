@@ -235,7 +235,14 @@ public static class MutationLedgerService
                 OwnerProcessStartedUtc = ownerStart,
                 PatchProfile = profile.ToString(),
                 IncludeServerKey = includeServerKey,
-                FeatureStoreTouched = kind == MutationOperationKind.FeatureStoreFallback,
+                // Same rule as the mirrors above: reusing an earlier baseline inherits the
+                // obligations that come with it. A live FeatureStore fallback whose baseline is
+                // reused by a later registry-only apply is still enabled, and the reused baseline
+                // is the only record of the pre-fallback configuration. Recomputing this flag from
+                // the new kind alone dropped that obligation, so removal skipped the FeatureStore
+                // restore entirely and still reported an exact, verified revert.
+                FeatureStoreTouched = kind == MutationOperationKind.FeatureStoreFallback ||
+                                      (reuseBaseline && prior!.FeatureStoreTouched),
                 IntendedFeatureIds = intendedFeatureIds.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
                 MirroredControlSets = effectiveMirrors.ToList(),
                 Baseline = baseline

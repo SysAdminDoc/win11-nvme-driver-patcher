@@ -5,6 +5,15 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- Removing the patch after a FeatureStore fallback could report "exact pre-mutation state restored
+  and verified" while the fallback feature IDs were still enabled and `nvmedisk` stayed bound after
+  reboot. Applying again on top of a live fallback (a manual re-apply, or the persistence guard
+  re-arming) reused the fallback's baseline — the only record of the pre-fallback configuration —
+  but recomputed the FeatureStore restore obligation from the new operation's kind, so it came out
+  false and removal skipped the FeatureStore entirely. The obligation is now inherited with the
+  baseline it belongs to. Removal additionally sweeps for fallback enablement that no ledger
+  recorded (a manual ViVeTool enable, or a ledger written before this fix) and undoes it instead of
+  certifying a store it never read.
 - The persistence guard's settings were never written to `config.json`. `persistence-guard --on`
   reported success and printed "Enabled: yes", but the save path named its fields by hand and did
   not include them, so every later process — including the boot task the guard runs from — loaded
