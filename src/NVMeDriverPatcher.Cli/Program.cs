@@ -160,7 +160,7 @@ class Program
                 "apply" or "install" => dryRun ? DryRunCommand(config) : ApplyCommand(config, force, noRestart, unattended, forceUnsupportedBuild),
                 "remove" or "uninstall" => RemoveCommand(config, noRestart),
                 "disable-for-update" or "disable-for-firmware" => DisableForUpdateCommand(config, noRestart),
-                "re-enable-after-update" or "reenable-after-update" => ReEnableAfterUpdateCommand(config, force, noRestart, unattended),
+                "re-enable-after-update" or "reenable-after-update" => ReEnableAfterUpdateCommand(config, force, noRestart, unattended, forceUnsupportedBuild),
                 "diagnostics" or "export-diagnostics" => DiagnosticsCommand(config),
                 "bundle" or "export-bundle" or "support-bundle" => SupportBundleCommand(config),
                 "fallback" or "vivetool-fallback" or "apply-fallback" => FallbackCommand(config, forceUnsupportedBuild),
@@ -1415,7 +1415,12 @@ class Program
         return 0;
     }
 
-    static int ReEnableAfterUpdateCommand(AppConfig config, bool force, bool noRestart, bool unattended)
+    static int ReEnableAfterUpdateCommand(
+        AppConfig config,
+        bool force,
+        bool noRestart,
+        bool unattended,
+        bool forceUnsupportedBuild)
     {
         var marker = FirmwareUpdateWorkflowService.ReadMarker(config);
         var (profile, hadMarker) = FirmwareUpdateWorkflowService.ResolveReEnableProfile(marker, config);
@@ -1425,7 +1430,11 @@ class Program
         config.PatchProfile = profile;
         Console.WriteLine($"Re-enabling Native NVMe ({profile} profile) after the firmware update...");
 
-        var rc = ApplyCommand(config, force, noRestart, unattended);
+        // Thread the build-policy override through. Without it the refusal message told the
+        // user to re-run with --force-unsupported-build, which this command silently dropped --
+        // an instruction loop whose only escape was knowing to use apply instead, leaving the
+        // firmware-update marker dangling.
+        var rc = ApplyCommand(config, force, noRestart, unattended, forceUnsupportedBuild);
         if (rc == 0)
         {
             FirmwareUpdateWorkflowService.ClearMarker(config);

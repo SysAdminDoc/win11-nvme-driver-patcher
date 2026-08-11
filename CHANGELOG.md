@@ -5,6 +5,23 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- Event-log queries built their timestamp with a culture-sensitive format string. In a custom .NET
+  format, `:` and `.` are the culture's time and decimal separators rather than literals, so on a
+  Finnish or German system the watchdog, the live event tail, and the code-integrity check all
+  emitted an invalid `SystemTime` — the query either threw, leaving the watchdog permanently
+  Unavailable and auto-revert dead, or matched nothing and reported a falsely healthy patch. All
+  three now share one invariant formatter.
+- A build-policy refusal no longer shows "Apply is ready" on a disabled Apply button. The guidance
+  only accounted for the recovery block, so it fell through to the ready text, and the button style
+  shows tooltips while disabled. The block is also written to the activity log now, which it never
+  was.
+- `re-enable-after-update` accepts `--force-unsupported-build`. It parsed the flag and dropped it,
+  so on a policy-refused build the command told the user to re-run with exactly the flag they had
+  just passed, with no way out except knowing to use `apply` instead — which leaves the
+  firmware-update marker dangling.
+- Importing a config bundle no longer reports success when the settings were not persisted. The
+  save result was discarded, so a busy config lock left the imported profile live in memory,
+  written nowhere, and the next process launch quietly ran the old profile.
 - Four features were unreachable from the GUI. The v5.x redesign replaced the old overview with the
   command deck but left the old container in the window with `Visibility="Collapsed"`, and it was
   the only place these were bound: **Cancel Benchmark** (so a running DiskSpd benchmark could not be

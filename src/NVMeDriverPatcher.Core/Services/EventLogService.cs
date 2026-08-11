@@ -9,6 +9,17 @@ public static class EventLogService
     // We use a safety margin in case of internal expansion.
     private const int MaxMessageLength = 30000;
 
+    /// <summary>
+    /// Formats a UTC timestamp for an event-log XPath <c>TimeCreated[@SystemTime &gt;= '...']</c>
+    /// predicate. Must be invariant: in a custom .NET format string ':' and '.' are the CULTURE's
+    /// time and decimal separators, not literals, so a hand-rolled "yyyy-MM-ddTHH:mm:ss.fffffffZ"
+    /// emits e.g. "2026-08-11T14.30.00,0000000Z" on a Finnish or German system. That is not a
+    /// valid SystemTime, so the query either throws — leaving the watchdog permanently Unavailable
+    /// and auto-revert dead — or matches nothing and reports a falsely healthy patch.
+    /// </summary>
+    internal static string FormatXPathTimestamp(DateTime utc) =>
+        utc.ToString("o", System.Globalization.CultureInfo.InvariantCulture);
+
     private static volatile bool _enabled = true;
     private static volatile bool _sourceRegistrationAttempted;
 

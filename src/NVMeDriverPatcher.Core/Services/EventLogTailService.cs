@@ -26,7 +26,7 @@ public static class EventLogTailService
     {
         var results = new List<EventLogTailRecord>();
         var since = DateTime.UtcNow - TimeSpan.FromMinutes(Math.Max(5, minutes));
-        var sinceXml = since.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ");
+        var sinceXml = EventLogService.FormatXPathTimestamp(since);
 
         var providerClauses = string.Join(" or ",
             ProvidersOfInterest.Select(p => $"Provider[@Name='{p}']"));

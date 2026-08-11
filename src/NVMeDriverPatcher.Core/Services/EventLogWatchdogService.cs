@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Diagnostics;
 using System.Diagnostics.Eventing.Reader;
 using System.IO;
@@ -690,7 +691,7 @@ public static class EventLogWatchdogService
         // Build a single System-channel query covering every (source, id) pair we track.
         // Using one query is dramatically cheaper than eight separate sessions — on a chatty
         // system the event log has hundreds of thousands of entries.
-        var sinceXml = since.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ");
+        var sinceXml = EventLogService.FormatXPathTimestamp(since);
         var sourceClauses = string.Join(" or ",
             WatchEvents.Select(w => $"(Provider[@Name='{w.Source}'] and EventID={w.Id})"));
         string xpath = $"*[System[({sourceClauses}) and TimeCreated[@SystemTime >= '{sinceXml}']]]";

@@ -31,7 +31,7 @@ public static class CodeIntegrityEventService
     {
         var results = new List<CodeIntegrityBlockedDriverEvent>();
         var since = DateTime.UtcNow - (lookback ?? DefaultLookback);
-        var sinceXml = since.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ");
+        var sinceXml = EventLogService.FormatXPathTimestamp(since);
         var xpath = $"*[System[(EventID=3076 or EventID=3077) and TimeCreated[@SystemTime >= '{sinceXml}']]]";
 
         try
