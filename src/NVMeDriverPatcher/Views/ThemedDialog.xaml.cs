@@ -59,22 +59,18 @@ public partial class ThemedDialog : Window
             DialogIcon.Warning => ResolveResourceBrush(dlg, "Yellow"),
             _ => ResolveResourceBrush(dlg, "Accent")
         };
-        var surfaceBrush = icon switch
-        {
-            DialogIcon.Error => ResolveResourceBrush(dlg, "RedBg"),
-            DialogIcon.Warning => ResolveResourceBrush(dlg, "YellowBg"),
-            _ => ResolveResourceBrush(dlg, "AccentBg")
-        };
         dlg.DlgEyebrow.Text = ResolveEyebrow(icon, title);
         dlg.DlgEyebrow.Foreground = iconBrush;
         dlg.HeaderAccentBar.Background = iconBrush;
         dlg.SetMessage(message ?? string.Empty, iconBrush);
-        dlg.BtnYes.Background = surfaceBrush;
+        // Severity is carried by the eyebrow, the icon, the accent bar and the message tint above.
+        // The primary button deliberately keeps the ActionButton style's own colours: local values
+        // outrank template triggers, so tinting it here pinned Foreground to TextPrimary while the
+        // template still swapped the background to ActionButtonHover on hover. That pair is
+        // white-on-near-white-cyan in HighContrast -- unreadable, in the accessibility theme -- and
+        // near-black-on-dark-blue in Light. Only Dark happened to survive it.
         dlg.BtnYes.BorderBrush = iconBrush;
-        dlg.BtnYes.Foreground = ResolveResourceBrush(dlg, "TextPrimary");
-        dlg.BtnOK.Background = surfaceBrush;
         dlg.BtnOK.BorderBrush = iconBrush;
-        dlg.BtnOK.Foreground = ResolveResourceBrush(dlg, "TextPrimary");
 
         var iconPath = new WpfPath { Stroke = iconBrush, StrokeThickness = 2 };
         iconPath.Data = icon switch
