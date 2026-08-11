@@ -11,7 +11,9 @@
 param(
     [Parameter(Mandatory)] [string]$Version,   # tag-derived, no leading v (e.g. 4.6.2)
     [string]$RepoRoot,                          # override repo root (tests); defaults to ../ of this script
-    [switch]$ExpectSigned                       # when set, every sign:true artifact must carry a Valid Authenticode signature
+    [switch]$ExpectSigned,                      # when set, every sign:true artifact must carry a Valid Authenticode signature
+    [string]$PublishedTag,                      # when set, verify the PUBLISHED release's asset list (post-publish gate)
+    [string]$PublishedAssetsPath                # test injection: JSON array of published asset names instead of calling gh
 )
 
 $ErrorActionPreference = 'Stop'
@@ -333,6 +335,47 @@ foreach ($a in $contract.artifacts) {
                 $failures.Add("scoop manifest missing arm64 autoupdate block")
             } elseif ($scoop.autoupdate.architecture.arm64.url -notmatch 'NVMeDriverPatcher-win-arm64\.exe#/NVMeDriverPatcher\.exe$') {
                 $failures.Add("scoop manifest arm64 autoupdate must preserve the ARM64 asset and common executable filename")
+            }
+        }
+    }
+}
+
+# Post-publish gate. Everything above proves the sidecars were GENERATED into publish/; nothing
+# proved they were UPLOADED. They were not, from 5.5.0 onward: those releases carry only
+# SHA256SUMS.txt, so the README's per-asset verification one-liner 404s and the in-app updater --
+# which fetches <asset>.sha256 and fails closed without it -- can never verify an update.
+if ($PublishedTag) {
+    $publishedAssets = @()
+    if ($PublishedAssetsPath) {
+        # Windows PowerShell 5.1's ConvertFrom-Json emits a JSON array as ONE Object[] item, so
+        # @(...) wraps it instead of flattening it and every name becomes a single joined key.
+        # Piping through ForEach-Object unrolls it the same way on 5.1 and 7.
+        $parsed = Get-Content -Raw $PublishedAssetsPath | ConvertFrom-Json
+        $publishedAssets = @($parsed | ForEach-Object { $_ })
+    }
+    else {
+        $ghJson = & gh release view $PublishedTag --json assets 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $failures.Add("could not read published release ${PublishedTag}: $($ghJson -join ' ')")
+        }
+        else {
+            $publishedAssets = @(($ghJson | ConvertFrom-Json).assets | ForEach-Object { $_.name })
+        }
+    }
+
+    if ($publishedAssets.Count -gt 0) {
+        $publishedSet = @{}
+        foreach ($name in $publishedAssets) { $publishedSet[$name] = $true }
+
+        foreach ($a in $contract.artifacts) {
+            if (-not $a.checksum) { continue }
+            $leaf = Split-Path ($a.path -replace '\{version\}', $Version) -Leaf
+            if (-not $publishedSet.ContainsKey($leaf)) {
+                if ($a.required) { $failures.Add("published release $PublishedTag is missing required asset $leaf") }
+                continue
+            }
+            if (-not $publishedSet.ContainsKey("$leaf.sha256")) {
+                $failures.Add("published release $PublishedTag is missing the .sha256 sidecar for $leaf")
             }
         }
     }

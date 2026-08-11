@@ -36,7 +36,43 @@ public sealed class ReleaseAssetsScriptTests
         Assert.Contains("PE architecture mismatch", result.StdOut, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static ScriptResult RunScript(string repoRoot, bool expectSigned)
+    [Fact]
+    public void Validate_PublishedRelease_FailsWhenSidecarsWereNeverUploaded()
+    {
+        // Generating the sidecars into publish/ was already checked; uploading them was not, and
+        // from 5.5.0 onward they stopped being uploaded. The README's per-asset verification
+        // one-liner 404s and the in-app updater, which fetches <asset>.sha256 and fails closed
+        // without it, can never verify an update.
+        using var repo = AssetsFixture.Create();
+        var assets = Path.Combine(repo.Path, "published-assets.json");
+        File.WriteAllText(assets, "[\"app.exe\", \"SHA256SUMS.txt\"]");
+
+        var result = RunScript(repo.Path, expectSigned: false, publishedTag: "v9.9.9", publishedAssetsPath: assets);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("missing the .sha256 sidecar", result.StdOut, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_PublishedRelease_PassesWhenEverySidecarIsPresent()
+    {
+        using var repo = AssetsFixture.Create();
+        var assets = Path.Combine(repo.Path, "published-assets.json");
+        File.WriteAllText(assets, "[\"app.exe\", \"app.exe.sha256\", \"SHA256SUMS.txt\"]");
+
+        var result = RunScript(repo.Path, expectSigned: false, publishedTag: "v9.9.9", publishedAssetsPath: assets);
+
+        Assert.True(result.ExitCode == 0, $"expected pass; stdout: {result.StdOut}\nstderr: {result.StdErr}");
+    }
+
+    private static ScriptResult RunScript(string repoRoot, bool expectSigned) =>
+        RunScript(repoRoot, expectSigned, publishedTag: null, publishedAssetsPath: null);
+
+    private static ScriptResult RunScript(
+        string repoRoot,
+        bool expectSigned,
+        string? publishedTag,
+        string? publishedAssetsPath)
     {
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo("powershell.exe")
@@ -56,6 +92,16 @@ public sealed class ReleaseAssetsScriptTests
                                   "-Version", "9.9.9", "-RepoRoot", repoRoot })
             process.StartInfo.ArgumentList.Add(a);
         if (expectSigned) process.StartInfo.ArgumentList.Add("-ExpectSigned");
+        if (!string.IsNullOrEmpty(publishedTag))
+        {
+            process.StartInfo.ArgumentList.Add("-PublishedTag");
+            process.StartInfo.ArgumentList.Add(publishedTag);
+        }
+        if (!string.IsNullOrEmpty(publishedAssetsPath))
+        {
+            process.StartInfo.ArgumentList.Add("-PublishedAssetsPath");
+            process.StartInfo.ArgumentList.Add(publishedAssetsPath);
+        }
 
         process.Start();
         var stdOut = process.StandardOutput.ReadToEnd();
