@@ -38,7 +38,13 @@ internal static class Program
         try
         {
             await host.RunAsync();
-            return 0;
+            // A BackgroundService fault stops the host gracefully (the default
+            // BackgroundServiceExceptionBehavior), so RunAsync does NOT rethrow and control
+            // arrives here looking like a clean shutdown. Returning 0 then registers a clean
+            // SERVICE_STOPPED, and SCM's failure actions only fire for a NON-ZERO exit even with
+            // failureflag set -- so the flush loop's "terminating so SCM recovery can restart the
+            // service" was never true. Report the worker's fault as the process exit code.
+            return WatchdogWorker.Faulted ? 1 : 0;
         }
         catch (Exception ex)
         {
@@ -71,10 +77,12 @@ internal static class Program
         string exe = Environment.ProcessPath ?? "NVMeDriverPatcher.Watchdog.exe";
         if (install)
         {
-            // Pass the exe path RAW: ProcessStartInfo.ArgumentList quotes each token itself, so
-            // manually wrapping it in quotes would be double-escaped (\"C:\path\") and register a
-            // broken ImagePath for any install dir with spaces (e.g. Program Files).
-            int rc = RunSc("create", ServiceName, "binpath=", exe, "start=", "auto",
+            // Quote the exe path. ArgumentList wire-quotes each token, but CommandLineToArgvW
+            // strips those quotes again before sc.exe parses its arguments, so passing the path
+            // RAW registers an UNQUOTED ImagePath -- the textbook unquoted-service-path weakness
+            // for an install under "C:\Program Files", where SCM probes C:\Program.exe first.
+            // Embedding the quotes in the token is what actually reaches sc as a quoted string.
+            int rc = RunSc("create", ServiceName, "binpath=", QuoteForSc(exe), "start=", "auto",
                 "obj=", "NT AUTHORITY\\LocalService", "DisplayName=", "NVMe Driver Patcher Watchdog");
             if (rc != 0) return rc;
 
@@ -142,6 +150,10 @@ internal static class Program
         return 1;
     }
 
+    // sc.exe stores binpath= verbatim, and SCM parses an unquoted ImagePath by probing each
+    // space-delimited prefix. Quoting is what makes "C:\Program Files\...\x.exe" unambiguous.
+    private static string QuoteForSc(string path) => "\"" + path + "\"";
+
     // sc.exe must resolve to System32, never through PATH or the executable/current directory:
     // every control verb runs elevated (requireAdministrator manifest, and the MSI custom action
     // runs it as SYSTEM with Impersonate="no"), so a planted sc.exe would inherit that token, and
@@ -182,6 +194,12 @@ internal static class Program
 
 internal sealed class WatchdogWorker : BackgroundService
 {
+    /// <summary>
+    /// Set when the worker gives up, so <see cref="Program.Main"/> can exit non-zero and let SCM's
+    /// restart actions fire. Static because the host owns the worker instance and Main never sees it.
+    /// </summary>
+    internal static volatile bool Faulted;
+
     private readonly ILogger<WatchdogWorker> _logger;
     private EventLogWatcher? _watcher;
     private int _eventsSinceFlush;
@@ -197,6 +215,7 @@ internal sealed class WatchdogWorker : BackgroundService
         {
             _logger.LogCritical("System Event Log readiness probe failed: {code} {summary}",
                 systemLogProbe.FailureCode, systemLogProbe.Summary);
+            Faulted = true;
             throw new InvalidOperationException(systemLogProbe.Summary);
         }
         _logger.LogInformation("System Event Log readiness proved: {summary}", systemLogProbe.Summary);
@@ -253,6 +272,7 @@ internal sealed class WatchdogWorker : BackgroundService
                 if (consecutiveFailures >= 3)
                 {
                     _logger.LogCritical("Watchdog evidence remained unavailable; terminating so SCM recovery can restart the service.");
+                    Faulted = true;
                     throw;
                 }
             }
