@@ -238,11 +238,21 @@ FILES:
             sb.Append("\r\n");
         }
 
+        // Clear only the default value, never the key. Build 26200.8737+ ships these SafeBoot keys
+        // itself carrying a NvmeDisk value, and deleting the key takes the OS's own Safe Mode
+        // storage-disk class registration with it — on a machine already being recovered, that can
+        // turn "Safe Mode still works" into "Safe Mode cannot see the boot disk" (issue #13). The
+        // default value is exactly what this tool writes, and it is what the residue probe checks,
+        // so clearing it removes all of ours and none of Windows'. A key we created is left behind
+        // empty, which registers nothing.
         foreach (var leaf in new[] { AppConfig.SafeBootGuid, AppConfig.SafeBootServiceName })
         {
             foreach (var cs in controlSets)
                 foreach (var store in new[] { "Minimal", "Network" })
-                    sb.Append($@"[-HKEY_LOCAL_MACHINE\SYSTEM\{cs}\Control\SafeBoot\{store}\{leaf}]").Append("\r\n");
+                {
+                    sb.Append($@"[HKEY_LOCAL_MACHINE\SYSTEM\{cs}\Control\SafeBoot\{store}\{leaf}]").Append("\r\n");
+                    sb.Append("@=-\r\n");
+                }
             sb.Append("\r\n");
         }
 
@@ -259,9 +269,11 @@ FILES:
         var sb = new System.Text.StringBuilder();
         foreach (var id in RecoveryFeatureIds())
             sb.Append($"{indent}\"{Sys32}\\reg.exe\" delete \"{regBase}\\{overridesRel}\" /v {id} /f 2>nul\r\n");
+        // /ve deletes only the default value, leaving the key and any OS-owned values (NvmeDisk on
+        // 26200.8737+) intact — see the .reg builder above for why removing the key is unsafe here.
         foreach (var leaf in new[] { AppConfig.SafeBootGuid, AppConfig.SafeBootServiceName })
             foreach (var store in new[] { "Minimal", "Network" })
-                sb.Append($"{indent}\"{Sys32}\\reg.exe\" delete \"{regBase}\\Control\\SafeBoot\\{store}\\{leaf}\" /f 2>nul\r\n");
+                sb.Append($"{indent}\"{Sys32}\\reg.exe\" delete \"{regBase}\\Control\\SafeBoot\\{store}\\{leaf}\" /ve /f 2>nul\r\n");
         return sb.ToString();
     }
 

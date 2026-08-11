@@ -5,6 +5,31 @@ namespace NVMeDriverPatcher.Tests;
 
 public sealed class RecoveryKitServiceTests : IDisposable
 {
+    /// <summary>
+    /// No generated recovery artifact may delete a SafeBoot key outright. Windows ships these keys
+    /// itself on 26200.8737+ with a NvmeDisk value, so removing the key takes the OS's own Safe
+    /// Mode storage-disk registration with it and Safe Mode can stop seeing the boot disk — on a
+    /// machine that is already being recovered (issue #13). Only the default value is ours, and it
+    /// is what the residue probe checks, so clearing it removes all of ours and none of Windows'.
+    /// </summary>
+    [Fact]
+    public void GeneratedArtifacts_NeverDeleteAnEntireSafeBootKey()
+    {
+        var reg = RecoveryKitService.BuildRegContent("001", "2026-08-11T00:00:00Z");
+        var bat = RecoveryKitService.BuildBatContent();
+
+        foreach (var leaf in new[] { AppConfig.SafeBootGuid, AppConfig.SafeBootServiceName })
+            foreach (var store in new[] { "Minimal", "Network" })
+            {
+                Assert.DoesNotContain($@"[-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\{store}\{leaf}]", reg);
+                Assert.DoesNotContain($@"\Control\SafeBoot\{store}\{leaf}"" /f ", bat);
+            }
+
+        // The default-value deletes must still be there — this must not pass by emitting nothing.
+        Assert.Contains("@=-", reg);
+        Assert.Contains(@"\Control\SafeBoot\Minimal\" + AppConfig.SafeBootGuid + @""" /ve /f", bat);
+    }
+
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"NVMeDriverPatcher.RecoveryKit.Tests.{Guid.NewGuid():N}");
 
     public RecoveryKitServiceTests()
