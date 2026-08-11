@@ -5,6 +5,23 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- The legacy PowerShell script detects BitLocker again. `Get-BitLockerVolume` reports `MountPoint`
+  as `C:` with no trailing separator, and the check compared it against `C:\`, so it was always
+  false — and the correct WMI fallback only runs from a `catch` that never fires, because the
+  cmdlet exists on every Pro/Enterprise install. Fully encrypted machines were reported as
+  unencrypted in preflight, `-Status`, and the diagnostics export.
+- The legacy script's `-Remove` no longer reports success when removal failed. Every per-component
+  failure was logged and swallowed, then the function reported REMOVED and returned true
+  regardless, so `-Silent -Remove` exited 0 while the flags were still set — automation recorded a
+  removal that had not happened. It now re-probes for residue and reports PARTIAL with a non-zero
+  exit when anything survives.
+- The legacy recovery kit's generated `.bat` invokes `reg.exe` by absolute path. It called it by
+  bare name while documenting "run it from the kit folder as Administrator", and cmd resolves a
+  bare name from the current directory first — so a `reg.exe` dropped beside the kit on a USB stick
+  would have run elevated. The C# generator already followed this rule.
+- The kit README no longer tells WinRE users to run `regedit /s`. In WinRE that edits WinRE's own
+  X: hive, so the offline system is untouched and the change evaporates on reboot while the user
+  believes the patch was removed. It now directs them to the `.bat`, which loads the offline hive.
 - The CLI rejects unknown options instead of ignoring them. Every option was detected with
   `args.Any(...)`, so an unrecognised token simply vanished — and `apply --unattended --dryrun`,
   one missing hyphen, performed a real apply plus an automatic reboot instead of the preview the

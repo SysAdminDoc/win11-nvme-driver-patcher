@@ -622,7 +622,9 @@ function Test-BitLockerEnabled {
         $volumes = Get-BitLockerVolume -ErrorAction SilentlyContinue
         if ($volumes) {
             foreach ($vol in $volumes) {
-                if ($vol.MountPoint -eq "$env:SystemDrive\" -and $vol.ProtectionStatus -eq "On") {
+                # MountPoint is "C:" (no trailing separator); comparing against "C:\" was
+                # always false, so this reported every encrypted machine as unencrypted.
+                if ($vol.MountPoint.TrimEnd('\') -eq $env:SystemDrive.TrimEnd('\') -and $vol.ProtectionStatus -eq "On") {
                     return $true
                 }
             }
@@ -1812,7 +1814,7 @@ exit /b 1
 
 :found_win
 echo Loading offline registry hive...
-reg load HKLM\OFFLINE_SYS "%WINFOUND%:\Windows\System32\config\SYSTEM" >nul 2>&1
+"%SystemRoot%\System32\reg.exe" load HKLM\OFFLINE_SYS "%WINFOUND%:\Windows\System32\config\SYSTEM" >nul 2>&1
 if %errorlevel% neq 0 (
     echo ERROR: Failed to load registry hive. It may be in use.
     pause
@@ -1823,26 +1825,26 @@ echo.
 
 :: Remove from all control sets in the offline hive
 for /L %%N in (1,1,9) do (
-    reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f 2>nul
-    reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f 2>nul
-    reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f 2>nul
-    reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f 2>nul
-    reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f 2>nul
-    reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f 2>nul
+    "%SystemRoot%\System32\reg.exe" delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f 2>nul
+    "%SystemRoot%\System32\reg.exe" delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f 2>nul
+    "%SystemRoot%\System32\reg.exe" delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f 2>nul
+    "%SystemRoot%\System32\reg.exe" delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f 2>nul
+    "%SystemRoot%\System32\reg.exe" delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f 2>nul
+    "%SystemRoot%\System32\reg.exe" delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f 2>nul
 )
 
 echo Unloading registry hive...
-reg unload HKLM\OFFLINE_SYS >nul 2>&1
+"%SystemRoot%\System32\reg.exe" unload HKLM\OFFLINE_SYS >nul 2>&1
 goto :done
 
 :do_remove
 :: Running in Windows -- use CurrentControlSet
-reg delete "HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f 2>nul
-reg delete "HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f 2>nul
-reg delete "HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f 2>nul
-reg delete "HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f 2>nul
-reg delete "HKLM\SYSTEM\%CS%\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f 2>nul
-reg delete "HKLM\SYSTEM\%CS%\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f 2>nul
+"%SystemRoot%\System32\reg.exe" delete "HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f 2>nul
+"%SystemRoot%\System32\reg.exe" delete "HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f 2>nul
+"%SystemRoot%\System32\reg.exe" delete "HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f 2>nul
+"%SystemRoot%\System32\reg.exe" delete "HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f 2>nul
+"%SystemRoot%\System32\reg.exe" delete "HKLM\SYSTEM\%CS%\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f 2>nul
+"%SystemRoot%\System32\reg.exe" delete "HKLM\SYSTEM\%CS%\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f 2>nul
 
 :done
 echo.
@@ -1894,16 +1896,18 @@ MANUAL WinRE METHOD (if .bat fails):
    reg load HKLM\OFFLINE C:\Windows\System32\config\SYSTEM
    (If C: doesn't work, try D: or E:)
 2. Delete the keys:
-   reg delete "HKLM\OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f
-   reg delete "HKLM\OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f
-   reg delete "HKLM\OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f
-   reg delete "HKLM\OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f
+   "%SystemRoot%\System32\reg.exe" delete "HKLM\OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f
+   "%SystemRoot%\System32\reg.exe" delete "HKLM\OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f
+   "%SystemRoot%\System32\reg.exe" delete "HKLM\OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f
+   "%SystemRoot%\System32\reg.exe" delete "HKLM\OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f
 3. Unload the hive:
    reg unload HKLM\OFFLINE
 4. Restart
 
 FILES:
-- NVMe_Remove_Patch.reg    - Registry file (Windows: double-click / WinRE: regedit /s)
+- NVMe_Remove_Patch.reg    - Registry file for a running Windows only (double-click).
+                            In WinRE use the .bat: regedit /s would edit WinRE's own
+                            X: hive, leaving the offline system untouched.
 - Remove_NVMe_Patch.bat    - Smart batch script (auto-detects Windows vs WinRE)
 - README.txt               - This file
 "@
@@ -2942,8 +2946,29 @@ function Uninstall-NVMePatch {
         Remove-OwnedSafeBootKey -Path $script:Config.SafeBootNetwork -Label "SafeBoot Network" -RemovedCount ([ref]$removedCount)
 
         Update-Progress -Value 90 -Status "Validating..."
+        # Residue re-probe. Every per-component failure above is logged and swallowed, so
+        # without this the function reported REMOVED and returned $true even when nothing
+        # could be deleted -- and -Silent -Remove exited 0 while the patch was still live.
+        $residue = @()
+        foreach ($id in $allFeatureIDs) {
+            if (Get-ItemProperty -Path $script:Config.RegistryPath -Name $id -ErrorAction SilentlyContinue) {
+                $residue += "feature flag $id"
+            }
+        }
+        foreach ($sbPath in @($script:Config.SafeBootMinimal, $script:Config.SafeBootNetwork)) {
+            $sbValue = (Get-ItemProperty -LiteralPath $sbPath -ErrorAction SilentlyContinue)."(default)"
+            if ($sbValue -eq $script:Config.SafeBootValue) { $residue += "SafeBoot default at $sbPath" }
+        }
+        if ($residue.Count -gt 0) {
+            Write-Log "========================================" -Level "INFO"
+            Write-Log "Patch Status: PARTIAL - $($residue.Count) component(s) still present:" -Level "ERROR"
+            foreach ($item in $residue) { Write-Log "  [RESIDUE] $item" -Level "ERROR" }
+            Write-AppEventLog -Message "NVMe Driver Patch removal incomplete: $($residue -join '; ')" -EntryType "Warning" -EventId 3002
+            Update-Progress -Value 0 -Status ""
+            return $false
+        }
         Write-Log "========================================" -Level "INFO"
-        Write-Log "Patch Status: REMOVED - Removed $removedCount components" -Level "SUCCESS"
+        Write-Log "Patch Status: REMOVED - Removed $removedCount components (zero residue verified)" -Level "SUCCESS"
         Write-Log "After reboot: Drives will return to 'Disk drives' using stornvme.sys" -Level "INFO"
         Write-Log "Please RESTART your computer" -Level "WARNING"
         Write-AppEventLog -Message "NVMe Driver Patch removed ($removedCount components)" -EntryType "Information" -EventId 1001
