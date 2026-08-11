@@ -2,7 +2,7 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
-## [Unreleased]
+## [5.7.0] - 2026-08-11
 
 ### Fixed
 - An apply that aborts before writing anything no longer un-applies a patch that is already
