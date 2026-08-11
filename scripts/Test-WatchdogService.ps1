@@ -4,7 +4,11 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string]$WatchdogExe,
-    [switch]$KeepInstalled
+    [switch]$KeepInstalled,
+    # The flush loop retries a failing evaluation twice at 30s spacing before it gives up, so a
+    # service that cannot read its own state dies at roughly t+60-90s. A 3-second probe proved only
+    # that the process started and let exactly that defect ship; stay past the third failure.
+    [ValidateRange(5, 600)] [int]$LivenessSeconds = 150
 )
 
 $ErrorActionPreference = 'Stop'
@@ -87,15 +91,33 @@ try {
     }
     (Get-Service $serviceName).WaitForStatus('Running', [TimeSpan]::FromSeconds(15))
 
-    # ExecuteAsync performs a live System-channel read before its flush loop. Remaining alive after
-    # this grace period proves that read succeeded under the configured LocalService identity.
-    Start-Sleep -Seconds 3
-    $running = Get-CimInstance Win32_Service -Filter "Name='$serviceName'"
-    if ($running.State -ne 'Running' -or $running.ProcessId -le 0) {
-        throw 'Service did not remain running after its LocalService System-log readiness probe.'
+    # ExecuteAsync performs a live System-channel read before its flush loop, then flushes state
+    # immediately and every 5 minutes after. Both halves have to survive under the LocalService
+    # token: the readiness probe reads the System channel, the flush reads AND writes the protected
+    # ProgramData state. Watching only the first one is what let a service that could never load its
+    # own state pass this smoke and ship.
+    Write-Host "Watching the service for $LivenessSeconds s (past the flush loop's third failure)..."
+    $watchStart = Get-Date
+    $deadline = $watchStart.AddSeconds($LivenessSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $running = Get-CimInstance Win32_Service -Filter "Name='$serviceName'"
+        if ($running.State -ne 'Running' -or $running.ProcessId -le 0) {
+            $elapsed = [int]((Get-Date) - $watchStart).TotalSeconds
+            throw "Service stopped after ${elapsed}s (state '$($running.State)'). Check the Application log for the watchdog's flush failures."
+        }
+        Start-Sleep -Seconds 5
     }
 
-    Write-Host 'Watchdog packaging smoke passed: identity, least privilege, service-SID state ACL, recovery actions, and live System-log readability.' -ForegroundColor Green
+    # The flush loop only clears its failure counter after a successful Evaluate, so a service that
+    # is still Running here has published state at least once. Prove that directly too.
+    $statePath = Join-Path $env:ProgramData 'NVMePatcher\Watchdog\watchdog.json'
+    if (-not (Test-Path -LiteralPath $statePath)) {
+        throw "Service stayed running but never published '$statePath'; its flush path is not working."
+    }
+    $stateAge = (Get-Date) - (Get-Item -LiteralPath $statePath).LastWriteTime
+    Write-Host ("Watchdog state published {0:N0}s ago." -f $stateAge.TotalSeconds)
+
+    Write-Host 'Watchdog packaging smoke passed: identity, least privilege, service-SID state ACL, recovery actions, live System-log readability, and a surviving flush loop with published state.' -ForegroundColor Green
 }
 finally {
     if ($startedBySmoke -and -not $KeepInstalled) {

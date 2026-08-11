@@ -2,6 +2,27 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- The real-time watchdog service could never read its own state and terminated within about two
+  minutes of every start, on every install. `EnsureRuntimeTree` asked all callers to validate the
+  privileged `State` child, which by design grants no access to LocalService — reading its DACL
+  threw for the service identity, validation failed, and the recovery path then attempted an
+  owner/DACL rewrite the service token cannot perform. Three consecutive flush failures stopped the
+  host, and SCM's two restart attempts hit the same deterministic failure, leaving the service
+  stopped for good. Validation scope is now per caller role: a watchdog caller proves only the
+  shared root and the watchdog child, the two surfaces its identity is entitled to read. Repair is
+  additionally gated on an elevated token, so an unelevated caller reports that the tree needs the
+  installer instead of throwing.
+- Watchdog state files published by the service are no longer rejected for carrying inherited
+  protection. The service cannot re-apply an explicit DACL or hand ownership to Administrators, so
+  publication now accepts a file that already inherits the validated watchdog directory's aces,
+  with the same post-condition: no unexpected writer.
+- The privileged-state ACL check now counts raw `GENERIC_WRITE`/`GENERIC_ALL` aces as write-capable.
+  Those bits share nothing with the specific rights masks, so such an ace previously read as
+  granting no write access and passed the check.
+
 ## [5.6.0] - 2026-08-07
 
 ### Added

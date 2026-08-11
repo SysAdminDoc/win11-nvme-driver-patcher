@@ -144,7 +144,13 @@ public sealed class InstallerContentTests
         Assert.Contains("ServiceSidType", script);
         Assert.Contains("showsid", script);
         Assert.Contains("FileSystemRights]::Modify", script);
-        Assert.Contains("System-log readiness probe", script);
+
+        // A 3-second probe only proved the process started, and that let a service ship that could
+        // never read its own state and died at ~t+60-90s. The smoke must outlast the flush loop's
+        // third failure and then prove the loop actually published state.
+        Assert.Contains("LivenessSeconds", script);
+        Assert.Matches(@"\$LivenessSeconds\s*=\s*1[5-9]\d|\$LivenessSeconds\s*=\s*[2-9]\d\d", script);
+        Assert.Contains(@"NVMePatcher\Watchdog\watchdog.json", script);
 
         // The smoke runs elevated, so a planted sc.exe would run as administrator -- and a stub
         // returning success would make every assertion above pass against a service that is not
