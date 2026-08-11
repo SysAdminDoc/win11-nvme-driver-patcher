@@ -162,6 +162,25 @@ public partial class MainViewModel
             return;
         }
 
+        // The build-rule policy disables Apply too, and this method used to fall straight through
+        // to the "Apply is ready" text below. ActionButton sets ToolTipService.ShowOnDisabled, so
+        // the disabled button actively advertised that it was ready to run. The whole bundled
+        // ruleset can also go stale at once, which makes this a common state rather than an exotic
+        // one, so it needs the same honest treatment as the recovery block above.
+        if (!_mutationAllowedByBuild)
+        {
+            ActionReadinessText = "New driver mutations are disabled on this Windows build. Verify, remove, and diagnostics remain available.";
+            ActionReadinessColor = "Yellow";
+            ApplyButtonTooltipText = string.IsNullOrWhiteSpace(MutationBlockedReason)
+                ? "Apply is disabled because this Windows build is not covered by a current, trusted build rule."
+                : MutationBlockedReason;
+            var buildStatus = knownStatus ?? RegistryService.GetPatchStatus();
+            RemoveButtonTooltipText = buildStatus.Applied || buildStatus.Partial
+                ? "Remove remains available to reverse a patch that is already applied."
+                : RemoveUnavailableText;
+            return;
+        }
+
         var status = knownStatus ?? RegistryService.GetPatchStatus();
         int plannedComponentCount = GetPlannedComponentCount();
 

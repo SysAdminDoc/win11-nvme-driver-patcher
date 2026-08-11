@@ -587,6 +587,11 @@ public partial class MainViewModel : ObservableObject
             var buildPolicy = BuildActionPolicyService.EvaluateCurrent(Config.WorkingDir);
             _mutationAllowedByBuild = buildPolicy.MutationAllowed;
             _buildMutationBlockedReason = buildPolicy.MutationAllowed ? "" : buildPolicy.Reason;
+            // Say it out loud. This state disables the primary action, and it was previously set
+            // without a single line in the activity log, so a user whose Apply button had gone
+            // quiet had nowhere to find out why.
+            if (!buildPolicy.MutationAllowed)
+                Log($"Mutation actions disabled by build policy: {buildPolicy.Reason}", "WARNING");
             RefreshMutationSafetyState();
             });
         }

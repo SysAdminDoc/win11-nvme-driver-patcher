@@ -67,7 +67,13 @@ public static class ConfigImportExportService
                 config.IncludeServerKey = bundle.Config.IncludeServerKey;
                 config.SkipWarnings = bundle.Config.SkipWarnings;
                 config.PatchProfile = bundle.Config.PatchProfile;
-                ConfigService.Save(config);
+                // Honour the save result the same way the watchdog save below does. Discarding it
+                // left the imported profile live in memory, reported the import as succeeded, and
+                // persisted nothing -- so the next process launch silently ran the old profile.
+                // That is exactly the divergence fleet cloning exists to avoid.
+                var configSave = ConfigService.SaveWithStatus(config);
+                if (!configSave.Success)
+                    return (false, $"Config bundle was only partially imported: settings were not persisted ({configSave.Summary}).");
             }
             if (bundle.Watchdog is not null)
             {
