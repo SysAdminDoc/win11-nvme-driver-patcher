@@ -5,6 +5,21 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- The in-app updater could never verify a real release. GitHub answers every
+  `releases/download` request — `.sha256` sidecars included — with a 302 to its signed CDN, and the
+  updater's client deliberately has automatic redirects off so each hop can be re-checked against
+  the host allowlist. The sidecar fetch made a single non-redirecting request and treated the 302
+  as "no sidecar", which under `RequireIntegrity` fails closed: staging an update was impossible
+  against any real release. It now follows allowlisted redirects, applying the same host and
+  HTTPS checks per hop. The existing tests served the sidecar as a direct 200, which GitHub never
+  does, so none of them caught it.
+
+### Added
+- `Validate-ReleaseAssets.ps1 -PublishedTag <tag>` verifies a **published** release's asset list,
+  failing when any checksummed asset has no uploaded `.sha256` sidecar. Everything the gate checked
+  before proved the sidecars were generated into `publish/`; nothing proved they were uploaded, and
+  from 5.5.0 onward they were not — so the README's per-asset verification one-liner 404s and the
+  updater has nothing to fetch. Run it after `gh release create`.
 - The MSI is now built as an x64 package. WiX defaults to x86 when `-arch` is omitted, and an x86
   package redirects every HKLM registry component into `WOW6432Node` on 64-bit Windows — so
   `HKLM\Software\SysAdminDoc\NVMeDriverPatcher\InstallLocation` was written where the PowerShell

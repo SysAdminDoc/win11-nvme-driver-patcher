@@ -100,6 +100,86 @@ public sealed class VerifiedDownloaderTests
     }
 
     [Fact]
+    public async Task TryFetchSidecarHashAsync_FollowsTheRedirectGitHubActuallyServes()
+    {
+        // Real GitHub answers every releases/download request -- sidecars included -- with a 302 to
+        // its signed CDN, and this client has AllowAutoRedirect off so each hop can be re-checked.
+        // Treating that 302 as "no sidecar" reported every real release as unverifiable, and with
+        // RequireIntegrity set that fails closed: staging an update became impossible. The other
+        // sidecar tests serve a direct 200, which GitHub never does, so none of them caught it.
+        var hash = new string('a', 64);
+        var sidecar = new Uri("https://github.com/owner/repo/releases/download/v1/NVMeDriverPatcher.exe.sha256");
+        var cdn = new Uri("https://release-assets.githubusercontent.com/pipeline/1/NVMeDriverPatcher.exe.sha256?sp=r");
+        var handler = new RedirectingSidecarOnlyHandler(sidecar, cdn, $"{hash}  NVMeDriverPatcher.exe");
+        using var client = new System.Net.Http.HttpClient(handler);
+
+        var result = await VerifiedDownloader.TryFetchSidecarHashAsync(
+            client,
+            new Uri("https://github.com/owner/repo/releases/download/v1/NVMeDriverPatcher.exe"),
+            new[] { "github.com", "release-assets.githubusercontent.com" },
+            CancellationToken.None);
+
+        Assert.Equal(hash, result);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task TryFetchSidecarHashAsync_RefusesASidecarRedirectToAnUntrustedHost()
+    {
+        var sidecar = new Uri("https://github.com/owner/repo/releases/download/v1/NVMeDriverPatcher.exe.sha256");
+        var evil = new Uri("https://evil.example.com/NVMeDriverPatcher.exe.sha256");
+        var handler = new RedirectingSidecarOnlyHandler(sidecar, evil, new string('a', 64));
+        using var client = new System.Net.Http.HttpClient(handler);
+
+        var result = await VerifiedDownloader.TryFetchSidecarHashAsync(
+            client,
+            new Uri("https://github.com/owner/repo/releases/download/v1/NVMeDriverPatcher.exe"),
+            new[] { "github.com", "release-assets.githubusercontent.com" },
+            CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    private sealed class RedirectingSidecarOnlyHandler : HttpMessageHandler
+    {
+        private readonly Uri _sidecar;
+        private readonly Uri _redirectTarget;
+        private readonly string _body;
+
+        public RedirectingSidecarOnlyHandler(Uri sidecar, Uri redirectTarget, string body)
+        {
+            _sidecar = sidecar;
+            _redirectTarget = redirectTarget;
+            _body = body;
+        }
+
+        public List<string> Requests { get; } = new();
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri ?? throw new InvalidOperationException("Missing request URI.");
+            Requests.Add(uri.AbsoluteUri);
+
+            if (uri.AbsoluteUri == _sidecar.AbsoluteUri)
+            {
+                var redirect = new HttpResponseMessage(HttpStatusCode.Found);
+                redirect.Headers.Location = _redirectTarget;
+                return Task.FromResult(redirect);
+            }
+
+            if (uri.AbsoluteUri == _redirectTarget.AbsoluteUri)
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(_body)
+                });
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
+    [Fact]
     public async Task DownloadAsync_UsesOriginalReleaseSidecarBeforeRedirectTarget()
     {
         var payload = Encoding.ASCII.GetBytes(new string('A', 2048));

@@ -184,21 +184,47 @@ public static class VerifiedDownloader
         CancellationToken cancellationToken)
     {
         var sidecarUri = new UriBuilder(assetUri) { Path = assetUri.AbsolutePath + ".sha256" }.Uri;
-        if (!IsAllowedHost(sidecarUri.Host, allowedHosts)) return null;
 
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, sidecarUri);
-            using var resp = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
-            if (!resp.IsSuccessStatusCode) return null;
-            var body = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            return ExtractSha256(body);
+            // GitHub serves every releases/download asset — sidecars included — as a 302 to its
+            // signed CDN, and the client this runs on has AllowAutoRedirect off so each hop can be
+            // re-checked against the allowlist. Treating a redirect as "no sidecar" reported every
+            // real release as unverifiable, which fails closed under RequireIntegrity and made
+            // staging impossible. Follow the hops here too, with the same host and scheme checks.
+            var current = sidecarUri;
+            for (int hops = 0; hops < MaxSidecarRedirects; hops++)
+            {
+                if (!IsAllowedHost(current.Host, allowedHosts)) return null;
+                if (current.Scheme != Uri.UriSchemeHttps) return null;
+
+                using var req = new HttpRequestMessage(HttpMethod.Get, current);
+                using var resp = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
+
+                var status = (int)resp.StatusCode;
+                if (status is >= 300 and <= 399)
+                {
+                    var location = resp.Headers.Location;
+                    if (location is null) return null;
+                    current = location.IsAbsoluteUri ? location : new Uri(current, location);
+                    continue;
+                }
+
+                if (!resp.IsSuccessStatusCode) return null;
+                var body = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return ExtractSha256(body);
+            }
+            return null;
         }
         catch
         {
             return null;
         }
     }
+
+    // A sidecar is a few dozen bytes behind at most one CDN redirect; more hops than this is a
+    // misconfiguration, not a route worth chasing.
+    private const int MaxSidecarRedirects = 5;
 
     private static async Task<string?> TryFetchPreferredSidecarHashAsync(
         HttpClient client,
