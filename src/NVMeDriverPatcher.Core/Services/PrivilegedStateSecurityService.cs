@@ -49,6 +49,14 @@ public static class PrivilegedStateSecurityService
         WindowsBuildRulesService.BundledRulesFile
     ];
 
+    // Windows maps generic rights to specific ones when a descriptor is applied to a real object,
+    // but an ace can still reach us carrying raw GENERIC_WRITE/GENERIC_ALL (an SDDL string that was
+    // never applied, a descriptor read back from a foreign writer). Those bits share nothing with
+    // the specific masks below, so without them such an ace reads as "grants no write" and the
+    // whole check silently waves it through. Same trap the PowerShell ACL probe already spells out.
+    private const FileSystemRights GenericAllRight = (FileSystemRights)0x10000000;
+    private const FileSystemRights GenericWriteRight = (FileSystemRights)0x40000000;
+
     private const FileSystemRights WriteCapableRights =
         FileSystemRights.Write |
         FileSystemRights.Modify |
@@ -58,7 +66,9 @@ public static class PrivilegedStateSecurityService
         FileSystemRights.ChangePermissions |
         FileSystemRights.TakeOwnership |
         FileSystemRights.CreateFiles |
-        FileSystemRights.CreateDirectories;
+        FileSystemRights.CreateDirectories |
+        GenericAllRight |
+        GenericWriteRight;
 
     public static StateDirectorySecurityResult EnsureForMutation(string workingDir)
     {
@@ -95,7 +105,7 @@ public static class PrivilegedStateSecurityService
             return new(true, directory, "Explicit isolated watchdog directory accepted.");
         }
 
-        var prepared = EnsureRuntimeTree();
+        var prepared = EnsureRuntimeTree(StateDirectoryRole.Watchdog);
         if (!prepared.Success)
             return prepared;
         return ValidateDirectory(directory, StateDirectoryRole.Watchdog);
@@ -125,7 +135,30 @@ public static class PrivilegedStateSecurityService
         }
     }
 
-    public static StateDirectorySecurityResult EnsureRuntimeTree()
+    public static StateDirectorySecurityResult EnsureRuntimeTree() =>
+        EnsureRuntimeTree(StateDirectoryRole.Privileged);
+
+    /// <summary>
+    /// The directories a caller in <paramref name="callerRole"/> must prove trustworthy before it
+    /// may use the runtime tree. The watchdog service runs as LocalService, which deliberately has
+    /// NO ace on the privileged child — reading that child's DACL throws for it, so a watchdog
+    /// caller must never be asked to validate a surface it is not entitled to read. Anything else
+    /// turns the strictest part of the boundary into a self-inflicted denial of service.
+    /// </summary>
+    internal static IReadOnlyList<(string Path, StateDirectoryRole Role)> RequiredValidationScope(
+        string root,
+        StateDirectoryRole callerRole)
+    {
+        var privileged = Path.Combine(root, AppConfig.PrivilegedStateFolderName);
+        var watchdog = Path.Combine(root, AppConfig.WatchdogStateFolderName);
+        return callerRole == StateDirectoryRole.Watchdog
+            ? [(root, StateDirectoryRole.SharedRoot), (watchdog, StateDirectoryRole.Watchdog)]
+            : [(root, StateDirectoryRole.SharedRoot),
+               (privileged, StateDirectoryRole.Privileged),
+               (watchdog, StateDirectoryRole.Watchdog)];
+    }
+
+    internal static StateDirectorySecurityResult EnsureRuntimeTree(StateDirectoryRole callerRole)
     {
         var root = AppConfig.GetSharedWorkingDirPath();
         if (string.IsNullOrWhiteSpace(root))
@@ -140,11 +173,27 @@ public static class PrivilegedStateSecurityService
             Directory.CreateDirectory(root);
             var existingPrivileged = Path.Combine(root, AppConfig.PrivilegedStateFolderName);
             var existingWatchdog = Path.Combine(root, AppConfig.WatchdogStateFolderName);
-            if (TryValidateDirectory(root, StateDirectoryRole.SharedRoot, out _) &&
-                TryValidateDirectory(existingPrivileged, StateDirectoryRole.Privileged, out _) &&
-                TryValidateDirectory(existingWatchdog, StateDirectoryRole.Watchdog, out _))
+            var scope = RequiredValidationScope(root, callerRole);
+            if (scope.All(entry => TryValidateDirectory(entry.Path, entry.Role, out _)))
             {
-                return new(true, existingPrivileged, "Protected ProgramData state directories are ready and validated.");
+                return new(
+                    true,
+                    callerRole == StateDirectoryRole.Watchdog ? existingWatchdog : existingPrivileged,
+                    "Protected ProgramData state directories are ready and validated.");
+            }
+
+            // Repair rewrites owners and DACLs, which needs an elevated token. The LocalService
+            // watchdog and the standard-user tray have neither WRITE_OWNER on the tree nor
+            // SeRestorePrivilege (`sc privs` strips the service to SeChangeNotifyPrivilege), so the
+            // attempt throws and the caller reads it as untrusted state. The honest answer is that
+            // the tree still needs the installer or an elevated run.
+            if (!IsProcessElevated())
+            {
+                return StateDirectorySecurityResult.Failed(
+                    root,
+                    "Protected ProgramData state directories are missing or untrusted, and this process is not " +
+                    "elevated enough to establish them. Run the elevated app, or re-run the watchdog installer's " +
+                    "/grant-runtime-access verb.");
             }
 
             var rootTrustedBefore = rootExisted && TryValidateDirectory(root, StateDirectoryRole.SharedRoot, out _);
@@ -191,8 +240,16 @@ public static class PrivilegedStateSecurityService
             if (!TryGetHardLinkCount(path, out var links) || links != 1)
                 return StateDirectorySecurityResult.Failed(path, "Critical state file has an unverifiable or non-single hard-link count.");
 
+            // A watchdog state file published by the LocalService service cannot carry a
+            // re-applied explicit DACL, so it inherits one from the watchdog child instead. That is
+            // equivalent protection — the inherited aces ARE the parent's — but only while the
+            // parent itself is trusted, so accept inheritance only after proving that.
+            bool inheritedProtectionIsAcceptable =
+                role == StateDirectoryRole.Watchdog && ParentDirectoryIsTrusted(path, role);
+
             var security = new FileInfo(path).GetAccessControl(AccessControlSections.Owner | AccessControlSections.Access);
-            if (!DescriptorAllowsOnlyExpectedWriters(security, role, requireProtectedAcl: true))
+            if (!DescriptorAllowsOnlyExpectedWriters(
+                    security, role, requireProtectedAcl: !inheritedProtectionIsAcceptable))
                 return StateDirectorySecurityResult.Failed(path, "Critical state file owner or DACL is not trusted.");
             return new(true, path, "Critical state file metadata is trusted.");
         }
@@ -200,6 +257,38 @@ public static class PrivilegedStateSecurityService
         {
             return StateDirectorySecurityResult.Failed(
                 path, $"Critical state metadata could not be verified: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Guarantees the role's protection on a published state file. Elevated callers re-apply the
+    /// explicit DACL outright; the LocalService watchdog cannot (no WRITE_OWNER, no
+    /// SeRestorePrivilege) and instead proves the file already carries the parent's protection.
+    /// Both routes end at the same post-condition — no unexpected writer — so a service that only
+    /// has the second route must not be treated as a failed publication.
+    /// </summary>
+    public static StateDirectorySecurityResult EnsureCriticalFileProtection(string path, StateDirectoryRole role)
+    {
+        var applied = ProtectCriticalFile(path, role);
+        return applied.Success ? applied : ValidateCriticalFile(path, role);
+    }
+
+    private static bool ParentDirectoryIsTrusted(string path, StateDirectoryRole role)
+    {
+        var parent = Path.GetDirectoryName(path);
+        return !string.IsNullOrWhiteSpace(parent) && TryValidateDirectory(parent, role, out _);
+    }
+
+    internal static bool IsProcessElevated()
+    {
+        try
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -232,8 +321,17 @@ public static class PrivilegedStateSecurityService
     {
         if (requireProtectedAcl && !security.AreAccessRulesProtected)
             return false;
+        // Watchdog state is written by LocalService, so a file it creates is owned by LocalService
+        // and nothing in the service token can hand ownership to Administrators. Ownership grants
+        // WRITE_DAC, but the role's own aces already give that identity Modify on the file and its
+        // parent, so accepting it as owner concedes nothing it could not already do.
+        var allowedOwners = role switch
+        {
+            StateDirectoryRole.Watchdog => new[] { AdministratorsSid, SystemSid, LocalServiceSid, ServiceSid },
+            _ => new[] { AdministratorsSid, SystemSid }
+        };
         var owner = security.GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier;
-        if (owner is null || (!owner.Equals(AdministratorsSid) && !owner.Equals(SystemSid)))
+        if (owner is null || !allowedOwners.Any(allowed => allowed.Equals(owner)))
             return false;
 
         var allowedWriters = role switch

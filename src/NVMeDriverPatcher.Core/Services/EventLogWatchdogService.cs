@@ -485,13 +485,13 @@ public static class EventLogWatchdogService
                 return new(WatchdogStateAccessStatus.Unavailable, "Published watchdog state failed validation: " + primaryError);
             if (AppConfig.IsRuntimeWorkingDirectory(workingDir))
             {
-                var protectedPrimary = PrivilegedStateSecurityService.ProtectCriticalFile(
+                var protectedPrimary = PrivilegedStateSecurityService.EnsureCriticalFileProtection(
                     path, StateDirectoryRole.Watchdog);
                 if (!protectedPrimary.Success)
                     return new(WatchdogStateAccessStatus.Unavailable, protectedPrimary.Summary);
                 if (File.Exists(backupPath))
                 {
-                    var protectedBackup = PrivilegedStateSecurityService.ProtectCriticalFile(
+                    var protectedBackup = PrivilegedStateSecurityService.EnsureCriticalFileProtection(
                         backupPath, StateDirectoryRole.Watchdog);
                     if (!protectedBackup.Success)
                         return new(WatchdogStateAccessStatus.Unavailable, protectedBackup.Summary);
