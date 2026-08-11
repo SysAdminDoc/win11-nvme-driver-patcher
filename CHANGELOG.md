@@ -5,6 +5,17 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- Four features were unreachable from the GUI. The v5.x redesign replaced the old overview with the
+  command deck but left the old container in the window with `Visibility="Collapsed"`, and it was
+  the only place these were bound: **Cancel Benchmark** (so a running DiskSpd benchmark could not be
+  stopped, while the activity log told the user to "Click Cancel to stop early"), **Try Fallback**
+  (the persistent re-entry to the FeatureStore fallback — a user who dismissed the one-shot
+  post-reboot dialog had no way back to it except the CLI), **Upgrade Safe Boot Entries** (the
+  KB5079391 `INACCESSIBLE_BOOT_DEVICE` remediation, which the app detected and then offered no
+  button for), and the **mutation-blocked notice** that explains why Apply is disabled on an
+  unsupported or stale-ruleset build. All four now live in the visible command deck, and the dead
+  container is gone. A test fails if any conditional affordance ends up inside a container whose
+  visibility is hardcoded rather than bound.
 - The protected-state ACL check rejected the very state its own writer produces. Its write-capable
   mask was built from the composite `FileSystemRights` values (`Write`, `Modify`, `FullControl`),
   each of which folds in the standard rights `READ_CONTROL` and `SYNCHRONIZE` — so ANDing a plain
