@@ -46,6 +46,13 @@ try {
     if ($service.PathName -notmatch [regex]::Escape($exePath)) {
         throw "Service ImagePath '$($service.PathName)' does not target '$exePath'."
     }
+    # An unquoted ImagePath containing spaces is the classic unquoted-service-path weakness: SCM
+    # probes each space-delimited prefix, so an admin-writable C:\Program.exe would run as the
+    # service. sc.exe stores binpath= verbatim, and ArgumentList's own quoting is stripped by
+    # CommandLineToArgvW before sc ever sees it, so this has to be asserted on the stored value.
+    if ($service.PathName -notmatch '^\s*"') {
+        throw "Service ImagePath is not quoted: $($service.PathName)"
+    }
 
     $failure = Invoke-ScQuery 'qfailure'
     if ([regex]::Matches($failure, 'RESTART', 'IgnoreCase').Count -lt 2) {

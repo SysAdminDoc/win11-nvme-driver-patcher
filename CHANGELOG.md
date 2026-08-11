@@ -5,6 +5,17 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- The watchdog service now exits non-zero when its flush loop gives up, so SCM's restart actions
+  actually fire. A faulted `BackgroundService` stops the host gracefully, `RunAsync` does not
+  rethrow, and `Main` returned 0 — a clean `SERVICE_STOPPED`, which SCM never treats as a failure
+  even with non-crash failure actions enabled. The log line claiming "terminating so SCM recovery
+  can restart the service" had never been true, so a transient event-log outage stopped the service
+  permanently instead of restarting it.
+- `/install` registers a quoted service `ImagePath`. `ArgumentList` quotes each token, but
+  `CommandLineToArgvW` strips those quotes before `sc.exe` parses its arguments, so the path was
+  stored unquoted — the classic unquoted-service-path weakness for an install under
+  `C:\Program Files`, where SCM probes `C:\Program.exe` first. The packaging smoke asserts the
+  stored value is quoted.
 - Event-log queries built their timestamp with a culture-sensitive format string. In a custom .NET
   format, `:` and `.` are the culture's time and decimal separators rather than literals, so on a
   Finnish or German system the watchdog, the live event tail, and the code-integrity check all
