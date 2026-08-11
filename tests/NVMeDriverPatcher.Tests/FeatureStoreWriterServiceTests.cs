@@ -1,9 +1,32 @@
 using NVMeDriverPatcher.Services;
+using Xunit.Abstractions;
 
 namespace NVMeDriverPatcher.Tests;
 
 public sealed class FeatureStoreWriterServiceTests
 {
+    private readonly ITestOutputHelper _output;
+
+    public FeatureStoreWriterServiceTests(ITestOutputHelper output) => _output = output;
+
+    /// <summary>
+    /// True when this process could actually mutate machine-wide feature state. Two tests below
+    /// exercise the REAL native writer, which is safe only because an unelevated call is rejected
+    /// by the kernel. Run elevated, the same calls write the post-block NVMe fallback IDs into the
+    /// Runtime AND Boot stores of the machine running the suite — persisting across reboot with no
+    /// cleanup — or silently undo a fallback the operator legitimately applied. The suite must
+    /// never do that, so when elevated these tests report why they did not run instead of
+    /// accepting the mutation.
+    /// </summary>
+    private bool SkipBecauseElevated(string what)
+    {
+        if (!PrivilegedStateSecurityService.IsProcessElevated()) return false;
+        _output.WriteLine(
+            $"SKIPPED: {what} exercises the real native FeatureStore writer, which would mutate " +
+            "machine-wide boot state from an elevated test run. Run the suite unelevated to cover it.");
+        return true;
+    }
+
     [Fact]
     public async Task RunExclusive_LockTimeoutReturnsBusyWithoutInvokingProtectedAction()
     {
@@ -113,22 +136,16 @@ public sealed class FeatureStoreWriterServiceTests
     [Fact]
     public void WriteOverrides_NonAdmin_FailsClosedWithoutThrowing()
     {
-        // The native writer is real now (RtlSetFeatureConfigurations). From a non-elevated
-        // test host the kernel rejects the write — the contract is: no exception, no
-        // success claim, and a message that routes the user somewhere actionable.
-        // (On an elevated host this would mutate feature state, so we only assert the
-        // failure path when the call did fail.)
+        // The native writer is real (RtlSetFeatureConfigurations). From a non-elevated test host
+        // the kernel rejects the write — the contract is: no exception, no success claim, and a
+        // message that routes the user somewhere actionable.
+        if (SkipBecauseElevated(nameof(WriteOverrides_NonAdmin_FailsClosedWithoutThrowing))) return;
+
         var result = FeatureStoreWriterService.WriteOverrides(new[] { 60786016, 48433719 });
-        if (!result.Success)
-        {
-            Assert.False(string.IsNullOrWhiteSpace(result.Summary));
-            Assert.Contains("fallback", result.Summary, StringComparison.OrdinalIgnoreCase);
-        }
-        else
-        {
-            // Elevated environment: the write went through and must report what it applied.
-            Assert.Equal(new[] { 60786016, 48433719 }, result.AppliedIds);
-        }
+
+        Assert.False(result.Success, "An unelevated write must never report success.");
+        Assert.False(string.IsNullOrWhiteSpace(result.Summary));
+        Assert.Contains("fallback", result.Summary, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -325,12 +342,19 @@ public sealed class FeatureStoreWriterServiceTests
     [Fact]
     public void ResetAppliedFallback_NoEvidenceOnHost_ReportsNothingToUndo()
     {
-        // The "no applied IDs" case. CI/dev hosts have no NVMe fallback flags enabled, so this
-        // reports a clean no-op. Environment-aware, mirroring WriteOverrides_NonAdmin: if a host
-        // unexpectedly HAS them enabled the call still must not throw and must produce a summary.
+        // The "no applied IDs" case: a host with no NVMe fallback flags enabled reports a clean
+        // no-op. Elevated, this call would silently undo a fallback the operator actually applied,
+        // reverting their patch on next boot — so it does not run there.
+        if (SkipBecauseElevated(nameof(ResetAppliedFallback_NoEvidenceOnHost_ReportsNothingToUndo))) return;
+
+        // HasFallbackEvidence is a pure read, so it is safe either way. On an unelevated host the
+        // reset cannot mutate anything regardless of what it finds.
+        var hadEvidence = FeatureStoreWriterService.HasFallbackEvidence();
+
         var result = FeatureStoreWriterService.ResetAppliedFallback();
+
         Assert.False(string.IsNullOrWhiteSpace(result.Summary));
-        if (!FeatureStoreWriterService.HasFallbackEvidence())
+        if (!hadEvidence)
         {
             Assert.True(result.Success);
             Assert.Contains("nothing to undo", result.Summary, StringComparison.OrdinalIgnoreCase);
