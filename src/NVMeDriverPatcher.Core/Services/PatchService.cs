@@ -238,7 +238,15 @@ public static class PatchService
                 preserveExistingBaseline: ledgerPreparation.ReusedBaseline))
         {
             log?.Invoke("[ERROR] BLOCKED: SafeBoot baseline could not be persisted before mutation.");
-            MutationLedgerService.RestoreOriginalState(workingDir, log);
+            // Nothing was written in this run, so close the prepared ledger rather than
+            // restoring the baseline: on a re-apply that baseline is the first clean
+            // pre-patch state, and writing it back would silently revert the patch the
+            // machine is already running -- with no revert notice and no reboot prompt.
+            if (!MutationLedgerService.MarkPreparedWithoutMutation(workingDir, result.MutationOperationId, log))
+            {
+                result.RollbackFullyReversed = false;
+                log?.Invoke("[WARNING] The prepared ledger could not be closed; preserve it for recovery.");
+            }
             FinalizeResult(result, nativeStatus, bypassStatus, progress);
             return result;
         }
@@ -356,9 +364,18 @@ public static class PatchService
             // Already logged + event-logged at the throw site. Fall through to finally
             // so the progress bar clears and we still capture an after-snapshot.
             if (bitLockerStateMayHaveChanged)
-                MutationLedgerService.RestoreOriginalState(workingDir, log);
-            else
-                MutationLedgerService.MarkPreparedWithoutMutation(workingDir, result.MutationOperationId, log);
+            {
+                // Capture the outcome. Discarding it made a failed protection resume or a
+                // partial registry restore indistinguishable from a clean abort, so
+                // RequiresManualRecoveryWarning never fired for the caller.
+                var aborted = MutationLedgerService.RestoreOriginalState(workingDir, log);
+                result.WasRolledBack = true;
+                result.RollbackFullyReversed = aborted.Success;
+            }
+            else if (!MutationLedgerService.MarkPreparedWithoutMutation(workingDir, result.MutationOperationId, log))
+            {
+                result.RollbackFullyReversed = false;
+            }
         }
         catch (Exception ex)
         {

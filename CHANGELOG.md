@@ -5,6 +5,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- An apply that aborts before writing anything no longer un-applies a patch that is already
+  running. When the Safe Boot journal could not be persisted, the abort path restored the ledger
+  baseline — but on a re-apply that baseline is the *first clean pre-patch state*, so writing it
+  back silently reverted the live patch while the log said the run was blocked "before mutation"
+  and no reboot was requested. It now closes the prepared ledger without touching system state,
+  which is what the sibling abort path already did. Both pre-mutation aborts also record whether
+  the rollback actually succeeded, so a partial restore can no longer look like a clean abort.
 - Dialog buttons are readable on hover in every theme. The dialog tinted its primary button by
   setting Foreground, Background and BorderBrush directly on the control, and a local value
   outranks a template trigger — so Foreground stayed pinned to the body text colour while the
