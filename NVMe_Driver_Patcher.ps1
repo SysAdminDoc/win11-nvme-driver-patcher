@@ -1753,10 +1753,14 @@ Windows Registry Editor Version 5.00
 "156965516"=-
 "1176759950"=-
 
-[-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}]
-[-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}]
-[-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet$controlSetNum\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}]
-[-HKEY_LOCAL_MACHINE\SYSTEM\ControlSet$controlSetNum\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}]
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}]
+@=-
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}]
+@=-
+[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet$controlSetNum\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}]
+@=-
+[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet$controlSetNum\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}]
+@=-
 "@
 
     $regFile = Join-Path $kitDir "NVMe_Remove_Patch.reg"
@@ -1823,8 +1827,8 @@ for /L %%N in (1,1,9) do (
     reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f 2>nul
     reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f 2>nul
     reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f 2>nul
-    reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /f 2>nul
-    reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /f 2>nul
+    reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f 2>nul
+    reg delete "HKLM\OFFLINE_SYS\ControlSet00%%N\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f 2>nul
 )
 
 echo Unloading registry hive...
@@ -1837,8 +1841,8 @@ reg delete "HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides" /v 
 reg delete "HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f 2>nul
 reg delete "HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f 2>nul
 reg delete "HKLM\SYSTEM\%CS%\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f 2>nul
-reg delete "HKLM\SYSTEM\%CS%\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /f 2>nul
-reg delete "HKLM\SYSTEM\%CS%\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /f 2>nul
+reg delete "HKLM\SYSTEM\%CS%\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f 2>nul
+reg delete "HKLM\SYSTEM\%CS%\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f 2>nul
 
 :done
 echo.
@@ -2829,6 +2833,67 @@ function New-SafeRestorePoint {
     }
 }
 
+function Remove-OwnedSafeBootKey {
+    <#
+    .SYNOPSIS
+    Removes only the SafeBoot state this tool created, never the key itself when Windows owns it.
+    .DESCRIPTION
+    Build 26200.8737 and later ship these SafeBoot GUID keys themselves, carrying a NvmeDisk
+    value, and ACL-protect them. Deleting the whole key there removes the OS's own Safe Mode
+    storage-disk class registration, so Safe Mode can fail to bind the NVMe boot disk. Mirrors
+    PatchService.RemoveOwnedSafeBootKey (issue #13): inspect first, delete only the default value
+    when foreign values are present, and never take ownership or rewrite the ACL.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string]$Path,
+        [Parameter(Mandatory)] [string]$Label,
+        [Parameter(Mandatory)] [ref]$RemovedCount
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Write-Log "  [ABSENT] $Label" -Level "INFO"
+        return
+    }
+
+    # Inspection phase. A denial here means Windows ACL-protects the key, so we certainly did
+    # not create it and there is nothing of ours to remove.
+    $foreignValues = @()
+    try {
+        $key = Get-Item -LiteralPath $Path -ErrorAction Stop
+        $foreignValues = @($key.GetValueNames() | Where-Object { $_ -and $_.Length -gt 0 })
+    }
+    catch [System.Security.SecurityException] {
+        Write-Log "  [PRESERVED] $Label - OS-owned and ACL-protected by Windows; nothing to remove" -Level "INFO"
+        return
+    }
+    catch [System.UnauthorizedAccessException] {
+        Write-Log "  [PRESERVED] $Label - OS-owned and ACL-protected by Windows; nothing to remove" -Level "INFO"
+        return
+    }
+    catch {
+        Write-Log "  [FAIL] ${Label}: $($_.Exception.Message)" -Level "ERROR"
+        return
+    }
+
+    try {
+        if ($foreignValues.Count -gt 0) {
+            # Windows owns this key. Clear only our default value and keep the key intact.
+            Remove-ItemProperty -LiteralPath $Path -Name "(Default)" -Force -ErrorAction SilentlyContinue
+            Write-Log "  [PRESERVED] $Label - OS-owned values kept; removed only the app default value" -Level "SUCCESS"
+            $RemovedCount.Value++
+            return
+        }
+
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+        Write-Log "  [REMOVED] $Label" -Level "SUCCESS"
+        $RemovedCount.Value++
+    }
+    catch {
+        Write-Log "  [FAIL] ${Label}: $($_.Exception.Message)" -Level "ERROR"
+    }
+}
+
 function Uninstall-NVMePatch {
     Write-Log "========================================" -Level "INFO"
     Write-Log "STARTING PATCH REMOVAL" -Level "INFO"
@@ -2873,27 +2938,8 @@ function Uninstall-NVMePatch {
 
         Update-Progress -Value 60 -Status "Removing SafeBoot keys..."
 
-        if (Test-Path -LiteralPath $script:Config.SafeBootMinimal) {
-            try {
-                Remove-Item -LiteralPath $script:Config.SafeBootMinimal -Force -ErrorAction Stop
-                Write-Log "  [REMOVED] SafeBoot Minimal" -Level "SUCCESS"
-                $removedCount++
-            }
-            catch {
-                Write-Log "  [FAIL] SafeBoot Minimal: $($_.Exception.Message)" -Level "ERROR"
-            }
-        }
-
-        if (Test-Path -LiteralPath $script:Config.SafeBootNetwork) {
-            try {
-                Remove-Item -LiteralPath $script:Config.SafeBootNetwork -Force -ErrorAction Stop
-                Write-Log "  [REMOVED] SafeBoot Network" -Level "SUCCESS"
-                $removedCount++
-            }
-            catch {
-                Write-Log "  [FAIL] SafeBoot Network: $($_.Exception.Message)" -Level "ERROR"
-            }
-        }
+        Remove-OwnedSafeBootKey -Path $script:Config.SafeBootMinimal -Label "SafeBoot Minimal" -RemovedCount ([ref]$removedCount)
+        Remove-OwnedSafeBootKey -Path $script:Config.SafeBootNetwork -Label "SafeBoot Network" -RemovedCount ([ref]$removedCount)
 
         Update-Progress -Value 90 -Status "Validating..."
         Write-Log "========================================" -Level "INFO"

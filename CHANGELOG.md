@@ -5,6 +5,15 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- Removal no longer deletes the SafeBoot GUID and service-name keys outright. Windows ships those
+  keys itself on build 26200.8737 and later, carrying a `NvmeDisk` value, so deleting the key takes
+  the OS's own Safe Mode storage-disk registration with it and Safe Mode can stop seeing the NVMe
+  boot disk (issue #13). The maintained app's uninstall path already preserved them, but the
+  generated recovery kit's `.reg` and `.bat` — the artifacts used from WinRE on a machine that is
+  already failing to boot — deleted the whole key across every control set, and so did the legacy
+  PowerShell script's `-Remove`. All of them now clear only the default value, which is the only
+  part this tool writes and exactly what the residue probe checks. A test fails if any generated
+  artifact goes back to deleting the key.
 - Removing the patch after a FeatureStore fallback could report "exact pre-mutation state restored
   and verified" while the fallback feature IDs were still enabled and `nvmedisk` stayed bound after
   reboot. Applying again on top of a live fallback (a manual re-apply, or the persistence guard
