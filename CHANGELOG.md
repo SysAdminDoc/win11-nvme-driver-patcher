@@ -5,6 +5,17 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- Dialog buttons are readable on hover in every theme. The dialog tinted its primary button by
+  setting Foreground, Background and BorderBrush directly on the control, and a local value
+  outranks a template trigger — so Foreground stayed pinned to the body text colour while the
+  button template still swapped the background to the accent hover colour underneath it. In
+  HighContrast that is white on near-white cyan, unreadable in the theme that exists for
+  readability; in Light it is near-black on dark blue. Only Dark happened to survive. Severity is
+  still carried by the eyebrow, icon, accent bar, and message tint.
+- Telemetry gauges and the tuning panel's profile buttons re-colour when the theme changes. Both
+  resolve brushes imperatively, which captures an instance from the active dictionary; after a
+  switch they kept the previous theme's colours because nothing re-ran them — the underlying data
+  had not changed. The tuning panel had no theme subscription at all.
 - The legacy PowerShell script detects BitLocker again. `Get-BitLockerVolume` reports `MountPoint`
   as `C:` with no trailing separator, and the check compared it against `C:\`, so it was always
   false — and the correct WMI fallback only runs from a `catch` that never fires, because the

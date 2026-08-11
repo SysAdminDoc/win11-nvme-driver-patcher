@@ -20,6 +20,11 @@ public partial class TelemetryView : UserControl
     private bool _themeSubscribed;
     private List<(DateTime Time, int TempC)> _lastTempHistory = [];
     private List<(DateTime Time, int WearPct)> _lastWearHistory = [];
+    // Brushes resolved imperatively are captured instances: once the dictionary they came
+    // from is swapped out they keep the OLD colours, and nothing re-resolves them because the
+    // source data has not changed. Cache the inputs so a theme change can re-apply them.
+    private NVMeHealthInfo? _lastHealth;
+    private (string Message, string Tone)? _lastStatus;
 
     public event Action<int>? DriveSelected;
 
@@ -102,6 +107,7 @@ public partial class TelemetryView : UserControl
 
     public void SetTelemetryStatus(string message, string tone = "muted")
     {
+        _lastStatus = (message, tone);
         TelemetryStatusText.Text = message;
 
         string foregroundKey;
@@ -144,6 +150,7 @@ public partial class TelemetryView : UserControl
 
     public void UpdateCurrentHealth(NVMeHealthInfo? health)
     {
+        _lastHealth = health;
         if (health is null)
         {
             TempValue.Text = "-";
@@ -312,6 +319,10 @@ public partial class TelemetryView : UserControl
         SetupChartDefaults();
         UpdateTempHistory(_lastTempHistory);
         UpdateWearHistory(_lastWearHistory);
+        // Re-resolve the metric and status brushes against the new dictionary; without this
+        // the gauges kept the previous theme's colours until the next telemetry poll.
+        UpdateCurrentHealth(_lastHealth);
+        if (_lastStatus is { } status) SetTelemetryStatus(status.Message, status.Tone);
     }
 
     private void TelemetryView_Loaded(object sender, RoutedEventArgs e)

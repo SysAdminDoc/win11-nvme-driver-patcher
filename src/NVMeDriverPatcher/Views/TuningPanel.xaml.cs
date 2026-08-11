@@ -13,13 +13,31 @@ public partial class TuningPanel : UserControl
     private bool _suppressEvents;
     private TuningProfile _loadedProfile = TuningProfile.Balanced;
     private bool _loadedProfileHasExplicitOverrides;
+    private bool _themeSubscribed;
     private static readonly TuningProfile[] Presets = TuningProfile.GetPresets();
 
     public TuningPanel()
     {
         InitializeComponent();
-        Loaded += (_, _) => LoadCurrentValues();
+        Loaded += (_, _) =>
+        {
+            LoadCurrentValues();
+            if (_themeSubscribed) return;
+            ThemeService.ThemeChanged += OnThemeChanged;
+            _themeSubscribed = true;
+        };
+        Unloaded += (_, _) =>
+        {
+            if (!_themeSubscribed) return;
+            ThemeService.ThemeChanged -= OnThemeChanged;
+            _themeSubscribed = false;
+        };
     }
+
+    // SetButtonState resolves brushes imperatively, so the profile buttons kept the previous
+    // theme's colours after a switch -- nothing re-ran them because the active profile had not
+    // changed. This panel had no theme subscription at all.
+    private void OnThemeChanged(object? sender, EventArgs e) => LoadCurrentValues();
 
     private void LoadCurrentValues()
     {
