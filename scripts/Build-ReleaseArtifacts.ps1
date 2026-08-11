@@ -109,8 +109,14 @@ if (-not $SkipMsi) {
 
     $wix = Join-Path $env:USERPROFILE '.dotnet/tools/wix.exe'
     if (-not (Test-Path -LiteralPath $wix)) { $wix = 'wix' }
+    # -arch x64 is load-bearing, not cosmetic. WiX defaults to x86, and an x86 package puts every
+    # HKLM registry component under WOW6432Node on 64-bit Windows -- so the InstallLocation value
+    # the PowerShell module and the Intune detection script read from 64-bit contexts is written
+    # somewhere they never look, and a custom INSTALLFOLDER install silently loses CLI resolution.
     Invoke-Checked $wix @(
         'build',
+        '-arch',
+        'x64',
         (Join-Path $repoRoot 'packaging/wix/NVMeDriverPatcher.wxs'),
         '-d',
         "PublishDir=$input",

@@ -5,6 +5,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- The MSI is now built as an x64 package. WiX defaults to x86 when `-arch` is omitted, and an x86
+  package redirects every HKLM registry component into `WOW6432Node` on 64-bit Windows — so
+  `HKLM\Software\SysAdminDoc\NVMeDriverPatcher\InstallLocation` was written where the PowerShell
+  module's CLI resolution and the Intune detection script, both running 64-bit, never look. Files
+  always installed correctly (the authoring uses `ProgramFiles64Folder`); only the registry was
+  redirected, which is why it went unnoticed. The release gate now reads the built package's
+  architecture directly, since neither the `.wxs` authoring nor the file name records it.
 - Removal no longer deletes the SafeBoot GUID and service-name keys outright. Windows ships those
   keys itself on build 26200.8737 and later, carrying a `NvmeDisk` value, so deleting the key takes
   the OS's own Safe Mode storage-disk registration with it and Safe Mode can stop seeing the NVMe
