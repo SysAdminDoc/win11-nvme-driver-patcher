@@ -29,6 +29,16 @@ class Program
             }
             if (!CliCommandRegistry.IsKnown(command))
                 return Unknown(command);
+            var unknownOption = CliCommandRegistry.FindUnknownOption(args);
+            if (unknownOption is not null)
+            {
+                var suggestion = CliCommandRegistry.SuggestOption(unknownOption);
+                Console.Error.WriteLine($"Error: unknown option '{unknownOption}'."
+                    + (suggestion is null ? "" : $" Did you mean '{suggestion}'?"));
+                Console.Error.WriteLine("Run 'NVMeDriverPatcher.Cli help' for the full option list.");
+                return 3;
+            }
+
 
             // Payload verification is read-only and must not initialize shared app state. Keep it
             // ahead of the in-process administrator gate for DLL-hosted support tooling; the

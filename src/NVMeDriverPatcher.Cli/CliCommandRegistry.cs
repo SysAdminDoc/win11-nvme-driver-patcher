@@ -28,6 +28,69 @@ public sealed record CliCommandDescriptor(
 
 public static class CliCommandRegistry
 {
+    // Every option is detected in Program with args.Any(...), so anything unrecognised used to be
+    // silently ignored. For a tool that mutates boot-storage configuration that is dangerous:
+    // `apply --unattended --dryrun` (one missing hyphen) performed a real apply AND an
+    // automatic reboot instead of a preview. Unknown options are now a usage error.
+    public static readonly string[] KnownOptions =
+    [
+        "--force", "-f", "--no-restart", "--force-unsupported-build", "--include-server-key",
+        "--no-server-key", "--safe", "--safe-mode", "--full", "--full-mode", "--json",
+        "--dry-run", "--preview", "--apply", "--unattended", "--auto-revert", "--history",
+        "--write-native", "--reset-native", "--on", "--off", "--reset"
+    ];
+
+    public static readonly string[] KnownOptionPrefixes =
+    [
+        "--output=", "--input=", "--endpoint=", "--export=", "--import=", "--current=",
+        "--source=", "--central-store=", "--threshold=", "--max="
+    ];
+
+    /// <summary>The first unrecognised option token, or null when every option is known.</summary>
+    public static string? FindUnknownOption(IEnumerable<string?> args)
+    {
+        foreach (var arg in args)
+        {
+            if (string.IsNullOrEmpty(arg) || arg[0] != '-') continue;
+            if (KnownOptions.Any(known => arg.Equals(known, StringComparison.OrdinalIgnoreCase))) continue;
+            if (KnownOptionPrefixes.Any(prefix => arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))) continue;
+            return arg;
+        }
+        return null;
+    }
+
+    /// <summary>Closest known option to <paramref name="unknown"/>, for a "did you mean" hint.</summary>
+    public static string? SuggestOption(string unknown)
+    {
+        var trimmed = unknown.TrimStart('-');
+        if (trimmed.Length == 0) return null;
+        return KnownOptions
+            .Concat(KnownOptionPrefixes.Select(p => p.TrimEnd('=')))
+            .Where(known => known.StartsWith("--", StringComparison.Ordinal))
+            .Select(known => (Option: known, Distance: Distance(trimmed, known.TrimStart('-'))))
+            .Where(candidate => candidate.Distance <= 2)
+            .OrderBy(candidate => candidate.Distance)
+            .Select(candidate => candidate.Option)
+            .FirstOrDefault();
+    }
+
+    private static int Distance(string a, string b)
+    {
+        var previous = new int[b.Length + 1];
+        var current = new int[b.Length + 1];
+        for (var j = 0; j <= b.Length; j++) previous[j] = j;
+        for (var i = 1; i <= a.Length; i++)
+        {
+            current[0] = i;
+            for (var j = 1; j <= b.Length; j++)
+            {
+                var cost = char.ToLowerInvariant(a[i - 1]) == char.ToLowerInvariant(b[j - 1]) ? 0 : 1;
+                current[j] = Math.Min(Math.Min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + cost);
+            }
+            (previous, current) = (current, previous);
+        }
+        return previous[b.Length];
+    }
     public static readonly CliCommandDescriptor[] All =
     {
         // ── Lifecycle ──
