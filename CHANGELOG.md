@@ -5,6 +5,21 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- The protected-state ACL check rejected the very state its own writer produces. Its write-capable
+  mask was built from the composite `FileSystemRights` values (`Write`, `Modify`, `FullControl`),
+  each of which folds in the standard rights `READ_CONTROL` and `SYNCHRONIZE` — so ANDing a plain
+  `ReadAndExecute, Synchronize` ace against them is non-zero and every read-only grant counted as a
+  writer. The shared state root exists to grant `Users:ReadAndExecute`, so it failed validation
+  permanently: elevated callers silently re-applied owners and DACLs across the tree on every call,
+  and any caller that cannot re-ACL — the LocalService watchdog, the standard-user tray — saw its
+  own correct state as untrusted. The mask is now the individual write bits. This is the same
+  composite-mask trap already fixed in the PowerShell ACL probe.
+- The system-tray agent can finally show a watchdog verdict. It is unelevated by design, but the
+  evaluation it called persists a checkpoint on every invocation and downgrades its own result to
+  Unavailable when that write fails — which for the tray is always — so it could never report
+  Healthy, Warning or Unstable regardless of the evidence. Read-only consumers now use
+  `EvaluateReadOnly`, and the watchdog state directory grants standard users read access (still no
+  write) so the tray can read the verdict it exists to display.
 - The in-app updater could never verify a real release. GitHub answers every
   `releases/download` request — `.sha256` sidecars included — with a 302 to its signed CDN, and the
   updater's client deliberately has automatic redirects off so each hop can be re-checked against

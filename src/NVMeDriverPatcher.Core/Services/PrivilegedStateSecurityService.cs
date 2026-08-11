@@ -57,16 +57,23 @@ public static class PrivilegedStateSecurityService
     private const FileSystemRights GenericAllRight = (FileSystemRights)0x10000000;
     private const FileSystemRights GenericWriteRight = (FileSystemRights)0x40000000;
 
+    // Spelled out as individual write bits, never as the composite FileSystemRights values.
+    // Write (0x116), Modify (0x301BF) and FullControl (0x1F01FF) each fold in the STANDARD rights
+    // READ_CONTROL (0x20000) and SYNCHRONIZE (0x100000) plus the read bits, so ANDing a plain
+    // `ReadAndExecute, Synchronize` ace (0x1200A9) against them is non-zero — every read-only ace
+    // read as write-capable. That made the shared root, whose whole point is Users:ReadAndExecute,
+    // fail its own validation permanently: the tree was re-ACLed on every elevated call, and any
+    // caller that could not re-ACL (the LocalService watchdog, the standard-user tray) saw its own
+    // correct state as untrusted. Same composite-mask trap the PowerShell ACL probe hit in 2026-08.
     private const FileSystemRights WriteCapableRights =
-        FileSystemRights.Write |
-        FileSystemRights.Modify |
-        FileSystemRights.FullControl |
-        FileSystemRights.Delete |
-        FileSystemRights.DeleteSubdirectoriesAndFiles |
-        FileSystemRights.ChangePermissions |
-        FileSystemRights.TakeOwnership |
-        FileSystemRights.CreateFiles |
-        FileSystemRights.CreateDirectories |
+        (FileSystemRights)0x0002 |      // WriteData / CreateFiles
+        (FileSystemRights)0x0004 |      // AppendData / CreateDirectories
+        (FileSystemRights)0x0010 |      // WriteExtendedAttributes
+        (FileSystemRights)0x0040 |      // DeleteSubdirectoriesAndFiles
+        (FileSystemRights)0x0100 |      // WriteAttributes
+        (FileSystemRights)0x10000 |     // Delete
+        (FileSystemRights)0x40000 |     // ChangePermissions (WRITE_DAC)
+        (FileSystemRights)0x80000 |     // TakeOwnership (WRITE_OWNER)
         GenericAllRight |
         GenericWriteRight;
 
@@ -427,6 +434,10 @@ public static class PrivilegedStateSecurityService
         {
             AddRule(security, LocalServiceSid, FileSystemRights.Modify, inheritance);
             AddRule(security, ServiceSid, FileSystemRights.Modify, inheritance);
+            // The non-admin tray exists to display this verdict, so it has to be able to read it.
+            // Read-only: standard users still cannot write watchdog state, which is what the
+            // trust boundary actually protects.
+            AddRule(security, UsersSid, FileSystemRights.ReadAndExecute, inheritance);
         }
         return security;
     }
