@@ -221,13 +221,22 @@ public static class EventLogWatchdogService
     public static WatchdogReport Evaluate(AppConfig config) =>
         Evaluate(config, CountEvents, DateTime.UtcNow, StateMutexTimeout, StateMutexName, SaveStateCore);
 
+    /// <summary>
+    /// Evaluates without writing a checkpoint, for consumers that only display the verdict and
+    /// cannot write protected state — the non-admin tray, dashboards. <see cref="Evaluate"/>
+    /// persists on every call and downgrades to Unavailable when that write fails, so a read-only
+    /// caller using it could never see Healthy/Warning/Unstable no matter what the evidence said.
+    /// </summary>
+    public static WatchdogReport EvaluateReadOnly(AppConfig config) =>
+        Evaluate(config, CountEvents, DateTime.UtcNow, StateMutexTimeout, StateMutexName, persistState: null);
+
     internal static WatchdogReport Evaluate(
         AppConfig config,
         Func<DateTime, WatchdogEventQueryResult> queryEvents,
         DateTime utcNow,
         TimeSpan mutexTimeout,
         string mutexName,
-        Func<AppConfig, WatchdogState, WatchdogStateSaveResult> persistState)
+        Func<AppConfig, WatchdogState, WatchdogStateSaveResult>? persistState)
     {
         using var lease = AcquireStateMutex(mutexTimeout, mutexName);
         if (!lease.Held)
@@ -277,8 +286,10 @@ public static class EventLogWatchdogService
         {
             state.LastVerdict = WatchdogVerdict.Unavailable.ToString();
             state.LastEvaluatedAt = utcNow.ToString("o");
-            var persisted = persistState(config, state);
-            var persistenceDetail = persisted.Success ? string.Empty : " State persistence also failed: " + persisted.Summary;
+            var persisted = persistState?.Invoke(config, state);
+            var persistenceDetail = persisted is null || persisted.Success
+                ? string.Empty
+                : " State persistence also failed: " + persisted.Summary;
             return UnavailableReport(
                 query.FailureCode ?? "EventLogQueryFailed",
                 query.Summary + persistenceDetail,
@@ -300,8 +311,11 @@ public static class EventLogWatchdogService
         state.LastVerdict = report.Verdict.ToString();
         state.LastEvaluatedAt = utcNow.ToString("o");
         state.CumulativeEvents = report.TotalEvents;
-        var saved = persistState(config, state);
-        if (!saved.Success)
+        // A read-only caller writes no checkpoint, so there is nothing to downgrade for. The
+        // observed verdict IS the answer for display purposes; only the durable-checkpoint claim
+        // is absent, and no read-only consumer makes one.
+        var saved = persistState?.Invoke(config, state);
+        if (saved is not null && !saved.Success)
         {
             report.Verdict = WatchdogVerdict.Unavailable;
             report.FailureCode = "StatePersistenceFailed";

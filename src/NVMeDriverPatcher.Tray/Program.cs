@@ -89,7 +89,10 @@ internal static class Program
 
             var status = RegistryService.GetPatchStatus();
             var verification = PatchVerificationService.Evaluate(_config);
-            var watchdog = EventLogWatchdogService.Evaluate(_config);
+            // Read-only: the tray runs unelevated and must never write protected watchdog state.
+            // The persisting overload downgrades its own verdict to Unavailable when that write
+            // fails, which for this process is always.
+            var watchdog = EventLogWatchdogService.EvaluateReadOnly(_config);
 
             string statusLine = $"Patch: {(status.Applied ? "Applied" : status.Partial ? "Partial" : "Not applied")} " +
                                 $"({status.Count}/{status.Total}) — {verification.Outcome}";
