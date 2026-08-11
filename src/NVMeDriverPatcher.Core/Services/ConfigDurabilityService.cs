@@ -218,7 +218,7 @@ public static partial class ConfigService
         return new ConfigSaveResult(ConfigSaveStatus.IoFailure, summary, backupPath);
     }
 
-    private static string SerializeConfig(AppConfig config)
+    internal static string SerializeConfig(AppConfig config)
     {
         var persisted = new
         {
@@ -228,6 +228,10 @@ public static partial class ConfigService
             config.RestartDelay,
             config.IncludeServerKey,
             config.SkipWarnings,
+            config.CompatTelemetryEnabled,
+            config.PersistenceGuardEnabled,
+            config.PersistenceGuardMaxReapplies,
+            config.PersistenceGuardConsecutiveReapplies,
             config.ThemeMode,
             config.PatchProfile,
             config.ConfigVersion,
@@ -273,7 +277,7 @@ public static partial class ConfigService
         }
     }
 
-    private static void ApplySavedConfig(AppConfig config, AppConfig saved)
+    internal static void ApplySavedConfig(AppConfig config, AppConfig saved)
     {
         config.AutoSaveLog = saved.AutoSaveLog;
         config.EnableToasts = saved.EnableToasts;
@@ -281,6 +285,13 @@ public static partial class ConfigService
         config.RestartDelay = saved.RestartDelay;
         config.IncludeServerKey = saved.IncludeServerKey;
         config.SkipWarnings = saved.SkipWarnings;
+        config.CompatTelemetryEnabled = saved.CompatTelemetryEnabled;
+        // The guard's re-apply budget is the only thing bounding an automatic re-arm loop, and it
+        // is spent BEFORE the mutation precisely so a machine that never comes back cannot retry
+        // forever. Dropping it here restarted the count at zero on every boot.
+        config.PersistenceGuardEnabled = saved.PersistenceGuardEnabled;
+        config.PersistenceGuardMaxReapplies = saved.PersistenceGuardMaxReapplies;
+        config.PersistenceGuardConsecutiveReapplies = saved.PersistenceGuardConsecutiveReapplies;
         config.ThemeMode = Enum.IsDefined(typeof(AppThemeMode), saved.ThemeMode)
             ? saved.ThemeMode
             : AppThemeMode.System;

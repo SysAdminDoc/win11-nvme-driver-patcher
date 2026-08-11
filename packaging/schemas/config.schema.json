@@ -6,25 +6,147 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "AutoSaveLog":                     { "type": "boolean", "default": true },
-    "EnableToasts":                    { "type": "boolean", "default": true },
-    "WriteEventLog":                   { "type": "boolean", "default": true },
-    "RestartDelay":                    { "type": "integer", "minimum": 0, "maximum": 3600, "default": 30 },
-    "IncludeServerKey":                { "type": "boolean", "default": false },
-    "SkipWarnings":                    { "type": "boolean", "default": false },
-    "ThemeMode":                       { "type": "string", "enum": ["System", "Light", "Dark", "HighContrast"], "default": "System" },
-    "PatchProfile":                    { "type": "string", "enum": ["Safe", "Full"], "default": "Safe" },
-    "ConfigVersion":                   { "type": "integer", "minimum": 1, "default": 3 },
-    "LastRecoveryKitPath":             { "type": ["string", "null"] },
-    "LastWinPEMediaPath":              { "type": ["string", "null"] },
-    "LastDiagnosticsPath":             { "type": ["string", "null"] },
-    "LastSupportBundlePath":           { "type": ["string", "null"] },
-    "LastVerificationScriptPath":      { "type": ["string", "null"] },
-    "PendingVerificationSince":        { "type": ["string", "null"], "format": "date-time" },
-    "PendingVerificationProfile":      { "type": ["string", "null"], "enum": ["Safe", "Full", null] },
-    "PendingFallbackApplied":          { "type": "boolean", "default": false },
-    "LastVerifiedProfile":             { "type": ["string", "null"] },
-    "LastVerificationResult":          { "type": ["string", "null"] },
-    "LastRun":                         { "type": ["string", "null"], "format": "date-time" }
+    "AutoSaveLog": {
+      "type": "boolean",
+      "default": true
+    },
+    "EnableToasts": {
+      "type": "boolean",
+      "default": true
+    },
+    "WriteEventLog": {
+      "type": "boolean",
+      "default": true
+    },
+    "RestartDelay": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3600,
+      "default": 30
+    },
+    "IncludeServerKey": {
+      "type": "boolean",
+      "default": false
+    },
+    "SkipWarnings": {
+      "type": "boolean",
+      "default": false
+    },
+    "CompatTelemetryEnabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "PersistenceGuardEnabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Opt-in boot-time restore of a patch Windows removed. Off by default: it re-arms a boot-critical driver with no human present."
+    },
+    "PersistenceGuardMaxReapplies": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 2,
+      "description": "Consecutive automatic re-applies before the guard stands down. Bounds the re-apply loop, so it must persist across reboots."
+    },
+    "PersistenceGuardConsecutiveReapplies": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 0
+    },
+    "ThemeMode": {
+      "type": "string",
+      "enum": [
+        "System",
+        "Light",
+        "Dark",
+        "HighContrast"
+      ],
+      "default": "System"
+    },
+    "PatchProfile": {
+      "type": "string",
+      "enum": [
+        "Safe",
+        "Full"
+      ],
+      "default": "Safe"
+    },
+    "ConfigVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 3
+    },
+    "LastRecoveryKitPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "LastWinPEMediaPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "LastDiagnosticsPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "LastSupportBundlePath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "LastVerificationScriptPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "PendingVerificationSince": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "PendingVerificationProfile": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "Safe",
+        "Full",
+        null
+      ]
+    },
+    "PendingFallbackApplied": {
+      "type": "boolean",
+      "default": false
+    },
+    "LastVerifiedProfile": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "LastVerificationResult": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "LastRun": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
   }
 }

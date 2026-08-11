@@ -5,6 +5,15 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- The persistence guard's settings were never written to `config.json`. `persistence-guard --on`
+  reported success and printed "Enabled: yes", but the save path named its fields by hand and did
+  not include them, so every later process — including the boot task the guard runs from — loaded
+  the default of off. Only a GPO overlay could actually enable it. The same gap dropped the guard's
+  consecutive-re-apply counter, which is the only bound on an automatic re-arm loop and is spent
+  before each mutation precisely so a machine that keeps losing the patch cannot retry forever;
+  with it unpersisted, every boot restarted the count at zero. `CompatTelemetryEnabled` was dropped
+  the same way. A round-trip test now fails, naming the property, whenever a persisted-intent field
+  is missing from either half of the save/load path.
 - The real-time watchdog service could never read its own state and terminated within about two
   minutes of every start, on every install. `EnsureRuntimeTree` asked all callers to validate the
   privileged `State` child, which by design grants no access to LocalService — reading its DACL
