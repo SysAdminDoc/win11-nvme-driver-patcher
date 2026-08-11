@@ -560,7 +560,47 @@ public static class PatchService
                     ? (restored.Success ? "FeatureStore restored to its exact pre-fallback configuration." : "FeatureStore exact restore incomplete.")
                     : "No FeatureStore mutation was recorded.";
 
-                if (restored.Success)
+                // The exact restore above covers only what THIS ledger recorded. A fallback the
+                // user enabled by hand with ViVeTool, or one recorded by a ledger written before
+                // the inherit-on-baseline-reuse fix, leaves the IDs enabled and nvmedisk bound
+                // after reboot while removal reports a verified revert. Sweep for that evidence
+                // and undo it the way the pre-ledger path does, rather than certifying a store
+                // we never read.
+                if (!mutationLedger.FeatureStoreTouched)
+                {
+                    try
+                    {
+                        if (FeatureStoreWriterService.HasFallbackEvidence())
+                        {
+                            var strayReset = FeatureStoreWriterService.ResetAppliedFallback();
+                            result.FeatureStoreResetSummary =
+                                "FeatureStore enablement was present without a recorded fallback mutation. " +
+                                strayReset.Summary;
+                            log?.Invoke($"  [FeatureStore] {result.FeatureStoreResetSummary}");
+                            if (strayReset.Success)
+                            {
+                                if (strayReset.AppliedIds.Length > 0)
+                                    result.NeedsRestart = true;
+                            }
+                            else
+                            {
+                                result.Residue.Add(
+                                    "FeatureStore fallback IDs are still enabled and could not be reset: " +
+                                    strayReset.Summary);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Never fail an otherwise-clean removal on the sweep itself, but do not let
+                        // an unreadable FeatureStore pass as proof that nothing is enabled.
+                        result.Residue.Add($"FeatureStore fallback state could not be verified: {ex.Message}");
+                        log?.Invoke($"  [FeatureStore] evidence check failed: {ex.Message}");
+                    }
+                    result.Success = restored.Success && result.Residue.Count == 0;
+                }
+
+                if (result.Success)
                 {
                     SafeBootStateService.DeleteJournal(workingDir);
                     log?.Invoke("[SUCCESS] Patch Status: REMOVED - exact pre-mutation state restored and verified");
@@ -569,10 +609,10 @@ public static class PatchService
                 else
                 {
                     log?.Invoke("[PARTIAL] Ledger restore INCOMPLETE:");
-                    foreach (var failure in restored.Failures)
+                    foreach (var failure in result.Residue)
                         log?.Invoke("  [RESIDUE] " + failure);
                     EventLogService.Write(
-                        "NVMe Driver Patch ledger restore incomplete: " + string.Join(", ", restored.Failures),
+                        "NVMe Driver Patch ledger restore incomplete: " + string.Join(", ", result.Residue),
                         EventLogEntryType.Warning,
                         3002);
                 }

@@ -1,3 +1,4 @@
+using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.Tests;
@@ -282,6 +283,63 @@ public sealed class MutationLedgerServiceTests
             Assert.Equal(MutationOperationPhase.Prepared, recoverable!.Phase);
             Assert.False(recoverable.FeatureStoreTouched);
             Assert.True(recoverable.BitLockerSuspensionPlanned);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ReusingAFallbackBaseline_KeepsTheFeatureStoreRestoreObligation()
+    {
+        // Apply the FeatureStore fallback, then apply again (a re-apply, or the persistence guard
+        // re-arming). The second operation reuses the first clean baseline — the only record of the
+        // pre-fallback configuration — but recomputed FeatureStoreTouched from its own kind, so it
+        // came out false. Removal then skipped the FeatureStore restore and still reported
+        // "exact pre-mutation state restored and verified" while the IDs stayed enabled.
+        var dir = TempDir();
+        try
+        {
+            var prior = CreateLedger("fallback", MutationOperationPhase.RebootPending);
+            prior.Kind = MutationOperationKind.FeatureStoreFallback;
+            prior.FeatureStoreTouched = true;
+            Assert.True(MutationLedgerService.SaveForTest(dir, prior, null, out var error), error);
+            Assert.True(MutationLedgerService.ShouldReuseBaseline(prior));
+
+            var prepared = MutationLedgerService.PrepareRegistryPatch(
+                dir, PatchProfile.Safe, includeServerKey: false, ["735209102"]);
+
+            Assert.True(prepared.Success, prepared.Summary);
+            Assert.True(
+                prepared.Ledger!.FeatureStoreTouched,
+                "A re-apply that reuses a live fallback's baseline must inherit its FeatureStore restore obligation.");
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void AFreshBaselineAfterRevert_DoesNotInheritAStaleFeatureStoreFlag()
+    {
+        // The mirror of the above: once the prior operation is Reverted the baseline is recaptured
+        // from a clean machine, so the obligation is genuinely gone and must not be carried forward.
+        var dir = TempDir();
+        try
+        {
+            var prior = CreateLedger("reverted", MutationOperationPhase.Reverted);
+            prior.Kind = MutationOperationKind.FeatureStoreFallback;
+            prior.FeatureStoreTouched = true;
+            Assert.True(MutationLedgerService.SaveForTest(dir, prior, null, out var error), error);
+            Assert.False(MutationLedgerService.ShouldReuseBaseline(prior));
+
+            var prepared = MutationLedgerService.PrepareRegistryPatch(
+                dir, PatchProfile.Safe, includeServerKey: false, ["735209102"]);
+
+            Assert.True(prepared.Success, prepared.Summary);
+            Assert.False(prepared.Ledger!.FeatureStoreTouched);
         }
         finally
         {
