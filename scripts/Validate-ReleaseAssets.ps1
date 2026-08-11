@@ -76,6 +76,24 @@ function Get-PeMachine {
     }
 }
 
+function Get-MsiTemplate {
+    # SummaryInformation property 7 (Template) carries the package architecture. It is the only
+    # honest record: the .wxs authoring does not state it and the file name never reflects it.
+    param([Parameter(Mandatory)] [string]$Path)
+
+    # The COM call needs a fully qualified path; anything else fails with a bare type mismatch.
+    $full = (Resolve-Path -LiteralPath $Path).Path
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    try {
+        $summary = $installer.GetType().InvokeMember(
+            'SummaryInformation', 'GetProperty', $null, $installer, @($full, 0))
+        return $summary.GetType().InvokeMember('Property', 'GetProperty', $null, $summary, @(7))
+    }
+    finally {
+        [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer)
+    }
+}
+
 foreach ($a in $contract.artifacts) {
     $rel = $a.path -replace '\{version\}', $Version
     $full = Join-Path $repoRoot $rel
@@ -103,8 +121,24 @@ foreach ($a in $contract.artifacts) {
         }
     }
 
+    # An x86 MSI redirects every HKLM registry component into WOW6432Node on 64-bit Windows, so
+    # InstallLocation lands where the PowerShell module and Intune detection never look. WiX
+    # defaults to x86 when -arch is omitted, and nothing in the .wxs authoring reveals it, so the
+    # built package is the only place this can be caught.
+    if ($leaf -like '*.msi') {
+        try {
+            $template = Get-MsiTemplate $full
+            if ($template -notmatch '^x64') {
+                $failures.Add("MSI package architecture for $leaf is '$template'; expected x64 (pass -arch x64 to wix build)")
+            }
+        }
+        catch {
+            $failures.Add("MSI package architecture unreadable for ${leaf}: $($_.Exception.Message)")
+        }
+    }
+
     if ($a.checksum) {
-        # Per-asset sidecar — the in-app auto-updater requires it.
+        # Per-asset sidecar - the in-app auto-updater requires it.
         $sidecar = Join-Path $repoRoot "publish/$leaf.sha256"
         if (-not (Test-Path $sidecar)) {
             $failures.Add("missing .sha256 sidecar for $leaf (id=$($a.id))")
