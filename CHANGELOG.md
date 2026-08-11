@@ -5,6 +5,18 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- The CLI rejects unknown options instead of ignoring them. Every option was detected with
+  `args.Any(...)`, so an unrecognised token simply vanished — and `apply --unattended --dryrun`,
+  one missing hyphen, performed a real apply plus an automatic reboot instead of the preview the
+  user asked for. Unknown options now exit 3 with a "did you mean" hint, and the check runs before
+  the administrator gate so a typo does not require an elevated shell to diagnose.
+- The machine-wide named mutexes shared by the GUI, CLI, tray, and watchdog service are created
+  with an explicit descriptor. A plain named mutex takes the creating token's default DACL, which
+  excludes the other principals, so whichever process created it first locked the others out for as
+  long as it held a handle — and the watchdog holds its state mutex across an entire event-log
+  scan. The watchdog paths degraded quietly, but config load surfaced it as a hard failure, so a
+  valid elevated `apply` or `status` could exit 99 "Unhandled error" because a background service
+  happened to be mid-scan.
 - The watchdog service now exits non-zero when its flush loop gives up, so SCM's restart actions
   actually fire. A faulted `BackgroundService` stops the host gracefully, `RunAsync` does not
   rethrow, and `Main` returned 0 — a clean `SERVICE_STOPPED`, which SCM never treats as a failure

@@ -644,7 +644,7 @@ public static class EventLogWatchdogService
         Mutex? mutex = null;
         try
         {
-            mutex = new Mutex(initiallyOwned: false, mutexName);
+            mutex = CrossPrivilegeMutex.Create(mutexName);
             var held = false;
             try { held = mutex.WaitOne(timeout); }
             catch (AbandonedMutexException) { held = true; }
