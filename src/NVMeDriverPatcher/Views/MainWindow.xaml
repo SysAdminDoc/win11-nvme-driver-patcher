@@ -293,555 +293,6 @@
                         </Grid>
                     </Border>
 
-                    <Grid x:Name="OverviewGrid" Grid.Row="1" Margin="24,14,24,0" Visibility="Collapsed">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.15*"/>
-                            <ColumnDefinition x:Name="OverviewSpacerColumn" Width="16"/>
-                            <ColumnDefinition Width="0.85*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Border x:Name="ReadinessCard"
-                                Grid.Row="0"
-                                Grid.Column="0"
-                                VerticalAlignment="Top"
-                                Style="{StaticResource SurfaceCard}">
-                              <Grid>
-                                  <Grid.RowDefinitions>
-                                      <RowDefinition Height="Auto"/>
-                                      <RowDefinition Height="Auto"/>
-                                      <RowDefinition Height="Auto"/>
-                                      <RowDefinition Height="Auto"/>
-                                      <RowDefinition Height="Auto"/>
-                                  </Grid.RowDefinitions>
-
-                                <StackPanel>
-                                    <TextBlock Text="Readiness" Style="{StaticResource SectionEyebrow}"/>
-                                    <TextBlock Text="{Binding StatusText}"
-                                               Margin="0,6,0,0"
-                                               FontSize="24"
-                                               FontWeight="SemiBold"
-                                               Foreground="{Binding StatusColor, Converter={StaticResource StrToBrush}}"/>
-                                    <TextBlock Text="{Binding StatusSummaryText}"
-                                               Margin="0,6,0,0"
-                                               Style="{StaticResource BodyCopy}"/>
-
-                                    <Border Margin="0,14,0,0"
-                                            Padding="14,12"
-                                            Background="{DynamicResource YellowBg}"
-                                            BorderBrush="{DynamicResource Border}"
-                                            BorderThickness="1"
-                                            CornerRadius="8"
-                                            Visibility="{Binding BuildPolicyBlocked, Converter={StaticResource BoolVis}}"
-                                            AutomationProperties.Name="Mutation safety notice">
-                                        <StackPanel>
-                                            <TextBlock Text="Mutation actions disabled"
-                                                       Foreground="{DynamicResource Yellow}"
-                                                       FontSize="13"
-                                                       FontWeight="SemiBold"/>
-                                            <TextBlock Text="{Binding MutationBlockedReason}"
-                                                       Margin="0,6,0,0"
-                                                       Foreground="{DynamicResource TextSecondary}"
-                                                       FontSize="12"
-                                                       TextWrapping="Wrap"/>
-                                            <TextBlock Text="{Binding MutationBlockedGuidance}"
-                                                       Margin="0,6,0,0"
-                                                       Foreground="{DynamicResource TextSecondary}"
-                                                       FontSize="12"
-                                                       TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                    </Border>
-
-                                    <Border Margin="0,14,0,0"
-                                            Padding="14,12"
-                                            Background="{DynamicResource YellowBg}"
-                                            BorderBrush="{DynamicResource Border}"
-                                            BorderThickness="1"
-                                            CornerRadius="8"
-                                            Visibility="{Binding ShowViVeToolFallbackBadge, Converter={StaticResource BoolVis}}">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0">
-                                                <TextBlock Text="Registry override blocked by Windows"
-                                                           Foreground="{DynamicResource Yellow}"
-                                                           FontSize="13"
-                                                           FontWeight="SemiBold"/>
-                                                <TextBlock Text="Your last patch applied the feature flags, but Windows is still using the legacy driver. This is the Feb/Mar 2026 Microsoft block. The fallback writes build-specific IDs to FeatureStore without network access first, then offers ViVeTool only if the native write fails."
-                                                           Margin="0,6,0,0"
-                                                           Foreground="{DynamicResource TextSecondary}"
-                                                           FontSize="12"
-                                                           TextWrapping="Wrap"/>
-                                            </StackPanel>
-                                            <Button Grid.Column="1"
-                                                    Content="Try Fallback"
-                                                    Margin="14,0,0,0"
-                                                    VerticalAlignment="Center"
-                                                    Style="{StaticResource SecondaryButton}"
-                                                    ToolTip="Writes build-specific FeatureStore IDs through the native Rtl API first. Downloads ViVeTool only if native both-store verification fails. Requires a restart."
-                                                    IsEnabled="{Binding MutationCommandsEnabled}"
-                                                    Command="{Binding ApplyViVeToolFallbackCommand}"/>
-                                        </Grid>
-                                    </Border>
-
-                                    <Border Margin="0,14,0,0"
-                                            Padding="14,12"
-                                            Background="{DynamicResource YellowBg}"
-                                            BorderBrush="{DynamicResource Border}"
-                                            BorderThickness="1"
-                                            CornerRadius="8"
-                                            Visibility="{Binding ShowSafeBootUpgradeBadge, Converter={StaticResource BoolVis}}"
-                                            AutomationProperties.Name="SafeBoot entries need update notice">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0">
-                                                <TextBlock Text="SafeBoot entries need update"
-                                                           Foreground="{DynamicResource Yellow}"
-                                                           FontSize="13"
-                                                           FontWeight="SemiBold"/>
-                                                <TextBlock Text="Your patch predates the KB5079391 Safe Mode fix: the service-name SafeBoot entries are missing. Booting to Safe Mode on 25H2+ could fail with INACCESSIBLE_BOOT_DEVICE until they are added."
-                                                           Margin="0,6,0,0"
-                                                           Foreground="{DynamicResource TextSecondary}"
-                                                           FontSize="12"
-                                                           TextWrapping="Wrap"/>
-                                            </StackPanel>
-                                            <Button Grid.Column="1"
-                                                    Content="Upgrade SafeBoot Entries"
-                                                    Margin="14,0,0,0"
-                                                    VerticalAlignment="Center"
-                                                    Style="{StaticResource SecondaryButton}"
-                                                    ToolTip="Writes the SafeBoot\Minimal\nvmedisk and SafeBoot\Network\nvmedisk service-name entries. Idempotent — changes nothing else."
-                                                    AutomationProperties.Name="Upgrade SafeBoot entries"
-                                                    IsEnabled="{Binding MutationCommandsEnabled}"
-                                                    Command="{Binding UpgradeSafeBootEntriesCommand}"/>
-                                        </Grid>
-                                    </Border>
-                                </StackPanel>
-
-                                <Border Grid.Row="2"
-                                        Margin="0,12,0,0"
-                                        Style="{StaticResource InsetCard}">
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                        </Grid.RowDefinitions>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="130"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <TextBlock Text="Build"
-                                                   Style="{StaticResource SectionEyebrow}"/>
-                                        <TextBlock Grid.Column="1"
-                                                   Text="{Binding BuildSummaryText}"
-                                                   Foreground="{DynamicResource TextPrimary}"
-                                                   FontSize="13"
-                                                   FontWeight="SemiBold"
-                                                   TextWrapping="Wrap"/>
-
-                                        <Border Grid.Row="1"
-                                                Grid.ColumnSpan="2"
-                                                Margin="0,8"
-                                                Height="1"
-                                                Background="{DynamicResource Border}"/>
-                                        <TextBlock Grid.Row="1"
-                                                   Text="Drives"
-                                                   Style="{StaticResource SectionEyebrow}"/>
-                                        <TextBlock Grid.Row="1"
-                                                   Grid.Column="1"
-                                                   Text="{Binding DriveInventorySummaryText}"
-                                                   Foreground="{DynamicResource TextPrimary}"
-                                                   FontSize="13"
-                                                   FontWeight="SemiBold"
-                                                   TextWrapping="Wrap"/>
-
-                                        <Border Grid.Row="2"
-                                                Grid.ColumnSpan="2"
-                                                Margin="0,-1,0,8"
-                                                Height="1"
-                                                Background="{DynamicResource Border}"/>
-                                        <TextBlock Grid.Row="2"
-                                                   Text="Risk"
-                                                   Margin="0,8,0,0"
-                                                   Style="{StaticResource SectionEyebrow}"/>
-                                        <TextBlock Grid.Row="2"
-                                                   Grid.Column="1"
-                                                   Margin="0,8,0,0"
-                                                   Text="{Binding RiskSummaryText}"
-                                                   Foreground="{DynamicResource TextPrimary}"
-                                                   FontSize="13"
-                                                   FontWeight="SemiBold"
-                                                   TextWrapping="Wrap"/>
-                                    </Grid>
-                                </Border>
-
-                                <Border Grid.Row="3"
-                                        Margin="0,10,0,0"
-                                        Style="{StaticResource InsetCard}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <StackPanel>
-                                            <TextBlock Text="Driver State" Style="{StaticResource SectionEyebrow}"/>
-                                            <TextBlock Text="{Binding DriverLabelText}"
-                                                       Margin="0,5,0,0"
-                                                       Foreground="{DynamicResource TextSecondary}"
-                                                       FontSize="13"
-                                                       TextWrapping="Wrap"/>
-                                        </StackPanel>
-
-                                        <StackPanel Grid.Column="1"
-                                                    Margin="24,0,0,0"
-                                                    VerticalAlignment="Center">
-                                            <TextBlock Text="Warnings" Style="{StaticResource SectionEyebrow}" HorizontalAlignment="Right"/>
-                                            <TextBlock Text="{Binding WarningCount}"
-                                                       Foreground="{DynamicResource Yellow}"
-                                                       FontSize="18"
-                                                       FontWeight="SemiBold"
-                                                       HorizontalAlignment="Right"/>
-                                        </StackPanel>
-
-                                        <TextBlock Grid.ColumnSpan="2"
-                                                   Margin="0,46,0,0"
-                                                   Foreground="{DynamicResource TextDim}"
-                                                   FontSize="11"
-                                                   Text="{Binding BenchLabelText}"
-                                                   Visibility="{Binding BenchLabelVisible, Converter={StaticResource BoolVis}}"/>
-                                    </Grid>
-                                </Border>
-                            </Grid>
-                        </Border>
-
-                        <Border x:Name="ControlsCard"
-                                Grid.Row="0"
-                                Grid.Column="2"
-                                MaxHeight="330"
-                                VerticalAlignment="Top"
-                                Style="{StaticResource SurfaceCard}">
-                            <Grid Margin="0,0,6,0">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-
-                                <StackPanel Visibility="Collapsed">
-                                    <TextBlock Text="Actions" Style="{StaticResource SectionEyebrow}"/>
-                                    <TextBlock Text="Act only after readiness, rollback, and validation signals are clear."
-                                                Margin="0,8,0,0"
-                                                Style="{StaticResource BodyCopy}"/>
-                                </StackPanel>
-
-                                <Border Grid.Row="1"
-                                        Margin="0,12,0,0"
-                                        Style="{StaticResource InsetCard}">
-                                    <StackPanel>
-                                            <TextBlock Text="Next step" Style="{StaticResource SectionEyebrow}"/>
-                                            <TextBlock Text="{Binding NextStepTitle}"
-                                                       Margin="0,6,0,0"
-                                                       Foreground="{Binding NextStepColor, Converter={StaticResource StrToBrush}}"
-                                                       FontSize="16"
-                                                       FontWeight="SemiBold"
-                                                       TextWrapping="Wrap"/>
-                                            <TextBlock Text="{Binding NextStepDescription}"
-                                                       Margin="0,6,0,0"
-                                                       Style="{StaticResource BodyCopy}"/>
-
-                                            <WrapPanel Margin="0,10,0,0">
-                                                <Button Content="{Binding NextStepPrimaryActionText}"
-                                                        Margin="0,0,10,10"
-                                                        Padding="14,8"
-                                                        Style="{StaticResource ActionButton}"
-                                                        AutomationProperties.Name="Recommended primary action"
-                                                        Visibility="{Binding HasNextStepPrimaryAction, Converter={StaticResource BoolVis}}"
-                                                        IsEnabled="{Binding NextStepPrimaryActionEnabled}"
-                                                        Click="RecommendedPrimaryAction_Click"/>
-                                                <Button Content="{Binding NextStepSecondaryActionText}"
-                                                        Margin="0,0,0,10"
-                                                        Padding="14,8"
-                                                        Style="{StaticResource SecondaryButton}"
-                                                        AutomationProperties.Name="Recommended secondary action"
-                                                        Visibility="{Binding HasNextStepSecondaryAction, Converter={StaticResource BoolVis}}"
-                                                        IsEnabled="{Binding NextStepSecondaryActionEnabled}"
-                                                        Click="RecommendedSecondaryAction_Click"/>
-                                            </WrapPanel>
-                                            <TextBlock Text="Backup, benchmark, recovery, and diagnostics tools stay available below for a stronger paper trail."
-                                                       Margin="0,0,0,0"
-                                                       Foreground="{DynamicResource TextDim}"
-                                                       FontSize="11.5"
-                                                       TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <Border Grid.Row="2"
-                                        Visibility="Collapsed"
-                                        Margin="0,18,0,0"
-                                        Style="{StaticResource InsetCard}">
-                                    <StackPanel>
-                                        <TextBlock Text="Migration plan" Style="{StaticResource SectionEyebrow}"/>
-                                        <TextBlock Text="{Binding ChangePlanSummaryText}"
-                                                   Margin="0,8,0,0"
-                                                   Style="{StaticResource BodyCopy}"/>
-                                        <Expander Margin="0,14,0,0"
-                                                  IsExpanded="False"
-                                                  Style="{StaticResource DarkExpander}">
-                                            <Expander.Header>
-                                                <TextBlock Text="Plan details"
-                                                           FontWeight="SemiBold"/>
-                                            </Expander.Header>
-                                            <StackPanel>
-                                                <Border Padding="12,10"
-                                                        Background="{DynamicResource BgMedium}"
-                                                        BorderBrush="{DynamicResource Border}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="8">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding HasChangePlanSteps}" Value="False">
-                                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <TextBlock Text="Waiting for the readiness scan to finish before building a machine-specific plan."
-                                                               Foreground="{DynamicResource TextSecondary}"
-                                                               FontSize="12"
-                                                               TextWrapping="Wrap"/>
-                                                </Border>
-
-                                                <ItemsControl ItemsSource="{Binding ChangePlanSteps}" Margin="0,10,0,0">
-                                                    <ItemsControl.Style>
-                                                        <Style TargetType="ItemsControl">
-                                                            <Setter Property="Visibility" Value="Visible"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding HasChangePlanSteps}" Value="False">
-                                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </ItemsControl.Style>
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <Border Margin="0,0,0,10"
-                                                                    Padding="12,10"
-                                                                    Background="{DynamicResource BgMedium}"
-                                                                    BorderBrush="{DynamicResource Border}"
-                                                                    BorderThickness="1"
-                                                                    CornerRadius="8">
-                                                                <StackPanel>
-                                                                    <TextBlock Text="{Binding Title}"
-                                                                               Foreground="{Binding ToneColor, Converter={StaticResource StrToBrush}}"
-                                                                               FontSize="12.5"
-                                                                               FontWeight="SemiBold"
-                                                                               TextWrapping="Wrap"/>
-                                                                    <TextBlock Text="{Binding Detail}"
-                                                                               Margin="0,6,0,0"
-                                                                               Foreground="{DynamicResource TextSecondary}"
-                                                                               FontSize="12"
-                                                                               TextWrapping="Wrap"/>
-                                                                </StackPanel>
-                                                            </Border>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </StackPanel>
-                                        </Expander>
-                                    </StackPanel>
-                                </Border>
-
-                                <WrapPanel Grid.Row="3"
-                                           Margin="0,12,0,0"
-                                           ItemHeight="40">
-                                    <Button Content="{Binding ApplyButtonText}"
-                                            MinWidth="220"
-                                            MaxWidth="320"
-                                            Margin="0,0,12,12"
-                                            Background="{DynamicResource GreenBg}"
-                                            BorderBrush="{DynamicResource Green}"
-                                            Foreground="{DynamicResource TextPrimary}"
-                                            Style="{StaticResource ActionButton}"
-                                            AutomationProperties.Name="Apply patch"
-                                            IsEnabled="{Binding ApplyEnabled}"
-                                            ToolTip="{Binding ApplyButtonTooltipText}"
-                                            Command="{Binding ApplyPatchCommand}"/>
-
-                                    <Button Content="Remove Patch"
-                                            MinWidth="220"
-                                            MaxWidth="320"
-                                            Margin="0,0,0,12"
-                                            Style="{StaticResource DangerButton}"
-                                            AutomationProperties.Name="Remove patch"
-                                            IsEnabled="{Binding RemoveEnabled}"
-                                            ToolTip="{Binding RemoveButtonTooltipText}"
-                                            Command="{Binding RemovePatchCommand}"/>
-                                </WrapPanel>
-
-                                  <Border Grid.Row="4"
-                                          Visibility="Collapsed"
-                                          Margin="0,16,0,0"
-                                          Padding="16,14"
-                                          Background="{DynamicResource SurfaceInset}"
-                                          BorderBrush="{DynamicResource BorderLight}"
-                                          BorderThickness="1"
-                                          CornerRadius="8"
-                                          AutomationProperties.LiveSetting="Polite">
-                                      <TextBlock Text="{Binding ActionReadinessText}"
-                                                 Foreground="{Binding ActionReadinessColor, Converter={StaticResource StrToBrush}}"
-                                                 FontSize="12"
-                                                 FontWeight="SemiBold"
-                                                 TextWrapping="Wrap"/>
-                                  </Border>
-
-                                  <Border Grid.Row="5"
-                                          Visibility="Collapsed"
-                                          Margin="0,18,0,0"
-                                          Style="{StaticResource InsetCard}">
-                                      <StackPanel>
-                                          <TextBlock Text="Prepare" Style="{StaticResource SectionEyebrow}"/>
-                                          <TextBlock Text="Create rollback assets and machine-specific evidence before touching the live driver path."
-                                                     Margin="0,8,0,0"
-                                                     Style="{StaticResource BodyCopy}"/>
-
-                                          <WrapPanel Margin="0,16,0,0"
-                                                     ItemHeight="40">
-                                              <Button Content="Create Backup"
-                                                      MinWidth="168"
-                                                      MaxWidth="220"
-                                                      Margin="0,0,12,12"
-                                                      Style="{StaticResource SecondaryButton}"
-                                                      ToolTip="Export a manual registry backup so the current state can be restored quickly if needed."
-                                                      AutomationProperties.Name="Create backup"
-                                                      IsEnabled="{Binding ButtonsEnabled}"
-                                                      Command="{Binding RunBackupCommand}"/>
-                                              <Button Content="Run Benchmark"
-                                                      MinWidth="168"
-                                                      MaxWidth="220"
-                                                      Margin="0,0,12,12"
-                                                      Style="{StaticResource SecondaryButton}"
-                                                      ToolTip="Capture a machine-specific performance run for before-and-after comparison."
-                                                      AutomationProperties.Name="Run benchmark"
-                                                      IsEnabled="{Binding ButtonsEnabled}"
-                                                      Command="{Binding RunBenchmarkCommand}"/>
-                                              <Button Content="Cancel Benchmark"
-                                                      MinWidth="168"
-                                                      MaxWidth="220"
-                                                      Margin="0,0,12,12"
-                                                      Style="{StaticResource WarningSecondaryButton}"
-                                                      ToolTip="Stop the current DiskSpd run. Partial data is discarded."
-                                                      AutomationProperties.Name="Cancel running benchmark"
-                                                      Visibility="{Binding BenchmarkRunning, Converter={StaticResource BoolVis}}"
-                                                      Command="{Binding CancelBenchmarkCommand}"/>
-                                              <Button Content="Export Diagnostics"
-                                                      MinWidth="168"
-                                                      MaxWidth="220"
-                                                      Margin="0,0,12,12"
-                                                      Style="{StaticResource SecondaryButton}"
-                                                      ToolTip="Save a support-ready snapshot with readiness, health, and recent activity details."
-                                                      AutomationProperties.Name="Export diagnostics"
-                                                      IsEnabled="{Binding ButtonsEnabled}"
-                                                      Command="{Binding ExportDiagnosticsCommand}"/>
-                                              <Button Content="Create Recovery Kit"
-                                                      MinWidth="168"
-                                                      MaxWidth="220"
-                                                      Margin="0,0,0,12"
-                                                      Style="{StaticResource SecondaryButton}"
-                                                      ToolTip="Generate offline rollback files for Windows and WinRE before a risky restart or handoff."
-                                                      AutomationProperties.Name="Create recovery kit"
-                                                      IsEnabled="{Binding ButtonsEnabled}"
-                                                      Command="{Binding ExportRecoveryKitCommand}"/>
-                                          </WrapPanel>
-                                      </StackPanel>
-                                  </Border>
-
-                                  <Border Grid.Row="6"
-                                          Visibility="Collapsed"
-                                          Margin="0,18,0,0"
-                                          Style="{StaticResource InsetCard}">
-                                      <StackPanel>
-                                          <TextBlock Text="Recent local data" Style="{StaticResource SectionEyebrow}"/>
-                                          <TextBlock Text="Backups, snapshots, and benchmarks stay close so every change has context."
-                                                     Margin="0,8,0,0"
-                                                     Style="{StaticResource BodyCopy}"/>
-                                          <Expander Margin="0,14,0,0"
-                                                    IsExpanded="False"
-                                                    Style="{StaticResource DarkExpander}">
-                                              <Expander.Header>
-                                                  <TextBlock Text="History details"
-                                                             FontWeight="SemiBold"/>
-                                              </Expander.Header>
-                                              <StackPanel>
-                                                  <Border Padding="12,10"
-                                                          Background="{DynamicResource BgMedium}"
-                                                          BorderBrush="{DynamicResource Border}"
-                                                          BorderThickness="1"
-                                                          CornerRadius="8">
-                                                      <StackPanel>
-                                                          <TextBlock Text="Registry Backups" Style="{StaticResource SectionEyebrow}"/>
-                                                          <TextBlock Text="{Binding BackupHistoryText}"
-                                                                     Margin="0,6,0,0"
-                                                                     Foreground="{DynamicResource TextSecondary}"
-                                                                     FontSize="12"
-                                                                     TextWrapping="Wrap"/>
-                                                      </StackPanel>
-                                                  </Border>
-
-                                                  <Border Margin="0,10,0,0"
-                                                          Padding="12,10"
-                                                          Background="{DynamicResource BgMedium}"
-                                                          BorderBrush="{DynamicResource Border}"
-                                                          BorderThickness="1"
-                                                          CornerRadius="8">
-                                                      <StackPanel>
-                                                          <TextBlock Text="Change Snapshots" Style="{StaticResource SectionEyebrow}"/>
-                                                          <TextBlock Text="{Binding SnapshotHistoryText}"
-                                                                     Margin="0,6,0,0"
-                                                                     Foreground="{DynamicResource TextSecondary}"
-                                                                     FontSize="12"
-                                                                     TextWrapping="Wrap"/>
-                                                      </StackPanel>
-                                                  </Border>
-
-                                                  <Border Margin="0,10,0,0"
-                                                          Padding="12,10"
-                                                          Background="{DynamicResource BgMedium}"
-                                                          BorderBrush="{DynamicResource Border}"
-                                                          BorderThickness="1"
-                                                          CornerRadius="8">
-                                                      <StackPanel>
-                                                          <TextBlock Text="Benchmark Runs" Style="{StaticResource SectionEyebrow}"/>
-                                                          <TextBlock Text="{Binding BenchmarkHistoryText}"
-                                                                     Margin="0,6,0,0"
-                                                                     Foreground="{DynamicResource TextSecondary}"
-                                                                     FontSize="12"
-                                                                     TextWrapping="Wrap"/>
-                                                      </StackPanel>
-                                                  </Border>
-                                              </StackPanel>
-                                          </Expander>
-                                      </StackPanel>
-                                  </Border>
-                              </Grid>
-                        </Border>
-                    </Grid>
 
                     <Border x:Name="CommandDeck"
                             Grid.Row="1"
@@ -1046,6 +497,37 @@
                                         </Grid>
                                     </Border>
 
+                                    <!-- Mutation-blocked notice. Without it a build-policy
+                                         refusal left a permanently disabled Apply button and
+                                         no visible reason anywhere in the window. -->
+                                    <Border Margin="0,10,0,0"
+                                            Padding="13,11"
+                                            MaxWidth="720"
+                                            HorizontalAlignment="Left"
+                                            Background="{DynamicResource YellowBg}"
+                                            BorderBrush="{DynamicResource Yellow}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            AutomationProperties.Name="Mutation actions disabled"
+                                            Visibility="{Binding BuildPolicyBlocked, Converter={StaticResource BoolVis}}">
+                                        <StackPanel>
+                                            <TextBlock Text="Mutation actions are disabled on this build"
+                                                       Foreground="{DynamicResource TextPrimary}"
+                                                       FontSize="12.5"
+                                                       FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding MutationBlockedReason}"
+                                                       Margin="0,4,0,0"
+                                                       Foreground="{DynamicResource TextMuted}"
+                                                       FontSize="11.5"
+                                                       TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding MutationBlockedGuidance}"
+                                                       Margin="0,4,0,0"
+                                                       Foreground="{DynamicResource TextDim}"
+                                                       FontSize="11.5"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Border>
+
                                     <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
                                         <Button Content="{Binding ApplyButtonText}"
                                                 MinWidth="142"
@@ -1065,10 +547,39 @@
                                                 Command="{Binding RemovePatchCommand}"/>
                                         <Button Content="Create Recovery Kit"
                                                 MinWidth="146"
+                                                Margin="0,0,8,0"
                                                 Style="{StaticResource SecondaryButton}"
                                                 AutomationProperties.Name="Create recovery kit"
                                                 Command="{Binding ExportRecoveryKitCommand}"
                                                 IsEnabled="{Binding ButtonsEnabled}"/>
+                                        <!-- Conditional affordances. Each was previously bound
+                                             only inside a permanently collapsed grid, so the
+                                             feature behind it was unreachable from the GUI. -->
+                                        <Button Content="Cancel Benchmark"
+                                                MinWidth="152"
+                                                Margin="0,0,8,0"
+                                                Style="{StaticResource WarningSecondaryButton}"
+                                                ToolTip="Stop the current DiskSpd run. Partial data is discarded."
+                                                AutomationProperties.Name="Cancel running benchmark"
+                                                Visibility="{Binding BenchmarkRunning, Converter={StaticResource BoolVis}}"
+                                                Command="{Binding CancelBenchmarkCommand}"/>
+                                        <Button Content="Try Fallback"
+                                                MinWidth="120"
+                                                Margin="0,0,8,0"
+                                                Style="{StaticResource SecondaryButton}"
+                                                ToolTip="Enable the native FeatureStore fallback, then ViVeTool only if that fails."
+                                                AutomationProperties.Name="Try the native FeatureStore fallback"
+                                                Visibility="{Binding ShowViVeToolFallbackBadge, Converter={StaticResource BoolVis}}"
+                                                IsEnabled="{Binding ButtonsEnabled}"
+                                                Command="{Binding ApplyViVeToolFallbackCommand}"/>
+                                        <Button Content="Upgrade Safe Boot Entries"
+                                                MinWidth="196"
+                                                Style="{StaticResource SecondaryButton}"
+                                                ToolTip="Add the KB5079391 service-name Safe Boot entries missing from pre-v4.6.1 patches."
+                                                AutomationProperties.Name="Upgrade Safe Boot entries"
+                                                Visibility="{Binding ShowSafeBootUpgradeBadge, Converter={StaticResource BoolVis}}"
+                                                IsEnabled="{Binding ButtonsEnabled}"
+                                                Command="{Binding UpgradeSafeBootEntriesCommand}"/>
                                     </StackPanel>
                                 </StackPanel>
 

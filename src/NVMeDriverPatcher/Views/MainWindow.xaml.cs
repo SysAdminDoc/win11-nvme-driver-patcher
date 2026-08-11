@@ -417,7 +417,6 @@ public partial class MainWindow : Window
         TitleBarRegion.Padding = compact
             ? new Thickness(16, 13, 16, 11)
             : new Thickness(20, 14, 20, 12);
-        OverviewSpacerColumn.Width = compact ? new GridLength(0) : new GridLength(16);
         MainContentSpacerColumn.Width = new GridLength(0);
         MainContentSplitter.Visibility = Visibility.Collapsed;
         MainContentSecondaryRow.Height = GridLength.Auto;
