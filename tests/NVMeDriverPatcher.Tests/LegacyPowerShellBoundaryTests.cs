@@ -77,26 +77,23 @@ public sealed class LegacyPowerShellBoundaryTests
 
     private static ScriptResult RunPowerShell(params string[] arguments)
     {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo("powershell.exe")
+        var startInfo = new ProcessStartInfo("powershell.exe")
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        process.StartInfo.Environment.Remove("PSModulePath");
-        process.StartInfo.ArgumentList.Add("-NoProfile");
-        process.StartInfo.ArgumentList.Add("-ExecutionPolicy");
-        process.StartInfo.ArgumentList.Add("Bypass");
+        startInfo.Environment.Remove("PSModulePath");
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-ExecutionPolicy");
+        startInfo.ArgumentList.Add("Bypass");
         foreach (var argument in arguments)
-            process.StartInfo.ArgumentList.Add(argument);
+            startInfo.ArgumentList.Add(argument);
 
-        process.Start();
-        var stdOut = process.StandardOutput.ReadToEnd();
-        var stdErr = process.StandardError.ReadToEnd();
-        Assert.True(process.WaitForExit(15_000), "PowerShell boundary test timed out.");
-        return new ScriptResult(process.ExitCode, stdOut, stdErr);
+        var result = TestProcessRunner.Run(startInfo, TimeSpan.FromSeconds(15));
+        Assert.False(result.TimedOut, "PowerShell boundary test timed out.");
+        return new ScriptResult(result.ExitCode, result.StdOut, result.StdErr);
     }
 
     private static string ValidatorPath([CallerFilePath] string sourceFile = "") =>

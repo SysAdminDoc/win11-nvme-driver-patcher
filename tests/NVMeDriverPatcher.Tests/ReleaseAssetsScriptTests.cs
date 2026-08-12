@@ -94,8 +94,7 @@ public sealed class ReleaseAssetsScriptTests
         string? publishedTag,
         string? publishedAssetsPath)
     {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo("powershell.exe")
+        var startInfo = new ProcessStartInfo("powershell.exe")
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
@@ -104,30 +103,27 @@ public sealed class ReleaseAssetsScriptTests
         };
         // Drop any inherited PSModulePath (e.g. a pwsh-7 path from the spawning shell) so Windows
         // PowerShell uses its default module path and can auto-load Get-FileHash / Get-AuthenticodeSignature.
-        process.StartInfo.Environment.Remove("PSModulePath");
+        startInfo.Environment.Remove("PSModulePath");
         // Invoked via -File, which passes every arg as a literal string ($true/$false don't
         // evaluate). A [switch] under -File is set by presence: add the bare flag for true,
         // omit it for false (its default).
         foreach (var a in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ScriptPath(),
                                   "-Version", "9.9.9", "-RepoRoot", repoRoot })
-            process.StartInfo.ArgumentList.Add(a);
-        if (expectSigned) process.StartInfo.ArgumentList.Add("-ExpectSigned");
+            startInfo.ArgumentList.Add(a);
+        if (expectSigned) startInfo.ArgumentList.Add("-ExpectSigned");
         if (!string.IsNullOrEmpty(publishedTag))
         {
-            process.StartInfo.ArgumentList.Add("-PublishedTag");
-            process.StartInfo.ArgumentList.Add(publishedTag);
+            startInfo.ArgumentList.Add("-PublishedTag");
+            startInfo.ArgumentList.Add(publishedTag);
         }
         if (!string.IsNullOrEmpty(publishedAssetsPath))
         {
-            process.StartInfo.ArgumentList.Add("-PublishedAssetsPath");
-            process.StartInfo.ArgumentList.Add(publishedAssetsPath);
+            startInfo.ArgumentList.Add("-PublishedAssetsPath");
+            startInfo.ArgumentList.Add(publishedAssetsPath);
         }
 
-        process.Start();
-        var stdOut = process.StandardOutput.ReadToEnd();
-        var stdErr = process.StandardError.ReadToEnd();
-        process.WaitForExit(15000);
-        return new ScriptResult(process.ExitCode, stdOut, stdErr);
+        var result = TestProcessRunner.Run(startInfo, TimeSpan.FromSeconds(15));
+        return new ScriptResult(result.ExitCode, result.StdOut, result.StdErr);
     }
 
     private static string ScriptPath([CallerFilePath] string sourceFile = "")
