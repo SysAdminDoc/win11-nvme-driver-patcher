@@ -37,6 +37,26 @@ public sealed class ReleaseAssetsScriptTests
     }
 
     [Fact]
+    public void Validate_RuntimeMetadataRejectsOlderEmbeddedRuntime()
+    {
+        using var repo = AssetsFixture.Create(runtime: "win-x64", peMachine: 0x8664, embeddedRuntime: "10.0.10");
+        var result = RunScript(repo.Path, expectSigned: false);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("embedded .NET runtime", result.StdOut, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("10.0.10", result.StdOut, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_RuntimeMetadataAcceptsReleaseFloor()
+    {
+        using var repo = AssetsFixture.Create(runtime: "win-x64", peMachine: 0x8664, embeddedRuntime: "10.0.11");
+        var result = RunScript(repo.Path, expectSigned: false);
+
+        Assert.True(result.ExitCode == 0, $"expected pass; stdout: {result.StdOut}\nstderr: {result.StdErr}");
+    }
+
+    [Fact]
     public void Validate_PublishedRelease_FailsWhenSidecarsWereNeverUploaded()
     {
         // Generating the sidecars into publish/ was already checked; uploading them was not, and
@@ -123,7 +143,7 @@ public sealed class ReleaseAssetsScriptTests
         private AssetsFixture(string path) => Path = path;
         public string Path { get; }
 
-        public static AssetsFixture Create(string? runtime = null, ushort? peMachine = null)
+        public static AssetsFixture Create(string? runtime = null, ushort? peMachine = null, string embeddedRuntime = "10.0.11")
         {
             var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"NVMeDriverPatcher.AssetsScript.Tests.{Guid.NewGuid():N}");
             Directory.CreateDirectory(System.IO.Path.Combine(root, "publish"));
@@ -131,9 +151,17 @@ public sealed class ReleaseAssetsScriptTests
             // One sign:true artifact — an unsigned dummy "exe".
             var artifactRel = "publish/app.exe";
             var artifactFull = System.IO.Path.Combine(root, "publish", "app.exe");
-            File.WriteAllBytes(artifactFull, peMachine is ushort machine
+            var artifactBytes = peMachine is ushort machine
                 ? MinimalPe(machine)
-                : new byte[] { 0x4D, 0x5A, 0x00, 0x01, 0x02, 0x03 }); // MZ + filler
+                : new byte[] { 0x4D, 0x5A, 0x00, 0x01, 0x02, 0x03 }; // MZ + filler
+            if (runtime is not null)
+            {
+                var runtimeConfig = $$$"""
+                    {"runtimeOptions":{"includedFrameworks":[{"name":"Microsoft.NETCore.App","version":"{{{embeddedRuntime}}}"}]}}
+                    """;
+                artifactBytes = artifactBytes.Concat(System.Text.Encoding.UTF8.GetBytes(runtimeConfig)).ToArray();
+            }
+            File.WriteAllBytes(artifactFull, artifactBytes);
             var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(artifactFull))).ToLowerInvariant();
             var runtimeJson = runtime is null ? string.Empty : $", \"runtime\": \"{runtime}\"";
 

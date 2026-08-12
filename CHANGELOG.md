@@ -2,6 +2,12 @@
 
 All notable changes to win11-nvme-driver-patcher will be documented in this file.
 
+## [Unreleased]
+
+### Security
+- Release publishing now requires SDK 10.0.303 or newer, embeds .NET runtime 10.0.11 or newer
+  in every self-contained executable, and rejects older runtime payloads from the release gate.
+
 ## [5.7.0] - 2026-08-11
 
 ### Fixed
