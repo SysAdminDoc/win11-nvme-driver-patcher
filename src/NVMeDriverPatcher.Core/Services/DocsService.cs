@@ -84,13 +84,16 @@ Storport Event ID 129 means a command timeout / device reset. Treat repeated
 command timeout (Storport 129) events as a strong revert signal, especially when paired
 with disk 51/153 paging or reset events.
 ",
-        ["bypassio"] = @"
+["bypassio"] = @"
 nvmedisk.sys vetoes BypassIO, so DirectStorage titles such as Ratchet & Clank: Rift Apart,
 Forspoken, Forza Motorsport, and Horizon Forbidden West can fall back to legacy I/O with
 higher CPU use or stutter. The native-NVMe mutation is machine-wide; a game-library drive
 cannot be excluded independently. Remove the patch or accept that global tradeoff.
 EasyAntiCheat's EOSSys.sys can also veto BypassIO
 independently, so an EOSSys.sys blocker is separate from the storage-driver choice.
+The live verdict uses the non-localized storport EnableBypassIO DWORD and the PnP
+DEVPKEY_Device_Service storage binding. fsutil output is retained as diagnostic evidence,
+but localized output is never parsed for the Enabled/Disabled decision.
 ",
         ["vivetool"] = @"
 Microsoft silently neutered the FeatureManagement override path on early 2026 Insider

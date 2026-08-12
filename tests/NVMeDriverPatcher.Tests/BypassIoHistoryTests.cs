@@ -49,6 +49,38 @@ public sealed class BypassIoHistoryTests
     }
 
     [Fact]
+    public void BypassIoInspectorService_NonEnglishFsutilOutputUsesRegistryAndDeviceEvidence()
+    {
+        var info = BypassIoInspectorService.BuildVolumeInfo(
+            @"C:\",
+            new BypassIoRegistryEvidence(true, true, true, "registry enabled"),
+            new BypassIoDeviceEvidence(true, "stornvme", "DEVPKEY_Device_Service=stornvme"),
+            queryExitCode: 0,
+            stdout: "BypassIO : Activé actuellement; Pile de stockage : stornvme.sys",
+            stderr: string.Empty);
+
+        Assert.True(info.Enabled);
+        Assert.Equal("Enabled", info.Status);
+        Assert.Equal("stornvme.sys", info.Stack);
+        Assert.Equal("stornvme", info.DeviceService);
+    }
+
+    [Theory]
+    [InlineData(false, "stornvme", 0, false)]
+    [InlineData(true, "nvmedisk", 0, false)]
+    [InlineData(true, "stornvme", 1, false)]
+    [InlineData(true, "stornvme", 0, true)]
+    public void BypassIoInspectorService_EvaluateEnabledRequiresStableEvidence(
+        bool registryEnabled,
+        string deviceService,
+        int queryExitCode,
+        bool expected)
+    {
+        Assert.Equal(expected,
+            BypassIoInspectorService.EvaluateEnabled(registryEnabled, deviceService, queryExitCode));
+    }
+
+    [Fact]
     public void BuildBypassIoGamingImpact_NvmediskBlocked_NamesGamesAndGlobalScope()
     {
         var impact = DriveService.BuildBypassIoGamingImpact(new BypassIOResult
