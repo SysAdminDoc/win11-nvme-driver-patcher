@@ -369,13 +369,6 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
 
 ### P1
 
-- [ ] P1 — Track `NativeNVMeStackEnableForClientOS: 48613417` as the candidate second gate on 26200+
-  Why: `windows_build_rules.json` rules `26200-bind-blocked` and `post-26200-trains-bind-blocked` both cite ViVe issue #164 as evidence that no route exists; #164 was closed by its owner saying there is "another feature ID or registry key in the mix". `48613417` is `Disabled By Default` on the Rubidium branch alongside `NativeNVMeStackForGeClient`, and has zero references in this repo.
-  Evidence: 29531.1000 dump lines 6920-6921 (between the `Disabled By Default:` and `Always Disabled:` headings); https://github.com/thebookisclosed/ViVe/issues/164; repo-wide grep for `48613417` returns 0 files.
-  Touches: `Models/FallbackFeatureCatalog.cs`, `Services/FeatureStoreWriterService.cs` (probe), `Services/PatchVerificationService.cs`, `windows_build_rules.json` rule summaries, CLI `featurestore`.
-  Acceptance: The FeatureStore evidence probe reports 48613417's current state on branches where it exists; the two `none-known` rule summaries name it as an untested candidate with its source. Applying it stays gated behind live validation (move to Roadmap_Blocked.md if hardware is required).
-  Complexity: M
-
 - [ ] P1 — Curate per-build feature IDs and default-state from velocity dumps into the existing data model
   Why: `FallbackFeatureCatalog.SelectForBuild` decides by `buildNumber >= 26200` and the build rules encode verdicts derived from press/forum reports. A per-branch primary source exists that gives name→ID *and* a default-state class; `Always Disabled` is the only honest basis for "no known route", and no sampled branch shows it for `NativeNVMeStackForGeClient`.
   Evidence: https://github.com/phantomofearth/windows-velocity-feature-lists (section headings `Always Enabled / Enabled By Default / Disabled By Default / Always Disabled`, verified by download). That repo carries **no LICENSE** — transcribe rows with `sourceUrl` + `lastReviewed` into the existing curated JSON; do not vendor the files and do not auto-download (RESEARCH.md rejects both).

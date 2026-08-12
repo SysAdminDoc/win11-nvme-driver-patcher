@@ -42,6 +42,21 @@ public sealed class WindowsBuildRulesServiceTests
     }
 
     [Fact]
+    public void BindBlockedRules_NameCandidateSecondGateWithoutAuthorizingIt()
+    {
+        var rules = WindowsBuildRulesService.LoadRuleset();
+        foreach (var id in new[] { "26200-bind-blocked", "post-26200-trains-bind-blocked" })
+        {
+            var rule = rules.Rules.Single(r => r.Id == id);
+            Assert.Equal("none-known", rule.ExpectedPath);
+            Assert.Contains("48613417", rule.Summary);
+            Assert.Contains("NativeNVMeStackEnableForClientOS", rule.Summary);
+            Assert.Contains("windows-velocity-feature-lists", rule.Summary);
+            Assert.Contains("live validation", rule.Summary, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void Match_NoMatch_ReturnsNull_AndDescribeIsConservative()
     {
         var empty = new WindowsBuildRuleset();

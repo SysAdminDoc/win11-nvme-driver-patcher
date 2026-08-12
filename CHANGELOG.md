@@ -17,6 +17,8 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - The 26200+ FeatureStore fallback now applies only `55369237` and `48433719`. `49453572`
   remains in the evidence probe union so hand-applied state is still recognized, but is not
   written because sampled velocity dumps mark `Standalone_Future` Always Enabled.
+- `featurestore` now reports the current Runtime/Boot state of candidate second-gate ID `48613417`
+  as a labeled probe-only row; the candidate is not included in native or ViVeTool writes.
 
 ## [5.7.0] - 2026-08-11
 

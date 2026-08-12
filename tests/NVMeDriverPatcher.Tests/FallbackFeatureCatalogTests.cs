@@ -38,6 +38,9 @@ public sealed class FallbackFeatureCatalogTests
         Assert.Equal(new[] { 55369237, 48433719 },
             FallbackFeatureCatalog.NativeNvmeStack25H2.Ids);
         Assert.Contains(49453572, FallbackFeatureCatalog.ProbeOnlyIds);
+        Assert.Contains(FallbackFeatureCatalog.CandidateSecondGateId, FallbackFeatureCatalog.CandidateProbeIds);
+        Assert.Equal("NativeNVMeStackEnableForClientOS", FallbackFeatureCatalog.CandidateSecondGateName);
+        Assert.Contains("windows-velocity-feature-lists", FallbackFeatureCatalog.CandidateSecondGateSourceUrl);
         // The FeatureStore evidence probe must recognize evidence from ANY known set,
         // including ViVeTool runs the user did by hand from a forum guide. The applied set is
         // intentionally smaller: 49453572 is Always Enabled in every sampled branch, so it is

@@ -305,6 +305,7 @@ public sealed class CliJsonTests
         {
             new(735209102, true, 2, 8, "Runtime"),
             new(735209102, true, 2, 8, "Boot"),
+            new FeatureConfigState(48613417, true, 2, 8, "Runtime") { IsCandidate = true },
         };
         var data = Parse("featurestore", CliJson.BuildFeatureStore(true, configs)).GetProperty("data");
 
@@ -316,5 +317,6 @@ public sealed class CliJsonTests
         Assert.Equal(2, first.GetProperty("enabledState").GetInt32());
         Assert.Equal(8, first.GetProperty("priority").GetInt32());
         Assert.True(first.GetProperty("isEnabled").GetBoolean());
+        Assert.True(data.GetProperty("configurations")[2].GetProperty("isCandidate").GetBoolean());
     }
 }
