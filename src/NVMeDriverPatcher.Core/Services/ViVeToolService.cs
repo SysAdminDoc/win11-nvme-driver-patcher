@@ -52,7 +52,8 @@ internal sealed record ViVeToolPayloadValidation(bool Success, string Summary)
 // validates the complete archive, and only then shells out.
 //
 // Source: https://github.com/thebookisclosed/ViVe (permissive, MIT-style license)
-// Feature IDs come from Models/FallbackFeatureCatalog (build-gated; Microsoft rotates them).
+// Feature IDs come from Models/FallbackFeatureCatalog (curated per-build branches; Microsoft
+// rotates them).
 //
 // We explicitly do NOT bundle vivetool.exe in the installer. The signed application embeds
 // the immutable release manifest instead, so a writable sidecar cannot redefine what elevated
@@ -79,7 +80,7 @@ public static class ViVeToolService
 
     /// <summary>
     /// The applied fallback ID set for THIS machine, selected by Windows build from the
-    /// FallbackFeatureCatalog (builds >= 26200 use the newer "Native NVMe Stack" set).
+    /// FallbackFeatureCatalog (the selected branch includes build/UBR-specific provenance).
     /// Falls back to the verified March-2026 set when the build can't be read.
     /// </summary>
     public static FallbackIdSet SelectFallbackSet()
@@ -87,7 +88,11 @@ public static class ViVeToolService
         try
         {
             var build = DriveService.GetWindowsBuildDetails();
-            if (build is not null) return FallbackFeatureCatalog.SelectForBuild(build.BuildNumber);
+            if (build is not null)
+                return FallbackFeatureCatalog.SelectForBuild(
+                    build.BuildNumber,
+                    build.UBR,
+                    AppConfig.GetWorkingDir());
         }
         catch { }
         return FallbackFeatureCatalog.PostBlockMarch2026;

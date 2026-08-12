@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace NVMeDriverPatcher.Tests;
 
-// Validates the bundled safety-data JSON (windows_build_rules.json, compat.json) and the
+// Validates the bundled safety-data JSON (windows_build_rules.json, feature_ids.json, compat.json) and the
 // telemetry payload contract against their packaged JSON Schemas. Uses a small built-in
 // validator (no external dependency, matching the repo's hand-rolled schema-check style) that
 // supports the subset of JSON Schema the schemas use: type, required, properties, items, enum,
@@ -25,6 +25,15 @@ public sealed class SafetyDataSchemaTests
         var errors = MiniJsonSchema.Validate(
             DataFile("src", "NVMeDriverPatcher.Core", "compat.json"),
             SchemaFile("compat.schema.json"));
+        Assert.True(errors.Count == 0, string.Join("\n", errors));
+    }
+
+    [Fact]
+    public void FeatureIdCatalog_ConformsToSchema()
+    {
+        var errors = MiniJsonSchema.Validate(
+            DataFile("src", "NVMeDriverPatcher.Core", "feature_ids.json"),
+            SchemaFile("feature_ids.schema.json"));
         Assert.True(errors.Count == 0, string.Join("\n", errors));
     }
 

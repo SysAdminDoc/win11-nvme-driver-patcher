@@ -15,6 +15,7 @@
 [CmdletBinding()]
 param(
     [string]$RulesPath,
+    [string]$FeatureIdsPath,
     [string]$RepoRoot,
     # Must match BuildActionPolicy.DefaultStaleAfterDays.
     [ValidateRange(1, 3650)] [int]$StaleAfterDays = 30,
@@ -27,8 +28,12 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $PSScriptRoot }
+$rulesPathWasSupplied = -not [string]::IsNullOrWhiteSpace($RulesPath)
 if (-not $RulesPath) {
     $RulesPath = Join-Path $RepoRoot 'src\NVMeDriverPatcher.Core\windows_build_rules.json'
+}
+if (-not $FeatureIdsPath -and -not $rulesPathWasSupplied) {
+    $FeatureIdsPath = Join-Path $RepoRoot 'src\NVMeDriverPatcher.Core\feature_ids.json'
 }
 
 if (-not (Test-Path -LiteralPath $RulesPath -PathType Leaf)) {
@@ -104,6 +109,79 @@ if (-not [datetime]::TryParseExact(
     }
 }
 
+if ($FeatureIdsPath) {
+    if (-not (Test-Path -LiteralPath $FeatureIdsPath -PathType Leaf)) {
+        $failures.Add("Feature ID catalog not found at '$FeatureIdsPath'.")
+    } else {
+        try {
+            $featureCatalog = Get-Content -Raw -LiteralPath $FeatureIdsPath | ConvertFrom-Json
+        } catch {
+            $failures.Add("Feature ID catalog is not valid JSON: $($_.Exception.Message)")
+            $featureCatalog = $null
+        }
+
+        if ($featureCatalog) {
+            if (-not $featureCatalog.branches -or @($featureCatalog.branches).Count -eq 0) {
+                $failures.Add('Feature ID catalog contains no branches; feature resolution would be unknown.')
+            }
+
+            $featureReviews = New-Object System.Collections.Generic.List[object]
+            $branchIndex = 0
+            foreach ($branch in @($featureCatalog.branches)) {
+                $branchId = if ($branch.id) { $branch.id } else { "(branch $branchIndex)" }
+                $branchIndex++
+                $reviewed = [datetime]::MinValue
+                $parsed = [datetime]::TryParseExact(
+                    [string]$branch.lastReviewed, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture,
+                    [Globalization.DateTimeStyles]::None, [ref]$reviewed)
+                if (-not $parsed) {
+                    $failures.Add("[feature:$branchId] lastReviewed '$($branch.lastReviewed)' is not a yyyy-MM-dd date; the branch is permanently stale.")
+                } else {
+                    $featureReviews.Add($reviewed.Date)
+                    $age = ($today - $reviewed.Date).TotalDays
+                    $daysLeft = $StaleAfterDays - $age
+                    if ($reviewed.Date -gt $today) {
+                        $failures.Add("[feature:$branchId] lastReviewed $($branch.lastReviewed) is in the future.")
+                    } elseif ($age -gt $StaleAfterDays) {
+                        $failures.Add("[feature:$branchId] was last reviewed $($branch.lastReviewed) ($([int]$age) days ago); it is already stale, so feature-ID selection is untrusted.")
+                    } elseif ($daysLeft -lt $WarnWithinDays) {
+                        $failures.Add("[feature:$branchId] was last reviewed $($branch.lastReviewed) and goes stale in $([int]$daysLeft) day(s) - inside the $WarnWithinDays-day release window. Re-verify its sourceUrl and refresh the date before shipping.")
+                    } elseif ($daysLeft -lt ($WarnWithinDays * 2)) {
+                        $warnings.Add("[feature:$branchId] goes stale in $([int]$daysLeft) day(s).")
+                    }
+                }
+
+                if (-not $branch.sourceUrl) {
+                    $failures.Add("[feature:$branchId] has no sourceUrl, so its feature IDs cannot be re-verified.")
+                }
+                if (-not $branch.features -or @($branch.features).Count -eq 0) {
+                    $failures.Add("[feature:$branchId] contains no feature rows.")
+                }
+                foreach ($feature in @($branch.features)) {
+                    if (-not $feature.name -or [int]$feature.id -le 0) {
+                        $failures.Add("[feature:$branchId] contains a feature row without a positive id and name.")
+                    }
+                    if ([string]$feature.defaultState -notin @('Always Enabled', 'Enabled By Default', 'Disabled By Default', 'Always Disabled')) {
+                        $failures.Add("[feature:$branchId] feature '$($feature.name)' has unsupported defaultState '$($feature.defaultState)'.")
+                    }
+                }
+            }
+
+            $catalogUpdated = [datetime]::MinValue
+            if (-not [datetime]::TryParseExact(
+                    [string]$featureCatalog.updated, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture,
+                    [Globalization.DateTimeStyles]::None, [ref]$catalogUpdated)) {
+                $failures.Add("The feature catalog 'updated' value '$($featureCatalog.updated)' is not a yyyy-MM-dd date.")
+            } elseif ($featureReviews.Count -gt 0) {
+                $newestFeatureReview = $featureReviews | Sort-Object -Descending | Select-Object -First 1
+                if ($catalogUpdated.Date -lt $newestFeatureReview.Date) {
+                    $failures.Add("The feature catalog 'updated' date ($($featureCatalog.updated)) is older than its newest branch review ($($newestFeatureReview.ToString('yyyy-MM-dd'))).")
+                }
+            }
+        }
+    }
+}
+
 foreach ($warning in $warnings) { Write-Host "WARN  $warning" -ForegroundColor Yellow }
 
 if ($failures.Count -gt 0) {
@@ -115,5 +193,9 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Host "Build-rules freshness gate passed: $(@($rules.rules).Count) rule(s), all reviewed within $($StaleAfterDays - $WarnWithinDays) days." -ForegroundColor Green
+if ($FeatureIdsPath) {
+    Write-Host "Build-rules freshness gate passed: $(@($rules.rules).Count) rule(s) and $(@($featureCatalog.branches).Count) feature branch(es), all reviewed within $($StaleAfterDays - $WarnWithinDays) days." -ForegroundColor Green
+} else {
+    Write-Host "Build-rules freshness gate passed: $(@($rules.rules).Count) rule(s), all reviewed within $($StaleAfterDays - $WarnWithinDays) days." -ForegroundColor Green
+}
 exit 0

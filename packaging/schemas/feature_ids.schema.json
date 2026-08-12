@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "updated", "sourceUrl", "branches"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "updated": { "type": "string" },
+    "sourceUrl": { "type": "string" },
+    "branches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "minBuild", "maxBuild", "minUbr", "maxUbr", "appliesTo",
+          "fallbackSet", "confidence", "sourceUrl", "lastReviewed", "features"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "minBuild": { "type": "integer", "minimum": 0 },
+          "maxBuild": { "type": "integer", "minimum": 0 },
+          "minUbr": { "type": "integer", "minimum": 0 },
+          "maxUbr": { "type": "integer", "minimum": 0 },
+          "appliesTo": { "type": "string" },
+          "fallbackSet": { "type": "string" },
+          "confidence": { "type": "string" },
+          "sourceUrl": { "type": "string" },
+          "lastReviewed": { "type": "string" },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "id", "defaultState"],
+              "properties": {
+                "name": { "type": "string" },
+                "id": { "type": "integer", "minimum": 1 },
+                "defaultState": {
+                  "type": "string",
+                  "enum": [
+                    "Always Enabled",
+                    "Enabled By Default",
+                    "Disabled By Default",
+                    "Always Disabled"
+                  ]
+                },
+                "apply": { "type": "boolean" },
+                "probeOnly": { "type": "boolean" },
+                "candidate": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

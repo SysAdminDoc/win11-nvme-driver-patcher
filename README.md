@@ -96,6 +96,12 @@ now identify the running build branch and explicitly report whether each registr
 known feature name/ID. This is diagnostic only and does not silently substitute a different
 registry payload while live-hardware validation remains open.
 
+The FeatureStore fallback is resolved from the reviewed `src/NVMeDriverPatcher.Core/feature_ids.json`
+catalog, not from a blanket build-number cutoff. It records the sampled branch, UBR range, feature
+ID, source URL, and velocity-dump default-state class. `Disabled By Default` rows may be selected
+only when the curated row explicitly permits application; `Always Enabled` rows stay probe-only,
+and an `Always Disabled` row is reported as a known no-route result rather than as unknown data.
+
 Since v4.6.1 the patch also writes two **service-name** SafeBoot entries for KB5079391 / 25H2
 (`SafeBoot\Minimal\nvmedisk` and `SafeBoot\Network\nvmedisk`). They are not counted in the five
 components above, but removal must delete them too — the Recovery Kit and `remove` both do.
@@ -133,7 +139,7 @@ components above, but removal must delete them too — the Recovery Kit and `rem
 - **Post-reboot drive migration verification** -- per-drive confirmation of which drives moved to "Storage disks"
 - **BypassIO/DirectStorage** status check with named-game gaming impact warning
 - **Before/after comparison** -- shows exactly what changed after patch/unpatch
-- **Diagnostics export** -- full system report with SMART health, compat software, migration status, benchmark history, and rules/compat DB provenance (source, schema, SHA-256, review freshness)
+- **Diagnostics export** -- full system report with SMART health, compat software, migration status, benchmark history, and rules/feature-ID/compat DB provenance (source, schema, SHA-256, review freshness)
 - **GitHub update check** with clickable badge in title bar
 - **Windows Event Log** integration for audit trails
 
@@ -276,8 +282,9 @@ NVMeDriverPatcher.Cli config-import --import=<path>        # Import config bundl
 | 26300+ Insider | 26300+ | Check the native Settings Feature flags page first; registry and fallback routes are not expected to bind. |
 | Pre-24H2 client | 26099 and below | Verify / monitor / rollback only; no sourced working enablement interval. |
 
-> The app and CLI use `src/NVMeDriverPatcher.Core/windows_build_rules.json` at runtime. Trust `status`
-> and preflight output over this static table when Microsoft changes Insider or cumulative-update behavior.
+> The app and CLI use `src/NVMeDriverPatcher.Core/windows_build_rules.json` and the reviewed
+> `feature_ids.json` catalog at runtime. Trust `status` and preflight output over this static table
+> when Microsoft changes Insider or cumulative-update behavior.
 
 ## Hardware Compatibility
 

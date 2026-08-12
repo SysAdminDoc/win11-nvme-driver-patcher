@@ -87,7 +87,9 @@ builds. The fallback writes build-specific feature IDs to FeatureStore instead, 
 the native Rtl API first and ViVeTool only if native both-store verification fails.
 The directly evidenced 24H2 build 26100.8106 uses 60786016 + 48433719; adjacent 26100
 UBRs are NOT inferred from that single report. 25H2 26200 builds below UBR 8524 use
-55369237 + 48433719 (49453572 is Always Enabled and probe-only). Other 26100 builds, build 26200.8524+, 26201-26299,
+55369237 + 48433719 (49453572 is Always Enabled and probe-only). The reviewed feature_ids.json
+catalog resolves the sampled branch and UBR before selecting a set; it does not use a blanket
+build-number cutoff. Other 26100 builds, build 26200.8524+, 26201-26299,
 and 26300+ have no sourced registry or fallback route that binds GenNvmeDisk; treat
 them as verify/monitor/rollback-only. `featurestore` probes whether a fallback has been
 applied and reports the candidate second gate 48613417 when the branch exposes it; the

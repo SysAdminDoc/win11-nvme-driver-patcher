@@ -77,8 +77,31 @@ public sealed class DataFileProvenanceServiceTests : IDisposable
         var all = DataFileProvenanceService.InspectAll();
 
         Assert.Contains(all, f => f.FileName == "windows_build_rules.json" && f.Exists && f.SchemaVersion >= 1);
+        Assert.Contains(all, f => f.FileName == "feature_ids.json" && f.Exists && f.SchemaVersion >= 1);
         Assert.Contains(all, f => f.FileName == "compat.json" && f.Exists && f.SchemaVersion >= 1);
         Assert.All(all, f => Assert.False(string.IsNullOrWhiteSpace(f.Sha256)));
+    }
+
+    [Fact]
+    public void InspectFeatureIds_UsesPortableWorkingDirectoryOverride()
+    {
+        var shippedDir = Path.Combine(_dir, "feature-app");
+        var portableDir = Path.Combine(_dir, "portable");
+        Directory.CreateDirectory(shippedDir);
+        Directory.CreateDirectory(portableDir);
+        File.WriteAllText(Path.Combine(shippedDir, "feature_ids.json"), FeatureCatalogPayload("shipped"));
+        File.WriteAllText(Path.Combine(portableDir, "feature_ids.json"), FeatureCatalogPayload("portable"));
+
+        var result = DataFileProvenanceService.Inspect(
+            "Curated feature ID catalog",
+            "feature_ids.json",
+            portableDir,
+            shippedDir,
+            staleAfterDays: 30,
+            nowUtc: new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal("local override", result.SourceKind);
+        Assert.True(result.IsCustomized);
     }
 
     public void Dispose()
@@ -100,6 +123,34 @@ public sealed class DataFileProvenanceServiceTests : IDisposable
                   "note": "{{note}}",
                   "lastReviewed": "{{reviewed}}",
                   "sourceUrl": "https://example.test/{{note}}"
+                }
+              ]
+            }
+        """;
+    }
+
+    private static string FeatureCatalogPayload(string note)
+    {
+        return $$"""
+            {
+              "schemaVersion": 1,
+              "updated": "2026-06-11",
+              "sourceUrl": "https://example.test/{{note}}",
+              "branches": [
+                {
+                  "id": "{{note}}",
+                  "minBuild": 26100,
+                  "maxBuild": 26100,
+                  "minUbr": 0,
+                  "maxUbr": 999999,
+                  "appliesTo": "{{note}}",
+                  "fallbackSet": "{{note}}",
+                  "confidence": "verified",
+                  "sourceUrl": "https://example.test/{{note}}/branch",
+                  "lastReviewed": "2026-06-11",
+                  "features": [
+                    { "name": "NativeNVMeStackForGeClient", "id": 60786016, "defaultState": "Disabled By Default", "apply": true }
+                  ]
                 }
               ]
             }

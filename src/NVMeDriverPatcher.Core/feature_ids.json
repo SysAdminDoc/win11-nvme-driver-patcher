@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "updated": "2026-08-12",
+  "sourceUrl": "https://github.com/phantomofearth/windows-velocity-feature-lists",
+  "branches": [
+    {
+      "id": "pre-26200-compatible",
+      "minBuild": 0,
+      "maxBuild": 26199,
+      "minUbr": 0,
+      "maxUbr": 2147483647,
+      "appliesTo": "pre-26200 sampled branch",
+      "fallbackSet": "post-block-2026-03",
+      "confidence": "verified sample; compatibility range",
+      "sourceUrl": "https://raw.githubusercontent.com/phantomofearth/windows-velocity-feature-lists/main/ge_prerelease_im/amd64/26100.8687.txt",
+      "lastReviewed": "2026-08-12",
+      "features": [
+        {
+          "name": "NativeNVMeStackForGeClient",
+          "id": 60786016,
+          "defaultState": "Disabled By Default",
+          "apply": true
+        },
+        {
+          "name": "UxAccOptimization",
+          "id": 48433719,
+          "defaultState": "Disabled By Default",
+          "apply": true
+        },
+        {
+          "name": "Standalone_Future",
+          "id": 49453572,
+          "defaultState": "Always Enabled",
+          "probeOnly": true
+        }
+      ]
+    },
+    {
+      "id": "ge-prerelease-im-26100.8687-amd64",
+      "minBuild": 26100,
+      "maxBuild": 26100,
+      "minUbr": 8687,
+      "maxUbr": 8687,
+      "appliesTo": "pre-26200 sampled branch",
+      "fallbackSet": "post-block-2026-03",
+      "confidence": "verified",
+      "sourceUrl": "https://raw.githubusercontent.com/phantomofearth/windows-velocity-feature-lists/main/ge_prerelease_im/amd64/26100.8687.txt",
+      "lastReviewed": "2026-08-12",
+      "features": [
+        {
+          "name": "NativeNVMeStackForGeClient",
+          "id": 60786016,
+          "defaultState": "Disabled By Default",
+          "apply": true
+        },
+        {
+          "name": "UxAccOptimization",
+          "id": 48433719,
+          "defaultState": "Disabled By Default",
+          "apply": true
+        },
+        {
+          "name": "Standalone_Future",
+          "id": 49453572,
+          "defaultState": "Always Enabled",
+          "probeOnly": true
+        }
+      ]
+    },
+    {
+      "id": "ge-prerelease-26404.5000-amd64",
+      "minBuild": 26404,
+      "maxBuild": 26404,
+      "minUbr": 5000,
+      "maxUbr": 5000,
+      "appliesTo": "26200+ sampled branch",
+      "fallbackSet": "native-nvme-stack-25h2",
+      "confidence": "community-reported",
+      "sourceUrl": "https://raw.githubusercontent.com/phantomofearth/windows-velocity-feature-lists/main/ge_prerelease/amd64/26404.5000.txt",
+      "lastReviewed": "2026-08-12",
+      "features": [
+        {
+          "name": "NativeNVMeStackForGeClient",
+          "id": 55369237,
+          "defaultState": "Disabled By Default",
+          "apply": true
+        },
+        {
+          "name": "UxAccOptimization",
+          "id": 48433719,
+          "defaultState": "Disabled By Default",
+          "apply": true
+        },
+        {
+          "name": "Standalone_Future",
+          "id": 49453572,
+          "defaultState": "Always Enabled",
+          "probeOnly": true
+        }
+      ]
+    },
+    {
+      "id": "rs-prerelease-29531.1000-amd64",
+      "minBuild": 29531,
+      "maxBuild": 29531,
+      "minUbr": 1000,
+      "maxUbr": 1000,
+      "appliesTo": "26200+ sampled branch",
+      "fallbackSet": "native-nvme-stack-25h2",
+      "confidence": "community-reported",
+      "sourceUrl": "https://raw.githubusercontent.com/phantomofearth/windows-velocity-feature-lists/main/rs_prerelease/amd64/29531.1000.txt",
+      "lastReviewed": "2026-08-12",
+      "features": [
+        {
+          "name": "NativeNVMeStackEnableForClientOS",
+          "id": 48613417,
+          "defaultState": "Disabled By Default",
+          "candidate": true
+        },
+        {
+          "name": "NativeNVMeStackForGeClient",
+          "id": 55369237,
+          "defaultState": "Disabled By Default",
+          "apply": true
+        },
+        {
+          "name": "UxAccOptimization",
+          "id": 48433719,
+          "defaultState": "Enabled By Default",
+          "apply": true
+        },
+        {
+          "name": "Standalone_Future",
+          "id": 49453572,
+          "defaultState": "Always Enabled",
+          "probeOnly": true
+        }
+      ]
+    },
+    {
+      "id": "26200-plus-compatible",
+      "minBuild": 26200,
+      "maxBuild": 2147483647,
+      "minUbr": 0,
+      "maxUbr": 2147483647,
+      "appliesTo": "26200+ sampled branch",
+      "fallbackSet": "native-nvme-stack-25h2",
+      "confidence": "community-reported; compatibility range",
+      "sourceUrl": "https://github.com/phantomofearth/windows-velocity-feature-lists",
+      "lastReviewed": "2026-08-12",
+      "features": [
+        {
+          "name": "NativeNVMeStackForGeClient",
+          "id": 55369237,
+          "defaultState": "Disabled By Default",
+          "apply": true
+        },
+        {
+          "name": "UxAccOptimization",
+          "id": 48433719,
+          "defaultState": "Disabled By Default",
+          "apply": true
+        },
+        {
+          "name": "Standalone_Future",
+          "id": 49453572,
+          "defaultState": "Always Enabled",
+          "probeOnly": true
+        }
+      ]
+    }
+  ]
+}
