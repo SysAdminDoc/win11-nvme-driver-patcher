@@ -34,6 +34,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   owner and current-token writeability, and preserves that evidence when a TrustedInstaller-owned
   key blocks cleanup. The recovery kit and offline docs include a backed-up WinRE takeown/
   reg delete path for deleting only the reported values.
+- Dependency pins now use the Microsoft 10.0.11 line, SkiaSharp 4.150.2 with HarfBuzzSharp
+  14.2.1.2, and SQLitePCLRaw 3.0.4 with the SourceGear.sqlite3 3.53.3 native asset. The
+  chart and SQLite smoke gates now exercise the upgraded native paths and verify their resolved
+  architecture-specific assets; the framework-provided System.Threading.AccessControl reference
+  was removed.
 
 ## [5.7.0] - 2026-08-11
 
