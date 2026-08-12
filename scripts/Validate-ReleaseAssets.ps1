@@ -7,6 +7,7 @@
 #   - SHA256SUMS.txt omits a checksummed artifact or carries a stale hash
 #   - the generated winget manifest's InstallerUrl tag/version or InstallerSha256 disagrees
 #     with the actual GUI exe and release version
+#   - a self-contained executable embeds an older .NET runtime than the release floor
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string]$Version,   # tag-derived, no leading v (e.g. 4.6.2)
@@ -19,6 +20,35 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = if ($RepoRoot) { Resolve-Path $RepoRoot } else { Resolve-Path (Join-Path $PSScriptRoot '..') }
 $Version = $Version.TrimStart('v')
+
+$minimumEmbeddedRuntime = [Version]'10.0.11'
+$propsPath = Join-Path $repoRoot 'Directory.Build.props'
+if (Test-Path -LiteralPath $propsPath) {
+    $propsText = Get-Content -Raw -LiteralPath $propsPath
+    $runtimeFloorMatch = [regex]::Match($propsText, '<MinimumEmbeddedRuntimeVersion>(?<value>[^<]+)</MinimumEmbeddedRuntimeVersion>')
+    if ($runtimeFloorMatch.Success) {
+        try { $minimumEmbeddedRuntime = [Version]$runtimeFloorMatch.Groups['value'].Value.Trim() }
+        catch { throw "Directory.Build.props has an invalid MinimumEmbeddedRuntimeVersion: $($runtimeFloorMatch.Groups['value'].Value)" }
+    }
+}
+
+$embeddedRuntimePattern = '"includedFrameworks"\s*:\s*\[\s*\{\s*"name"\s*:\s*"Microsoft\.NETCore\.App"\s*,\s*"version"\s*:\s*"(?<version>\d+\.\d+\.\d+)"'
+
+function Get-EmbeddedRuntimeVersion {
+    param([Parameter(Mandatory)] [string]$Path)
+
+    # PublishSingleFile folds runtimeconfig.json into the bundle. The JSON remains as an ASCII
+    # substring, so this verifies the runtime actually carried by the release executable rather
+    # than the SDK installed on the machine that built it.
+    $text = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($Path))
+    $matches = [regex]::Matches($text, $embeddedRuntimePattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($matches.Count -ne 1) {
+        throw "expected one embedded Microsoft.NETCore.App runtimeconfig entry, found $($matches.Count)"
+    }
+
+    try { return [Version]$matches[0].Groups['version'].Value }
+    catch { throw "embedded Microsoft.NETCore.App version is invalid: $($matches[0].Groups['version'].Value)" }
+}
 
 & (Join-Path $PSScriptRoot 'Validate-LegacyPowerShellBoundary.ps1') `
     -ScriptPath (Join-Path $repoRoot 'NVMe_Driver_Patcher.ps1')
@@ -120,6 +150,16 @@ foreach ($a in $contract.artifacts) {
         }
         catch {
             $failures.Add("PE architecture unreadable for $leaf (runtime $($a.runtime)): $($_.Exception.Message)")
+        }
+
+        try {
+            $embeddedRuntime = Get-EmbeddedRuntimeVersion $full
+            if ($embeddedRuntime -lt $minimumEmbeddedRuntime) {
+                $failures.Add("embedded .NET runtime for $leaf is $embeddedRuntime; release floor is $minimumEmbeddedRuntime")
+            }
+        }
+        catch {
+            $failures.Add("embedded .NET runtime unreadable for ${leaf}: $($_.Exception.Message)")
         }
     }
 

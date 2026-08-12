@@ -367,15 +367,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here duplicates the
 2026-08-10 audit findings above; where they touch the same file, the relationship is noted inline.
 
-### P0
-
-- [ ] P0 — Rebuild and re-release on .NET 10.0.11; make embedded runtime version a release gate
-  Why: All four exes publish SelfContained + PublishSingleFile, so Windows Update never services their .NET runtime — every published artifact carries 10.0.10, and 10.0.11 (2026-08-11) fixes ten CVEs including two RCE (CVE-2026-70354, CVE-2026-62897) and three EoP, inside a `requireAdministrator` process.
-  Evidence: `global.json` pins SDK 10.0.301 (installed 10.0.302 / runtime 10.0.10, verified locally); https://github.com/dotnet/core/blob/main/release-notes/10.0/10.0.11/10.0.11.md. CVE-2026-62900 additionally names `Microsoft.Build.Tasks.Git`/`Microsoft.SourceLink.*` in SDK 10.0.300–10.0.301 specifically.
-  Touches: `global.json` (→ 10.0.303), `scripts/Build-ReleaseArtifacts.ps1`, `scripts/Validate-ReleaseAssets.ps1`, CHANGELOG.
-  Acceptance: `dotnet --version` resolves 10.0.303+; a published exe reports runtime 10.0.11; `Validate-ReleaseAssets.ps1` fails a build whose embedded runtime is older than a declared floor (same pattern as its MSI SummaryInfo Template read).
-  Complexity: S
-
 ### P1
 
 - [ ] P1 — Registry-override path writes three feature IDs that exist on no current build

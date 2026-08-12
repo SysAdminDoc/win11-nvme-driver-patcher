@@ -1,6 +1,8 @@
 <Project>
   <PropertyGroup>
     <VersionPrefix>5.7.0</VersionPrefix>
+    <!-- Self-contained release artifacts must carry the patched .NET runtime, because Windows Update cannot service it. -->
+    <MinimumEmbeddedRuntimeVersion>10.0.11</MinimumEmbeddedRuntimeVersion>
     <Version Condition="'$(Version)' == ''">$(VersionPrefix)</Version>
     <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">$(VersionPrefix).0</AssemblyVersion>
     <FileVersion Condition="'$(FileVersion)' == ''">$(VersionPrefix).0</FileVersion>

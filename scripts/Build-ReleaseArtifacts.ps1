@@ -13,6 +13,23 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = if ($RepoRoot) { (Resolve-Path $RepoRoot).Path } else { (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
 
+$minimumSdk = [Version]'10.0.303'
+$dotnetPath = $null
+$dotnetCandidates = @()
+if ($env:DOTNET_ROOT) { $dotnetCandidates += Join-Path $env:DOTNET_ROOT 'dotnet.exe' }
+if (${env:DOTNET_ROOT(x86)}) { $dotnetCandidates += Join-Path ${env:DOTNET_ROOT(x86)} 'dotnet.exe' }
+$dotnetCandidates += Join-Path ${env:ProgramFiles} 'dotnet\dotnet.exe'
+foreach ($candidate in $dotnetCandidates) {
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) { $dotnetPath = $candidate; break }
+}
+if (-not $dotnetPath) { throw 'dotnet.exe was not found in DOTNET_ROOT or Program Files.' }
+$sdkVersionText = (& $dotnetPath --version 2>&1 | Out-String).Trim()
+try { $sdkVersion = [Version]$sdkVersionText }
+catch { throw "Could not parse dotnet SDK version '$sdkVersionText'." }
+if ($sdkVersion -lt $minimumSdk) {
+    throw "dotnet SDK $sdkVersion is older than the release floor $minimumSdk. Install SDK $minimumSdk or newer before publishing."
+}
+
 & (Join-Path $PSScriptRoot 'Validate-LegacyPowerShellBoundary.ps1') `
     -ScriptPath (Join-Path $repoRoot 'NVMe_Driver_Patcher.ps1')
 
@@ -60,8 +77,6 @@ function Get-Sha256Hex {
     }
 }
 
-Invoke-Checked dotnet @('restore', (Join-Path $repoRoot 'NVMeDriverPatcher.sln'))
-
 $matrix = @(
     @{ Id = 'gui'; Project = 'src/NVMeDriverPatcher/NVMeDriverPatcher.csproj'; Runtime = 'win-x64'; Output = 'publish/gui'; Exe = 'NVMeDriverPatcher.exe' },
     @{ Id = 'cli'; Project = 'src/NVMeDriverPatcher.Cli/NVMeDriverPatcher.Cli.csproj'; Runtime = 'win-x64'; Output = 'publish/cli'; Exe = 'NVMeDriverPatcher.Cli.exe' },
@@ -76,7 +91,11 @@ $matrix = @(
 foreach ($entry in $matrix) {
     $project = Join-Path $repoRoot $entry.Project
     $output = Join-Path $repoRoot $entry.Output
-    Invoke-Checked dotnet @(
+    # Restore per RID so the Windows SDK/runtime packs for both published architectures are
+    # present before the no-restore publish. A solution-level restore without a RID does not
+    # download those packs on a clean SDK installation.
+    Invoke-Checked $dotnetPath @('restore', $project, '-r', $entry.Runtime)
+    Invoke-Checked $dotnetPath @(
         'publish',
         $project,
         '-c',
@@ -233,5 +252,20 @@ foreach ($artifact in $contract.artifacts) {
     Set-Content -LiteralPath (Join-Path $publishRoot "$leaf.sha256") -Value $line -Encoding ASCII
 }
 Set-Content -LiteralPath (Join-Path $publishRoot 'SHA256SUMS.txt') -Value $sumLines -Encoding ASCII
+
+# Validate the artifacts that were just built, including the runtimeconfig embedded in every
+# self-contained executable. This keeps the runtime floor a release-builder gate, not merely a
+# check that a release operator has to remember to run separately.
+Invoke-Checked powershell.exe @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    (Join-Path $repoRoot 'scripts/Validate-ReleaseAssets.ps1'),
+    '-Version',
+    $Version,
+    '-RepoRoot',
+    $repoRoot
+)
 
 Write-Host "Built release artifacts for v$Version. ARM64 portable assets are diagnostic/status-only until Microsoft ships ARM64 nvmedisk.sys." -ForegroundColor Green
