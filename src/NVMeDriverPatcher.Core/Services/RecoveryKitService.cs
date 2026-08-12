@@ -119,6 +119,25 @@ WHAT THIS KIT CAN AND CANNOT UNDO:
   not boot, first remove the registry/SafeBoot patch with this kit so Windows
   boots on the legacy stack, THEN run the fallback reset from inside Windows.
 
+REGISTRY OWNERSHIP RESIDUE (LAST RESORT):
+If Remove Patch reports that values remain under
+HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides
+and the current user cannot rewrite them (often because the owner is TrustedInstaller),
+the normal elevated delete can still be denied. Do NOT take ownership of a live registry
+key while Windows is running. Use WinRE Command Prompt only, and make a backup of the
+offline SYSTEM hive before editing it:
+1. Identify the Windows volume (shown as W: below) and the kit/USB volume.
+2. Run: copy W:\Windows\System32\config\SYSTEM W:\Windows\System32\config\SYSTEM.nvme-backup
+3. Run: takeown /f W:\Windows\System32\config\SYSTEM /a
+4. Run: reg load HKLM\NVME_OFFLINE W:\Windows\System32\config\SYSTEM
+5. Run: reg query HKLM\NVME_OFFLINE\Select /v Current and note the control-set number.
+6. For each value named by the removal report, run (replace 001 and VALUE_NAME):
+   reg delete HKLM\NVME_OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides /v VALUE_NAME /f
+7. Run: reg unload HKLM\NVME_OFFLINE
+If reg load or reg delete fails, stop and restore the SYSTEM hive backup or use System
+Restore. Do not delete the entire Overrides key: Windows or another feature-management
+owner may have values there that this tool did not create.
+
 FILES:
 - Remove_NVMe_Patch.bat     - Integrity gate and canonical recovery entry point
 - Apply_Recovery_Mutation.bat - Registry removal logic called only after verification

@@ -70,6 +70,17 @@ public sealed class DocsServiceTests
     }
 
     [Fact]
+    public void RecoveryTopic_DocumentsRegistryOwnershipRecovery()
+    {
+        var text = DocsService.Render("recovery");
+
+        Assert.Contains("takeown", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("reg delete", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SYSTEM.nvme-backup", text, StringComparison.Ordinal);
+        Assert.Contains("FeatureManagement\\Overrides", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildRulesTopic_DistinguishesFallbackBlockedAndFeatureFlagsBuilds()
     {
         var text = DocsService.Render("buildrules");

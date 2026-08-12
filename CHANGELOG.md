@@ -27,6 +27,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   written because sampled velocity dumps mark `Standalone_Future` Always Enabled.
 - `featurestore` now reports the current Runtime/Boot state of candidate second-gate ID `48613417`
   as a labeled probe-only row; the candidate is not included in native or ViVeTool writes.
+- Removal now enumerates every value left under the FeatureManagement override key, records its
+  owner and current-token writeability, and preserves that evidence when a TrustedInstaller-owned
+  key blocks cleanup. The recovery kit and offline docs include a backed-up WinRE takeown/
+  reg delete path for deleting only the reported values.
 
 ## [5.7.0] - 2026-08-11
 

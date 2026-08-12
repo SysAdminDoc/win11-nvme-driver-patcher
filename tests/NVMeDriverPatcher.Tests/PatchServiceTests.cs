@@ -30,6 +30,20 @@ public sealed class PatchServiceTests
         Assert.All(residue, r => Assert.False(string.IsNullOrWhiteSpace(r)));
     }
 
+    [Fact]
+    public void InspectRegistryOverrideOwnership_ReadsLiveKeyWithoutMutatingIt()
+    {
+        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+
+        var report = PatchService.InspectRegistryOverrideOwnership(hklm);
+
+        Assert.NotNull(report);
+        Assert.False(string.IsNullOrWhiteSpace(report.Summary));
+        Assert.NotNull(report.Owner);
+        Assert.NotNull(report.RemainingValueNames);
+        Assert.Equal(report.RemainingValueNames.Count > 0 && !report.CurrentUserCanWrite, report.HasBlockingResidue);
+    }
+
 
     [Theory]
     [InlineData(0, true)]

@@ -78,6 +78,21 @@ public sealed class RecoveryKitServiceTests : IDisposable
     }
 
     [Fact]
+    public void ExportRecoveryKit_ReadmeDocumentsRegistryOwnershipRecovery()
+    {
+        var kitDir = RecoveryKitService.Export(_tempRoot);
+
+        Assert.NotNull(kitDir);
+        var readme = File.ReadAllText(Path.Combine(kitDir!, "README.txt"));
+        Assert.Contains("REGISTRY OWNERSHIP RESIDUE", readme, StringComparison.Ordinal);
+        Assert.Contains("TrustedInstaller", readme, StringComparison.Ordinal);
+        Assert.Contains("takeown /f", readme, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("reg delete", readme, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(AppConfig.RegistryPath, readme, StringComparison.Ordinal);
+        Assert.Contains("Do not delete the entire Overrides key", readme, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Export_RemovalArtifacts_CoverServiceNameSafeBootEntries()
     {
         // The kit must remove BOTH SafeBoot entry styles: the GUID-class entries and the
