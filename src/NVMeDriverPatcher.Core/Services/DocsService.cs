@@ -61,6 +61,17 @@ Flip via `apply --safe` / `apply --full` or the GUI's Install Mode radio.
    into winre.wim. `winre-inject --apply` backs up winre.wim, logs SHA-256 before/after,
    mounts under the app working dir, commits or discards, and runs DISM cleanup on failure.
    After applying, boot into WinRE once and confirm the system volume is accessible.
+
+If removal reports registry-override ownership residue, do not take ownership of a live
+registry key. From WinRE Command Prompt, back up the offline SYSTEM hive, then use the
+following last-resort sequence (replace W: and 001 with the Windows volume and control set):
+copy W:\Windows\System32\config\SYSTEM W:\Windows\System32\config\SYSTEM.nvme-backup
+takeown /f W:\Windows\System32\config\SYSTEM /a
+reg load HKLM\NVME_OFFLINE W:\Windows\System32\config\SYSTEM
+reg delete HKLM\NVME_OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides /v VALUE_NAME /f
+reg unload HKLM\NVME_OFFLINE
+Delete only the reported value names; never delete the entire Overrides key. If the hive
+cannot be loaded or edited, stop and use the backup or System Restore.
 ",
         ["watchdog"] = @"
 The post-patch watchdog counts storage-stack distress signals (Storport 129, disk 51/153,
@@ -169,6 +180,12 @@ proof and know which INF owns the binding.
 2. Clean local data:   `NVMeDriverPatcher.Cli clean-data`  (removes logs, ETL, backups, DB)
 3. Unregister tasks:   `NVMeDriverPatcher.Cli unregister-tasks`
 4. If installed via MSI: use Programs and Features. Otherwise just delete the exe.
+
+Removal enumerates every value under the FeatureManagement Overrides key. If it reports
+that the current user cannot rewrite a remaining value, the owner may be TrustedInstaller
+and ViVeTool /fullreset can fail independently. Use the WinRE ownership-recovery sequence
+in docs recovery: back up SYSTEM, takeown the offline hive file, reg load, delete only
+the reported value with reg delete, then reg unload.
 "
     };
 

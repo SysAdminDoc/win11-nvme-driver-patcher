@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using Microsoft.Win32;
 using NVMeDriverPatcher.Models;
 
@@ -25,6 +27,11 @@ public class PatchOperationResult
     // Status of the native FeatureStore / ViVeTool fallback undo attempted during Uninstall.
     // Null when no removal ran; otherwise a human-readable summary surfaced in the activity rail.
     public string? FeatureStoreResetSummary { get; set; }
+
+    // Read-only ownership/writeability evidence for the FeatureManagement override key. This is
+    // deliberately retained separately from Residue so support bundles and callers can distinguish
+    // a normal leftover value from a TrustedInstaller-owned key the current user cannot rewrite.
+    public RegistryOverrideOwnershipReport? RegistryOverrideOwnership { get; set; }
 
     // Components still present after a post-removal re-probe of every store. Non-empty means the
     // removal was PARTIAL: Success is false, the watchdog stays armed, and the CLI exits non-zero.
@@ -561,6 +568,8 @@ public static class PatchService
             {
                 result.Residue.Add("Mutation ledger is unreadable; exact pre-state cannot be proven.");
                 log?.Invoke("[ERROR] Removal blocked: mutation ledger exists but is unreadable. Preserve it and use the recovery kit.");
+                result.RegistryOverrideOwnership = InspectLiveRegistryOverrideOwnership();
+                log?.Invoke($"  [Registry] {result.RegistryOverrideOwnership.Summary}");
                 return result;
             }
             if (mutationLedger is not null)
@@ -617,6 +626,9 @@ public static class PatchService
                     result.Success = restored.Success && result.Residue.Count == 0;
                 }
 
+                result.RegistryOverrideOwnership = InspectLiveRegistryOverrideOwnership();
+                log?.Invoke($"  [Registry] {result.RegistryOverrideOwnership.Summary}");
+
                 if (result.Success)
                 {
                     SafeBootStateService.DeleteJournal(workingDir);
@@ -641,29 +653,44 @@ public static class PatchService
             log?.Invoke("Removing registry components...");
             ReportProgress(progress, 30, "Removing feature flags...");
 
-            using var overrides = hklm.OpenSubKey(AppConfig.RegistrySubKey, writable: true);
-            if (overrides is not null)
+            RegistryKey? overrides = null;
+            try
             {
-                var allIds = AppConfig.FeatureIDs.Append(AppConfig.ServerFeatureID);
-                foreach (var id in allIds)
+                overrides = hklm.OpenSubKey(AppConfig.RegistrySubKey, writable: true);
+                if (overrides is not null)
                 {
-                    string friendlyName = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn : "Feature Flag";
-                    try
+                    var allIds = AppConfig.FeatureIDs.Append(AppConfig.ServerFeatureID);
+                    foreach (var id in allIds)
                     {
-                        if (overrides.GetValue(id) is not null)
+                        string friendlyName = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn : "Feature Flag";
+                        try
                         {
-                            overrides.DeleteValue(id);
-                            log?.Invoke($"  [REMOVED] {id} - {friendlyName}");
-                            removedCount++;
+                            if (overrides.GetValue(id) is not null)
+                            {
+                                overrides.DeleteValue(id);
+                                log?.Invoke($"  [REMOVED] {id} - {friendlyName}");
+                                removedCount++;
+                            }
+                            else
+                            {
+                                log?.Invoke($"  [ABSENT] {id} (Already gone)");
+                            }
                         }
-                        else
-                        {
-                            log?.Invoke($"  [ABSENT] {id} (Already gone)");
-                        }
+                        catch (Exception ex) { log?.Invoke($"  [FAIL] {id}: {ex.Message}"); }
                     }
-                    catch (Exception ex) { log?.Invoke($"  [FAIL] {id}: {ex.Message}"); }
+                    try { overrides.Flush(); } catch { }
                 }
-                try { overrides.Flush(); } catch { }
+            }
+            catch (Exception ex)
+            {
+                // A TrustedInstaller-owned key can reject the writable handle before the residue
+                // probe runs. Continue with SafeBoot/fallback cleanup so the read-only ownership
+                // report can identify the exact remaining values instead of losing the evidence.
+                log?.Invoke($"  [FAIL] Feature override key could not be opened for removal: {ex.Message}");
+            }
+            finally
+            {
+                overrides?.Dispose();
             }
 
             ReportProgress(progress, 60, "Restoring SafeBoot keys...");
@@ -727,7 +754,9 @@ public static class PatchService
             // Success is possible ONLY when nothing this app is responsible for remains.
             ReportProgress(progress, 90, "Validating removal (residue probe)...");
             result.AppliedCount = removedCount;
-            result.Residue = ProbeRemovalResidue(hklm, workingDir, log);
+            result.RegistryOverrideOwnership = InspectRegistryOverrideOwnership(hklm);
+            log?.Invoke($"  [Registry] {result.RegistryOverrideOwnership.Summary}");
+            result.Residue = ProbeRemovalResidue(hklm, workingDir, result.RegistryOverrideOwnership, log);
             result.Success = result.Residue.Count == 0;
             result.NeedsRestart = removedCount > 0 || result.NeedsRestart;
 
@@ -786,28 +815,33 @@ public static class PatchService
     // Fails closed: if a store cannot be read to confirm it is clean, that counts as residue.
     internal static List<string> ProbeRemovalResidue(RegistryKey hklm, string? workingDir, Action<string>? log)
     {
+        var ownership = InspectRegistryOverrideOwnership(hklm);
+        return ProbeRemovalResidue(hklm, workingDir, ownership, log);
+    }
+
+    private static List<string> ProbeRemovalResidue(
+        RegistryKey hklm,
+        string? workingDir,
+        RegistryOverrideOwnershipReport ownership,
+        Action<string>? log)
+    {
         var residue = new List<string>();
 
         // 1) Feature override values under the FeatureManagement Overrides key.
-        try
+        if (!ownership.Readable)
         {
-            using var overrides = hklm.OpenSubKey(AppConfig.RegistrySubKey, writable: false);
-            if (overrides is not null)
-            {
-                foreach (var id in AppConfig.FeatureIDs.Append(AppConfig.ServerFeatureID))
-                {
-                    try
-                    {
-                        if (overrides.GetValue(id) is not null)
-                            residue.Add($"Feature override value {id}");
-                    }
-                    catch (Exception ex) { residue.Add($"Feature override {id} unverifiable ({ex.GetType().Name})"); }
-                }
-            }
+            residue.Add($"Feature overrides key unverifiable; ownership report: {ownership.Summary}");
         }
-        catch (Exception ex)
+        else
         {
-            residue.Add($"Feature overrides key unverifiable ({ex.GetType().Name})");
+            foreach (var name in ownership.RemainingValueNames)
+            {
+                string displayName = string.IsNullOrEmpty(name) ? "(Default)" : name;
+                string access = ownership.CurrentUserCanWrite
+                    ? $"owner {ownership.Owner}; current user can rewrite"
+                    : $"owner {ownership.Owner}; current user cannot rewrite";
+                residue.Add($"Feature override value {displayName} remains ({access})");
+            }
         }
 
         // 2) SafeBoot: residue is ONLY the app's own default value still present. A preserved
@@ -829,6 +863,112 @@ public static class PatchService
         }
 
         return residue;
+    }
+
+    /// <summary>
+    /// Enumerates every value under the FeatureManagement override key and checks whether the
+    /// current token can obtain a writable handle. The check is intentionally non-mutating: an
+    /// administrator must not take ownership of a boot-adjacent policy key as part of removal.
+    /// </summary>
+    internal static RegistryOverrideOwnershipReport InspectRegistryOverrideOwnership(RegistryKey hklm)
+    {
+        RegistryKey? overrides = null;
+        try
+        {
+            overrides = hklm.OpenSubKey(AppConfig.RegistrySubKey, writable: false);
+            if (overrides is null)
+            {
+                return new RegistryOverrideOwnershipReport(
+                    KeyExists: false,
+                    Readable: true,
+                    Owner: "(none)",
+                    CurrentUserCanWrite: true,
+                    RemainingValueNames: Array.Empty<string>(),
+                    Summary: $"Registry override ownership: clean — {AppConfig.RegistryPath} is absent.");
+            }
+
+            var remaining = overrides.GetValueNames()
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+            string owner = GetRegistryOwner(overrides);
+            bool canWrite = CanOpenRegistryKeyWritable(hklm);
+            string summary = remaining.Length == 0
+                ? $"Registry override ownership: clean — key is readable and contains no values (owner {owner})."
+                : canWrite
+                    ? $"Registry override residue: {remaining.Length} value(s) remain under {AppConfig.RegistryPath}; owner {owner}; current user can rewrite."
+                    : $"Registry override ownership: BLOCKED — {remaining.Length} value(s) remain under {AppConfig.RegistryPath}; owner {owner}; current user cannot rewrite.";
+
+            return new RegistryOverrideOwnershipReport(
+                KeyExists: true,
+                Readable: true,
+                Owner: owner,
+                CurrentUserCanWrite: canWrite,
+                RemainingValueNames: remaining,
+                Summary: summary);
+        }
+        catch (Exception ex)
+        {
+            return new RegistryOverrideOwnershipReport(
+                KeyExists: true,
+                Readable: false,
+                Owner: "(unavailable)",
+                CurrentUserCanWrite: false,
+                RemainingValueNames: Array.Empty<string>(),
+                Summary: $"Registry override ownership: UNKNOWN — {AppConfig.RegistryPath} could not be read ({ex.GetType().Name}).");
+        }
+        finally
+        {
+            overrides?.Dispose();
+        }
+    }
+
+    private static RegistryOverrideOwnershipReport InspectLiveRegistryOverrideOwnership()
+    {
+        try
+        {
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            return InspectRegistryOverrideOwnership(hklm);
+        }
+        catch (Exception ex)
+        {
+            return new RegistryOverrideOwnershipReport(
+                KeyExists: true,
+                Readable: false,
+                Owner: "(unavailable)",
+                CurrentUserCanWrite: false,
+                RemainingValueNames: Array.Empty<string>(),
+                Summary: $"Registry override ownership: UNKNOWN — {AppConfig.RegistryPath} could not be opened ({ex.GetType().Name}).");
+        }
+    }
+
+    private static string GetRegistryOwner(RegistryKey key)
+    {
+        try
+        {
+            var owner = key.GetAccessControl(AccessControlSections.Owner).GetOwner(typeof(NTAccount));
+            return owner?.Value ?? "(unavailable)";
+        }
+        catch (Exception ex)
+        {
+            return $"(unavailable: {ex.GetType().Name})";
+        }
+    }
+
+    private static bool CanOpenRegistryKeyWritable(RegistryKey hklm)
+    {
+        try
+        {
+            using var writable = hklm.OpenSubKey(AppConfig.RegistrySubKey, writable: true);
+            return writable is not null;
+        }
+        catch (Exception ex) when (IsAccessDenied(ex))
+        {
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     // Legacy fallback for patches applied before SafeBoot journalling. Deletes the app's subkey
