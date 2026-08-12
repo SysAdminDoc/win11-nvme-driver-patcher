@@ -12,6 +12,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - `status` and the dry-run preview now compare the registry override IDs being written with the
   sampled feature IDs for the running Windows build, calling out exact mismatches without changing
   the registry payload.
+- BypassIO inspection now derives its enabled state from the non-localized storport registry
+  switch and PnP `DEVPKEY_Device_Service` binding; localized `fsutil` output remains diagnostic
+  evidence only, so the CLI, GUI, and preflight verdict stay correct on non-English Windows.
 - A reviewed `feature_ids.json` catalog now resolves fallback IDs by sampled build/UBR branch and
   records each feature's velocity-dump default-state, source, and review date. `Always Enabled`
   rows remain probe-only; `Always Disabled` rows are reported as known no-route evidence rather

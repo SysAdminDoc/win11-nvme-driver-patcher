@@ -161,6 +161,40 @@ internal static partial class NativeMethods
         uint memberIndex,
         ref SP_DEVINFO_DATA deviceInfoData);
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct DEVPROPKEY
+    {
+        public Guid Fmtid;
+        public uint Pid;
+
+        public DEVPROPKEY(Guid fmtid, uint pid)
+        {
+            Fmtid = fmtid;
+            Pid = pid;
+        }
+    }
+
+    // DEVPKEY_Device_Service is the non-localized service binding exposed by PnP for a
+    // device instance. BypassIO evidence uses this instead of localized fsutil prose.
+    internal static readonly DEVPROPKEY DEVPKEY_Device_Service = new(
+        new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"), 6);
+
+    internal const uint DEVPROP_TYPE_STRING = 0x00000012;
+    internal const uint ERROR_INSUFFICIENT_BUFFER = 122;
+    internal const uint ERROR_NO_MORE_ITEMS = 259;
+
+    [LibraryImport("setupapi.dll", EntryPoint = "SetupDiGetDevicePropertyW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool SetupDiGetDeviceProperty(
+        DeviceInfoSetSafeHandle deviceInfoSet,
+        ref SP_DEVINFO_DATA deviceInfoData,
+        in DEVPROPKEY propertyKey,
+        out uint propertyType,
+        IntPtr propertyBuffer,
+        uint propertyBufferSize,
+        out uint requiredSize,
+        uint flags);
+
     /// <summary>
     /// Sets class install parameters for a device information element.
     /// </summary>

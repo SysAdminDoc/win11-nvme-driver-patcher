@@ -66,12 +66,6 @@ public static class DriveService
     private static readonly Regex RxParagon    = new(@"Paragon|UimFIO|Uim_IM|psmounter", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex RxCrystalDiskInfo = new(@"^(CrystalDiskInfo|DiskInfo|DiskInfo32|DiskInfo64|DiskInfoA64)(\.exe)?$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    // Pre-compiled patterns for fsutil bypassio output parsing.
-    private static readonly Regex RxStorageType   = new(@"Storage Type:\s*(.+)",   RegexOptions.Compiled);
-    private static readonly Regex RxStorageDriver = new(@"Storage Driver:\s*(.+)", RegexOptions.Compiled);
-    private static readonly Regex RxDriverName    = new(@"Driver Name:\s*(.+)",    RegexOptions.Compiled);
-    private static readonly Regex RxDriverSys     = new(@"Driver:\s*(\S+\.sys)",   RegexOptions.Compiled);
-
     public static readonly IReadOnlyList<string> DirectStorageGameExamples =
     [
         "Ratchet & Clank: Rift Apart",
@@ -385,56 +379,19 @@ public static class DriveService
         try
         {
             var systemDrive = NormalizeDriveRoot(Environment.GetEnvironmentVariable("SystemDrive")) ?? "C:\\";
-            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("fsutil.exe"))
+            var volume = BypassIoInspectorService.InspectOne(systemDrive);
+            if (volume is null)
             {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            psi.ArgumentList.Add("bypassio");
-            psi.ArgumentList.Add("state");
-            psi.ArgumentList.Add(systemDrive);
-
-            using var proc = Process.Start(psi);
-            if (proc is null) return result;
-            // Read both pipes asynchronously so stderr can't block process exit on failure.
-            var outputTask = proc.StandardOutput.ReadToEndAsync();
-            var errorTask = proc.StandardError.ReadToEndAsync();
-            if (!proc.WaitForExit(10000))
-            {
-                try { proc.Kill(true); } catch { }
-                result.RawOutput = "fsutil bypassio query timed out after 10s";
-                return result;
-            }
-            var output = outputTask.GetAwaiter().GetResult();
-            var error = errorTask.GetAwaiter().GetResult();
-            result.RawOutput = string.IsNullOrWhiteSpace(error)
-                ? output.Trim()
-                : $"{output}{Environment.NewLine}{error}".Trim();
-
-            if (proc.ExitCode != 0 && string.IsNullOrWhiteSpace(result.RawOutput))
-            {
-                result.RawOutput = $"fsutil bypassio exited with code {proc.ExitCode}";
+                result.RawOutput = "Unable to inspect BypassIO evidence.";
+                result.GamingImpact = BuildBypassIoGamingImpact(result);
                 return result;
             }
 
-            if (output.Contains("is currently supported")) result.Supported = true;
-            else if (output.Contains("is not currently supported")) result.Supported = false;
-
-            var storageMatch = RxStorageType.Match(output);
-            if (storageMatch.Success) result.StorageType = storageMatch.Groups[1].Value.Trim();
-
-            var driverMatch = RxStorageDriver.Match(output);
-            if (driverMatch.Success) result.DriverCompat = driverMatch.Groups[1].Value.Trim();
-
-            var blockedMatch = RxDriverName.Match(output);
-            if (blockedMatch.Success) result.BlockedBy = blockedMatch.Groups[1].Value.Trim();
-            else
-            {
-                var blockedAlt = RxDriverSys.Match(output);
-                if (blockedAlt.Success) result.BlockedBy = blockedAlt.Groups[1].Value.Trim();
-            }
+            result.Supported = volume.Enabled;
+            result.StorageType = BypassIoInspectorService.StorageTypeForService(volume.DeviceService);
+            result.DriverCompat = volume.Stack;
+            result.BlockedBy = DetermineBypassIoBlocker(volume);
+            result.RawOutput = volume.Detail;
 
             result.GamingImpact = BuildBypassIoGamingImpact(result);
             if (!result.Supported && IsNvmeStorage(result.StorageType))
@@ -446,6 +403,19 @@ public static class DriveService
             result.GamingImpact = BuildBypassIoGamingImpact(result);
         }
         return result;
+    }
+
+    private static string DetermineBypassIoBlocker(BypassIoVolumeInfo volume)
+    {
+        if (string.Equals(volume.DeviceService, "nvmedisk", StringComparison.OrdinalIgnoreCase))
+            return "nvmedisk.sys";
+        if (!volume.RegistryValuePresent || !volume.RegistryEnabled)
+            return "EnableBypassIO registry value";
+        if (string.Equals(volume.Status, "Query failed", StringComparison.OrdinalIgnoreCase))
+            return "fsutil bypassio query";
+        if (string.IsNullOrWhiteSpace(volume.DeviceService) || volume.DeviceService == "Unknown")
+            return "DEVPKEY_Device_Service storage binding";
+        return volume.Stack;
     }
 
     internal static string BuildBypassIoGamingImpact(BypassIOResult result)

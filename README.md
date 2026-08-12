@@ -137,7 +137,9 @@ components above, but removal must delete them too — the Recovery Kit and `rem
 - **NVMe health badges** -- temperature, wear %, firmware, power-on hours, media errors (hover for SMART details)
 - **Per-drive NATIVE/LEGACY badges** -- shows whether each NVMe drive migrated to `nvmedisk.sys` or remains on `stornvme.sys`
 - **Post-reboot drive migration verification** -- per-drive confirmation of which drives moved to "Storage disks"
-- **BypassIO/DirectStorage** status check with named-game gaming impact warning
+- **BypassIO/DirectStorage** status check with named-game gaming impact warning; the verdict
+  uses the non-localized storport registry switch and PnP service binding rather than localized
+  `fsutil` prose
 - **Before/after comparison** -- shows exactly what changed after patch/unpatch
 - **Diagnostics export** -- full system report with SMART health, compat software, migration status, benchmark history, and rules/feature-ID/compat DB provenance (source, schema, SHA-256, review freshness)
 - **GitHub update check** with clickable badge in title bar
