@@ -11,6 +11,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   `Invoke-Checked` or extensionless names; release tools are resolved to absolute paths first.
 
 ### Added
+- Preflight, `recovery-proof`, the GUI recovery workspace, diagnostics, and CLI JSON now carry
+  advisory OS-native recovery evidence: Point-in-Time Restore support/newest restore-point age
+  and Quick Machine Recovery/remediation state read from Windows. Unavailable evidence remains
+  informational and never creates a new mutation blocker.
 - Post-patch ETW captures now add a custom WPR profile for Microsoft's `Microsoft-Windows-NvmeDisk`
   provider when the native stack is bound. WPR session status and a redacted provider-evidence
   record are included in diagnostics and support bundles.

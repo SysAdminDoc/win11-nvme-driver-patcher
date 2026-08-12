@@ -26,6 +26,7 @@ public class PreflightResult
     public PerControllerAuditReport? ControllerAudit { get; set; }
     public Dictionary<string, NVMeHealthInfo> CachedHealth { get; set; } = [];
     public StorageMigrationResult? CachedMigration { get; set; }
+    public OsRecoveryEvidence? OsRecoveryEvidence { get; set; }
     public UpdateInfo? UpdateAvailable { get; set; }
 
     /// <summary>
@@ -271,6 +272,20 @@ public static class PreflightService
         catch
         {
             checks["SystemProtection"] = new(CheckStatus.Warning, "Unable to verify");
+        }
+
+        // OS-native recovery features are useful additional evidence, but remain informational:
+        // the app's own registry backup, Recovery Kit, and existing proof items continue to
+        // determine whether mutation is allowed.
+        try
+        {
+            var osRecovery = OsRecoveryEvidenceService.Probe(result.BuildDetails);
+            result.OsRecoveryEvidence = osRecovery;
+            checks["OSRecovery"] = new(CheckStatus.Info, osRecovery.Summary);
+        }
+        catch
+        {
+            checks["OSRecovery"] = new(CheckStatus.Info, "OS-native recovery evidence unavailable");
         }
 
         // Pending reboot: applying registry changes while Windows already has a reboot queued

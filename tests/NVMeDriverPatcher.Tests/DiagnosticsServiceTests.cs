@@ -210,6 +210,35 @@ public sealed class DiagnosticsServiceTests : IDisposable
     }
 
     [Fact]
+    public void Export_IncludesOsNativeRecoveryAdvisoryEvidence()
+    {
+        var preflight = new PreflightResult
+        {
+            OsRecoveryEvidence = new OsRecoveryEvidence
+            {
+                PointInTimeRestoreSupported = true,
+                PointInTimeRestoreEnabled = true,
+                RestorePointQuerySucceeded = true,
+                NewestRestorePointUtc = new DateTimeOffset(2026, 8, 12, 12, 0, 0, TimeSpan.Zero),
+                QuickMachineRecoverySupported = true,
+                QuickMachineRecoveryEnabled = false,
+                QuickMachineRecoveryAutoRemediationEnabled = true,
+                QuickMachineRecoveryQuerySucceeded = true,
+            }
+        };
+
+        var reportPath = DiagnosticsService.Export(_tempRoot, preflight, []);
+
+        Assert.NotNull(reportPath);
+        var report = File.ReadAllText(reportPath!);
+        Assert.Contains("OS-NATIVE RECOVERY ADVISORY", report, StringComparison.Ordinal);
+        Assert.Contains("PiTR supported: Yes", report, StringComparison.Ordinal);
+        Assert.Contains("PiTR enabled flag: Yes", report, StringComparison.Ordinal);
+        Assert.Contains("QMR enabled: No", report, StringComparison.Ordinal);
+        Assert.Contains("QMR auto-remediation: Yes", report, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ExportBundle_IncludesNvmeDiskProviderVerdict()
     {
         var etlDir = Path.Combine(_tempRoot, "etl");

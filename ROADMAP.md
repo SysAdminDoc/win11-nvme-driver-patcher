@@ -342,13 +342,6 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
 
 ### P2
 
-- [ ] P2 — Preflight: verify OS-native rollback (Point-in-Time Restore) and recovery (Quick Machine Recovery)
-  Why: The tool gates rollback readiness on System Protection + `Checkpoint-Computer`, which does not capture user files/apps/certs. Point-in-Time Restore went GA in 2026 and does; Quick Machine Recovery is the OS's own answer to "can't boot after the change" and is **off by default on Pro/Enterprise** — exactly this tool's audience. Repo has zero references to either. `reagentc /SetRecoveryTestmode` proves the recovery path before any mutation.
-  Evidence: https://techcommunity.microsoft.com/blog/windows-itpro-blog/point-in-time-restore-for-windows-11-is-now-generally-available/4508101; https://4sysops.com/archives/quick-machine-recovery-in-windows-11/; `Services/RecoveryProofGateService.cs:207-241`, `Services/WinReBcdPrepService.cs` (already shells `reagentc`).
-  Touches: `Services/RecoveryProofGateService.cs`, `Services/PreflightService.cs`, `Services/WinReBcdPrepService.cs`, `Services/RecoveryKitFreshnessService.cs`, GUI recovery tab, CLI `preflight`.
-  Acceptance: Preflight reports PiTR availability and the age of the newest restore point where the OS exposes it, and reports whether QMR is enabled; both advisory (never a new hard block) and named in the recovery-readiness summary.
-  Complexity: M
-
 - [ ] P2 — Ship the Intune Check/Remediate proactive-remediation pair
   Why: `packaging/intune/` ships only `Detect-NVMeDriverPatcher.ps1` plus MSI wrapping instructions. Intune's proactive-remediation contract is a *pair*, and a competing repo already ships one for this exact tweak — fleet operators currently have to write the remediation half themselves.
   Evidence: `packaging/intune/README.md`; https://github.com/jhochwald/PowerShell-collection (`Check-`/`Remediate-EnablingNvmeNativeDrivers.ps1`).

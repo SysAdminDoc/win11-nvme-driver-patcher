@@ -113,6 +113,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _verificationScriptStatusText = NoVerificationScriptText;
     [ObservableProperty] private string _diagnosticsReportStatusText = NoDiagnosticsReportText;
     [ObservableProperty] private string _recoveryWorkspaceSummaryText = "Generate rollback, verification, and diagnostics assets so the system can be reversed or confirmed without guesswork.";
+    [ObservableProperty] private string _osRecoverySummaryText = "OS-native Point-in-Time Restore and Quick Machine Recovery evidence will appear after the readiness scan.";
     [ObservableProperty] private bool _hasRecoveryKit;
     [ObservableProperty] private bool _hasVerificationScript;
     [ObservableProperty] private bool _hasDiagnosticsReport;
@@ -463,6 +464,9 @@ public partial class MainViewModel : ObservableObject
         {
             Application.Current?.Dispatcher.Invoke(() =>
             {
+            OsRecoverySummaryText = _preflight.OsRecoveryEvidence?.Summary
+                ?? "OS-native recovery evidence was not available during the readiness scan.";
+
             // Map checks to UI
             ReadinessChecks.Clear();
             LeftChecks.Clear();
@@ -1307,7 +1311,7 @@ public partial class MainViewModel : ObservableObject
             // check in the confirmation dialog so users see what's ready and what isn't.
             try
             {
-                var proof = RecoveryProofGateService.Evaluate(Config);
+                var proof = RecoveryProofGateService.Evaluate(Config, _preflight?.OsRecoveryEvidence);
                 foreach (var item in proof.Items)
                 {
                     if (item.Passed)
@@ -1315,6 +1319,8 @@ public partial class MainViewModel : ObservableObject
                     else
                         warnings.Add($"Recovery — {item.Label}: {item.Detail}");
                 }
+                if (proof.OsRecovery is not null)
+                    notes.Add($"Recovery — {proof.OsRecovery.Summary}");
             }
             catch
             {

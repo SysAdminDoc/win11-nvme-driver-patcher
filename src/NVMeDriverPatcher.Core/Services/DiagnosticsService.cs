@@ -602,6 +602,25 @@ public static class DiagnosticsService
         sb.AppendLine($"Directory Join: {bitLockerProof.DirectoryJoin.Kind}");
         sb.AppendLine($"Detail: {bitLockerProof.Detail}");
 
+        sb.AppendLine().AppendLine("OS-NATIVE RECOVERY ADVISORY").AppendLine("--------------------------");
+        var osRecovery = preflight?.OsRecoveryEvidence;
+        if (osRecovery is null)
+        {
+            sb.AppendLine("No OS-native recovery evidence snapshot was supplied by preflight.");
+        }
+        else
+        {
+            sb.AppendLine(osRecovery.Summary);
+            sb.AppendLine($"PiTR supported: {(osRecovery.PointInTimeRestoreSupported ? "Yes" : "No")}");
+            sb.AppendLine($"PiTR enabled flag: {FormatNullableBool(osRecovery.PointInTimeRestoreEnabled)}");
+            sb.AppendLine($"Newest restore point UTC: {(osRecovery.NewestRestorePointUtc?.ToString("O") ?? "None observed")}");
+            sb.AppendLine($"PiTR restore-point query: {(osRecovery.RestorePointQuerySucceeded ? "Succeeded" : "Unavailable")}");
+            sb.AppendLine($"QMR supported: {(osRecovery.QuickMachineRecoverySupported ? "Yes" : "No")}");
+            sb.AppendLine($"QMR enabled: {FormatNullableBool(osRecovery.QuickMachineRecoveryEnabled)}");
+            sb.AppendLine($"QMR auto-remediation: {FormatNullableBool(osRecovery.QuickMachineRecoveryAutoRemediationEnabled)}");
+            sb.AppendLine($"QMR settings query: {(osRecovery.QuickMachineRecoveryQuerySucceeded ? "Succeeded" : "Unavailable")}");
+        }
+
         var databaseState = DataService.DatabaseState;
         sb.AppendLine().AppendLine("HISTORY DATABASE").AppendLine("----------------");
         sb.AppendLine($"Availability: {databaseState.Availability}");

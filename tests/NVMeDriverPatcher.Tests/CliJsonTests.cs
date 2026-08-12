@@ -163,6 +163,35 @@ public sealed class CliJsonTests
     }
 
     [Fact]
+    public void RecoveryEvidence_FieldNamesAndAdvisoryStateAreStable()
+    {
+        var evidence = new OsRecoveryEvidence
+        {
+            PointInTimeRestoreSupported = true,
+            PointInTimeRestoreEnabled = null,
+            RestorePointQuerySucceeded = false,
+            QuickMachineRecoverySupported = true,
+            QuickMachineRecoveryEnabled = true,
+            QuickMachineRecoveryAutoRemediationEnabled = false,
+            QuickMachineRecoveryQuerySucceeded = true,
+        };
+        var report = new RecoveryProofReport { OsRecovery = evidence };
+        report.Items.Add(new RecoveryProofItem { Label = "Recovery kit", Passed = true, Detail = "fresh" });
+
+        var proof = Parse("recovery-proof", CliJson.BuildRecoveryProof(report)).GetProperty("data");
+        var os = proof.GetProperty("osRecovery");
+        Assert.True(os.GetProperty("pointInTimeRestoreSupported").GetBoolean());
+        Assert.False(os.GetProperty("restorePointQuerySucceeded").GetBoolean());
+        Assert.True(os.GetProperty("quickMachineRecoveryEnabled").GetBoolean());
+        Assert.False(os.GetProperty("quickMachineRecoveryAutoRemediationEnabled").GetBoolean());
+        Assert.Contains("OS-native recovery advisory", os.GetProperty("summary").GetString());
+
+        var probes = Parse("preflight", CliJson.BuildCriticalProbes(new CriticalProbeReport(), evidence))
+            .GetProperty("data");
+        Assert.True(probes.GetProperty("osRecovery").GetProperty("quickMachineRecoverySupported").GetBoolean());
+    }
+
+    [Fact]
     public void BypassIo_FieldNamesAreStable()
     {
         var result = new BypassIOResult

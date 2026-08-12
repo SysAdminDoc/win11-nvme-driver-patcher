@@ -13,6 +13,7 @@ public sealed class RecoveryProofReport
 {
     public List<RecoveryProofItem> Items { get; } = new();
     public BitLockerRecoveryProof? BitLockerRecovery { get; set; }
+    public OsRecoveryEvidence? OsRecovery { get; set; }
     public bool AllPassed => Items.All(i => i.Passed);
     public int PassedCount => Items.Count(i => i.Passed);
     public int TotalCount => Items.Count;
@@ -21,10 +22,14 @@ public sealed class RecoveryProofReport
     {
         get
         {
-            if (Items.Count == 0) return "No recovery checks performed.";
-            if (AllPassed) return $"Recovery readiness: {PassedCount}/{TotalCount} checks passed.";
-            var failing = Items.Where(i => !i.Passed).Select(i => i.Label);
-            return $"Recovery readiness: {PassedCount}/{TotalCount} — not ready: {string.Join(", ", failing)}.";
+            var readiness = Items.Count == 0
+                ? "No recovery checks performed."
+                : AllPassed
+                    ? $"Recovery readiness: {PassedCount}/{TotalCount} checks passed."
+                    : $"Recovery readiness: {PassedCount}/{TotalCount} — not ready: {string.Join(", ", Items.Where(i => !i.Passed).Select(i => i.Label))}.";
+            return OsRecovery is null
+                ? readiness
+                : $"{readiness} Advisory: {OsRecovery.Summary}";
         }
     }
 }
@@ -34,9 +39,10 @@ public sealed class RecoveryProofReport
 // capability are the ones who file "bricked my PC" issues.
 public static class RecoveryProofGateService
 {
-    public static RecoveryProofReport Evaluate(AppConfig config)
+    public static RecoveryProofReport Evaluate(AppConfig config, OsRecoveryEvidence? osRecovery = null)
     {
         var report = new RecoveryProofReport();
+        report.OsRecovery = osRecovery ?? OsRecoveryEvidenceService.Probe();
 
         try
         {

@@ -536,7 +536,7 @@ public partial class MainViewModel
                 return;
             }
 
-            var proof = RecoveryProofGateService.Evaluate(Config);
+            var proof = RecoveryProofGateService.Evaluate(Config, _preflight?.OsRecoveryEvidence);
             if (!proof.AllPassed)
             {
                 Log($"Recovery proof: {proof.Summary}", "WARNING");
@@ -558,6 +558,8 @@ public partial class MainViewModel
                     return;
                 }
             }
+            if (proof.OsRecovery is not null)
+                Log($"[ADVISORY] {proof.OsRecovery.Summary}", "INFO");
 
             Log("========================================");
             Log("Applying fallback (native FeatureStore first)");
