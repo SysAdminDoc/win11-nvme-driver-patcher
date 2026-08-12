@@ -102,14 +102,13 @@ public sealed class PackageManifestsScriptTests
         string arm64ExePath,
         string? outputRoot = null)
     {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo("powershell.exe")
+        var startInfo = new ProcessStartInfo("powershell.exe")
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
             UseShellExecute = false
         };
-        process.StartInfo.Environment.Remove("PSModulePath"); // let Windows PowerShell find Get-FileHash
+        startInfo.Environment.Remove("PSModulePath"); // let Windows PowerShell find Get-FileHash
         var args = new List<string> { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ScriptPath(),
                                       "-Version", version, "-ExePath", exePath, "-RepoRoot", repoRoot };
         args.Add("-Arm64ExePath");
@@ -120,13 +119,10 @@ public sealed class PackageManifestsScriptTests
             args.Add(outputRoot);
         }
         foreach (var a in args)
-            process.StartInfo.ArgumentList.Add(a);
+            startInfo.ArgumentList.Add(a);
 
-        process.Start();
-        var stdOut = process.StandardOutput.ReadToEnd();
-        var stdErr = process.StandardError.ReadToEnd();
-        process.WaitForExit(15000);
-        return new ScriptResult(process.ExitCode, stdOut, stdErr);
+        var result = TestProcessRunner.Run(startInfo, TimeSpan.FromSeconds(15));
+        return new ScriptResult(result.ExitCode, result.StdOut, result.StdErr);
     }
 
     private static string ScriptPath([CallerFilePath] string sourceFile = "")

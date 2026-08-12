@@ -37,27 +37,23 @@ public sealed class RootHygieneScriptTests
 
     private static ScriptResult RunScript(string repoRoot)
     {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo("powershell.exe")
+        var startInfo = new ProcessStartInfo("powershell.exe")
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
             UseShellExecute = false
         };
-        process.StartInfo.ArgumentList.Add("-NoProfile");
-        process.StartInfo.ArgumentList.Add("-ExecutionPolicy");
-        process.StartInfo.ArgumentList.Add("Bypass");
-        process.StartInfo.ArgumentList.Add("-File");
-        process.StartInfo.ArgumentList.Add(ScriptPath());
-        process.StartInfo.ArgumentList.Add("-RepoRoot");
-        process.StartInfo.ArgumentList.Add(repoRoot);
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-ExecutionPolicy");
+        startInfo.ArgumentList.Add("Bypass");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(ScriptPath());
+        startInfo.ArgumentList.Add("-RepoRoot");
+        startInfo.ArgumentList.Add(repoRoot);
 
-        process.Start();
-        var stdOut = process.StandardOutput.ReadToEnd();
-        var stdErr = process.StandardError.ReadToEnd();
-        process.WaitForExit(10000);
+        var result = TestProcessRunner.Run(startInfo, TimeSpan.FromSeconds(10));
 
-        return new ScriptResult(process.ExitCode, stdOut, stdErr);
+        return new ScriptResult(result.ExitCode, result.StdOut, result.StdErr);
     }
 
     private static string ScriptPath([CallerFilePath] string sourceFile = "")

@@ -60,8 +60,7 @@ public sealed class ArtifactManifestScriptTests : IDisposable
 
     private ScriptResult RunScript()
     {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo("powershell.exe")
+        var startInfo = new ProcessStartInfo("powershell.exe")
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
@@ -72,12 +71,9 @@ public sealed class ArtifactManifestScriptTests : IDisposable
             "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ScriptPath(),
             "-PayloadRoot", _tempRoot, "-PayloadType", "intune-source", "-ToolVersion", "5.0.0"
         })
-            process.StartInfo.ArgumentList.Add(argument);
-        process.Start();
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit(15_000);
-        return new(process.ExitCode, stdout, stderr);
+            startInfo.ArgumentList.Add(argument);
+        var result = TestProcessRunner.Run(startInfo, TimeSpan.FromSeconds(15));
+        return new(result.ExitCode, result.StdOut, result.StdErr);
     }
 
     private static string ScriptPath([CallerFilePath] string sourceFile = "") =>

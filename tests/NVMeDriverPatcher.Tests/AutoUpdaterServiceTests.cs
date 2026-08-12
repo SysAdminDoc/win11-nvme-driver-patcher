@@ -126,27 +126,22 @@ public sealed class AutoUpdaterServiceTests
         try
         {
             var command = AutoUpdaterService.BuildRestartCommand(staged, target, new string('0', 64));
-            using var process = new Process
+            var startInfo = new ProcessStartInfo("powershell.exe")
             {
-                StartInfo = new ProcessStartInfo("powershell.exe")
-                {
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
             };
-            process.StartInfo.ArgumentList.Add("-NoProfile");
-            process.StartInfo.ArgumentList.Add("-Command");
-            process.StartInfo.ArgumentList.Add(command);
+            startInfo.ArgumentList.Add("-NoProfile");
+            startInfo.ArgumentList.Add("-Command");
+            startInfo.ArgumentList.Add(command);
 
-            process.Start();
-            var stdout = process.StandardOutput.ReadToEnd();
-            var stderr = process.StandardError.ReadToEnd();
-            Assert.True(process.WaitForExit(10_000), "Generated updater command timed out.");
+            var result = TestProcessRunner.Run(startInfo, TimeSpan.FromSeconds(10));
+            Assert.False(result.TimedOut, "Generated updater command timed out.");
 
-            Assert.NotEqual(0, process.ExitCode);
-            Assert.Contains("SHA-256 changed", stdout + stderr, StringComparison.OrdinalIgnoreCase);
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("SHA-256 changed", result.StdOut + result.StdErr, StringComparison.OrdinalIgnoreCase);
             Assert.False(File.Exists(target));
         }
         finally

@@ -30,6 +30,8 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   route while ViVeTool is only a secondary cross-check.
 
 ### Changed
+- Test-side PowerShell/Node process harnesses now drain stdout and stderr concurrently and kill
+  timed-out child trees, preventing a wedged helper from hanging the entire verification suite.
 - Benchmark history now persists desktop profile metadata and metrics in schema v3, with a
   transactional v2→v3 migration that defaults older records to an unmeasured desktop profile.
 - The 26200+ FeatureStore fallback now applies only `55369237` and `48433719`. `49453572`

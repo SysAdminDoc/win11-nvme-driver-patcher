@@ -545,18 +545,18 @@ public sealed class TelemetryReceiverSummaryTests
 
     private static ProcessResult RunNode(params string[] args)
     {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo("node")
+        var startInfo = new ProcessStartInfo("node")
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
             UseShellExecute = false
         };
-        foreach (var arg in args) process.StartInfo.ArgumentList.Add(arg);
+        foreach (var arg in args) startInfo.ArgumentList.Add(arg);
 
         try
         {
-            process.Start();
+            var result = TestProcessRunner.Run(startInfo, TimeSpan.FromSeconds(20));
+            return new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
@@ -565,11 +565,6 @@ public sealed class TelemetryReceiverSummaryTests
             throw new InvalidOperationException(
                 "node is required to run the telemetry-receiver contract test but was not found on PATH.", ex);
         }
-
-        var stdOut = process.StandardOutput.ReadToEnd();
-        var stdErr = process.StandardError.ReadToEnd();
-        process.WaitForExit(20000);
-        return new ProcessResult(process.ExitCode, stdOut, stdErr);
     }
 
     private static string WorkerPath([CallerFilePath] string sourceFile = "")
