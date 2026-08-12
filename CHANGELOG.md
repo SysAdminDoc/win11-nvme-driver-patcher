@@ -39,6 +39,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   chart and SQLite smoke gates now exercise the upgraded native paths and verify their resolved
   architecture-specific assets; the framework-provided System.Threading.AccessControl reference
   was removed.
+- NuGet vulnerability auditing is now a repository-wide restore/build gate at low severity,
+  including transitive packages; the release builder runs the audit and a disposable seeded-
+  vulnerability proof before publishing.
 
 ## [5.7.0] - 2026-08-11
 
