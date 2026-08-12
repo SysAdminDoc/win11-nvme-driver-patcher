@@ -1,6 +1,8 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using NVMeDriverPatcher.Data;
+using System.Runtime.InteropServices;
+using System.Text.Json;
 
 namespace NVMeDriverPatcher.Tests;
 
@@ -18,6 +20,36 @@ public sealed class SqliteVersionTests
         // Floor is 3.53.3 (SourceGear.sqlite3 direct pin): fixes CVE-2026-11822 and the 3.53.2
         // FTS5 shadow-table CVEs. A native downgrade below this must fail the suite.
         Assert.True(v >= new Version(3, 53, 3), $"Bundled SQLite {raw} is older than 3.53.3 (CVE-2026-11822 / FTS5 CVEs).");
+    }
+
+    [Fact]
+    public void BundledSqlite_UsesPinnedSourceGearNativeAsset()
+    {
+        var rid = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.X64 => "win-x64",
+            Architecture.Arm64 => "win-arm64",
+            Architecture.X86 => "win-x86",
+            var architecture => throw new PlatformNotSupportedException($"Unsupported Windows test architecture: {architecture}")
+        };
+        var nativeRelativePath = $"runtimes/{rid}/native/e_sqlite3.dll";
+        var nativePath = Path.Combine(AppContext.BaseDirectory, "runtimes", rid, "native", "e_sqlite3.dll");
+        Assert.True(File.Exists(nativePath), $"Resolved SQLite native asset is missing: {nativePath}");
+
+        var assetsPath = Path.GetFullPath(Path.Combine(
+            Path.GetDirectoryName(typeof(SqliteVersionTests).Assembly.Location)!,
+            "..", "..", "..", "..", "..",
+            "src", "NVMeDriverPatcher.Core", "obj", "project.assets.json"));
+        Assert.True(File.Exists(assetsPath), $"Restore assets are missing: {assetsPath}");
+
+        using var document = JsonDocument.Parse(File.ReadAllText(assetsPath));
+        var libraries = document.RootElement.GetProperty("libraries");
+        Assert.True(libraries.TryGetProperty("SourceGear.sqlite3/3.53.3", out var sourceGear),
+            "The pinned SourceGear.sqlite3/3.53.3 library was not selected by restore.");
+        Assert.Contains(sourceGear.GetProperty("files").EnumerateArray(),
+            file => string.Equals(file.GetString(), nativeRelativePath, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(libraries.EnumerateObject(),
+            library => library.Name.StartsWith("SQLite/", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

@@ -36,15 +36,15 @@
          ChartingSmokeTests (render + PNG encode the native path). -->
     <!-- LiveChartsCore pulls SkiaSharp transitively, but NuGet advisories do not track the
          statically-linked libpng inside native libSkiaSharp. Keep direct aligned SkiaSharp pins
-         as the control: SkiaSharp 4.148.0 includes the v4 libpng 1.6.58 update (mono/SkiaSharp
+         as the control: SkiaSharp 4.150.2 includes the v4 libpng 1.6.58 update (mono/SkiaSharp
          issue 3685, PR 3718), covering the libpng < 1.6.55 CVE-2026-25646/CVE-2026-33416 floor
          in addition to the older CVE-2025-64505/64506/64720/65018 fixes. ChartingSmokeTests
          render and PNG-encode the native path and must pass before/after any bump. Keep every
          SkiaSharp package aligned. -->
-    <PackageReference Include="SkiaSharp" Version="4.148.0" />
-    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.148.0" />
-    <PackageReference Include="SkiaSharp.HarfBuzz" Version="4.148.0" />
-    <PackageReference Include="SkiaSharp.Views.WPF" Version="4.148.0" />
+    <PackageReference Include="SkiaSharp" Version="4.150.2" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.150.2" />
+    <PackageReference Include="SkiaSharp.HarfBuzz" Version="4.150.2" />
+    <PackageReference Include="SkiaSharp.Views.WPF" Version="4.150.2" />
   </ItemGroup>
 
   <ItemGroup>

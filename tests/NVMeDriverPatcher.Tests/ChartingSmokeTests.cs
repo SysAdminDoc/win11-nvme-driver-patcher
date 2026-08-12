@@ -2,6 +2,7 @@ using LiveChartsCore;
 using LiveChartsCore.Defaults;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.SKCharts;
+using LiveChartsCore.SkiaSharpView.Painting;
 using SkiaSharp;
 
 namespace NVMeDriverPatcher.Tests;
@@ -22,8 +23,22 @@ public sealed class ChartingSmokeTests
         // Mirrors BenchmarkComparisonView: two ColumnSeries<double> (before/after IOPS).
         var series = new ISeries[]
         {
-            new ColumnSeries<double> { Name = "Before", Values = new double[] { 42000, 51000 } },
-            new ColumnSeries<double> { Name = "After",  Values = new double[] { 68000, 84000 } },
+            new ColumnSeries<double>
+            {
+                Name = "Before",
+                Values = new double[] { 42000, 51000 },
+                Fill = new SolidColorPaint(SKColors.SlateGray),
+                MaxBarWidth = 24,
+                Padding = 4
+            },
+            new ColumnSeries<double>
+            {
+                Name = "After",
+                Values = new double[] { 68000, 84000 },
+                Fill = new SolidColorPaint(SKColors.CornflowerBlue),
+                MaxBarWidth = 24,
+                Padding = 4
+            },
         };
 
         AssertRendersToPng(series);
@@ -44,6 +59,10 @@ public sealed class ChartingSmokeTests
                     new ObservablePoint(1, 41),
                     new ObservablePoint(2, 40),
                 },
+                Stroke = new SolidColorPaint(SKColors.IndianRed, 2),
+                Fill = new SolidColorPaint(SKColors.IndianRed.WithAlpha(36)),
+                GeometrySize = 0,
+                LineSmoothness = 0.3
             },
         };
 
@@ -59,6 +78,26 @@ public sealed class ChartingSmokeTests
             Width = 640,
             Height = 360,
             Series = series,
+            XAxes = new[]
+            {
+                new Axis
+                {
+                    Labels = new[] { "Before", "After" },
+                    LabelsPaint = new SolidColorPaint(SKColors.Gray),
+                    TextSize = 10,
+                    SeparatorsPaint = new SolidColorPaint(SKColors.DarkGray)
+                }
+            },
+            YAxes = new[]
+            {
+                new Axis
+                {
+                    LabelsPaint = new SolidColorPaint(SKColors.Gray),
+                    TextSize = 10,
+                    SeparatorsPaint = new SolidColorPaint(SKColors.DarkGray),
+                    MinLimit = 0
+                }
+            }
         };
 
         // GetImage() runs the full Skia draw pass; Encode(Png) drives the bundled libpng.

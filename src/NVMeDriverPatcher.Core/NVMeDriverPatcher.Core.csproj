@@ -31,24 +31,20 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
-    <!-- EF's transitive SQLitePCLRaw 2.1.11 bundles native SQLite 3.49.1, which is
-         vulnerable to CVE-2025-6965 (fixed in 3.50.2). Direct reference overrides the
-         bundle; SqliteVersionTests pins the floor so a regression fails the suite.
-         FTS5 CVEs in 3.53.2: the bundled native lib does NOT compile FTS5
-         (Fts5_IsNotAvailable test proves this), and defensive mode is enabled on
-         every DB connection, so the FTS5/shadow-table attack surface is absent. -->
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
-    <!-- bundle_e_sqlite3 3.0.3 transitively resolves the native provider SourceGear.sqlite3
-         3.50.4.5 (SQLite 3.50.4). Pin the provider DIRECTLY to 3.53.3 (SQLite 3.53.3) so every
-         published RID (win-x64, win-arm64) ships the fixed native library — this closes
-         CVE-2026-11822 and the 3.53.2 FTS5 shadow-table CVEs at the source rather than relying
-         only on defensive-mode mitigation. SqliteVersionTests pins the runtime floor to >= 3.53.3
-         so a native downgrade fails the suite. Keep this ahead of the bundle's own resolution. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
+    <!-- EF's transitive SQLitePCLRaw 2.1.11 bundle resolves an older native SQLite, so the
+         direct bundle + SourceGear pins keep the native asset on the maintained 3.53.3 floor.
+         The bundled native library compiles FTS5; defensive mode is enabled on every DB
+         connection and SqliteVersionTests proves shadow-table writes are blocked. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.4" />
+    <!-- bundle_e_sqlite3 3.0.4 resolves SourceGear.sqlite3 3.53.3. Keep the provider pinned
+         DIRECTLY so every published RID (win-x64, win-arm64) ships the intended native library.
+         Do not move this bundle to 3.0.5 without revalidating the native package identity:
+         that release changes the transitive native package id and can orphan this pin.
+         SqliteVersionTests pins both the runtime floor and the resolved native asset path. -->
     <PackageReference Include="SourceGear.sqlite3" Version="3.53.3" />
-    <PackageReference Include="System.Management" Version="10.0.9" />
-    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.9" />
-    <PackageReference Include="System.Threading.AccessControl" Version="10.0.0" />
+    <PackageReference Include="System.Management" Version="10.0.11" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.11" />
   </ItemGroup>
 
 </Project>
