@@ -188,6 +188,17 @@ public static class DiagnosticsService
                 }
                 catch { }
 
+                // Keep the provider verdict alongside diagnostics so support can tell whether
+                // the post-patch trace actually carried Microsoft's native NVMe events.
+                try
+                {
+                    var etwEvidence = EtwTraceService.GetLatestProviderEvidence(workingDir);
+                    if (etwEvidence is not null)
+                        AddTextEntry(zip, "etl/provider-evidence.json",
+                            JsonSerializer.Serialize(etwEvidence, BundleJsonOptions));
+                }
+                catch { }
+
                 // Manifest — who generated this, when, and what version of the app.
                 var manifest = new StringBuilder();
                 manifest.AppendLine("NVMe Driver Patcher Support Bundle");
@@ -205,6 +216,7 @@ public static class DiagnosticsService
                 manifest.AppendLine("  registry/*.reg    Up to 5 most-recent registry backups");
                 manifest.AppendLine("  data/nvmepatcher.db  Validated point-in-time SQLite Online Backup snapshot (if present)");
                 manifest.AppendLine("  data/benchmark_results.json  Benchmark history cache (if present)");
+                manifest.AppendLine("  etl/provider-evidence.json  Native Microsoft-Windows-NvmeDisk provider verdict (if captured)");
                 manifest.AppendLine();
                 manifest.Append(BuildTrustLedger(workingDir));
                 AddTextEntry(zip, "MANIFEST.txt", manifest.ToString());
@@ -664,6 +676,24 @@ public static class DiagnosticsService
         sb.AppendLine($"Partial: {status.Partial}");
         sb.AppendLine($"Components: {status.Count}/{status.Total}");
         sb.AppendLine($"Applied Keys: {string.Join(", ", status.Keys)}");
+
+        sb.AppendLine().AppendLine("ETW NVMe DRIVER WATCHDOG EVIDENCE").AppendLine("---------------------------------");
+        var etwEvidence = EtwTraceService.GetLatestProviderEvidence(workingDir);
+        if (etwEvidence is null)
+        {
+            sb.AppendLine("No ETW provider evidence metadata was recorded.");
+        }
+        else
+        {
+            sb.AppendLine($"Latest capture: {etwEvidence.Phase} ({etwEvidence.CapturedAtUtc:O})");
+            sb.AppendLine($"Trace: {etwEvidence.TraceFileName}");
+            sb.AppendLine($"Native stack probe: {(etwEvidence.NativeStackProbeSucceeded ? "Succeeded" : "Unavailable")}");
+            sb.AppendLine($"Native NVMe stack bound: {(etwEvidence.NativeStackBound ? "Yes" : "No")}");
+            sb.AppendLine($"Provider: {etwEvidence.ProviderName} {etwEvidence.ProviderGuid}");
+            sb.AppendLine($"Provider requested: {(etwEvidence.ProviderRequested ? "Yes" : "No")}");
+            sb.AppendLine($"Provider present in WPR session: {(etwEvidence.ProviderPresent ? "Yes" : "No / unverified")}");
+            sb.AppendLine($"Provider evidence: {etwEvidence.ProviderStatus}");
+        }
 
         // PER-CONTROLLER PnP EVIDENCE (RD P1) — captures INF / provider / class / hardware /
         // compatible IDs for each NVMe controller. When nvmedisk.sys is bound with no patch

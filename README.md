@@ -166,7 +166,7 @@ components above, but removal must delete them too — the Recovery Kit and `rem
 - **Firmware + controller compat JSON** -- shipped `compat.json` maps `{controller, firmware}` → `{Good, Caution, Bad}` and flags power-loss-risk entries such as Phison E18/E26. Preflight consults it before proceeding.
 - **Honest machine-wide scope** -- the registry and FeatureStore routes affect Windows driver selection for every eligible NVMe drive/controller. Legacy `drive_scope.json` preferences are detected and reported as unenforced; the tool does not claim a drive can stay independently on `stornvme.sys`.
 - **Dry-run preview** (`--dry-run` / "Preview Changes") -- prints every registry write the patch would perform, without touching the registry.
-- **ETW storage trace** (`etw`) -- wraps `wpr.exe` for 60-second pre/post captures; ETL files land in `%ProgramData%\NVMePatcher\etl\`.
+- **ETW storage trace** (`etw`) -- wraps `wpr.exe` for 60-second pre/post captures; ETL files land in `%ProgramData%\NVMePatcher\etl\`. Post-patch captures add Microsoft's `Microsoft-Windows-NvmeDisk` provider (`{9799276c-fb04-47e8-845e-36946045c218}`) when `nvmedisk.sys` is bound, and support bundles record whether WPR reported that provider as active.
 - **Controller-complete WinPE recovery USB builder** (`winpe`) -- detects the Windows ADK + WinPE add-on, inventories every present hardware-backed storage controller, exports each bound OEM package once, injects signed packages into `boot.wim`, and retains the same INFs for manual `drvload`. The published tree/ISO includes a verified Recovery Kit, controller coverage report, custom `startnet.cmd`, and final SHA-256 inventory. `winpe-freshness` verifies that media and reports stale when the app, Recovery Kit, rollback script, WinRE image, or controller INF/version has changed.
 - **Opt-in compatibility telemetry** -- build an anonymized `{controller, firmware, OS build, profile, verification, watchdog, reliability delta}` JSON and optionally `POST` it to a user-configured HTTPS endpoint. No serials, machine names, drive letters, or user names.
 - **Driver Verifier harness** (`verifier-on` / `-off` / `-status`) -- dev/tester-mode wrapper around `verifier.exe` for kernel-level stress checks on the NVMe stack.
@@ -241,7 +241,7 @@ NVMeDriverPatcher.Cli bundle                               # Export support bund
 NVMeDriverPatcher.Cli diagnostics                          # Export diagnostics report (.txt)
 
 # Storage & Performance
-NVMeDriverPatcher.Cli etw                                  # 60s ETW storage trace
+NVMeDriverPatcher.Cli etw                                  # 60s ETW trace + native NvmeDisk provider verdict when applicable
 NVMeDriverPatcher.Cli firmware                             # Compat.json entries
 NVMeDriverPatcher.Cli benchmark                            # High-QD + desktop QD1 DiskSpd benchmark
 NVMeDriverPatcher.Cli compare-benchmarks --threshold=15    # Before/after benchmark diff
