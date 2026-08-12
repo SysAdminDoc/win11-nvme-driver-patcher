@@ -369,13 +369,6 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
 
 ### P1
 
-- [ ] P1 — Stop applying `Standalone_Future: 49453572`; it is Always Enabled on every sampled branch
-  Why: The fallback set applies an override for a feature Windows already forces on. It cannot change behavior, but it widens the FeatureStore write, the mutation-ledger baseline, and the restore obligation on a boot-critical store — including the priority-8 reset defect already tracked above.
-  Evidence: `49453572` appears under `## Always Enabled:` in all three dumps (26100.8687 line 5417, 26404.5000 line 4549, 29531.1000 line 5262); applied via `FallbackFeatureCatalog.NativeNvmeStack25H2`.
-  Touches: `Models/FallbackFeatureCatalog.cs`, `Services/FeatureStoreWriterService.cs`, `Services/FallbackApplyService.cs`, `FallbackFeatureCatalogTests`, dialog/CLI strings deriving from `IdsDisplay`.
-  Acceptance: The applied set for 26200+ is {55369237, 48433719}; `AllKnownIds` still includes 49453572 so evidence probes recognize a hand-applied override; a test asserts applied-set ≠ probe-set and documents why.
-  Complexity: S
-
 - [ ] P1 — Track `NativeNVMeStackEnableForClientOS: 48613417` as the candidate second gate on 26200+
   Why: `windows_build_rules.json` rules `26200-bind-blocked` and `post-26200-trains-bind-blocked` both cite ViVe issue #164 as evidence that no route exists; #164 was closed by its owner saying there is "another feature ID or registry key in the mix". `48613417` is `Disabled By Default` on the Rubidium branch alongside `NativeNVMeStackForGeClient`, and has zero references in this repo.
   Evidence: 29531.1000 dump lines 6920-6921 (between the `Disabled By Default:` and `Always Disabled:` headings); https://github.com/thebookisclosed/ViVe/issues/164; repo-wide grep for `48613417` returns 0 files.

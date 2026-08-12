@@ -132,8 +132,8 @@ public static class FeatureStoreWriterService
 
     public const string DataValueName = "FeatureStore";
 
-    // Union of every known fallback set — evidence written by ANY known set (or by a
-    // user running ViVeTool by hand from a forum guide) must still be recognized.
+    // Probe union of every applied fallback set plus probe-only IDs — evidence written by ANY
+    // known set (or by a user running ViVeTool by hand from a forum guide) must still be recognized.
     public static readonly int[] PostBlockFeatureIds =
         Models.FallbackFeatureCatalog.AllKnownIds.ToArray();
 
