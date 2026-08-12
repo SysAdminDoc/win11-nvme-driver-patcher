@@ -73,6 +73,8 @@ public sealed class AppDatabaseUpgradeServiceTests : IDisposable
         AssertCurrentSchema(path);
         Assert.Equal("legacy bypass", Scalar(path, "SELECT Description FROM BypassIoHistory WHERE Id=1"));
         Assert.Equal("legacy bypass", Scalar(result.BackupPath!, "SELECT Description FROM BypassIoHistory WHERE Id=1"));
+        Assert.Equal("desktop-qd1", Scalar(path, "SELECT DesktopProfileId FROM Benchmarks WHERE Id=1"));
+        Assert.Equal(0d, Convert.ToDouble(Scalar(path, "SELECT DesktopReadIOPS FROM Benchmarks WHERE Id=1")));
     }
 
     [Fact]
@@ -215,6 +217,14 @@ public sealed class AppDatabaseUpgradeServiceTests : IDisposable
                      "IX_BypassIoHistory_Timestamp", "IX_BypassIoHistory_VolumeLetter_Timestamp"
                  })
             Assert.True(ObjectExists(path, "index", index), $"Missing index {index}");
+        foreach (var column in new[]
+                 {
+                     "DesktopProfileId", "DesktopProfileName", "DesktopThreads", "DesktopOutstandingIo",
+                     "DesktopDurationSeconds", "DesktopReadIOPS", "DesktopReadThroughputMBs",
+                     "DesktopReadLatencyMs", "DesktopWriteIOPS", "DesktopWriteThroughputMBs",
+                     "DesktopWriteLatencyMs"
+                 })
+            Assert.True(ColumnExists(path, "Benchmarks", column), $"Missing benchmark column {column}");
         AssertQuickCheck(path);
     }
 
@@ -228,6 +238,15 @@ public sealed class AppDatabaseUpgradeServiceTests : IDisposable
         command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type=$type AND name=$name";
         command.Parameters.AddWithValue("$type", type);
         command.Parameters.AddWithValue("$name", name);
+        return Convert.ToInt64(command.ExecuteScalar()) == 1;
+    }
+
+    private static bool ColumnExists(string path, string table, string column)
+    {
+        using var connection = Open(path);
+        using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name=$name";
+        command.Parameters.AddWithValue("$name", column);
         return Convert.ToInt64(command.ExecuteScalar()) == 1;
     }
 

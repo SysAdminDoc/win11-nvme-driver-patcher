@@ -35,8 +35,12 @@ public partial class BenchmarkComparisonView : UserControl
             TrendHintText.Text = "The chart becomes useful once at least one run is captured and far more trustworthy once a second run confirms direction.";
             ReadIopsValue.Text = "-";
             WriteIopsValue.Text = "-";
+            DesktopReadIopsValue.Text = "-";
+            DesktopWriteIopsValue.Text = "-";
             ReadDelta.Text = "";
             WriteDelta.Text = "";
+            DesktopReadDelta.Text = "";
+            DesktopWriteDelta.Text = "";
             ApplyBenchmarkState("Waiting", "TextDim", "SurfaceInset", "Border");
             BenchChart.Series = [];
             return;
@@ -47,6 +51,10 @@ public partial class BenchmarkComparisonView : UserControl
         BenchmarkContextText.Text = $"Latest run: {latest.Label} • {FormatTimestamp(latest.Timestamp)}";
         ReadIopsValue.Text = latest.Read.IOPS.ToString("N0");
         WriteIopsValue.Text = latest.Write.IOPS.ToString("N0");
+        var latestDesktop = latest.Desktop;
+        bool latestHasDesktop = latestDesktop?.HasMetrics == true;
+        DesktopReadIopsValue.Text = latestHasDesktop ? latestDesktop!.Read.IOPS.ToString("N0") : "-";
+        DesktopWriteIopsValue.Text = latestHasDesktop ? latestDesktop!.Write.IOPS.ToString("N0") : "-";
 
         if (history.Count >= 2)
         {
@@ -55,7 +63,22 @@ public partial class BenchmarkComparisonView : UserControl
             ReadDelta.Foreground = DeltaBrush(prev.Read.IOPS, latest.Read.IOPS);
             WriteDelta.Text = FormatDelta(prev.Write.IOPS, latest.Write.IOPS);
             WriteDelta.Foreground = DeltaBrush(prev.Write.IOPS, latest.Write.IOPS);
-            BenchmarkSummaryText.Text = $"Comparing {latest.Label} against the previous run shows whether the most recent change helped sustained 4K random performance or simply shifted the tradeoff.";
+            if (HasDesktopPair(prev, latest))
+            {
+                DesktopReadDelta.Text = FormatDelta(prev.Desktop!.Read.IOPS, latestDesktop!.Read.IOPS);
+                DesktopReadDelta.Foreground = DeltaBrush(prev.Desktop.Read.IOPS, latestDesktop.Read.IOPS);
+                DesktopWriteDelta.Text = FormatDelta(prev.Desktop.Write.IOPS, latestDesktop.Write.IOPS);
+                DesktopWriteDelta.Foreground = DeltaBrush(prev.Desktop.Write.IOPS, latestDesktop.Write.IOPS);
+            }
+            else
+            {
+                DesktopReadDelta.Text = "No desktop QD1 comparison";
+                DesktopWriteDelta.Text = "No desktop QD1 comparison";
+                DesktopReadDelta.Foreground = ResolveBrush("TextDim");
+                DesktopWriteDelta.Foreground = ResolveBrush("TextDim");
+            }
+
+            BenchmarkSummaryText.Text = BuildComparisonSummary(prev, latest);
             TrendHintText.Text = "Use the chart to confirm whether the latest change moved both read and write performance in the direction you expected, not just one headline metric.";
             ApplyBenchmarkState("Comparison Ready", "Green", "GreenBg", "Green");
         }
@@ -65,6 +88,10 @@ public partial class BenchmarkComparisonView : UserControl
             ReadDelta.Foreground = ResolveBrush("TextDim");
             WriteDelta.Text = "Run another benchmark after a driver change to compare.";
             WriteDelta.Foreground = ResolveBrush("TextDim");
+            DesktopReadDelta.Text = latestHasDesktop ? "Baseline captured" : "Not recorded";
+            DesktopWriteDelta.Text = latestHasDesktop ? "Baseline captured" : "Not recorded";
+            DesktopReadDelta.Foreground = ResolveBrush("TextDim");
+            DesktopWriteDelta.Foreground = ResolveBrush("TextDim");
             BenchmarkSummaryText.Text = "This first run is your baseline. Capture another run after applying or removing the patch so the comparison view can show direction, not just raw numbers.";
             TrendHintText.Text = "The chart currently reflects one baseline run. Add a post-change run to reveal direction instead of a single point in time.";
             ApplyBenchmarkState("Baseline Only", "Accent", "AccentBg", "Accent");
@@ -141,6 +168,33 @@ public partial class BenchmarkComparisonView : UserControl
         var pct = Math.Round((current - prev) / prev * 100, 1);
         return $"vs previous run: {(pct >= 0 ? "+" : "")}{pct}%";
     }
+
+    private static bool HasDesktopPair(BenchmarkResult previous, BenchmarkResult current) =>
+        previous.Desktop?.HasMetrics == true && current.Desktop?.HasMetrics == true;
+
+    private static string BuildComparisonSummary(BenchmarkResult previous, BenchmarkResult current)
+    {
+        var highRead = PercentDelta(previous.Read.IOPS, current.Read.IOPS);
+        var highWrite = PercentDelta(previous.Write.IOPS, current.Write.IOPS);
+        var highText = $"high-QD read {FormatPercent(highRead)} / write {FormatPercent(highWrite)}";
+
+        if (!HasDesktopPair(previous, current))
+            return $"Comparing {current.Label} against the previous run: {highText}. Desktop QD1 metrics are unavailable for one of these runs.";
+
+        var desktopRead = PercentDelta(previous.Desktop!.Read.IOPS, current.Desktop!.Read.IOPS);
+        var desktopWrite = PercentDelta(previous.Desktop.Write.IOPS, current.Desktop.Write.IOPS);
+        var desktopText = $"desktop QD1 read {FormatPercent(desktopRead)} / write {FormatPercent(desktopWrite)}";
+        bool highImproved = highRead > 0 || highWrite > 0;
+        bool desktopDidNotImprove = desktopRead <= 0 && desktopWrite <= 0;
+        return highImproved && desktopDidNotImprove
+            ? $"High-QD improved while desktop QD1 did not. {highText}; {desktopText}."
+            : $"Comparing {current.Label} against the previous run: {highText}; {desktopText}.";
+    }
+
+    private static double PercentDelta(double previous, double current) =>
+        previous <= 0 ? 0 : (current - previous) / previous * 100;
+
+    private static string FormatPercent(double value) => $"{value:+0.0;-0.0}%";
 
     private void ThemeService_ThemeChanged(object? sender, EventArgs e)
     {

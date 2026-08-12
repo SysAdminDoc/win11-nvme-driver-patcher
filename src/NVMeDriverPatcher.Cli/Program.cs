@@ -1,3 +1,4 @@
+using System.Text.Json;
 using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 
@@ -204,6 +205,7 @@ class Program
                 "config-import" => ConfigImportCommand(config, importPath),
                 "tuning-export" => TuningExportCommand(exportPath),
                 "tuning-import" => TuningImportCommand(importPath),
+                "benchmark" => BenchmarkCommand(config, json),
                 "compare-benchmarks" => CompareBenchmarksCommand(config, thresholdArg, currentBenchmarkPath),
                 "compat-checksum" => CompatChecksumCommand(config),
                 "verify-backup" => VerifyBackupCommand(config, importPath),
@@ -638,6 +640,38 @@ class Program
         if (profile is null) return 1;
         bool ok = TuningService.ApplyProfile(profile, Console.WriteLine);
         return ok ? 0 : 1;
+    }
+
+    static int BenchmarkCommand(AppConfig config, bool json)
+    {
+        var label = RegistryService.GetPatchStatus().Applied ? "Post-Patch" : "Pre-Patch";
+        var result = BenchmarkService.RunBenchmarkAsync(
+                config.WorkingDir,
+                label,
+                json ? null : Console.WriteLine)
+            .GetAwaiter()
+            .GetResult();
+
+        if (result is null)
+        {
+            if (json)
+                Console.Error.WriteLine("Benchmark did not produce a complete result.");
+            return 1;
+        }
+
+        BenchmarkService.SaveResults(config.WorkingDir, result);
+        if (json)
+        {
+            Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+            return 0;
+        }
+
+        Console.WriteLine("Benchmark complete:");
+        Console.WriteLine($"  High-QD (t4/o16 ≈ QD64) read:  {result.Read.IOPS:N0} IOPS ({result.Read.ThroughputMBs:N2} MB/s)");
+        Console.WriteLine($"  High-QD (t4/o16 ≈ QD64) write: {result.Write.IOPS:N0} IOPS ({result.Write.ThroughputMBs:N2} MB/s)");
+        Console.WriteLine($"  Desktop QD1 (t1/o1) read:       {result.Desktop.Read.IOPS:N0} IOPS ({result.Desktop.Read.ThroughputMBs:N2} MB/s)");
+        Console.WriteLine($"  Desktop QD1 (t1/o1) write:      {result.Desktop.Write.IOPS:N0} IOPS ({result.Desktop.Write.ThroughputMBs:N2} MB/s)");
+        return 0;
     }
 
     static int CompareBenchmarksCommand(AppConfig config, int threshold, string? currentPath)

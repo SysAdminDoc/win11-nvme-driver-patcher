@@ -132,7 +132,7 @@ components above, but removal must delete them too — the Recovery Kit and `rem
 
 **Diagnostics & Benchmarking**
 - **Automated verification** -- 1,000+ discovered test cases cover mutation safety, recovery, packaging, CLI, accessibility, and update integrity; release validation derives the live count from the test project
-- **Built-in DiskSpd benchmark** -- 4K random read/write test targeting NVMe drive with before/after comparison (auto-downloads [Microsoft DiskSpd](https://github.com/microsoft/diskspd))
+- **Built-in DiskSpd benchmark** -- high-QD (t4/o16 ≈ QD64) plus desktop QD1 4K random read/write profiles with before/after comparison (auto-downloads [Microsoft DiskSpd](https://github.com/microsoft/diskspd))
 - **11 async preflight checks** run in a background thread without freezing the GUI
 - **NVMe health badges** -- temperature, wear %, firmware, power-on hours, media errors (hover for SMART details)
 - **Per-drive NATIVE/LEGACY badges** -- shows whether each NVMe drive migrated to `nvmedisk.sys` or remains on `stornvme.sys`
@@ -206,7 +206,7 @@ NVMeDriverPatcher.Cli.exe apply --safe
 .\NVMe_Driver_Patcher.ps1 -ExportRecoveryKit
 ```
 
-### Extended CLI (C# binary — 61 commands)
+### Extended CLI (C# binary — 62 commands)
 
 Run `NVMeDriverPatcher.Cli help` for the full grouped command reference.
 
@@ -243,6 +243,7 @@ NVMeDriverPatcher.Cli diagnostics                          # Export diagnostics 
 # Storage & Performance
 NVMeDriverPatcher.Cli etw                                  # 60s ETW storage trace
 NVMeDriverPatcher.Cli firmware                             # Compat.json entries
+NVMeDriverPatcher.Cli benchmark                            # High-QD + desktop QD1 DiskSpd benchmark
 NVMeDriverPatcher.Cli compare-benchmarks --threshold=15    # Before/after benchmark diff
 
 # Fleet & Admin

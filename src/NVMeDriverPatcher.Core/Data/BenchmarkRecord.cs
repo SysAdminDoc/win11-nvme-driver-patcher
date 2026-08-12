@@ -26,5 +26,27 @@ public class BenchmarkRecord
 
     public double WriteLatencyMs { get; set; }
 
+    public string DesktopProfileId { get; set; } = "desktop-qd1";
+
+    public string DesktopProfileName { get; set; } = "Desktop QD1";
+
+    public int DesktopThreads { get; set; } = 1;
+
+    public int DesktopOutstandingIo { get; set; } = 1;
+
+    public int DesktopDurationSeconds { get; set; } = 30;
+
+    public double DesktopReadIOPS { get; set; }
+
+    public double DesktopReadThroughputMBs { get; set; }
+
+    public double DesktopReadLatencyMs { get; set; }
+
+    public double DesktopWriteIOPS { get; set; }
+
+    public double DesktopWriteThroughputMBs { get; set; }
+
+    public double DesktopWriteLatencyMs { get; set; }
+
     public string? Notes { get; set; }
 }

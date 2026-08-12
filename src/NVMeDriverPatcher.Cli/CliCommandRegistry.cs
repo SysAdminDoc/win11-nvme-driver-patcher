@@ -169,6 +169,8 @@ public static class CliCommandRegistry
             "Capture a 60s ETW storage trace (wpr.exe) to %ProgramData%\\NVMePatcher\\etl"),
         new("firmware", ["compat"], CommandGroup.StoragePerformance,
             "List bundled controller/firmware compat entries (compat.json)"),
+        new("benchmark", [], CommandGroup.StoragePerformance,
+            "Run high-QD and desktop QD1 4K random DiskSpd profiles (--json for machine-readable output)"),
         new("compare-benchmarks", [], CommandGroup.StoragePerformance,
             "Compare before/after benchmark JSON (--threshold=N%, default 15)"),
         new("compat-checksum", [], CommandGroup.StoragePerformance,
