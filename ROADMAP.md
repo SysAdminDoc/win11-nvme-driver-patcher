@@ -369,13 +369,6 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
 
 ### P1
 
-- [ ] P1 — Registry-override path writes three feature IDs that exist on no current build
-  Why: `AppConfig.RegistryPath` writes `735209102` / `1853569164` / `156965516`, none of which appear in the 26100.8687, 26404.5000, or 29531.1000 velocity dumps. The same three feature *names* now carry `NativeNVMeStackForGeClient` 60786016 (26100) / 55369237 (26404, 29531), `UxAccOptimization` 48433719, `Standalone_Future` 49453572 — numbers the tool already knows, but only on the FeatureStore path. "The registry route stopped working" is at least partly ID rotation, not only hive neutering, and `status` currently cannot say so.
-  Evidence: grepped directly against the three dumps (URLs in RESEARCH.md Sources); `src/NVMeDriverPatcher.Core/Models/AppConfig.cs:52-53`; README.md 5-component table.
-  Touches: `Models/AppConfig.cs`, `Models/FallbackFeatureCatalog.cs`, `Services/PatchService.cs` (BuildRequiredRegistryMutations), `Services/PatchVerificationService.cs`, `Services/DryRunService.cs`, README component table, CLI `status`.
-  Acceptance: `status` and the dry-run preview name, for the running build, which override IDs the tool would write and whether those IDs correspond to a known feature name on that branch; a mismatch is reported explicitly rather than as a generic "no known route". Do NOT change what is written until the live-hardware open question in RESEARCH.md is answered.
-  Complexity: M
-
 - [ ] P1 — Stop applying `Standalone_Future: 49453572`; it is Always Enabled on every sampled branch
   Why: The fallback set applies an override for a feature Windows already forces on. It cannot change behavior, but it widens the FeatureStore write, the mutation-ledger baseline, and the restore obligation on a boot-critical store — including the priority-8 reset defect already tracked above.
   Evidence: `49453572` appears under `## Always Enabled:` in all three dumps (26100.8687 line 5417, 26404.5000 line 4549, 29531.1000 line 5262); applied via `FallbackFeatureCatalog.NativeNvmeStack25H2`.

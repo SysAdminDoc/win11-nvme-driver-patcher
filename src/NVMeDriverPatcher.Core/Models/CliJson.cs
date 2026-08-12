@@ -23,7 +23,11 @@ public static class CliJson
         JsonSerializer.Serialize(new CliEnvelope { Command = command, Data = data }, Options);
 
     public static StatusJson BuildStatus(
-        PatchStatus status, NativeNVMeStatus? native, EnablementSource source, WindowsBuildRule? rule) => new()
+        PatchStatus status,
+        NativeNVMeStatus? native,
+        EnablementSource source,
+        WindowsBuildRule? rule,
+        RegistryOverrideAssessment? registryOverride = null) => new()
     {
         Status = status.Applied ? "applied" : status.Partial ? "partial" : "not-applied",
         Applied = status.Applied,
@@ -38,6 +42,23 @@ public static class CliJson
         BuildRuleSource = rule?.SourceUrl,
         BuildRuleConfidence = rule?.Confidence,
         BuildRuleLastReviewed = rule?.LastReviewed,
+        RegistryOverride = registryOverride is null ? null : new RegistryOverrideJson
+        {
+            BuildNumber = registryOverride.BuildNumber,
+            Ubr = registryOverride.Ubr,
+            Branch = registryOverride.Branch,
+            BranchKnown = registryOverride.BranchKnown,
+            HasMismatch = registryOverride.HasMismatch,
+            Summary = registryOverride.Summary,
+            Features = registryOverride.Features.Select(feature => new RegistryOverrideFeatureJson
+            {
+                RegistryId = feature.RegistryId,
+                FeatureName = feature.FeatureName,
+                KnownBranchId = feature.KnownBranchId,
+                MatchesKnownFeature = feature.MatchesKnownFeature,
+                Detail = feature.Detail,
+            }).ToList(),
+        },
     };
 
     public static WatchdogJson BuildWatchdog(WatchdogReport report) => new()
@@ -239,6 +260,27 @@ public sealed class StatusJson
     public string? BuildRuleSource { get; set; }
     public string? BuildRuleConfidence { get; set; }
     public string? BuildRuleLastReviewed { get; set; }
+    public RegistryOverrideJson? RegistryOverride { get; set; }
+}
+
+public sealed class RegistryOverrideJson
+{
+    public int BuildNumber { get; set; }
+    public int Ubr { get; set; }
+    public string Branch { get; set; } = string.Empty;
+    public bool BranchKnown { get; set; }
+    public bool HasMismatch { get; set; }
+    public string Summary { get; set; } = string.Empty;
+    public List<RegistryOverrideFeatureJson> Features { get; set; } = new();
+}
+
+public sealed class RegistryOverrideFeatureJson
+{
+    public string RegistryId { get; set; } = string.Empty;
+    public string FeatureName { get; set; } = string.Empty;
+    public int? KnownBranchId { get; set; }
+    public bool MatchesKnownFeature { get; set; }
+    public string Detail { get; set; } = string.Empty;
 }
 
 public sealed class WatchdogJson

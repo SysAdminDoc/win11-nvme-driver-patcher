@@ -86,4 +86,24 @@ public sealed class DryRunServiceTests
         foreach (var item in report.Items)
             Assert.Contains(item.ValueName, md);
     }
+
+    [Fact]
+    public void Preview_ReportsRegistryOverrideIdMismatchForDetectedBranch()
+    {
+        var config = new AppConfig { PatchProfile = PatchProfile.Full };
+        var preflight = new PreflightResult
+        {
+            BuildDetails = new WindowsBuildDetails { BuildNumber = 26404, UBR = 5000 }
+        };
+
+        var report = DryRunService.PlanInstall(config, preflight);
+        Assert.NotNull(report.RegistryOverrideAssessment);
+        var assessment = report.RegistryOverrideAssessment!;
+
+        Assert.Equal(3, assessment.Features.Count);
+        Assert.True(assessment.HasMismatch);
+        Assert.Contains("Registry Override ID Compatibility", DryRunService.RenderMarkdown(report));
+        Assert.Contains("MISMATCH", report.Summary);
+        Assert.Contains("55369237", DryRunService.RenderMarkdown(report));
+    }
 }

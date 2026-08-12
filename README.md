@@ -78,17 +78,23 @@ the release SHA-256 immediately before copy and verifies the installed target ag
 
 Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the legacy SCSI translation layer, allowing direct communication with NVMe drives. This driver is available in Windows 11 (24H2+) but disabled by default. Microsoft has stated they are ["absolutely exploring"](https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353) bringing it broadly to the entire Windows codebase.
 
-**This tool enables it via 5 registry components:**
+**The maintained registry route writes 5 components:**
 
 | Component | Purpose |
 |-----------|---------|
-| Feature Flag `735209102` | NativeNVMeStackForGeClient - Primary driver enable |
-| Feature Flag `1853569164` | UxAccOptimization - Extended functionality |
-| Feature Flag `156965516` | Standalone_Future - Performance optimizations |
+| Registry override `735209102` | NativeNVMeStackForGeClient - Primary driver enable |
+| Registry override `1853569164` | UxAccOptimization - Extended functionality |
+| Registry override `156965516` | Standalone_Future - Performance optimizations |
 | SafeBoot Minimal Key | Prevents INACCESSIBLE_BOOT_DEVICE BSOD in Safe Mode |
 | SafeBoot Network Key | Safe Mode with Networking support |
 
 Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be included via checkbox. **Recommended** -- without it, the new I/O scheduler may not activate and results can be inconsistent.
+
+The three registry override IDs above are the historical payload the tool still writes; Windows
+has rotated the corresponding feature IDs on sampled branches. `status` and the dry-run preview
+now identify the running build branch and explicitly report whether each registry ID matches a
+known feature name/ID. This is diagnostic only and does not silently substitute a different
+registry payload while live-hardware validation remains open.
 
 Since v4.6.1 the patch also writes two **service-name** SafeBoot entries for KB5079391 / 25H2
 (`SafeBoot\Minimal\nvmedisk` and `SafeBoot\Network\nvmedisk`). They are not counted in the five

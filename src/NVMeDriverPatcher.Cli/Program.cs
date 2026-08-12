@@ -1134,6 +1134,9 @@ class Program
     {
         var preflight = PreflightService.RunAll();
         var status = RegistryService.GetPatchStatus();
+        var registryOverride = FallbackFeatureCatalog.AssessRegistryOverrides(
+            preflight.BuildDetails,
+            AppConfig.FeatureIDs);
 
         if (json)
         {
@@ -1142,7 +1145,7 @@ class Program
             try { evidence = FeatureStoreWriterService.HasFallbackEvidence(); } catch { }
             var src = PatchVerificationService.ClassifyEnablementSource(native?.IsActive ?? false, status.Count, evidence);
             Console.WriteLine(CliJson.Serialize("status",
-                CliJson.BuildStatus(status, native, src, WindowsBuildRulesService.MatchCurrent())));
+                CliJson.BuildStatus(status, native, src, WindowsBuildRulesService.MatchCurrent(), registryOverride)));
             return status.Applied ? 0 : status.Partial ? 2 : 1;
         }
 
@@ -1156,6 +1159,11 @@ class Program
 
         if (status.Keys.Count > 0)
             Console.WriteLine($"Applied Keys: {string.Join(", ", status.Keys)}");
+
+        Console.WriteLine();
+        Console.WriteLine(registryOverride.Summary);
+        foreach (var feature in registryOverride.Features)
+            Console.WriteLine($"  {feature.Detail}");
 
         if (preflight.NativeNVMeStatus is not null)
         {

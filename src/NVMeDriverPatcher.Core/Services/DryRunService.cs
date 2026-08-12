@@ -20,6 +20,7 @@ public class DryRunReport
     public bool IncludeServerKey { get; set; }
     public int TotalWrites { get; set; }
     public int TotalCreates { get; set; }
+    public RegistryOverrideAssessment? RegistryOverrideAssessment { get; set; }
     public List<DryRunPlanItem> Items { get; set; } = new();
     public List<string> PreflightBlockers { get; set; } = new();
     public List<string> PreflightWarnings { get; set; } = new();
@@ -52,6 +53,10 @@ public static class DryRunService
 
         var featureIDs = AppConfig.GetFeatureIDsForProfile(config.PatchProfile).ToList();
         if (config.IncludeServerKey) featureIDs.Add(AppConfig.ServerFeatureID);
+
+        report.RegistryOverrideAssessment = FallbackFeatureCatalog.AssessRegistryOverrides(
+            preflight?.BuildDetails,
+            featureIDs.Where(id => AppConfig.FeatureIDs.Contains(id)));
 
         foreach (var id in featureIDs)
         {
@@ -248,6 +253,8 @@ public static class DryRunService
         sb.Append("Scope: machine-wide across every eligible NVMe drive/controller; per-drive exclusions are not enforced. ");
         sb.Append($"Profile: {report.Profile}");
         if (report.IncludeServerKey) sb.Append(" + Server 2025 key");
+        if (report.RegistryOverrideAssessment is not null)
+            sb.Append($" | {report.RegistryOverrideAssessment.Summary}");
         if (report.PreflightBlockers.Count > 0) sb.Append($" | {report.PreflightBlockers.Count} BLOCKER(s)");
         if (report.PreflightWarnings.Count > 0) sb.Append($" | {report.PreflightWarnings.Count} warning(s)");
         sb.Append('.');
@@ -271,6 +278,15 @@ public static class DryRunService
         {
             sb.AppendLine("## Warnings");
             foreach (var w in report.PreflightWarnings) sb.AppendLine($"- {w}");
+            sb.AppendLine();
+        }
+        if (report.RegistryOverrideAssessment is not null)
+        {
+            sb.AppendLine("## Registry Override ID Compatibility");
+            sb.AppendLine();
+            sb.AppendLine("These are the registry feature IDs this profile would write; the payload is unchanged by this comparison.");
+            foreach (var feature in report.RegistryOverrideAssessment.Features)
+                sb.AppendLine($"- {feature.Detail}");
             sb.AppendLine();
         }
         sb.AppendLine("## Registry Changes");
