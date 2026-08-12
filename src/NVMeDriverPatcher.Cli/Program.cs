@@ -768,7 +768,10 @@ class Program
             var desc = state.Found
                 ? $"state={state.EnabledState switch { 2 => "Enabled", 1 => "Disabled", _ => "Default" }} priority={state.Priority}"
                 : "no configuration";
-            Console.WriteLine($"  {state.FeatureId,10}  [{state.Store,-7}]  {desc}");
+            var candidate = state.IsCandidate
+                ? $"  [candidate probe: {FallbackFeatureCatalog.CandidateSecondGateName}; not applied]"
+                : string.Empty;
+            Console.WriteLine($"  {state.FeatureId,10}  [{state.Store,-7}]  {desc}{candidate}");
         }
         var exportPath = Path.Combine(config.WorkingDir, "featurestore_snapshot.bin");
         var snapshot = FeatureStoreWriterService.ExportBlob(exportPath);

@@ -1,3 +1,4 @@
+using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 using Xunit.Abstractions;
 
@@ -163,6 +164,8 @@ public sealed class FeatureStoreWriterServiceTests
         // invalidate everyone's fallback evidence check.
         Assert.Contains(60786016, FeatureStoreWriterService.PostBlockFeatureIds);
         Assert.Contains(48433719, FeatureStoreWriterService.PostBlockFeatureIds);
+        Assert.DoesNotContain(FallbackFeatureCatalog.CandidateSecondGateId, FeatureStoreWriterService.PostBlockFeatureIds);
+        Assert.Contains(FallbackFeatureCatalog.CandidateSecondGateId, FeatureStoreWriterService.CandidateProbeFeatureIds);
     }
     // --- Rtl native path: pure decode/construction logic + no-throw query probe ---
 
@@ -210,12 +213,16 @@ public sealed class FeatureStoreWriterServiceTests
     public void QueryAllKnownConfigurations_CoversEveryKnownIdInBothStores()
     {
         var states = FeatureStoreWriterService.QueryAllKnownConfigurations();
-        Assert.Equal(FeatureStoreWriterService.PostBlockFeatureIds.Length * 2, states.Count);
-        foreach (var id in FeatureStoreWriterService.PostBlockFeatureIds)
+        Assert.Equal(FeatureStoreWriterService.FeatureStoreProbeIds.Length * 2, states.Count);
+        foreach (var id in FeatureStoreWriterService.FeatureStoreProbeIds)
         {
             Assert.Contains(states, s => s.FeatureId == id && s.Store == "Boot");
             Assert.Contains(states, s => s.FeatureId == id && s.Store == "Runtime");
         }
+        Assert.All(states.Where(s => s.FeatureId == FallbackFeatureCatalog.CandidateSecondGateId),
+            state => Assert.True(state.IsCandidate));
+        Assert.All(states.Where(s => s.FeatureId != FallbackFeatureCatalog.CandidateSecondGateId),
+            state => Assert.False(state.IsCandidate));
     }
 
     // --- Both-store verification classifier (Runtime + Boot must BOTH be enabled) ---

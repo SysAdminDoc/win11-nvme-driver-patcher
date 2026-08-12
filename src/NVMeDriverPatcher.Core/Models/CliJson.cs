@@ -234,6 +234,7 @@ public static class CliJson
             EnabledState = s.EnabledState,
             Priority = s.Priority,
             IsEnabled = s.IsEnabled,
+            IsCandidate = s.IsCandidate,
         }).ToList(),
     };
 }
@@ -473,4 +474,5 @@ public sealed class FeatureStoreConfigJson
     public int EnabledState { get; set; }
     public int Priority { get; set; }
     public bool IsEnabled { get; set; }
+    public bool IsCandidate { get; set; }
 }

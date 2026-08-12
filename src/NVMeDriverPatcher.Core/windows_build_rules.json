@@ -37,7 +37,7 @@
       "minUbr": 0,
       "maxUbr": 999999,
       "expectedPath": "none-known",
-      "summary": "Insider trains newer than 26200 (26H1 28020/28120 and later) inherit the GenNvmeDisk compatible-ID removal — no working enablement path is known. Wait for Microsoft's official client rollout.",
+      "summary": "Insider trains newer than 26200 (26H1 28020/28120 and later) inherit the GenNvmeDisk compatible-ID removal — no working enablement path is known. Candidate probe 48613417 (NativeNVMeStackEnableForClientOS) is untested on this branch; source: https://github.com/phantomofearth/windows-velocity-feature-lists. Applying it remains gated behind live validation. Wait for Microsoft's official client rollout.",
       "sourceUrl": "https://github.com/thebookisclosed/ViVe/issues/164",
       "confidence": "community-reported",
       "lastReviewed": "2026-08-02"
@@ -50,7 +50,7 @@
       "minUbr": 8524,
       "maxUbr": 999999,
       "expectedPath": "none-known",
-      "summary": "Builds 26200.8524+ (and newer Insider trains): stornvme no longer exposes the GenNvmeDisk compatible ID, so nvmedisk.inf cannot match — registry AND ViVeTool routes both enable flags that have no effect. No working enablement path is known; wait for Microsoft's official client rollout.",
+      "summary": "Builds 26200.8524+ (and newer Insider trains): stornvme no longer exposes the GenNvmeDisk compatible ID, so nvmedisk.inf cannot match — registry AND ViVeTool routes both enable flags that have no effect. Candidate probe 48613417 (NativeNVMeStackEnableForClientOS) is untested on this branch; source: https://github.com/phantomofearth/windows-velocity-feature-lists. Applying it remains gated behind live validation. No working enablement path is known; wait for Microsoft's official client rollout.",
       "sourceUrl": "https://github.com/thebookisclosed/ViVe/issues/164",
       "confidence": "community-reported",
       "lastReviewed": "2026-08-02"

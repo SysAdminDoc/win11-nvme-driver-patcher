@@ -63,6 +63,11 @@ public sealed record RegistryOverrideAssessment(
 /// </summary>
 public static class FallbackFeatureCatalog
 {
+    public const int CandidateSecondGateId = 48613417;
+    public const string CandidateSecondGateName = "NativeNVMeStackEnableForClientOS";
+    public const string CandidateSecondGateSourceUrl =
+        "https://github.com/phantomofearth/windows-velocity-feature-lists";
+
     // These are the feature names/IDs observed in the sampled velocity dumps. They are used
     // for status and dry-run disclosure only; the registry payload remains AppConfig's legacy
     // write set until the live-hardware question in RESEARCH.md is resolved.
@@ -105,6 +110,10 @@ public static class FallbackFeatureCatalog
     /// <summary>IDs recognized by evidence probes but deliberately excluded from every
     /// applied set because the sampled velocity dumps mark them Always Enabled.</summary>
     public static IReadOnlyList<int> ProbeOnlyIds { get; } = [49453572];
+
+    /// <summary>Candidate IDs queried for diagnostics only. These are not fallback evidence
+    /// IDs and must never be passed to an apply/reset operation without live validation.</summary>
+    public static IReadOnlyList<int> CandidateProbeIds { get; } = [CandidateSecondGateId];
 
     public static IReadOnlyList<FallbackIdSet> All { get; } =
         new[] { PostBlockMarch2026, NativeNvmeStack25H2 };

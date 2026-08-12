@@ -90,7 +90,8 @@ UBRs are NOT inferred from that single report. 25H2 26200 builds below UBR 8524 
 55369237 + 48433719 (49453572 is Always Enabled and probe-only). Other 26100 builds, build 26200.8524+, 26201-26299,
 and 26300+ have no sourced registry or fallback route that binds GenNvmeDisk; treat
 them as verify/monitor/rollback-only. `featurestore` probes whether a fallback has been
-applied; `fallback` applies the native-first path only when the build rule permits it.
+applied and reports the candidate second gate 48613417 when the branch exposes it; the
+candidate is diagnostic only. `fallback` applies the native-first path only when the build rule permits it.
 ",
         ["buildrules"] = @"
 The app and CLI load windows_build_rules.json at runtime before recommending an enablement

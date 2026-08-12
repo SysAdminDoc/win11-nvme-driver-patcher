@@ -46,6 +46,7 @@ public sealed record FeatureConfigState(
     string Store)       // "Boot" or "Runtime"
 {
     public bool IsEnabled => Found && EnabledState == 2;
+    public bool IsCandidate { get; init; }
 }
 
 /// <summary>Lossless result used by the mutation ledger. QuerySucceeded distinguishes a genuine
@@ -137,6 +138,14 @@ public static class FeatureStoreWriterService
     public static readonly int[] PostBlockFeatureIds =
         Models.FallbackFeatureCatalog.AllKnownIds.ToArray();
 
+    // Candidate second-gate IDs are queried for diagnostics but are not fallback evidence and
+    // are never included in the native or ViVeTool apply/reset payload.
+    public static readonly int[] CandidateProbeFeatureIds =
+        Models.FallbackFeatureCatalog.CandidateProbeIds.ToArray();
+
+    public static readonly int[] FeatureStoreProbeIds =
+        PostBlockFeatureIds.Concat(CandidateProbeFeatureIds).Distinct().ToArray();
+
     #region ntdll interop (mirrors ViVe's NativeStructs/NativeMethods)
 
     private enum ConfigurationType : uint { Boot = 0, Runtime = 1 }
@@ -222,14 +231,16 @@ public static class FeatureStoreWriterService
         }
     }
 
-    /// <summary>Both-store query for every known fallback ID — feeds CLI/diagnostics.</summary>
+    /// <summary>Both-store query for every known fallback ID plus candidate second-gate IDs —
+    /// feeds CLI/diagnostics. Candidate rows are labeled and remain probe-only.</summary>
     public static IReadOnlyList<FeatureConfigState> QueryAllKnownConfigurations()
     {
         var list = new List<FeatureConfigState>();
-        foreach (var id in PostBlockFeatureIds)
+        foreach (var id in FeatureStoreProbeIds)
         {
-            list.Add(QueryConfiguration(id, bootStore: true));
-            list.Add(QueryConfiguration(id, bootStore: false));
+            bool isCandidate = CandidateProbeFeatureIds.Contains(id);
+            list.Add(QueryConfiguration(id, bootStore: true) with { IsCandidate = isCandidate });
+            list.Add(QueryConfiguration(id, bootStore: false) with { IsCandidate = isCandidate });
         }
         return list;
     }
