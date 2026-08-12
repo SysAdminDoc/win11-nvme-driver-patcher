@@ -67,6 +67,12 @@ public static class ApstInspectorService
                 if (key.GetValue($"PowerState{i}_NonOperational") is int no) state.NonOperational = no != 0;
                 report.States.Add(state);
             }
+
+            // The stornvme registry profile stores transition timing, but not the NVMe Identify
+            // Controller MPS wattage. Use the first successfully identified NVMe controller to
+            // populate the same power-state indices; without this bridge the battery estimate can
+            // never produce an idle-savings number.
+            ApplyIdentifyPowerStates(report, QueryIdentifyPowerStates());
             report.Summary = report.ApstEnabled
                 ? $"APST enabled with idle timeout {report.ApstIdleTimeout?.ToString() ?? "default"}. {report.States.Count} power-state entries."
                 : "APST disabled — drives stay at active power state (higher battery drain on laptops).";
@@ -77,6 +83,41 @@ public static class ApstInspectorService
             report.Summary = $"APST inspection failed: {ex.Message}";
         }
         return report;
+    }
+
+    private static IReadOnlyList<NvmePowerStateDescriptor> QueryIdentifyPowerStates()
+    {
+        try
+        {
+            foreach (var drive in DriveService.GetSystemDrives().Where(d => d.IsNVMe))
+            {
+                var identify = NvmeIdentifyService.Query(drive.Number);
+                if (identify.Success && identify.PowerStates.Count > 0)
+                    return identify.PowerStates;
+            }
+        }
+        catch { }
+
+        return Array.Empty<NvmePowerStateDescriptor>();
+    }
+
+    internal static void ApplyIdentifyPowerStates(
+        ApstInspectionReport report,
+        IEnumerable<NvmePowerStateDescriptor>? identifyStates)
+    {
+        if (report is null || identifyStates is null) return;
+
+        var byIndex = identifyStates
+            .Where(state => state is not null && state.Index >= 0 &&
+                            double.IsFinite(state.MaxPowerWatts) && state.MaxPowerWatts > 0)
+            .GroupBy(state => state.Index)
+            .ToDictionary(group => group.Key, group => group.First().MaxPowerWatts);
+
+        foreach (var state in report.States)
+        {
+            if (byIndex.TryGetValue(state.PowerStateNumber, out var watts))
+                state.MaxPowerWatts = watts;
+        }
     }
 
     internal static ApstBatteryEstimate EstimateBatteryImpact(ApstInspectionReport report)

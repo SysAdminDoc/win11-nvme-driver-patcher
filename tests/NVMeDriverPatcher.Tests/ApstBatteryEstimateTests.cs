@@ -49,6 +49,36 @@ public sealed class ApstBatteryEstimateTests
     }
 
     [Fact]
+    public void ApplyIdentifyPowerStates_MapsMpsByPowerStateIndex()
+    {
+        var report = new ApstInspectionReport
+        {
+            States = new()
+            {
+                new ApstPowerState { PowerStateNumber = 0, NonOperational = false },
+                new ApstPowerState { PowerStateNumber = 3, NonOperational = true },
+                new ApstPowerState { PowerStateNumber = 4, NonOperational = true }
+            }
+        };
+
+        ApstInspectorService.ApplyIdentifyPowerStates(report,
+        [
+            new NvmePowerStateDescriptor { Index = 0, MaxPowerWatts = 6.0 },
+            new NvmePowerStateDescriptor { Index = 3, MaxPowerWatts = 0.05 },
+            new NvmePowerStateDescriptor { Index = 4, MaxPowerWatts = 0.004 }
+        ]);
+
+        Assert.Equal(6.0, report.States[0].MaxPowerWatts);
+        Assert.Equal(0.05, report.States[1].MaxPowerWatts);
+        Assert.Equal(0.004, report.States[2].MaxPowerWatts);
+        report.ApstEnabled = true;
+        report.NoLowPowerTransitions = false;
+        var estimate = ApstInspectorService.EstimateBatteryImpact(report);
+        Assert.Equal(6.0, estimate.ActivePowerWatts);
+        Assert.Equal(0.004, estimate.LowestIdlePowerWatts);
+    }
+
+    [Fact]
     public void EstimateBatteryImpact_NoLowPowerTransitions_IsNotHonored()
     {
         var report = new ApstInspectionReport

@@ -30,6 +30,8 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   route while ViVeTool is only a secondary cross-check.
 
 ### Changed
+- APST inspection now bridges NVMe Identify Controller power-state wattage into the registry
+  state report, enabling the laptop battery estimate to show measured idle-savings values.
 - Test-side PowerShell/Node process harnesses now drain stdout and stderr concurrently and kill
   timed-out child trees, preventing a wedged helper from hanging the entire verification suite.
 - Benchmark history now persists desktop profile metadata and metrics in schema v3, with a
