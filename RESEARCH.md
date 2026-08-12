@@ -1,103 +1,297 @@
 # Research — NVMe Driver Patcher
 
-> **Point-in-time snapshot, captured at v5.0.0.** Findings below describe the code as it was
-> then. Items that have since been fixed are marked inline with the release that fixed them;
-> anything unmarked was still open when this note was last reviewed (2026-08-11). Do not treat
-> an unqualified "Verified" here as a statement about the current tree — check the code.
+Date: 2026-08-11 — replaces all prior research (the previous v5.0.0 point-in-time snapshot).
+Repo state at capture: v5.7.0, HEAD `394e2b8`.
 
 ## Executive Summary
-NVMe Driver Patcher v5.0.0 is a local Windows 11 safety-and-recovery layer for enabling, verifying, and reversing Microsoft's still-experimental client `nvmedisk.sys` path. Its strongest shape is breadth around a narrow job: GUI/CLI/tray/watchdog surfaces, build-rule and firmware evidence, BitLocker/WinRE precautions, reversible registry and FeatureStore routes, a build-gated fallback ID catalog, diagnostic exports, and a large local test suite. The highest-value direction is not more storage features; it is making every elevated mutation truthful, durable, and trustworthy end-to-end. The prior pass's five P0s (raise the SQLite floor + per-connection defenses; gate apply/fallback/restart on trusted build rules; durably checkpoint fallback across reboot; preserve pre-existing SafeBoot state; make remove/auto-revert residue-verified) remain the load-bearing work and are already on the roadmap. This pass added concrete, verified net-new gaps (status as of 2026-08-11 in brackets): (1) [FIXED] the ViVeTool fallback downloads and executes an **unverified** third-party binary as admin; (2) [FIXED in 5.1.0] `ConfigService.Save` uses a fixed-name temp file that races across the four processes sharing `%ProgramData%`; (3) [PARTLY FIXED] BitLocker suspension covers only the system drive, so protected NVMe *data* volumes re-lock after reboot with no warning; preflight now warns via `BitLockerDataDrives`, suspension is still system-drive only; (4) [FIXED] the `compare-benchmarks` CLI compares the baseline to itself and can never report a regression; (5) [FIXED 2026-08-11] the manual watchdog `/install` verb registers a malformed `sc.exe binpath=`; plus static-data drift in `windows_build_rules.json`/`compat.json`. Confidence: Verified unless labeled otherwise.
+
+NVMe Driver Patcher is a local Windows 11 safety-and-recovery layer for enabling, verifying, and
+reversing Microsoft's still-experimental client `nvmedisk.sys` path (GUI + CLI + tray + watchdog +
+MSI/winget/Intune/ADMX). Its strongest shape is unusual: after ~397 commits and a drained deep-audit
+backlog, the *safety* machinery (mutation ledger, SafeBoot journal, control-set mirroring, residue
+probe, recovery kit, build-action policy, watchdog auto-revert) is materially better than anything
+else in the space — there is no second application-grade competitor. The weakness is now on the
+opposite side: **the feature-ID and build data the whole tool acts on is hand-curated from press and
+forum reports, while a per-build, per-branch primary source exists and is not being used.** That
+data gap, plus a servicing gap in the self-contained .NET runtime, is where the highest value sits.
+
+Top opportunities, priority order:
+
+1. **Ship on .NET 10.0.11.** Released 2026-08-11 with 10 CVEs (2 RCE, 3 EoP). Every published
+   artifact is self-contained single-file, so Windows Update never services them — this repo owns
+   .NET patching outright, in a `requireAdministrator` process. Verified.
+2. **The registry-override path writes three feature IDs that map to no feature name on any current
+   branch.** `735209102` / `1853569164` / `156965516` are absent from the 26100, 26404, and 29531
+   velocity dumps; the same three feature *names* now carry different numbers. Verified from primary
+   dumps.
+3. **`Standalone_Future: 49453572` is Always Enabled on all three sampled branches** — the fallback
+   set applies an override for a feature Windows already forces on, needlessly widening the
+   boot-critical mutation and restore surface. Verified.
+4. **A second gate exists and is untracked: `NativeNVMeStackEnableForClientOS: 48613417`**, present
+   on the Rubidium branch alongside `NativeNVMeStackForGeClient`. Plausibly the "another feature ID
+   in the mix" ViVe's maintainer named when closing issue #164 — the very issue this repo's
+   `26200-bind-blocked` rule cites as evidence there is *no* known route. Verified (existence);
+   Needs live validation (causality).
+5. **Adopt per-build velocity dumps as the curated data source** for IDs *and* default-state
+   (`Disabled By Default` = overridable vs `Always Disabled` = not), replacing `SelectForBuild`'s
+   `buildNumber >= 26200` heuristic.
+6. **ViVeTool has been dead since 2025-03-10**; its GUI front-end repo is deleted and its bundled
+   dictionary stops at build 26236. The fallback's secondary path rests on abandonware.
+7. **Locale trap, C# twin:** `BypassIoInspectorService` regex-parses English `fsutil` output — the
+   identical defect already logged against the legacy script, never checked in C#.
+8. **Recovery is a release behind the OS.** Point-in-Time Restore went GA mid-2026 and Quick Machine
+   Recovery is off by default on Pro/Enterprise; the tool still gates on `Checkpoint-Computer` and
+   has zero references to either.
+9. **The most-asked community question is unanswered:** benchmarks run one fixed profile
+   (`-t4 -o16 -b4K` ≈ QD64). Measured gains are ~+65% 4K random read at high QD, **−2.6% on write**,
+   and near-zero at QD1–QD2 — i.e. typical desktop use.
+10. **Dependency currency and audit gating** — no `NuGetAudit` config, no lock files, an
+    orphaned `System.Threading.AccessControl` (NU1510), and two upgrade traps documented below.
 
 ## Product Map
-- Core workflows: assess readiness; choose Safe/Full or build-gated FeatureStore fallback; apply; reboot; prove driver binding; monitor storage events; remove/auto-revert; export recovery and support evidence.
-- User personas: storage enthusiasts, workstation/homelab administrators, fleet operators using the CLI/PowerShell/ADMX, and support engineers diagnosing failed driver swaps.
-- Platforms and distribution: Windows 11 24H2/25H2 x64 mutation path; diagnostic-only ARM64 builds; Server 2025 as the supported reference; portable EXEs, MSI, winget/Scoop/Chocolatey manifests, PowerShell module, ADMX, and Intune assets.
-- Key integrations and data flows: 64-bit HKLM feature/SafeBoot state, Rtl Feature Store APIs, WMI/CIM/PnP evidence, BitLocker and WinRE, Event Log/watchdog state, `%ProgramData%\NVMePatcher` config + SQLite history, curated `windows_build_rules.json`/`compat.json`, and checksummed release assets.
+
+- **Core workflows:** assess readiness (≈26 preflight checks) → choose Safe/Full profile or the
+  build-gated FeatureStore fallback → apply (BitLocker suspend, restore point, mutation ledger,
+  SafeBoot journal, control-set mirroring) → reboot → prove driver binding → watchdog-monitor →
+  remove / auto-revert with residue proof → export recovery kit and support bundle.
+- **Personas:** storage enthusiasts; workstation/homelab admins; fleet operators (CLI, PowerShell
+  module, ADMX, Intune); support engineers diagnosing a failed swap. **New in 2026:** the tool is
+  mirrored by MajorGeeks at v5.6.0, which adds a non-enthusiast audience that did not read the
+  README.
+- **Platforms/distribution:** Windows 11 24H2/25H2 x64 mutation path; diagnostic-only ARM64;
+  Server 2025 as the supported reference. Portable EXEs, MSI, winget/Scoop/Chocolatey manifests,
+  PowerShell module, ADMX/ADML, Intune assets. No GitHub Actions (deliberate repo policy).
+- **Integrations/data flows:** 64-bit HKLM feature + SafeBoot state, Rtl Feature Store APIs,
+  WMI/CIM/PnP evidence, BitLocker, WinRE/`reagentc`, System/Application event logs, `wpr` ETW,
+  `%ProgramData%\NVMePatcher` config + SQLite history, curated `windows_build_rules.json` /
+  `compat.json`, checksummed release assets, optional Cloudflare Worker telemetry receiver.
 
 ## Competitive Landscape
-- **GEAnalyticsLabs/native-nvme** (Python/Tkinter, v1.0.0 Dec 2025): a clean 3-phase Safety→Modify→Verify workflow with **reboot-resumable state** via a `%ProgramData%` state.json + an ONLOGON scheduled task, and a `manage-bde` poll-until-decrypted loop. Learn: adopt the scheduled-task ONLOGON resume as the durable pattern for the `PendingFallbackApplied` checkpoint. Avoid: its 25H2-Pro-only gate, no dry-run, no post-reboot bind proof.
-- **1LUC1D4710N/nvme-performance-script** (PowerShell): ships a "nuclear cleanup" that removes the entire `Overrides` key structure, not just values. Learn: the residue probe on remove should also detect an emptied/deleted `Overrides` key. Avoid: restore-point-only recovery, no bind proof.
-- **giosci1994/feature-overrides-registry** (PS+C#, Feb 2026): SHA256 integrity on release artifacts (now table stakes — this repo already does it). Avoid: only 3 IDs, no server key, no mitigation for the drive-duplication risk it documents.
-- **ken-yossy/nvmetool-win** (C): reads NVMe Identify/log-page/SMART through the *inbox* driver IOCTLs. Learn: an inbox-IOCTL health path could keep SMART badges alive after vendor SCSI-passthrough tools break post-swap. Avoid: it is a diagnostic library, not an enabler.
-- **thebookisclosed/ViVe (ViVeTool)**: the FeatureStore substrate the fallback shells out to; `Extra/FeatureDiction` is the community ID dictionary and the bellwether for ID drift. Issue #164 is the custom-INF/test-signing route this repo correctly refuses.
-- **Driver Store Explorer / DiskSpd / CrystalDiskInfo**: keep the repo's bounded, itemized, honest-partial-failure model; do not expand into general driver-store management, a benchmark suite, or a SMART suite.
-- **Macrium Reflect / Veeam Agent**: recovery-first UX and explicit destructive warnings are the lesson; full imaging/cloud rebuild stays outside remit (the recovery kit + blocked WinRE-inject item are the proportionate boundary).
+
+There is no second application-grade competitor. The relevant field is data sources, scripts, and
+adjacent OS features.
+
+- **phantomofearth/windows-velocity-feature-lists** — per-build, per-branch feature name→ID dumps
+  *with default-state sections*, continuing Rivera's mach2 work. **Learn:** this is ground truth for
+  every ID decision the tool makes today by inference; sections `Always Enabled / Enabled By Default
+  / Disabled By Default / Always Disabled` directly answer "is this build overridable at all".
+  **Avoid:** the repo carries **no LICENSE** — transcribe rows into the existing curated JSON with
+  `sourceUrl` + `lastReviewed`, do not vendor the files, and do not auto-download (both would break
+  this repo's own curated-data principle).
+- **thebookisclosed/ViVe (ViVeTool)** — the fallback's secondary substrate. **Learn:** issue #164's
+  closing comment ("another feature ID or registry key in the mix") is a maintainer-level hint that
+  matches `48613417`; issue #166 shows `Policies\...\Overrides` values owned by TrustedInstaller
+  break `vivetool /fullreset` — *this tool writes exactly there.* **Avoid:** depending on it. Zero
+  commits since 2025-03-10; bundled dictionary stops at build 26236; `PheeL-Pheel/ViVeTool-GUI`
+  404s; `riverar/mach2` is archived.
+- **FR33THYFR33THY/Ultimate** (631★) — ships a 5th override value `3244671118` this tool does not
+  know, and its revert does `reg delete HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft /f`,
+  destroying the whole policy subtree. **Learn:** detect-and-repair this state; it is a support-load
+  generator, not a competitor. **Avoid:** everything about that revert.
+- **TheBeardofKnowledge `nvmeSPEEDtweak.bat`** — best preflight narrative of the script tier. **Learn:**
+  it reads `HKLM\SYSTEM\CurrentControlSet\Services\storport\Parameters\EnableBypassIO` from the
+  registry and checks device binding via `DEVPKEY_Device_Service` — locale-independent where this
+  tool parses English `fsutil` text. **Avoid:** no rollback proof, no post-reboot bind verification.
+- **jhochwald/PowerShell-collection** — ships Intune **Check/Remediate proactive-remediation pairs**
+  for exactly this tweak. **Learn:** the pair *is* the Intune-native contract; this repo ships a
+  detection script and an MSI bundle but no remediation half. **Avoid:** its unguarded apply.
+- **GEAnalyticsLabs/native-nvme** — architecturally the closest clone (ProgramData `state.json` +
+  ONLOGON scheduled task for reboot-resume, `manage-bde` suspend, USB recovery kit). **Learn:** the
+  three-phase workflow rendered as a *visible* cross-reboot state machine. **Avoid:** dead since
+  2025-12; Win11 Pro 25H2-only gate; no bind proof.
+- **ken-yossy/nvmetool-win** — raw NVMe admin/IO pass-through (Identify, log pages, SMART, self-test)
+  through the inbox driver. **Learn:** a richer inbox-IOCTL health path than this repo's `identify`
+  subset, which matters when vendor tools stop seeing drives post-swap. **Avoid:** dormant 17 months;
+  it is a diagnostic library, not an enabler.
+- **Windows Point-in-Time Restore / Quick Machine Recovery** (OS features, 2026) — the OS's own
+  answers to "snapshot before" and "can't boot after". **Learn:** PiTR captures user files/apps/certs
+  where a restore point does not; `reagentc /SetRecoveryTestmode` proves the recovery path *before*
+  touching the storage stack. **Avoid:** treating them as replacements for the recovery kit — they
+  are additional evidence, and QMR is off by default on Pro/Enterprise.
 
 ## Security, Privacy, and Reliability
-- ~~Verified~~ **FIXED** — the download is now gated on a SHA-256 archive manifest (`ViVeToolService` reports `IntegritySignal = "manifest-sha256"`), so the claim below no longer holds. Original finding — **unverified elevated third-party execution**: the ViVeTool fallback downloads `ViVeTool.exe` with `RequireIntegrity = false` and `AllowAuthenticodeFallback = false` (`src/NVMeDriverPatcher.Core/Services/ViVeToolService.cs:287`), gated only by host allowlist + a size range cross-checked against the GitHub API's self-reported `size` (same channel), then executes it elevated (`:449`). A compromised release, repo transfer, or same-sized MITM payload passes every check. This is a strictly weaker trust link than the app's own updater (`RequireIntegrity = true`). No SHA-256 sidecar exists upstream, so there is currently *no* content verification on an admin-run binary.
-- ~~Verified~~ **FIXED in 5.1.0** — the shared-config rework replaced this with PID+GUID temp names under a global mutex (`ConfigServiceConcurrencyTests`). Original finding — **cross-process config write race**: `ConfigService.Save` writes to a fixed `config.json.tmp` (`ConfigService.cs:207`) in shared `%ProgramData%`, which GUI, CLI, Tray, and Watchdog all target. Concurrent saves collide (`FileMode.Create`/`FileShare.None` throws for one writer; a `File.Move` can clobber the other's half-written temp), so the "atomic" write is not atomic across processes and a settings/state write can be silently dropped (only a Warning is logged).
-- **PARTLY FIXED** — preflight now surfaces protected data volumes (`BitLockerDataDrives`, covered by `BitLockerDataVolumeTests`); suspension itself is still system-drive only, so the access-loss risk below stands for a user who ignores the warning. Original finding — **BitLocker suspension is system-drive-only**: `SuspendBitLocker` acts on `%SystemDrive%` alone (`PatchService.cs:352`), yet the swap changes the driver stack for *all* NVMe controllers. A BitLocker-protected non-system NVMe volume without auto-unlock re-locks on the post-patch boot; unlike the HotSwap path (which warns via `DescribeBitLockerRisk`), apply neither warns nor suspends it. Access-loss, not data-loss.
-- **STILL OPEN** (re-checked 2026-08-11; note the premise "releases always ship sidecars" went false at 5.5.0 and is tracked separately) — **Authenticode fallback checks validity, not identity**: `VerifiedDownloader.VerifyAuthenticode` runs `signtool verify /pa` (chain/policy only), and `AutoUpdaterService` sets `AllowAuthenticodeFallback = true`. With no `.sha256` sidecar present, any validly-signed binary at the asset URL is accepted for the in-place self-replace; there is no expected signer/thumbprint pin. Low real-world exposure because releases always ship sidecars, but the fallback is unpinned.
-- **STILL OPEN** (re-checked 2026-08-11) — **FeatureStore write lock is process-local**: `FeatureStoreWriterService.WriteLock` is a `SemaphoreSlim(1,1)` (`FeatureStoreWriterService.cs:54`), but `RtlSetFeatureConfigurations` mutates machine-global state. Two elevated processes can interleave the Runtime-then-Boot two-phase write; the boot-failure rollback only reverts this process's Runtime write, risking a split Runtime/Boot state the verifier then reports as partial.
-- **STILL OPEN** (re-checked 2026-08-11) — **pre-patch `.reg` backup cannot undo an install**: `RegistryService.ExportRegistryBackup` records only pre-existing values (`:152`); re-importing it never deletes the keys the patch later adds (a real revert needs `"id"=-` and `[-...GUID]` directives). Recovery messaging that points users at this backup (`PatchService.cs:316`) over-promises in exactly the incomplete-rollback path.
-- ~~Verified~~ **FIXED** — `CompareBenchmarksCommand` now compares baseline against current. Original finding — **dead regression detector**: `CompareBenchmarksCommand` calls `AutoBenchmarkService.Compare(baseline, baseline, threshold)` (`Cli/Program.cs:494`); identical inputs always yield `Regressed = false` and exit 0, so a fleet script gating on this exit code gets false confidence.
-- ~~Verified~~ **FIXED 2026-08-11** — `/install` now quotes the binpath value, and the packaging smoke asserts the registered ImagePath is quoted. Original finding — **malformed manual service install**: the watchdog's own `/install` verb passes `binpath=` + a pre-quoted path through `ProcessStartInfo.ArgumentList` (`Watchdog/Program.cs:67`), which re-escapes the embedded quotes; on any spaced install path the `ImagePath` registers wrong and the service won't start. The MSI is unaffected (it uses a WiX `<ServiceInstall>`), so this only hits the documented manual route.
-- ~~Verified~~ **FIXED** — `ClassifyRestart` maps a timeout to `Unconfirmed`, pinned by `PatchServiceTests`. Original finding — **restart timeout reported as success**: `InitiateRestart` returns `true` when `shutdown.exe` doesn't exit within 5s (`PatchService.cs:867`); in the `--unattended` CLI flow this suppresses the "run shutdown manually" hint, so a machine that never actually reboots is indistinguishable from a queued restart.
-- Verified — privacy remains appropriately local-first: compat telemetry is explicit, anonymized, GPO-controllable, with no default receiver. Do not turn curated compat/build data into an unsigned auto-update channel.
-- Verified — issue #12: the shipping MSI shows lorem ipsum; `packaging/wix/README.md:21` also misstates the watchdog account (LocalSystem vs the installed LocalService).
-- Verified report; ACL cause needs live validation — issue #13 (build 26200.8737): the SafeBoot GUID keys already exist **in-box** with a named `NvmeDisk` REG_SZ value and deny writes. Microsoft is landing this state natively, so the write-then-delete-subtree model can erase OS-owned pre-state.
+
+- **Verified — unserviced .NET in an elevated process.** `global.json` pins SDK **10.0.301**;
+  installed SDK is 10.0.302 / runtime **10.0.10**. .NET **10.0.11** shipped 2026-08-11 with ten CVEs
+  including two RCE (CVE-2026-70354, CVE-2026-62897) and three EoP. Because all four exes publish
+  `SelfContained` + `PublishSingleFile` (`src/NVMeDriverPatcher/NVMeDriverPatcher.csproj`), users
+  receive **no** .NET servicing from Windows Update — and both GUI and CLI carry
+  `requireAdministrator`, so a runtime memory-safety defect is a privilege-boundary crossing.
+  Runtime currency must be a per-release gate, not a chore.
+- **Verified (primary dumps) — the primary path's feature IDs are stale.** `AppConfig.RegistryPath`
+  writes `SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides` with
+  `735209102`, `1853569164`, `156965516` (README's 5-component table). None of the three appears in
+  the 26100.8687, 26404.5000, or 29531.1000 dumps; the same feature *names* now carry
+  `NativeNVMeStackForGeClient: 60786016` (26100) / `55369237` (26404, 29531),
+  `UxAccOptimization: 48433719`, `Standalone_Future: 49453572`. The tool already knows the current
+  numbers — but only on the FeatureStore fallback path. Whether writing current IDs to the Policies
+  path binds is **Needs live validation**; reporting the mismatch is shippable now and is a strictly
+  more honest `status` than "no known route".
+- **Verified — a needless boot-critical mutation.** `Standalone_Future: 49453572` sits under
+  `## Always Enabled:` in all three sampled dumps, yet `FallbackFeatureCatalog.NativeNvmeStack25H2`
+  applies it. It cannot change behavior, but it enlarges the FeatureStore write, the ledger baseline,
+  and the restore obligation — including the priority-8 reset defect already on the roadmap.
+- **Verified (existence) / Needs live validation (causality) — untracked second gate.**
+  `NativeNVMeStackEnableForClientOS: 48613417` is `Disabled By Default` on 29531.1000 and has zero
+  references anywhere in this repo. `windows_build_rules.json`'s `26200-bind-blocked` and
+  `post-26200-trains-bind-blocked` rules both cite ViVe #164 as evidence of no route; #164's own
+  closing comment points at a missing extra ID.
+- **Verified — supply/maintenance risk in the fallback's secondary path.** ViVeTool: last commit
+  2025-03-10, dictionary current only to build 26236, GUI front-end deleted. `ViVeToolService`
+  correctly gates on a SHA-256 manifest, so this is not an integrity hole — it is a dead-upstream
+  risk that the fallback UI does not disclose.
+- **Verified — this tool can wedge the user's own escape hatch.** ViVe issue #166: values under
+  `Policies\Microsoft\FeatureManagement\Overrides` owned by TrustedInstaller make `vivetool
+  /fullreset` fail access-denied. That is precisely the key `PatchService` writes.
+- **Verified — locale trap, C# twin.** `Services/BypassIoInspectorService.cs:55-96` regex-matches
+  English `fsutil bypassio state` output (`RxBypassEnabled`, `RxStorageStack`). On non-English
+  Windows `Enabled` is always false and the gaming-impact warning silently degrades. The identical
+  defect in `NVMe_Driver_Patcher.ps1:986-1006` is already on the roadmap; the C# site is not — the
+  same "nobody checked the twin" pattern the repo logged on 2026-08-11 for the ACL predicate.
+- **Verified — no dependency-audit gate.** `Directory.Build.props` sets no `NuGetAuditMode` /
+  `NuGetAuditLevel`, and there are no `packages.lock.json` files.
+  `dotnet list package --vulnerable --include-transitive` is clean today; nothing *fails a build*
+  when it stops being clean.
+- **Verified — upgrade traps that would pass the suite while breaking the pin.**
+  (a) `SQLitePCLRaw.bundle_e_sqlite3` **3.0.5 switches its native dependency to a different package
+  id** (`SQLite` 3.53.4) — the repo's direct `SourceGear.sqlite3` pin would silently stop overriding
+  anything and ship a second native `e_sqlite3`, and `SqliteVersionTests` (a runtime version-string
+  check) would still pass. Go to **3.0.4**, not 3.0.5. (b) LiveCharts 2.0.5 declares SkiaSharp
+  2.88.9 / Views.WPF 3.119.0; the repo force-resolves 4.148.0, and SkiaSharp 4.150.0 promoted
+  pre-v4 obsolete APIs to errors — a removed member surfaces only as a runtime
+  `MissingMethodException` on a path `ChartingSmokeTests` may not hit.
+- **Verified — bundled native C libraries are current at the pin.** libpng 1.6.58, freetype 2.14.3,
+  libwebp 1.6.0 are all upstream-current in SkiaSharp 4.148.0; the only native delta to 4.151.1 is
+  HarfBuzz 14.2.0→14.2.1. The one gap, libexpat 2.8.1 vs 2.8.2 (13 CVEs), is **not** fixed by any
+  SkiaSharp release and is unreachable here (no SVG/XML parsed through Skia). The security case for
+  bumping SkiaSharp is nil; the *support-tier* case is real (4.148 was dropped from stable support).
+- **Verified — telemetry receiver drifted.** `packaging/telemetry-receiver/` declares no `wrangler`
+  dependency and has no lockfile, uses the deprecated `[[unsafe.bindings]]` rate-limiter surface
+  (stable `[[ratelimits]]` since wrangler 4.36.0), and pins `compatibility_date = 2026-04-19`.
+- **Verified — privacy posture remains correct.** Compat telemetry is explicit, anonymized,
+  GPO-controllable, with no default receiver. Do not turn curated compat/build data into an unsigned
+  auto-update channel.
 
 ## Architecture Assessment
-- Introduce one trusted action-policy boundary over `WindowsBuildRulesService`; GUI, CLI, fallback, dry-run, and restart decisions should consume the same disposition instead of re-interpreting advisory preflight strings.
-- Make `PatchVerificationService.Evaluate()` a pure read; run fallback recovery through a one-shot coordinator that owns reset, persistence, retry state, and user-visible outcome (tray/dashboard polling must never mutate FeatureStore state).
-- Give `ConfigService` an explicit persisted-state contract with round-trip + schema-parity tests, a per-process-unique temp name, and a cross-process mutex around the write.
-- Register a `DbConnectionInterceptor` (sync + async open) in `AppDbContext.OnConfiguring()` so every EF connection receives the checked SQLite defenses; keep `EnsureCreated()` for schema/WAL init only.
-- Treat SafeBoot edits as a reversible transaction: classify writable/already-correct/conflicting/denied GUID keys before writing, never take over ACLs, journal exact prior state durably, and restore byte-for-byte / delete only app-created state.
-- Refactor removal into per-component outcomes plus a final residue probe (registry overrides, owned SafeBoot entries, fallback IDs); success only after a zero-residue re-read.
-- Serialize the machine-global FeatureStore write with a named mutex, not a process-local semaphore.
-- Static safety data (`windows_build_rules.json`, `compat.json`) drifts against a fast-moving target and needs a periodic, sourced review pass, not one-time authorship.
-- Testing is broad; keep the fresh/stale provenance fixtures on an injected clock (already on the roadmap) so the canonical suite passes on any calendar date.
+
+- **Data model, not code, is the bottleneck.** `FallbackFeatureCatalog.SelectForBuild` decides by
+  `buildNumber >= 26200`, and `windows_build_rules.json` encodes verdicts (`none-known`) derived
+  from press and forum reports. Both should consume one curated table carrying, per branch and
+  build: feature *name*, numeric ID, and default-state class. Default-state is the missing axis —
+  `Always Disabled` is the only honest basis for "no route", and no sampled branch shows it.
+- **`AppConfig.RegistryPath` and `FeatureStoreWriterService`'s
+  `Control\FeatureManagement\Overrides` are two different hives with two different ID sets.** They
+  should share one resolved-per-build ID list so the registry and FeatureStore routes cannot drift
+  apart again.
+- **`BypassIoInspectorService` should be evidence-based, not text-based:** read
+  `Services\storport\Parameters\EnableBypassIO` from the registry, and check whether the bound
+  driver's INF declares `STORAGE_SUPPORTED_FEATURES_BYPASS_IO` — that converts the gaming-impact
+  warning from heuristic to proof.
+- **Recovery evidence should include OS-native rollback.** `RecoveryProofGateService` currently
+  hard-gates on System Protection being on; Point-in-Time Restore is a stronger, separate signal and
+  Quick Machine Recovery is testable pre-mutation via `reagentc /SetRecoveryTestmode`.
+- **Benchmarking is one fixed profile.** `BenchmarkService.CreateDiskSpdArguments` is
+  `-c128M -d30 -t4 -o16 -b4K -r -Sh -L`. A second QD1/QD2 desktop profile (and a 128K sequential
+  pass) is what turns "does this help me?" into an answer.
+- **Watchdog evidence is inferential.** `EventLogWatchdogService.WatchEvents` already includes the
+  classic `nvmedisk` source at ID 129 — good — but the driver also has a dedicated ETW provider
+  (`Microsoft-Windows-NvmeDisk`, `{9799276c-fb04-47e8-845e-36946045c218}`), which `EtwTraceService`
+  (a generic `wpr` profile wrapper) does not target.
+- **Test/doc gaps:** no gate asserts the runtime version embedded in a published artifact (the
+  existing `Validate-ReleaseAssets.ps1` MSI-SummaryInfo read is the pattern to copy); no gate covers
+  dependency audit; `Roadmap_Blocked.md` describes editing `.github/workflows/release.yml`, which
+  does not exist in this repo (build CI is banned by policy) — the item's mechanism is wrong.
 
 ## Rejected Ideas
-- Build-aware per-branch ViVeTool ID selection as *new* work — Source: 2026 ID-drift reports (elevenforum 46678, Win-Raid 113111). Reason: **already implemented** in `FallbackFeatureCatalog.SelectForBuild`; only incremental data refresh (e.g. evaluating the community `1409234060` client ID) is warranted, not a rebuild.
-- Automate the custom-INF/test-signing workaround — Source: ViVe issue #164. Reason: modifies/resigns inbox storage-driver matching and may need test-signing/Secure Boot changes outside the rollback model.
-- Integrate Windows Cloud rebuild as an app action — Source: Microsoft Cloud rebuild preview. Reason: it reformats the system disk; link only as last-resort recovery documentation.
-- Add firmware flashing, secure erase, SMART prediction, or general driver cleanup — Source: Samsung Magician, Solidigm Storage Tool, Driver Store Explorer. Reason: vendor/general tools own these risky domains; only compatibility guidance fits.
-- Build a full rescue-imaging product — Source: Macrium, Veeam. Reason: the recovery kit + blocked WinRE-inject item are the proportionate boundary.
-- Auto-download unsigned build rules or promote raw telemetry into `compat.json` — Source: current curated data model. Reason: action gating must not trust unreviewed community state.
-- Add NVMe-oF / NVMe 2.2 command tooling or device-fuzzing — Source: NVMe-oF Initiator Server preview, NVM Express 2.2. Reason: adjacent but unrelated to the Windows client class-driver swap; monitor as MS's investment direction only.
-- Expand into plugin ecosystems, mobile, multi-user/server control, full i18n, or theme work — Source: repo scope rule. Reason: none improves enable/verify/rollback; MSI product strings can be localized without broad product localization.
+
+- **Vendor the velocity dump files directly** — Source: phantomofearth repo. Reason: no LICENSE on
+  that repo, and auto-downloading unreviewed feature data contradicts this repo's curated-data
+  principle. Transcribe with citation instead.
+- **Vendor the FeatureStore RPC/ABI to drop ViVeTool entirely** — Source: ViVe dormancy analysis.
+  Reason: already largely moot — `FeatureStoreWriterService` is the primary path and ViVeTool is
+  only the secondary; taking full ownership of an undocumented, version-sensitive ABI on a
+  boot-critical store buys little and costs the third-party cross-check.
+- **Migrate WPF → WinUI 3 / Windows App SDK** — Source: platform survey. Reason: nothing in 2025–26
+  gives WinUI 3 a storage/recovery API WPF lacks, and it would cost the self-contained single-file,
+  no-prerequisite elevated-launch story the tool depends on.
+- **Warn on Data Deduplication, Storage Spaces, WSL2, Intel VMD/RST** — Source: community failure
+  reports. Reason: **already implemented** (`DriveService.cs:756, 785-816, 875`); no new work.
+- **Rebuild build-aware per-branch ID selection** — Source: ID-drift reports. Reason: already
+  implemented in `FallbackFeatureCatalog`; only the data behind it needs correcting.
+- **Automate the custom-INF / test-signing workaround** — Source: ViVe #164. Reason: resigning inbox
+  storage drivers falls outside the rollback model; the issue's owner closed it with the same
+  warning.
+- **Adopt WiX 6/7** — Source: WiX releases. Reason: v7 requires OSMF EULA acceptance (build error
+  WIX7015) with fees above $10k/yr revenue; `heat` removal would be a rewrite for no user benefit.
+  Stay on 5.0.2 and accept it is frozen.
+- **Firmware flashing, secure erase, SMART prediction, general driver-store cleanup, full rescue
+  imaging, NVMe-oF / NVMe 2.2 tooling, plugin ecosystem, mobile, multi-user server control, full
+  product i18n** — Source: vendor tools, Macrium/Veeam, Server vNext previews, repo scope rule.
+  Reason: none improves enable/verify/rollback. (i18n narrowly excepted: *locale-independent
+  probing* is a correctness fix and is on the roadmap; translating the product is not.)
+- **Accessibility rework** — Source: category sweep. Reason: `AccessibilityService`,
+  `HighContrastTheme.xaml`, `ThemeContrastTests`, `AccessibilitySmokeTests` and reduced-motion
+  support already exist; the one live gap (ThemedDialog accessible title) is already on the roadmap.
+  No new a11y items justified by evidence.
 
 ## Sources
-Official platform and standards:
-- https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353
-- https://learn.microsoft.com/en-us/windows-insider/release-notes/experimental/preview-build-26300-8758
-- https://learn.microsoft.com/en-us/windows-hardware/drivers/storage/stornvme-command-set-support
-- https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/power-management-for-storage-hardware-devices-nvme
+
+Microsoft / platform:
+- https://github.com/dotnet/core/blob/main/release-notes/10.0/10.0.11/10.0.11.md
+- https://techcommunity.microsoft.com/blog/windows-itpro-blog/point-in-time-restore-for-windows-11-is-now-generally-available/4508101
+- https://learn.microsoft.com/en-us/windows/configuration/cloud-rebuild/
 - https://learn.microsoft.com/en-us/windows-hardware/drivers/ifs/bypassio
-- https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/pnputil-command-syntax
-- https://learn.microsoft.com/en-us/powershell/module/storage/get-physicaldisk?view=windowsserver2025-ps
-- https://learn.microsoft.com/en-us/ef/core/logging-events-diagnostics/interceptors
+- https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/storport/ns-storport-stormq_miniport_interface
+- https://techcommunity.microsoft.com/blog/windows-itpro-blog/what-to-know-about-windows-11-version-26h1/4491941
+- https://support.microsoft.com/en-us/topic/windows-11-version-25h2-update-history-99c7f493-df2a-4832-bd2d-6706baa0dec0
+- https://github.com/MicrosoftDocs/windows-driver-docs/blob/staging/windows-driver-docs-pr/install/system-defined-device-setup-classes-available-to-vendors.md
 
-Dependencies, security, and installer:
-- https://sqlite.org/cves.html
-- https://www.sqlite.org/releaselog/current.html
-- https://www.nuget.org/packages/SourceGear.sqlite3/
-- https://docs.firegiant.com/wix3/howtos/ui_and_localization/make_installer_localizable/
+Feature-ID ground truth:
+- https://github.com/phantomofearth/windows-velocity-feature-lists
+- https://raw.githubusercontent.com/phantomofearth/windows-velocity-feature-lists/main/rs_prerelease/amd64/29531.1000.txt
+- https://raw.githubusercontent.com/phantomofearth/windows-velocity-feature-lists/main/ge_prerelease_im/amd64/26100.8687.txt
+- https://raw.githubusercontent.com/phantomofearth/windows-velocity-feature-lists/main/ge_prerelease/amd64/26404.5000.txt
 
-Native-NVMe ecosystem and community:
-- https://github.com/SysAdminDoc/win11-nvme-driver-patcher/issues/13
-- https://github.com/SysAdminDoc/win11-nvme-driver-patcher/issues/12
+Competitors and community:
 - https://github.com/thebookisclosed/ViVe/issues/164
+- https://github.com/thebookisclosed/ViVe/issues/166
+- https://github.com/thebookisclosed/ViVe/releases
+- https://github.com/FR33THYFR33THY/Ultimate/blob/main/8%20Advanced/19%20NVME%20Faster%20Driver.ps1
+- https://github.com/jhochwald/PowerShell-collection
+- https://github.com/TheBeardofKnowledge/Scripts-from-my-videos
 - https://github.com/GEAnalyticsLabs/native-nvme
-- https://github.com/1LUC1D4710N/nvme-performance-script
-- https://github.com/giosci1994/feature-overrides-registry
 - https://github.com/ken-yossy/nvmetool-win
+- https://www.storagereview.com/review/windows-server-native-nvme
 - https://winraid.level1techs.com/t/discussion-microsofts-native-nvme-disk-drive-support/113111
-- https://www.elevenforum.com/t/windows-11-25h2-nvmedisk-sys-driver-support.46678/
-- https://www.overclock.net/threads/enable-native-nvme-driver-in-windows-11-24h2-25h2-with-last-update.1818467/
 - https://www.tomshardware.com/software/windows/microsoft-blocks-the-registry-hack-trick-that-unlocked-native-nvme-performance-on-windows-11
-- https://www.ghacks.net/2025/12/26/this-registry-hack-unlocks-a-faster-nvme-driver-in-windows-11/
+- https://www.majorgeeks.com/files/details/nvme_driver_patcher_for_windows_11.html
 
-Firmware/hardware advisories:
-- https://www.heise.de/en/news/Against-blue-screens-Important-firmware-updates-for-Western-Digital-SSDs-9984513.html
-- https://support-en.sandisk.com/app/answers/detailweb/a_id/51469
-- https://eu.community.samsung.com/t5/computers-it/990-pro-2tb-disappearing-firmware-4b2qjxd7/td-p/12822796
-- https://www.neowin.net/news/wd-sn850x-nvme-ssd-that-beat-samsung-seagate-crucial-hynix-bsoding-freezing-windows-11/
-- https://rossmanngroup.com/problems/windows-11-24h2-ssd-missing
-- https://community.intel.com/t5/Intel-Optane-Solid-State-Drives/Win11-newest-update-destroy-VMD-driver/m-p/1722976
+Recovery and diagnostics:
+- https://4sysops.com/archives/quick-machine-recovery-in-windows-11/
+- https://4sysops.com/archives/configure-windows-11-point-in-time-restore/
+- https://github.com/libyal/winevt-kb/blob/main/docs/sources/eventlog-providers/Provider-Microsoft-Windows-NvmeDisk.md
+
+Dependencies:
+- https://github.com/mono/SkiaSharp/releases/tag/v4.150.0
+- https://github.com/mono/SkiaSharp/pull/4502
+- https://blog.hartwork.org/posts/expat-2-8-2-released/
+- https://www.sqlite.org/changes.html
+- https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/
+- https://github.com/wixtoolset/issues/issues/9196
 
 ## Open Questions
-- Samsung 990 Pro firmware truth: community sources report `4B2QJXD7` as the *bad* disappearing-drive revision fixed by `6B2QJXD7`, while `compat.json` currently cautions `7B2QJXD7` and recommends updating *to* `4B2QJXD7`. Which revision is actually degraded for the native-stack case needs a first-party Samsung confirmation before editing the entry. (Blocks correct `compat.json` data only.)
-- Exact registry-override block build: press reports the hard block at Insider `26100.8106`; `windows_build_rules.json` models it fuzzily around `26100`/`26200.8524+`. Confirming the precise UBR would let `status` be honest per-branch. (Data precision, not prioritization.)
-- Hardware-only validation (WinRE inject `--commit`, ARM64 launch, debloat/LTSC bind reproduction) remains isolated in `Roadmap_Blocked.md`.
+
+- **Does writing the current-branch IDs to `Policies\Microsoft\FeatureManagement\Overrides` bind the
+  driver on 26200+?** The IDs are now known; whether the Policies hive is neutered independently of
+  ID rotation is not. Blocks the choice between "correct the registry path" and "report the mismatch
+  and stay verify-only". Requires a live 26200.8xxx machine.
+- **Is `NativeNVMeStackEnableForClientOS: 48613417` a required co-gate on 26200+?** Its existence is
+  verified; its necessity is inferred from ViVe #164's closing comment. Blocks whether it becomes an
+  applied ID or a probe-only evidence field.
+- **Samsung 990 Pro firmware truth** (carried forward, still unresolved): community sources call
+  `4B2QJXD7` the bad revision fixed by `6B2QJXD7`; `compat.json` cautions `7B2QJXD7` and recommends
+  updating *to* `4B2QJXD7`. Needs first-party Samsung confirmation before editing. Blocks correct
+  `compat.json` data only.
+- Hardware-only validation (WinRE inject `--commit`, ARM64 launch, debloat/LTSC bind reproduction,
+  Windows Sandbox package lifecycle, OEM VMD/RAID WinPE media) remains isolated in
+  `Roadmap_Blocked.md`.
