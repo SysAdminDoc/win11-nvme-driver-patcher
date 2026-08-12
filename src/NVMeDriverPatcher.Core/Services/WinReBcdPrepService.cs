@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 namespace NVMeDriverPatcher.Services;
 
@@ -11,6 +12,14 @@ public class WinReProvisionInfo
     public string? DeviceGuid { get; set; }
     public string Summary { get; set; } = string.Empty;
     public bool NeedsReagentcInstall { get; set; }
+}
+
+public sealed class QuickMachineRecoverySettings
+{
+    public bool QuerySucceeded { get; init; }
+    public bool? CloudRemediationEnabled { get; init; }
+    public bool? AutoRemediationEnabled { get; init; }
+    public string Summary { get; init; } = string.Empty;
 }
 
 // Probes the Windows Recovery Environment (reagentc /info) and the BCD entry for WinRE
@@ -125,6 +134,86 @@ public static class WinReBcdPrepService
             log?.Invoke($"[ERROR] Could not invoke reagentc: {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Read the documented Quick Machine Recovery settings without changing recovery state.
+    /// The command emits an XML document that may contain Wi-Fi credentials; only the two
+    /// boolean remediation states are returned to callers.
+    /// </summary>
+    public static QuickMachineRecoverySettings ProbeQuickMachineRecovery()
+    {
+        try
+        {
+            var result = RunCapture(SystemToolPathService.Resolve("reagentc.exe"), new[] { "/getrecoverysettings" }, 20);
+            var parsed = ParseRecoverySettings(result.Stdout);
+            if (result.ExitCode != 0 || !parsed.Parsed)
+            {
+                return new QuickMachineRecoverySettings
+                {
+                    Summary = "Quick Machine Recovery settings are not exposed by reagentc on this build or policy."
+                };
+            }
+
+            return new QuickMachineRecoverySettings
+            {
+                QuerySucceeded = true,
+                CloudRemediationEnabled = parsed.CloudRemediationEnabled,
+                AutoRemediationEnabled = parsed.AutoRemediationEnabled,
+                Summary = "Quick Machine Recovery settings were read from reagentc."
+            };
+        }
+        catch (Exception ex)
+        {
+            return new QuickMachineRecoverySettings
+            {
+                Summary = $"Quick Machine Recovery settings could not be read ({ex.GetType().Name})."
+            };
+        }
+    }
+
+    /// <summary>
+    /// Parses only the QMR state attributes from reagentc's XML response. Never return the XML
+    /// or arbitrary attributes because the response can contain configured Wi-Fi credentials.
+    /// </summary>
+    internal static (bool Parsed, bool? CloudRemediationEnabled, bool? AutoRemediationEnabled)
+        ParseRecoverySettings(string? stdout)
+    {
+        if (string.IsNullOrWhiteSpace(stdout))
+            return (false, null, null);
+
+        try
+        {
+            var start = stdout.IndexOf("<WindowsRE", StringComparison.OrdinalIgnoreCase);
+            if (start < 0) return (false, null, null);
+            var endMarker = "</WindowsRE>";
+            var end = stdout.IndexOf(endMarker, start, StringComparison.OrdinalIgnoreCase);
+            if (end < 0) return (false, null, null);
+            var xml = stdout.Substring(start, end + endMarker.Length - start);
+            var document = XDocument.Parse(xml, LoadOptions.None);
+            var cloud = ParseRecoveryState(document.Descendants()
+                .FirstOrDefault(element => element.Name.LocalName.Equals("CloudRemediation", StringComparison.OrdinalIgnoreCase)));
+            var auto = ParseRecoveryState(document.Descendants()
+                .FirstOrDefault(element => element.Name.LocalName.Equals("AutoRemediation", StringComparison.OrdinalIgnoreCase)));
+            return (true, cloud, auto);
+        }
+        catch
+        {
+            return (false, null, null);
+        }
+    }
+
+    private static bool? ParseRecoveryState(XElement? element)
+    {
+        var state = element?.Attribute("state")?.Value;
+        if (string.IsNullOrWhiteSpace(state)) return null;
+        return state.Trim() switch
+        {
+            "1" => true,
+            "0" => false,
+            _ when bool.TryParse(state, out var value) => value,
+            _ => null
+        };
     }
 
     private static (int ExitCode, string Stdout, string Stderr) RunCapture(string exe, string[] args, int timeoutSeconds)

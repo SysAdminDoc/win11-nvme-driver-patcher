@@ -1327,10 +1327,12 @@ class Program
 
         Console.WriteLine("SCOPE: the registry/feature mutation is machine-wide. Every eligible NVMe drive/controller is subject to the same Windows driver selection; drive_scope.json exclusions are not enforced.");
 
-        var proof = RecoveryProofGateService.Evaluate(config);
+        var proof = RecoveryProofGateService.Evaluate(config, preflight.OsRecoveryEvidence);
         Console.WriteLine($"Recovery readiness: {proof.PassedCount}/{proof.TotalCount}");
         foreach (var item in proof.Items)
             Console.WriteLine($"  [{(item.Passed ? "OK" : "!!")}] {item.Label}: {item.Detail}");
+        if (proof.OsRecovery is not null)
+            Console.WriteLine($"  [ADVISORY] {proof.OsRecovery.Summary}");
         if (!proof.AllPassed && !force)
         {
             Console.Error.WriteLine("Recovery infrastructure is incomplete. Fix the items above or use --force to override.");
@@ -1714,6 +1716,8 @@ class Program
         Console.WriteLine($"Recovery readiness: {proof.PassedCount}/{proof.TotalCount}");
         foreach (var item in proof.Items)
             Console.WriteLine($"  [{(item.Passed ? "OK" : "!!")}] {item.Label}: {item.Detail}");
+        if (proof.OsRecovery is not null)
+            Console.WriteLine($"  [ADVISORY] {proof.OsRecovery.Summary}");
         Console.WriteLine();
         Console.WriteLine(proof.AllPassed ? "Ready to apply." : "Fix the items above before applying.");
         return proof.AllPassed ? 0 : 1;
@@ -1722,13 +1726,15 @@ class Program
     static int CriticalPreflightCommand(bool json)
     {
         var report = CriticalEnvironmentProbeService.EvaluateRegistryPatch();
+        var osRecovery = OsRecoveryEvidenceService.Probe();
         if (json)
         {
-            Console.WriteLine(CliJson.Serialize("preflight", CliJson.BuildCriticalProbes(report)));
+            Console.WriteLine(CliJson.Serialize("preflight", CliJson.BuildCriticalProbes(report, osRecovery)));
             return report.ExitCode;
         }
 
         Console.WriteLine(report.Summary);
+        Console.WriteLine($"OS-native recovery advisory: {osRecovery.Summary}");
         foreach (var item in report.Items)
         {
             Console.WriteLine($"  [{item.Verdict}] {item.Label} [{item.ReasonCode}]: {item.Detail}");

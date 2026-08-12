@@ -1059,6 +1059,11 @@
                                                                    FontSize="13"
                                                                    FontWeight="SemiBold"
                                                                    TextWrapping="Wrap"/>
+                                                        <TextBlock Text="{Binding OsRecoverySummaryText}"
+                                                                   Margin="0,6,0,0"
+                                                                   Foreground="{DynamicResource TextSecondary}"
+                                                                   FontSize="11.5"
+                                                                   TextWrapping="Wrap"/>
                                                     </StackPanel>
 
                                                     <WrapPanel VerticalAlignment="Center">

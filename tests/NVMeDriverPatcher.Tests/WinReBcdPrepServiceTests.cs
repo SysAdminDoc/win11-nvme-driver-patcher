@@ -98,4 +98,48 @@ public sealed class WinReBcdPrepServiceTests
         Assert.False(enabled);
         Assert.Null(guid);
     }
+
+    [Fact]
+    public void ParseRecoverySettings_ReadsRemediationStatesWithoutReturningSensitivePayload()
+    {
+        const string stdout = """
+            reagentc settings:
+            <WindowsRE>
+              <CloudRemediation state="1" />
+              <AutoRemediation state="0" />
+              <WifiProfile ssid="office" password="secret-that-must-not-be-returned" />
+            </WindowsRE>
+            """;
+
+        var parsed = WinReBcdPrepService.ParseRecoverySettings(stdout);
+
+        Assert.True(parsed.Parsed);
+        Assert.True(parsed.CloudRemediationEnabled);
+        Assert.False(parsed.AutoRemediationEnabled);
+    }
+
+    [Fact]
+    public void ParseRecoverySettings_AcceptsBooleanStateAttributes()
+    {
+        const string stdout = "<WindowsRE><CloudRemediation state=\"true\" /><AutoRemediation state=\"false\" /></WindowsRE>";
+
+        var parsed = WinReBcdPrepService.ParseRecoverySettings(stdout);
+
+        Assert.True(parsed.Parsed);
+        Assert.True(parsed.CloudRemediationEnabled);
+        Assert.False(parsed.AutoRemediationEnabled);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("<WindowsRE>")]
+    public void ParseRecoverySettings_RejectsMissingOrMalformedXml(string? stdout)
+    {
+        var parsed = WinReBcdPrepService.ParseRecoverySettings(stdout);
+
+        Assert.False(parsed.Parsed);
+        Assert.Null(parsed.CloudRemediationEnabled);
+        Assert.Null(parsed.AutoRemediationEnabled);
+    }
 }

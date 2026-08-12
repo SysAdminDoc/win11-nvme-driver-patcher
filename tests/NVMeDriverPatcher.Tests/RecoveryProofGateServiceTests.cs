@@ -75,6 +75,24 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
     }
 
     [Fact]
+    public void OsRecoveryAdvisory_DoesNotChangeRecoveryGateVerdict()
+    {
+        var report = new RecoveryProofReport
+        {
+            OsRecovery = new OsRecoveryEvidence
+            {
+                PointInTimeRestoreSupported = false,
+                QuickMachineRecoverySupported = false
+            }
+        };
+        report.Items.Add(new() { Label = "Recovery kit", Passed = true, Detail = "fresh" });
+
+        Assert.True(report.AllPassed);
+        Assert.Contains("Advisory", report.Summary);
+        Assert.Contains("not exposed", report.Summary);
+    }
+
+    [Fact]
     public void Summary_WhenAllPassed_DoesNotContainNotReady()
     {
         var report = new RecoveryProofReport();

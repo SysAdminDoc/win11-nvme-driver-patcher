@@ -90,6 +90,9 @@ public static class CliJson
             Passed = i.Passed,
             Detail = i.Detail,
         }).ToList(),
+        OsRecovery = report.OsRecovery is { } osRecovery
+            ? BuildOsRecovery(osRecovery)
+            : null,
         BitLocker = report.BitLockerRecovery is { } proof
             ? new BitLockerRecoveryJson
             {
@@ -107,7 +110,9 @@ public static class CliJson
             : null,
     };
 
-    public static CriticalProbeReportJson BuildCriticalProbes(CriticalProbeReport report) => new()
+    public static CriticalProbeReportJson BuildCriticalProbes(
+        CriticalProbeReport report,
+        OsRecoveryEvidence? osRecovery = null) => new()
     {
         Scope = report.Scope.ToString(),
         AllPassed = report.AllPassed,
@@ -124,6 +129,22 @@ public static class CliJson
             Evidence = item.Evidence.ToList(),
             ObservedAtUtc = item.ObservedAtUtc,
         }).ToList(),
+        OsRecovery = osRecovery is null ? null : BuildOsRecovery(osRecovery),
+    };
+
+    private static OsRecoveryJson BuildOsRecovery(OsRecoveryEvidence evidence) => new()
+    {
+        PointInTimeRestoreSupported = evidence.PointInTimeRestoreSupported,
+        PointInTimeRestoreEnabled = evidence.PointInTimeRestoreEnabled,
+        RestorePointQuerySucceeded = evidence.RestorePointQuerySucceeded,
+        NewestRestorePointUtc = evidence.NewestRestorePointUtc,
+        PointInTimeRestoreSummary = evidence.PointInTimeRestoreSummary,
+        QuickMachineRecoverySupported = evidence.QuickMachineRecoverySupported,
+        QuickMachineRecoveryEnabled = evidence.QuickMachineRecoveryEnabled,
+        QuickMachineRecoveryAutoRemediationEnabled = evidence.QuickMachineRecoveryAutoRemediationEnabled,
+        QuickMachineRecoveryQuerySucceeded = evidence.QuickMachineRecoveryQuerySucceeded,
+        QuickMachineRecoverySummary = evidence.QuickMachineRecoverySummary,
+        Summary = evidence.Summary,
     };
 
     public static BypassIoJson BuildBypassIo(BypassIOResult result) => new()
@@ -320,6 +341,22 @@ public sealed class RecoveryProofJson
     public int TotalCount { get; set; }
     public List<RecoveryProofItemJson> Items { get; set; } = new();
     public BitLockerRecoveryJson? BitLocker { get; set; }
+    public OsRecoveryJson? OsRecovery { get; set; }
+}
+
+public sealed class OsRecoveryJson
+{
+    public bool PointInTimeRestoreSupported { get; set; }
+    public bool? PointInTimeRestoreEnabled { get; set; }
+    public bool RestorePointQuerySucceeded { get; set; }
+    public DateTimeOffset? NewestRestorePointUtc { get; set; }
+    public string PointInTimeRestoreSummary { get; set; } = string.Empty;
+    public bool QuickMachineRecoverySupported { get; set; }
+    public bool? QuickMachineRecoveryEnabled { get; set; }
+    public bool? QuickMachineRecoveryAutoRemediationEnabled { get; set; }
+    public bool QuickMachineRecoveryQuerySucceeded { get; set; }
+    public string QuickMachineRecoverySummary { get; set; } = string.Empty;
+    public string Summary { get; set; } = string.Empty;
 }
 
 public sealed class BitLockerRecoveryJson
@@ -350,6 +387,7 @@ public sealed class CriticalProbeReportJson
     public bool HasUnknown { get; set; }
     public int ExitCode { get; set; }
     public List<CriticalProbeJson> Items { get; set; } = new();
+    public OsRecoveryJson? OsRecovery { get; set; }
 }
 
 public sealed class CriticalProbeJson
