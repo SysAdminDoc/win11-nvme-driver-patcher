@@ -52,6 +52,25 @@ public sealed class CliJsonTests
     }
 
     [Fact]
+    public void Status_ReportsRegistryOverrideCompatibility()
+    {
+        var assessment = FallbackFeatureCatalog.AssessRegistryOverrides(
+            new WindowsBuildDetails { BuildNumber = 26100, UBR = 8687 },
+            AppConfig.FeatureIDs);
+        var data = Parse("status", CliJson.BuildStatus(
+                new PatchStatus(), null, EnablementSource.None, null, assessment))
+            .GetProperty("data");
+
+        var registry = data.GetProperty("registryOverride");
+        Assert.Equal(26100, registry.GetProperty("buildNumber").GetInt32());
+        Assert.Equal("pre-26200 sampled branch", registry.GetProperty("branch").GetString());
+        Assert.True(registry.GetProperty("hasMismatch").GetBoolean());
+        Assert.Equal("735209102", registry.GetProperty("features")[0].GetProperty("registryId").GetString());
+        Assert.Equal(60786016, registry.GetProperty("features")[0].GetProperty("knownBranchId").GetInt32());
+        Assert.False(registry.GetProperty("features")[0].GetProperty("matchesKnownFeature").GetBoolean());
+    }
+
+    [Fact]
     public void Watchdog_FieldNamesAreStable()
     {
         var report = new WatchdogReport

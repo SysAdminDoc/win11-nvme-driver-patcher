@@ -58,4 +58,45 @@ public sealed class FallbackFeatureCatalogTests
         Assert.Equal("60786016 and 48433719", FallbackFeatureCatalog.PostBlockMarch2026.IdsDisplay);
         Assert.Equal("55369237, 48433719 and 49453572", FallbackFeatureCatalog.NativeNvmeStack25H2.IdsDisplay);
     }
+
+    [Fact]
+    public void RegistryOverrideAssessment_Pre26200_ReportsExplicitMismatches()
+    {
+        var assessment = FallbackFeatureCatalog.AssessRegistryOverrides(
+            new WindowsBuildDetails { BuildNumber = 26100, UBR = 8687 },
+            AppConfig.FeatureIDs);
+
+        Assert.True(assessment.BranchKnown);
+        Assert.Equal("pre-26200 sampled branch", assessment.Branch);
+        Assert.Equal(3, assessment.MismatchCount);
+        Assert.Equal(60786016, assessment.Features[0].KnownBranchId);
+        Assert.Equal("NativeNVMeStackForGeClient", assessment.Features[0].FeatureName);
+        Assert.All(assessment.Features, feature => Assert.False(feature.MatchesKnownFeature));
+        Assert.Contains("MISMATCH", assessment.Features[0].Detail);
+        Assert.Contains("3 MISMATCH(es)", assessment.Summary);
+    }
+
+    [Fact]
+    public void RegistryOverrideAssessment_Post26200_UsesRotatedPrimaryId()
+    {
+        var assessment = FallbackFeatureCatalog.AssessRegistryOverrides(
+            new WindowsBuildDetails { BuildNumber = 26404, UBR = 5000 },
+            AppConfig.FeatureIDs);
+
+        Assert.Equal(55369237, assessment.Features.Single(f => f.FeatureName == "NativeNVMeStackForGeClient").KnownBranchId);
+        Assert.Equal(48433719, assessment.Features.Single(f => f.FeatureName == "UxAccOptimization").KnownBranchId);
+        Assert.Equal(49453572, assessment.Features.Single(f => f.FeatureName == "Standalone_Future").KnownBranchId);
+        Assert.True(assessment.HasMismatch);
+    }
+
+    [Fact]
+    public void RegistryOverrideAssessment_WithoutBuild_IsExplicitlyUnknown()
+    {
+        var assessment = FallbackFeatureCatalog.AssessRegistryOverrides(null, AppConfig.FeatureIDs);
+
+        Assert.False(assessment.BranchKnown);
+        Assert.False(assessment.HasMismatch);
+        Assert.Contains("build unavailable", assessment.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNKNOWN", assessment.Features[0].Detail);
+    }
 }
