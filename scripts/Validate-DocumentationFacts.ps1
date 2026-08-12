@@ -17,6 +17,17 @@ $RepoRoot = $RepoRoot.ToString()
 
 $failures = New-Object System.Collections.Generic.List[string]
 
+$dotnetCandidates = @()
+if ($env:DOTNET_ROOT) { $dotnetCandidates += Join-Path $env:DOTNET_ROOT 'dotnet.exe' }
+if (${env:DOTNET_ROOT(x86)}) { $dotnetCandidates += Join-Path ${env:DOTNET_ROOT(x86)} 'dotnet.exe' }
+$dotnetCandidates += Join-Path ${env:ProgramFiles} 'dotnet\dotnet.exe'
+$dotnetPath = $dotnetCandidates |
+    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+    Select-Object -First 1
+if (-not $dotnetPath) {
+    $failures.Add('dotnet.exe was not found in DOTNET_ROOT or Program Files')
+}
+
 function Relative([string]$Path) {
     $Path.Substring($RepoRoot.Length).TrimStart(
         [System.IO.Path]::DirectorySeparatorChar,
@@ -139,11 +150,15 @@ if ($null -ne $readme) {
 if ($DiscoveredTestCount -lt 0) {
     $testProject = Join-Path $RepoRoot 'tests/NVMeDriverPatcher.Tests/NVMeDriverPatcher.Tests.csproj'
     if (Test-Path -LiteralPath $testProject -PathType Leaf) {
-        $output = & dotnet test $testProject --no-restore --list-tests --verbosity quiet 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            $failures.Add("test discovery failed with exit $LASTEXITCODE")
+        if (-not $dotnetPath) {
             $DiscoveredTestCount = 0
         } else {
+            $output = & $dotnetPath test $testProject --no-restore --list-tests --verbosity quiet 2>&1
+        }
+        if ($dotnetPath -and $LASTEXITCODE -ne 0) {
+            $failures.Add("test discovery failed with exit $LASTEXITCODE")
+            $DiscoveredTestCount = 0
+        } elseif ($dotnetPath) {
             $DiscoveredTestCount = @($output | Where-Object {
                 $_ -match '^\s+NVMeDriverPatcher\.Tests\.'
             }).Count

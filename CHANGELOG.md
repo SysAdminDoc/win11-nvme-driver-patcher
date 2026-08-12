@@ -7,6 +7,8 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ### Security
 - Release publishing now requires SDK 10.0.303 or newer, embeds .NET runtime 10.0.11 or newer
   in every self-contained executable, and rejects older runtime payloads from the release gate.
+- Packaging and documentation validation now reject PATH/CWD tool resolution hidden behind
+  `Invoke-Checked` or extensionless names; release tools are resolved to absolute paths first.
 
 ### Added
 - The built-in DiskSpd benchmark now records the existing high-QD profile alongside a desktop
