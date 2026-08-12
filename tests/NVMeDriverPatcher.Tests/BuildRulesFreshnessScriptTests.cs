@@ -27,6 +27,31 @@ public sealed class BuildRulesFreshnessScriptTests
         }
         """;
 
+    private static string FeatureCatalog(string lastReviewed, string updated = ReviewDate) => $$"""
+        {
+          "schemaVersion": 1,
+          "updated": "{{updated}}",
+          "sourceUrl": "https://example.invalid/catalog",
+          "branches": [
+            {
+              "id": "fixture-branch",
+              "minBuild": 26100,
+              "maxBuild": 26199,
+              "minUbr": 0,
+              "maxUbr": 2147483647,
+              "appliesTo": "fixture",
+              "fallbackSet": "fixture-set",
+              "confidence": "verified",
+              "sourceUrl": "https://example.invalid/branch",
+              "lastReviewed": "{{lastReviewed}}",
+              "features": [
+                { "name": "NativeNVMeStackForGeClient", "id": 60786016, "defaultState": "Disabled By Default", "apply": true }
+              ]
+            }
+          ]
+        }
+        """;
+
     [Fact]
     public void FreshRuleset_Passes()
     {
@@ -123,6 +148,16 @@ public sealed class BuildRulesFreshnessScriptTests
         Assert.Equal(0, result.ExitCode);
     }
 
+    [Fact]
+    public void StaleFeatureCatalog_FailsTheReleaseGate()
+    {
+        var result = RunWithFeatureCatalog(FeatureCatalog(ReviewDate), asOf: "2026-09-02");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("feature:fixture-branch", result.StdOut, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("feature-ID selection is untrusted", result.StdOut, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ScriptResult Run(string rulesetJson, string asOf)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nvme-rules-{Guid.NewGuid():N}.json");
@@ -137,7 +172,24 @@ public sealed class BuildRulesFreshnessScriptTests
         }
     }
 
-    private static ScriptResult RunAgainst(string rulesPath, string asOf)
+    private static ScriptResult RunWithFeatureCatalog(string featureJson, string asOf)
+    {
+        var rulesPath = Path.Combine(Path.GetTempPath(), $"nvme-rules-{Guid.NewGuid():N}.json");
+        var featurePath = Path.Combine(Path.GetTempPath(), $"nvme-features-{Guid.NewGuid():N}.json");
+        File.WriteAllText(rulesPath, Ruleset(ReviewDate));
+        File.WriteAllText(featurePath, featureJson);
+        try
+        {
+            return RunAgainst(rulesPath, asOf, featurePath);
+        }
+        finally
+        {
+            try { File.Delete(rulesPath); } catch { /* best effort */ }
+            try { File.Delete(featurePath); } catch { /* best effort */ }
+        }
+    }
+
+    private static ScriptResult RunAgainst(string rulesPath, string asOf, string? featureIdsPath = null)
     {
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo("powershell.exe")
@@ -146,11 +198,19 @@ public sealed class BuildRulesFreshnessScriptTests
             RedirectStandardOutput = true,
             UseShellExecute = false
         };
-        foreach (var arg in new[]
-                 {
-                     "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ScriptPath(),
-                     "-RulesPath", rulesPath, "-AsOf", asOf
-                 })
+        var arguments = new List<string>
+        {
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ScriptPath(),
+            "-RulesPath", rulesPath
+        };
+        if (!string.IsNullOrEmpty(featureIdsPath))
+        {
+            arguments.Add("-FeatureIdsPath");
+            arguments.Add(featureIdsPath);
+        }
+        arguments.Add("-AsOf");
+        arguments.Add(asOf);
+        foreach (var arg in arguments)
         {
             process.StartInfo.ArgumentList.Add(arg);
         }

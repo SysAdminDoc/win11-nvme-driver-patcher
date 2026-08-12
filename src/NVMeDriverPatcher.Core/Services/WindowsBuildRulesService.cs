@@ -148,6 +148,23 @@ public static class WindowsBuildRulesService
         catch { return null; }
     }
 
+    /// <summary>
+    /// Resolves a feature's curated default-state for the same build/UBR used by the build-rule
+    /// engine. A branch with an explicit <c>Always Disabled</c> row is reported differently from
+    /// a branch where the feature is absent, which is an unknown-data condition.
+    /// </summary>
+    public static FeatureRouteAssessment AssessFeatureRoute(
+        WindowsBuildDetails? buildDetails,
+        string featureName,
+        string? workingDir = null) =>
+        FeatureIdCatalogService.AssessFeature(buildDetails, featureName, workingDir);
+
+    public static string DescribeFeatureRoute(
+        WindowsBuildDetails? buildDetails,
+        string featureName,
+        string? workingDir = null) =>
+        AssessFeatureRoute(buildDetails, featureName, workingDir).Detail;
+
     public static string Describe(WindowsBuildRule? rule) =>
         rule is null
             ? "No rule matches this Windows build — behavior unknown. Proceed conservatively and share diagnostics."

@@ -76,4 +76,20 @@ public sealed class WindowsBuildRulesServiceTests
         foreach (var r in rs.Rules.Where(r => !string.IsNullOrEmpty(r.FallbackSet)))
             Assert.Contains(r.FallbackSet!, known);
     }
+
+    [Fact]
+    public void DescribeFeatureRoute_UsesDefaultStateAndKeepsUnknownDistinct()
+    {
+        var build = new Models.WindowsBuildDetails { BuildNumber = 29531, UBR = 1000 };
+
+        var alwaysEnabled = WindowsBuildRulesService.DescribeFeatureRoute(
+            build, "Standalone_Future");
+        var unknown = WindowsBuildRulesService.DescribeFeatureRoute(
+            build, "FeatureAbsentFromCuratedBranch");
+
+        Assert.Contains("Always Enabled", alwaysEnabled);
+        Assert.Contains("49453572", alwaysEnabled);
+        Assert.Contains("UNKNOWN", unknown);
+        Assert.DoesNotContain("Always Disabled", unknown);
+    }
 }

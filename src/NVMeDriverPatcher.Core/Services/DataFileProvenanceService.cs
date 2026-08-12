@@ -14,6 +14,7 @@ public static class DataFileProvenanceService
         return
         [
             InspectWindowsBuildRules(workingDir, staleAfterDays),
+            InspectFeatureIds(workingDir, staleAfterDays),
             InspectFirmwareCompat(workingDir, staleAfterDays)
         ];
     }
@@ -23,6 +24,14 @@ public static class DataFileProvenanceService
             "Windows build rules",
             "windows_build_rules.json",
             string.IsNullOrWhiteSpace(workingDir) ? null : AppConfig.GetPrivilegedStateDirectory(workingDir),
+            AppContext.BaseDirectory,
+            staleAfterDays);
+
+    public static DataFileProvenance InspectFeatureIds(string? workingDir = null, int staleAfterDays = DefaultStaleAfterDays) =>
+        Inspect(
+            "Curated feature ID catalog",
+            FeatureIdCatalogService.BundledCatalogFile,
+            FeatureCatalogWorkingDirectory(workingDir),
             AppContext.BaseDirectory,
             staleAfterDays);
 
@@ -132,6 +141,16 @@ public static class DataFileProvenanceService
             : $"fresh: reviewed {DisplayDate(file.NewestLastReviewed)}";
         var custom = file.IsCustomized ? ", customized" : string.Empty;
         return $"{file.FileName}: {file.SourceKind}{custom}, schema {file.SchemaVersion}, {freshness}, sha256 {ShortHash(file.Sha256)}.";
+    }
+
+    private static string? FeatureCatalogWorkingDirectory(string? workingDir)
+    {
+        if (string.IsNullOrWhiteSpace(workingDir))
+            return null;
+
+        return AppConfig.IsRuntimeWorkingDirectory(workingDir)
+            ? AppConfig.GetPrivilegedStateDirectory(workingDir)
+            : workingDir;
     }
 
     private static bool IsStale(string date, int staleAfterDays, DateTime nowUtc)

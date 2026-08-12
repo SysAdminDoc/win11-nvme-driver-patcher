@@ -1,3 +1,5 @@
+using NVMeDriverPatcher.Services;
+
 namespace NVMeDriverPatcher.Models;
 
 /// <summary>A named set of ViVeTool/FeatureStore fallback feature IDs with provenance.</summary>
@@ -58,8 +60,8 @@ public sealed record RegistryOverrideAssessment(
 /// Single source of truth for every known fallback feature-ID set. Microsoft has rotated
 /// these once already (the March 2026 block) and community reports show newer 25H2 builds
 /// moved again — every UI string, CLI message, ViVeTool invocation, and FeatureStore
-/// evidence probe must derive from here instead of hardcoding IDs (previously duplicated
-/// across 8+ files).
+/// evidence probe must derive from the reviewed feature_ids.json catalog instead of a
+/// build-number heuristic or duplicated IDs.
 /// </summary>
 public static class FallbackFeatureCatalog
 {
@@ -68,72 +70,47 @@ public static class FallbackFeatureCatalog
     public const string CandidateSecondGateSourceUrl =
         "https://github.com/phantomofearth/windows-velocity-feature-lists";
 
-    // These are the feature names/IDs observed in the sampled velocity dumps. They are used
-    // for status and dry-run disclosure only; the registry payload remains AppConfig's legacy
-    // write set until the live-hardware question in RESEARCH.md is resolved.
-    private static readonly IReadOnlyDictionary<string, int> Pre26200RegistryFeatureIds =
-        new Dictionary<string, int>(StringComparer.Ordinal)
-        {
-            ["NativeNVMeStackForGeClient"] = 60786016,
-            ["UxAccOptimization"] = 48433719,
-            ["Standalone_Future"] = 49453572,
-        };
-
-    private static readonly IReadOnlyDictionary<string, int> Post26200RegistryFeatureIds =
-        new Dictionary<string, int>(StringComparer.Ordinal)
-        {
-            ["NativeNVMeStackForGeClient"] = 55369237,
-            ["UxAccOptimization"] = 48433719,
-            ["Standalone_Future"] = 49453572,
-        };
+    private const string PostBlockSetName = "post-block-2026-03";
+    private const string NativeNvmeSetName = "native-nvme-stack-25h2";
+    private static readonly FeatureIdCatalog BundledCatalog = FeatureIdCatalogService.LoadBundledCatalog();
 
     /// <summary>The set the community adopted after the Feb/Mar 2026 registry-override
-    /// block. Verified working on 24H2 and early-25H2 builds (Tom's Hardware /
-    /// HotHardware, Mar 2026; still confirmed early June 2026).</summary>
-    public static FallbackIdSet PostBlockMarch2026 { get; } = new(
-        "post-block-2026-03",
-        new[] { 60786016, 48433719 },
-        "Windows 11 builds below 26200",
-        "verified");
+    /// block. Verified on the sampled 26100.8687 branch.</summary>
+    public static FallbackIdSet PostBlockMarch2026 { get; } =
+        FeatureIdCatalogService.GetAppliedSetByName(BundledCatalog, PostBlockSetName);
 
-    /// <summary>Newer 25H2 (26200.x) applied set: 55369237 ("Native NVMe Stack") reportedly
-    /// REPLACES 60786016 — one community report says 60786016 no longer exists on recent
-    /// stable builds — used with 48433719 ("UX Acceleration"). 49453572 ("Standalone_Future")
-    /// is always enabled in the sampled branches and remains probe-only. Community-reported
-    /// (elevenforum 46678, windowsforum 406833); needs live validation on a 26200.8xxx system.</summary>
-    public static FallbackIdSet NativeNvmeStack25H2 { get; } = new(
-        "native-nvme-stack-25h2",
-        new[] { 55369237, 48433719 },
-        "Windows 11 builds 26200 and later",
-        "community-reported");
+    /// <summary>Newer 25H2 and later applied set, resolved from the sampled 26404.5000 and
+    /// 29531.1000 branches. 49453572 is Always Enabled in those branches and remains probe-only.</summary>
+    public static FallbackIdSet NativeNvmeStack25H2 { get; } =
+        FeatureIdCatalogService.GetAppliedSetByName(BundledCatalog, NativeNvmeSetName);
 
     /// <summary>IDs recognized by evidence probes but deliberately excluded from every
     /// applied set because the sampled velocity dumps mark them Always Enabled.</summary>
-    public static IReadOnlyList<int> ProbeOnlyIds { get; } = [49453572];
+    public static IReadOnlyList<int> ProbeOnlyIds { get; } =
+        FeatureIdCatalogService.GetProbeOnlyIds(BundledCatalog);
 
     /// <summary>Candidate IDs queried for diagnostics only. These are not fallback evidence
     /// IDs and must never be passed to an apply/reset operation without live validation.</summary>
-    public static IReadOnlyList<int> CandidateProbeIds { get; } = [CandidateSecondGateId];
+    public static IReadOnlyList<int> CandidateProbeIds { get; } =
+        FeatureIdCatalogService.GetCandidateIds(BundledCatalog);
 
     public static IReadOnlyList<FallbackIdSet> All { get; } =
-        new[] { PostBlockMarch2026, NativeNvmeStack25H2 };
+        FeatureIdCatalogService.GetAppliedSets(BundledCatalog);
 
     /// <summary>Union of every applied set plus probe-only IDs — what evidence probes must
     /// scan so a fallback applied by ANY known set (or by the user running ViVeTool by hand
-    /// from a forum guide) is still recognized.</summary>
+    /// from a forum guide) is still recognized. Candidate IDs remain a separate diagnostic set.</summary>
     public static IReadOnlyList<int> AllKnownIds { get; } =
-        All.SelectMany(s => s.Ids)
-            .Concat(ProbeOnlyIds)
-            .Distinct()
-            .OrderBy(i => i)
-            .ToArray();
+        FeatureIdCatalogService.GetKnownIds(BundledCatalog);
 
-    /// <summary>Returns the sampled velocity-dump name-to-ID map for a build branch.</summary>
-    public static IReadOnlyDictionary<string, int> GetKnownRegistryFeatureIdsForBuild(int buildNumber) =>
-        buildNumber >= 26200 ? Post26200RegistryFeatureIds : Pre26200RegistryFeatureIds;
+    /// <summary>Returns the curated velocity-dump name-to-ID map for a build branch.</summary>
+    public static IReadOnlyDictionary<string, int> GetKnownRegistryFeatureIdsForBuild(
+        int buildNumber,
+        int? ubr = null) =>
+        FeatureIdCatalogService.GetKnownFeatureIds(BundledCatalog, buildNumber, ubr);
 
     /// <summary>
-    /// Compares the IDs the registry route would write with the current sampled feature names
+    /// Compares the IDs the registry route would write with the current curated feature names
     /// for the detected branch. This is deliberately diagnostic: it does not change the IDs in
     /// <see cref="AppConfig"/> or authorize a different mutation payload.
     /// </summary>
@@ -156,7 +133,7 @@ public static class FallbackFeatureCatalog
                     false)).ToArray());
         }
 
-        var knownIds = GetKnownRegistryFeatureIdsForBuild(buildDetails.BuildNumber);
+        var knownIds = GetKnownRegistryFeatureIdsForBuild(buildDetails.BuildNumber, buildDetails.UBR);
         var features = ids.Select(id =>
         {
             var name = GetFeatureName(id);
@@ -169,16 +146,23 @@ public static class FallbackFeatureCatalog
                 matches);
         }).ToArray();
 
-        var branch = buildDetails.BuildNumber >= 26200
-            ? "26200+ sampled branch"
-            : "pre-26200 sampled branch";
+        var branch = FeatureIdCatalogService.ResolveBranch(
+            BundledCatalog,
+            buildDetails.BuildNumber,
+            buildDetails.UBR);
         return new RegistryOverrideAssessment(
             buildDetails.BuildNumber,
             buildDetails.UBR,
-            branch,
-            true,
+            branch?.AppliesTo ?? "unknown branch",
+            branch is not null,
             features);
     }
+
+    public static FeatureRouteAssessment AssessFeatureRoute(
+        WindowsBuildDetails? buildDetails,
+        string featureName) =>
+        FeatureIdCatalogService.AssessFeature(BundledCatalog, buildDetails?.BuildNumber ?? -1,
+            buildDetails?.UBR, featureName);
 
     private static string GetFeatureName(string id)
     {
@@ -188,7 +172,13 @@ public static class FallbackFeatureCatalog
         return descriptionStart > 0 ? displayName[..descriptionStart] : displayName;
     }
 
-    /// <summary>Build-gated selection: which set to APPLY on a given build.</summary>
-    public static FallbackIdSet SelectForBuild(int buildNumber) =>
-        buildNumber >= 26200 ? NativeNvmeStack25H2 : PostBlockMarch2026;
+    /// <summary>Build-gated selection resolved from the curated branch ranges and UBR rows.</summary>
+    public static FallbackIdSet SelectForBuild(
+        int buildNumber,
+        int? ubr = null,
+        string? workingDir = null)
+    {
+        var selected = FeatureIdCatalogService.SelectAppliedSet(buildNumber, ubr, workingDir);
+        return selected.Ids.Count > 0 ? selected : PostBlockMarch2026;
+    }
 }

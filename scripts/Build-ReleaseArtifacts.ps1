@@ -36,7 +36,8 @@ if ($sdkVersion -lt $minimumSdk) {
 # Every bundled build rule carries the same review date, so the whole ruleset expires on one day and
 # apply silently becomes verify/rollback-only on every build. Fail the release here rather than let
 # that reach users: re-verify each rule against its sourceUrl, then refresh the dates.
-& (Join-Path $PSScriptRoot 'Validate-BuildRulesFreshness.ps1') -RepoRoot $repoRoot
+& (Join-Path $PSScriptRoot 'Validate-BuildRulesFreshness.ps1') -RepoRoot $repoRoot `
+    -FeatureIdsPath (Join-Path $repoRoot 'src\NVMeDriverPatcher.Core\feature_ids.json')
 if ($LASTEXITCODE -ne 0) { throw 'Bundled windows_build_rules.json is stale or about to go stale; refusing to build a release.' }
 
 if ([string]::IsNullOrWhiteSpace($Version)) {

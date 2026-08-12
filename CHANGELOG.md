@@ -12,6 +12,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - `status` and the dry-run preview now compare the registry override IDs being written with the
   sampled feature IDs for the running Windows build, calling out exact mismatches without changing
   the registry payload.
+- A reviewed `feature_ids.json` catalog now resolves fallback IDs by sampled build/UBR branch and
+  records each feature's velocity-dump default-state, source, and review date. `Always Enabled`
+  rows remain probe-only; `Always Disabled` rows are reported as known no-route evidence rather
+  than being conflated with unknown data. The release freshness gate and diagnostics provenance
+  report this catalog alongside the build rules and firmware database.
 
 ### Changed
 - The 26200+ FeatureStore fallback now applies only `55369237` and `48433719`. `49453572`
