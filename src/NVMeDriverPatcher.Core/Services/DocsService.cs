@@ -83,8 +83,10 @@ independently, so an EOSSys.sys blocker is separate from the storage-driver choi
 ",
         ["vivetool"] = @"
 Microsoft silently neutered the FeatureManagement override path on early 2026 Insider
-builds. The fallback writes build-specific feature IDs to FeatureStore instead, using
-the native Rtl API first and ViVeTool only if native both-store verification fails.
+builds. The fallback writes build-specific feature IDs to FeatureStore instead. Native FeatureStore
+is primary; ViVeTool is used only as a secondary cross-check if native both-store verification fails.
+The trusted ViVeTool release is v0.3.4, published 2025-03-10. Its upstream is dormant and its
+feature dictionary may not cover current Windows builds, so it is not a current enablement source.
 The directly evidenced 24H2 build 26100.8106 uses 60786016 + 48433719; adjacent 26100
 UBRs are NOT inferred from that single report. 25H2 26200 builds below UBR 8524 use
 55369237 + 48433719 (49453572 is Always Enabled and probe-only). The reviewed feature_ids.json
@@ -94,6 +96,8 @@ and 26300+ have no sourced registry or fallback route that binds GenNvmeDisk; tr
 them as verify/monitor/rollback-only. `featurestore` probes whether a fallback has been
 applied and reports the candidate second gate 48613417 when the branch exposes it; the
 candidate is diagnostic only. `fallback` applies the native-first path only when the build rule permits it.
+The ViVeTool path is integrity-pinned to the trusted release above and is a secondary cross-check,
+not the primary route.
 ",
         ["buildrules"] = @"
 The app and CLI load windows_build_rules.json at runtime before recommending an enablement

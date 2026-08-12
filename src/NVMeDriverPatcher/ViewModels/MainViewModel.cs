@@ -744,9 +744,8 @@ public partial class MainViewModel : ObservableObject
                 "Microsoft began blocking this override path on recent Insider builds in early 2026. " +
                 "On those builds the FeatureManagement\\Overrides route is a no-op.\n\n" +
                 "Scope: FeatureStore is machine-wide. Every eligible NVMe drive/controller is subject to the same Windows driver selection; legacy drive_scope.json exclusions are not enforced.\n\n" +
-                $"A fallback exists: the app can write build-specific FeatureStore IDs {ViVeToolService.SelectFallbackSet().IdsDisplay} with the native Rtl API first. " +
-                "If native both-store verification fails, it will try ViVeTool from its official GitHub release " +
-                $"({ViVeToolService.ViVeToolProjectUrl}) as the secondary path.\n\n" +
+                 $"A fallback exists: the app can write build-specific FeatureStore IDs {ViVeToolService.SelectFallbackSet().IdsDisplay} with the native Rtl API first.\n" +
+                 ViVeToolService.ViVeToolFallbackDisclosure + $"\nSee the trusted release: {ViVeToolService.ViVeToolLastKnownReleaseUrl}.\n\n" +
                 "Choose Apply Fallback to apply the fallback now.\n\n" +
                 "If you choose Not Now, your registry backup, restore point, and recovery kit stay in place. " +
                 "You can remove the patch from this app at any time."
