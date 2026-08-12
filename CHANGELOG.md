@@ -11,6 +11,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   `Invoke-Checked` or extensionless names; release tools are resolved to absolute paths first.
 
 ### Added
+- Post-patch ETW captures now add a custom WPR profile for Microsoft's `Microsoft-Windows-NvmeDisk`
+  provider when the native stack is bound. WPR session status and a redacted provider-evidence
+  record are included in diagnostics and support bundles.
 - The built-in DiskSpd benchmark now records the existing high-QD profile alongside a desktop
   QD1 profile, exposes both through the GUI and CLI, and explains when a high-QD gain does not
   carry over to desktop I/O.

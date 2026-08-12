@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
@@ -18,20 +19,45 @@ public class EtwTraceResult
     public string Summary { get; set; } = string.Empty;
     public EtwTracePhase Phase { get; set; }
     public int DurationSeconds { get; set; }
+    public bool NativeStackProbeSucceeded { get; set; }
+    public bool NativeStackBound { get; set; }
+    public bool NvmeDiskProviderRequested { get; set; }
+    public bool NvmeDiskProviderPresent { get; set; }
+    public string NvmeDiskProviderStatus { get; set; } = string.Empty;
+    public string EvidencePath { get; set; } = string.Empty;
+}
+
+public sealed class EtwTraceProviderEvidence
+{
+    public EtwTracePhase Phase { get; set; }
+    public DateTime CapturedAtUtc { get; set; }
+    public string TraceFileName { get; set; } = string.Empty;
+    public bool NativeStackProbeSucceeded { get; set; }
+    public bool NativeStackBound { get; set; }
+    public string ProviderName { get; set; } = EtwTraceService.NvmeDiskProviderName;
+    public string ProviderGuid { get; set; } = EtwTraceService.NvmeDiskProviderGuid;
+    public bool ProviderRequested { get; set; }
+    public bool ProviderPresent { get; set; }
+    public string ProviderStatus { get; set; } = string.Empty;
 }
 
 // Wraps Windows Performance Recorder (wpr.exe) to capture short storage-IO traces before
 // and after a patch apply. Lets us show the user real latency-distribution deltas instead
 // of hand-wavy IOPS numbers.
 //
-// Uses the inbox "GeneralProfile.Storage" WPR profile where available, falling back to
-// a synthetic storage profile written at runtime. wpr.exe is part of Windows since 10 —
-// we don't ship it.
+// Uses the inbox "GeneralProfile.Storage" WPR profile where available. Post-patch captures
+// add a small custom profile for Microsoft's own nvmedisk ETW provider when the native stack
+// is actually bound. wpr.exe is part of Windows since 10 — we don't ship it.
 public static class EtwTraceService
 {
     private const string DefaultProfile = "GeneralProfile.Storage";
     private const int DefaultDurationSeconds = 60;
     private const string EtlExtension = ".etl";
+    private const string ProviderProfileName = "NvmeDiskWatch";
+    internal const string EvidenceFileSuffix = ".provider.json";
+
+    public const string NvmeDiskProviderName = "Microsoft-Windows-NvmeDisk";
+    public const string NvmeDiskProviderGuid = "{9799276c-fb04-47e8-845e-36946045c218}";
 
     public static async Task<EtwTraceResult> CaptureAsync(
         AppConfig config,
@@ -40,6 +66,24 @@ public static class EtwTraceService
         CancellationToken cancellationToken = default)
     {
         var result = new EtwTraceResult { Phase = phase, DurationSeconds = durationSeconds };
+        if (phase == EtwTracePhase.PostPatch)
+        {
+            var native = ProbeNativeStack();
+            result.NativeStackProbeSucceeded = native.Succeeded;
+            result.NativeStackBound = native.IsBound;
+            result.NvmeDiskProviderRequested = ShouldRequestNvmeDiskProvider(phase, native.Succeeded && native.IsBound);
+            result.NvmeDiskProviderStatus = native.Succeeded
+                ? native.IsBound
+                    ? "requested; WPR session status is pending"
+                    : "not requested because the native NVMe stack is not bound"
+                : "not requested because native NVMe stack status is unavailable";
+        }
+        else
+        {
+            result.NativeStackProbeSucceeded = true;
+            result.NvmeDiskProviderStatus = "not applicable to the pre-patch capture";
+        }
+
         var dir = Path.Combine(
             string.IsNullOrWhiteSpace(config.WorkingDir) ? AppConfig.GetWorkingDir() : config.WorkingDir,
             "etl");
@@ -56,6 +100,7 @@ public static class EtwTraceService
             return result;
         }
 
+        string? profilePath = null;
         try
         {
             // Clear any stale kernel session left by a prior capture that was killed between -start
@@ -63,7 +108,33 @@ public static class EtwTraceService
             // and the session lingers until reboot. Best-effort — a no-op when nothing is recording.
             try { await RunWprAsync(new[] { "-cancel" }, 15, CancellationToken.None); } catch { }
 
-            await RunWprAsync(new[] { "-start", DefaultProfile, "-filemode" }, 30, cancellationToken);
+            var startArguments = new List<string> { "-start", DefaultProfile };
+            if (result.NvmeDiskProviderRequested)
+            {
+                profilePath = Path.Combine(Path.GetTempPath(), $"NVMePatcher_{Guid.NewGuid():N}.wprp");
+                File.WriteAllText(profilePath, BuildNvmeDiskProviderProfile(), new UTF8Encoding(false));
+                startArguments.Add("-start");
+                startArguments.Add($"{profilePath}!{ProviderProfileName}.Verbose.File");
+            }
+            startArguments.Add("-filemode");
+            await RunWprAsync(startArguments.ToArray(), 30, cancellationToken);
+
+            if (result.NvmeDiskProviderRequested)
+            {
+                try
+                {
+                    var status = await RunWprAsync(new[] { "-status", "collectors" }, 30, cancellationToken);
+                    result.NvmeDiskProviderPresent = ContainsNvmeDiskProvider(status.StdOut, status.StdErr);
+                    result.NvmeDiskProviderStatus = result.NvmeDiskProviderPresent
+                        ? "present in the active WPR session"
+                        : "requested but not listed by WPR session status";
+                }
+                catch (Exception ex)
+                {
+                    result.NvmeDiskProviderStatus = $"requested; WPR session status unavailable ({ex.GetType().Name})";
+                }
+            }
+
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(Math.Max(5, durationSeconds)), cancellationToken);
@@ -75,14 +146,17 @@ public static class EtwTraceService
             }
             await RunWprAsync(new[] { "-stop", result.EtlPath }, 90, cancellationToken);
             result.Success = File.Exists(result.EtlPath);
+            if (result.Success)
+                PersistProviderEvidence(result);
             result.Summary = result.Success
-                ? $"Captured {durationSeconds}s storage trace to {result.EtlPath}"
+                ? $"Captured {durationSeconds}s storage trace to {result.EtlPath}. {FormatProviderSummary(result)}"
                 : "wpr reported success but ETL file is missing.";
         }
         catch (OperationCanceledException)
         {
             result.Success = false;
             result.Summary = "ETW capture canceled.";
+            try { await RunWprAsync(new[] { "-cancel" }, 30, CancellationToken.None); } catch { }
         }
         catch (Exception ex)
         {
@@ -90,7 +164,93 @@ public static class EtwTraceService
             result.Summary = $"ETW capture failed: {ex.GetType().Name}: {ex.Message}";
             try { await RunWprAsync(new[] { "-cancel" }, 30, CancellationToken.None); } catch { }
         }
+        finally
+        {
+            if (profilePath is not null)
+            {
+                try { File.Delete(profilePath); } catch { }
+            }
+        }
         return result;
+    }
+
+    internal static string BuildNvmeDiskProviderProfile() => """
+        <?xml version="1.0" encoding="utf-8"?>
+        <WindowsPerformanceRecorder Version="1.0">
+          <Profiles>
+            <EventCollector Id="NvmeDiskCollector" Name="NVMe Driver Patcher ETW Collector">
+              <BufferSize Value="64" />
+              <Buffers Value="64" />
+            </EventCollector>
+            <EventProvider Id="NvmeDiskProvider"
+                           Name="9799276c-fb04-47e8-845e-36946045c218"
+                           Level="5"
+                           Strict="false">
+              <Keywords>
+                <Keyword Value="0x0" />
+              </Keywords>
+            </EventProvider>
+            <Profile Id="NvmeDiskWatch.Verbose.File"
+                     Name="NvmeDiskWatch"
+                     DetailLevel="Verbose"
+                     LoggingMode="File"
+                     Description="Microsoft-Windows-NvmeDisk first-party NVMe stack evidence">
+              <Collectors>
+                <EventCollectorId Value="NvmeDiskCollector">
+                  <EventProviders>
+                    <EventProviderId Value="NvmeDiskProvider" />
+                  </EventProviders>
+                </EventCollectorId>
+              </Collectors>
+            </Profile>
+            <Profile Id="NvmeDiskWatch.Verbose.Memory"
+                     Name="NvmeDiskWatch"
+                     DetailLevel="Verbose"
+                     LoggingMode="Memory"
+                     Description="Microsoft-Windows-NvmeDisk first-party NVMe stack evidence">
+              <Collectors>
+                <EventCollectorId Value="NvmeDiskCollector">
+                  <EventProviders>
+                    <EventProviderId Value="NvmeDiskProvider" />
+                  </EventProviders>
+                </EventCollectorId>
+              </Collectors>
+            </Profile>
+          </Profiles>
+        </WindowsPerformanceRecorder>
+        """;
+
+    internal static bool ContainsNvmeDiskProvider(string stdout, string stderr)
+    {
+        var output = $"{stdout}\n{stderr}";
+        return output.Contains(NvmeDiskProviderName, StringComparison.OrdinalIgnoreCase) ||
+               output.Contains(NvmeDiskProviderGuid, StringComparison.OrdinalIgnoreCase) ||
+               output.Contains(NvmeDiskProviderGuid.Trim('{', '}'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool ShouldRequestNvmeDiskProvider(EtwTracePhase phase, bool nativeStackBound) =>
+        phase == EtwTracePhase.PostPatch && nativeStackBound;
+
+    internal static EtwTraceProviderEvidence? GetLatestProviderEvidence(string workingDir)
+    {
+        try
+        {
+            var dir = Path.Combine(workingDir, "etl");
+            if (!Directory.Exists(dir)) return null;
+
+            foreach (var path in Directory.GetFiles(dir, $"*{EvidenceFileSuffix}", SearchOption.TopDirectoryOnly)
+                         .OrderByDescending(File.GetLastWriteTimeUtc))
+            {
+                try
+                {
+                    var evidence = JsonSerializer.Deserialize<EtwTraceProviderEvidence>(File.ReadAllText(path));
+                    if (evidence is not null) return evidence;
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return null;
     }
 
     /// <summary>
@@ -138,7 +298,48 @@ public static class EtwTraceService
         catch { return false; }
     }
 
-    private static async Task RunWprAsync(string[] args, int timeoutSeconds, CancellationToken cancellationToken)
+    private static (bool Succeeded, bool IsBound, string Detail) ProbeNativeStack()
+    {
+        try
+        {
+            var status = DriveService.TestNativeNVMeActive();
+            var unavailable = status.Details.StartsWith("Unable to determine", StringComparison.OrdinalIgnoreCase);
+            return (!unavailable, status.IsActive, status.Details);
+        }
+        catch (Exception ex)
+        {
+            return (false, false, ex.Message);
+        }
+    }
+
+    private static string FormatProviderSummary(EtwTraceResult result)
+    {
+        return $"{NvmeDiskProviderName} provider: {result.NvmeDiskProviderStatus}.";
+    }
+
+    private static void PersistProviderEvidence(EtwTraceResult result)
+    {
+        var evidence = new EtwTraceProviderEvidence
+        {
+            Phase = result.Phase,
+            CapturedAtUtc = DateTime.UtcNow,
+            TraceFileName = Path.GetFileName(result.EtlPath),
+            NativeStackProbeSucceeded = result.NativeStackProbeSucceeded,
+            NativeStackBound = result.NativeStackBound,
+            ProviderRequested = result.NvmeDiskProviderRequested,
+            ProviderPresent = result.NvmeDiskProviderPresent,
+            ProviderStatus = result.NvmeDiskProviderStatus
+        };
+        var path = result.EtlPath + EvidenceFileSuffix;
+        var tempPath = path + $".{Guid.NewGuid():N}.tmp";
+        File.WriteAllText(tempPath, JsonSerializer.Serialize(evidence, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
+        File.Move(tempPath, path, overwrite: true);
+        result.EvidencePath = path;
+    }
+
+    private sealed record WprCommandResult(string StdOut, string StdErr, int ExitCode);
+
+    private static async Task<WprCommandResult> RunWprAsync(string[] args, int timeoutSeconds, CancellationToken cancellationToken)
     {
         var psi = new ProcessStartInfo(SystemToolPathService.Resolve("wpr.exe"))
         {
@@ -181,5 +382,7 @@ public static class EtwTraceService
             var detail = string.IsNullOrWhiteSpace(stderr) ? stdout.Trim() : stderr.Trim();
             throw new InvalidOperationException($"wpr {string.Join(' ', args)} exit {proc.ExitCode}: {detail}");
         }
+
+        return new WprCommandResult(stdout, stderr, proc.ExitCode);
     }
 }

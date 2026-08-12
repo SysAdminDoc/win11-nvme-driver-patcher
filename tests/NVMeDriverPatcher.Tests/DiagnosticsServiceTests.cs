@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.IO.Compression;
 using Microsoft.Data.Sqlite;
@@ -209,6 +210,42 @@ public sealed class DiagnosticsServiceTests : IDisposable
     }
 
     [Fact]
+    public void ExportBundle_IncludesNvmeDiskProviderVerdict()
+    {
+        var etlDir = Path.Combine(_tempRoot, "etl");
+        Directory.CreateDirectory(etlDir);
+        var evidence = new EtwTraceProviderEvidence
+        {
+            Phase = EtwTracePhase.PostPatch,
+            CapturedAtUtc = new DateTime(2026, 8, 12, 14, 0, 0, DateTimeKind.Utc),
+            TraceFileName = "post_20260812140000.etl",
+            NativeStackProbeSucceeded = true,
+            NativeStackBound = true,
+            ProviderRequested = true,
+            ProviderPresent = true,
+            ProviderStatus = "present in the active WPR session"
+        };
+        File.WriteAllText(
+            Path.Combine(etlDir, "post_20260812140000.etl" + EtwTraceService.EvidenceFileSuffix),
+            JsonSerializer.Serialize(evidence));
+        var outputPath = Path.Combine(_tempRoot, "support-with-etw.zip");
+
+        var bundle = DiagnosticsService.ExportBundle(
+            _tempRoot,
+            preflight: new PreflightResult(),
+            logHistory: [],
+            outputPath: outputPath);
+
+        Assert.Equal(outputPath, bundle);
+        var reportEntryText = ReadZipEntry(outputPath, "diagnostics.txt");
+        Assert.Contains("ETW NVMe DRIVER WATCHDOG EVIDENCE", reportEntryText, StringComparison.Ordinal);
+        Assert.Contains("Provider present in WPR session: Yes", reportEntryText, StringComparison.Ordinal);
+        var evidenceEntryText = ReadZipEntry(outputPath, "etl/provider-evidence.json");
+        Assert.Contains("\"ProviderPresent\": true", evidenceEntryText, StringComparison.Ordinal);
+        Assert.Contains("etl/provider-evidence.json", ReadZipEntry(outputPath, "MANIFEST.txt"), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ExportBundle_IncludesFinalIntegrityManifestAndVerifiesAsZipPayload()
     {
         var configPath = Path.Combine(_tempRoot, "config.json");
@@ -370,5 +407,14 @@ public sealed class DiagnosticsServiceTests : IDisposable
         {
             // Best-effort temp cleanup only.
         }
+    }
+
+    private static string ReadZipEntry(string zipPath, string entryName)
+    {
+        using var zip = ZipFile.OpenRead(zipPath);
+        var entry = zip.GetEntry(entryName);
+        Assert.NotNull(entry);
+        using var reader = new StreamReader(entry!.Open());
+        return reader.ReadToEnd();
     }
 }

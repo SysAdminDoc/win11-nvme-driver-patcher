@@ -8,36 +8,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P2
 
-- [ ] P2 — The packaging-script $PATH gate is defeated by one level of indirection and extensionless tool names — the exact escape its C# sibling was fixed for
-  Category: testing
-  Where: `tests/NVMeDriverPatcher.Tests/SystemToolPathServiceTests.cs:155-159` (`PowerShellPathLookup` regex); offending-but-green sites `scripts/Build-ReleaseArtifacts.ps1:63, 111, 135, 171, 188` (`Invoke-Checked dotnet/powershell.exe/winget.exe`, bare `'wix'` fallback), `scripts/Validate-DocumentationFacts.ps1:142` (`& dotnet`)
-  Problem: The gate matches only `Get-Command x.exe`, `& x.exe`, `Start-Process 'x.exe'`. Launches via the `Invoke-Checked` wrapper put the literal in a parameter position, and `dotnet`/`wix` carry no `.exe` suffix — invisible either way. The 2026-08-02 Learned entry documents this exact indirection escape for the C# detector; the PS gate kept the naive shape. The stated policy ("packaging scripts must not resolve tools through $PATH, test-gated") is certified by a gate that cannot see the violations that exist today.
-  Evidence: Regex vs. offending lines compared directly.
-  Fix: Either resolve dotnet/winget/powershell/wix absolutely in the scripts (as `nuget`/`msiexec`/`sc` already are) and keep the gate, or extend the gate to match extensionless known tool names and wrapper-parameter positions; self-check the gate by reintroducing each real defect shape.
-  Acceptance: Gate fails against current `Build-ReleaseArtifacts.ps1` before the script fix, passes after; self-check covers the wrapper shape.
-  Confidence: Verified
-  Effort: M
-
-- [ ] P2 — Eight test helpers kept the wedge-prone synchronous `ReadToEnd()` pattern the repo already logged as a 25-minute-suite-hang lesson
-  Category: testing
-  Where: `tests/NVMeDriverPatcher.Tests/`: `LegacyPowerShellBoundaryTests.cs:96-98`, `AutoUpdaterServiceTests.cs:144-146`, `ArtifactManifestScriptTests.cs:77-79`, `PackageManifestsScriptTests.cs:126-128`, `PackagingVersionScriptTests.cs:102-104`, `ReleaseAssetsScriptTests.cs:61-63`, `RootHygieneScriptTests.cs:56-58`, `TelemetryReceiverSummaryTests.cs:569-571`
-  Problem: `ReadToEnd()` before `WaitForExit(timeout)` blocks unboundedly (timeout is dead code) and the sequential stdout-then-stderr read can deadlock on a filled stderr pipe. The last six also ignore `WaitForExit`'s bool then read `ExitCode`, which throws `InvalidOperationException` on a live process. The hardened pattern already exists in-suite (`BuildRulesFreshnessScriptTests.cs:161-166`, `SystemToolPathServiceTests.cs:123-135`) — it was applied only to the original incident's files.
-  Evidence: All eight sites read; hardened counterparts confirmed.
-  Fix: Extract one shared `RunProcessBounded` helper (async pipe drain, kill-on-timeout, honest exit) and use it at all eight sites.
-  Acceptance: A deliberately-hanging child script fails one test with a timeout message instead of wedging the suite.
-  Confidence: Verified
-  Effort: S
-
-- [ ] P2 — APST battery-impact estimate is dead code: `ApstPowerState.MaxPowerWatts` has no writer anywhere
-  Category: correctness
-  Where: `src/NVMeDriverPatcher.Core/Services/ApstInspectorService.cs:9, 60-68, 94-105` (consumer); `NvmeIdentifyService`'s separate `NvmePowerStateDescriptor` (has real wattage, never bridged)
-  Problem: `Inspect()` never assigns `MaxPowerWatts` (repo-wide grep: no writer), so in `EstimateBatteryImpact` `ActivePowerWatts` is always null, the `lowestIdle` query always empties, and the "(up to ~X.XW idle savings)" text can never render — the laptop guidance silently degrades to the generic string. The feature the class exists for never fires.
-  Evidence: Exhaustive grep; consumer logic read.
-  Fix: Map per-state MPS wattage from `NvmeIdentifyService.Query()` results into `ApstPowerState.MaxPowerWatts` (correlate by power-state index), or delete the estimate branch and its UI/CLI text if identify data is deemed unreliable.
-  Acceptance: On an NVMe laptop (or identify fixture), `apst` output includes the idle-savings wattage; unit test feeds a fixture identify and asserts the estimate renders.
-  Confidence: Verified
-  Effort: M
-
 ### P3
 
 - [ ] P3 — `NvmeIdentifyService.Query` ignores the protocol-level result; zeroed buffers can report as successful identifies
@@ -369,63 +339,8 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
 
 ### P1
 
-- [ ] P1 — Curate per-build feature IDs and default-state from velocity dumps into the existing data model
-  Why: `FallbackFeatureCatalog.SelectForBuild` decides by `buildNumber >= 26200` and the build rules encode verdicts derived from press/forum reports. A per-branch primary source exists that gives name→ID *and* a default-state class; `Always Disabled` is the only honest basis for "no known route", and no sampled branch shows it for `NativeNVMeStackForGeClient`.
-  Evidence: https://github.com/phantomofearth/windows-velocity-feature-lists (section headings `Always Enabled / Enabled By Default / Disabled By Default / Always Disabled`, verified by download). That repo carries **no LICENSE** — transcribe rows with `sourceUrl` + `lastReviewed` into the existing curated JSON; do not vendor the files and do not auto-download (RESEARCH.md rejects both).
-  Touches: `windows_build_rules.json` (or a sibling `feature_ids.json` on the same provenance/freshness machinery), `Models/FallbackFeatureCatalog.cs`, `Services/WindowsBuildRulesService.cs`, `Services/DataFileProvenanceService.cs`, `scripts/Validate-BuildRulesFreshness.ps1`.
-  Acceptance: `SelectForBuild` resolves from curated per-branch data rather than a `>= 26200` constant; a build whose feature is `Always Disabled` is reported distinctly from "unknown"; the freshness gate covers the new data file.
-  Complexity: M
-
-- [ ] P1 — Disclose that the ViVeTool fallback's upstream is abandoned
-  Why: ViVe has had zero commits since 2025-03-10, its bundled dictionary stops at build 26236, and the canonical `PheeL-Pheel/ViVeTool-GUI` repo now 404s. The download is SHA-256-manifest gated so this is not an integrity hole, but the fallback dialog presents ViVeTool as a live escape hatch.
-  Evidence: https://github.com/thebookisclosed/ViVe/releases; `Services/ViVeToolService.cs`; `ViewModels/MainViewModel.Commands.cs:482`.
-  Touches: `Services/ViVeToolService.cs` (surface a last-release/dormancy field), fallback dialog copy in `MainViewModel.Commands.cs`, `Services/DocsService.cs`, README fallback section.
-  Acceptance: The fallback confirmation names ViVeTool's last release date and states that the native FeatureStore path is primary and the ViVeTool path is a cross-check.
-  Complexity: S
-
-- [ ] P1 — Warn that this tool's own registry writes can break `vivetool /fullreset`
-  Why: ViVe issue #166 (2026-07-30) reports `/fullreset` failing access-denied when values under `Policies\Microsoft\FeatureManagement\Overrides` are TrustedInstaller-owned. That is exactly the key `PatchService` writes, so the tool can wedge the user's independent escape hatch — and the residue probe does not look for it.
-  Evidence: https://github.com/thebookisclosed/ViVe/issues/166; `Models/AppConfig.cs:52-53`; `Services/PatchService.cs:791`.
-  Touches: `Services/PatchService.cs` (removal residue probe), `Services/RecoveryKitService.cs` (kit `.reg`/README), `Services/DocsService.cs`.
-  Acceptance: Removal reports whether any override value remains under the Policies key with an owner the current user cannot rewrite, and the recovery kit documents the manual `takeown`/`reg delete` path for that case.
-  Complexity: S
 
 ### P2
-
-- [ ] P2 — `BypassIoInspectorService` is English-only; the same trap already logged for the legacy script
-  Why: `InspectOne` regex-matches English `fsutil bypassio state` stdout (`RxBypassEnabled`, `RxStorageStack`), so on non-English Windows `Enabled` is always false and the gaming-impact warning silently degrades to a wrong answer. This is the C# twin of the P3 legacy-script fsutil item above — that item covers `NVMe_Driver_Patcher.ps1` only.
-  Evidence: `src/NVMeDriverPatcher.Core/Services/BypassIoInspectorService.cs:55-96`; locale-independent alternative demonstrated by TheBeardofKnowledge's `nvmeSPEEDtweak.bat`, which reads `HKLM\SYSTEM\CurrentControlSet\Services\storport\Parameters\EnableBypassIO` directly.
-  Touches: `Services/BypassIoInspectorService.cs`, `Services/DriveService.cs` (consumers), CLI `bypassio`, tests.
-  Acceptance: BypassIO state is derived from the registry value (and device binding via `DEVPKEY_Device_Service`) rather than parsed prose; a test feeding non-English `fsutil` output still yields the correct verdict.
-  Complexity: S
-
-- [ ] P2 — Dependency currency pass with the two documented upgrade traps avoided
-  Why: Six Microsoft packages sit at 10.0.9 against a 10.0.11 runtime; `System.Threading.AccessControl 10.0.0` is framework-provided and already emits NU1510; SkiaSharp 4.148.0 was dropped from the supported-stable tier and misses HarfBuzz 14.2.1 hardening.
-  Evidence: csproj files read directly; https://github.com/mono/SkiaSharp/pull/4502; https://github.com/mono/SkiaSharp/releases/tag/v4.150.0. Traps: `SQLitePCLRaw.bundle_e_sqlite3` **3.0.5** switches its native dep to a different package id (`SQLite` 3.53.4), orphaning the repo's `SourceGear.sqlite3` pin while `SqliteVersionTests` still passes — use **3.0.4**. LiveCharts 2.0.5 declares SkiaSharp 2.88.9 / Views.WPF 3.119.0 against the forced 4.148.0, and 4.150.0 turned pre-v4 obsolete APIs into errors, so a break surfaces only as a runtime `MissingMethodException`.
-  Touches: `src/NVMeDriverPatcher.Core/NVMeDriverPatcher.Core.csproj`, `src/NVMeDriverPatcher/NVMeDriverPatcher.csproj`, `src/NVMeDriverPatcher.Watchdog/NVMeDriverPatcher.Watchdog.csproj`, `tests/NVMeDriverPatcher.Tests/NVMeDriverPatcher.Tests.csproj`, CLAUDE.md native-pin notes.
-  Acceptance: Microsoft packages at 10.0.11; `System.Threading.AccessControl` reference removed with no NU1510; bundle at 3.0.4 with the SourceGear pin still winning (assert the resolved native path, not just the version string); SkiaSharp at 4.150.2 with `ChartingSmokeTests` widened to touch the chart APIs LiveCharts actually calls.
-  Complexity: M
-
-- [ ] P2 — Make dependency auditing a build gate
-  Why: `Directory.Build.props` sets no `NuGetAuditMode`/`NuGetAuditLevel` and there are no lock files, so `dotnet list package --vulnerable` being clean today is a snapshot nothing enforces — in a repo whose whole thesis is gated safety.
-  Evidence: `Directory.Build.props` read in full; no `packages.lock.json` anywhere in the tree.
-  Touches: `Directory.Build.props`, `scripts/Build-ReleaseArtifacts.ps1`.
-  Acceptance: `<NuGetAuditMode>all</NuGetAuditMode>` with an appropriate `NuGetAuditLevel` set repo-wide; restore with a seeded vulnerable transitive fails the build; the release builder runs the audit explicitly.
-  Complexity: S
-
-- [ ] P2 — Add a desktop-profile (QD1/QD2) benchmark alongside the existing high-QD run
-  Why: `CreateDiskSpdArguments` is one fixed profile (`-t4 -o16 -b4K` ≈ QD64). Measured native-stack gains are ~+65% 4K random read at high QD but **−2.6% on 4K random write**, and near-zero at QD1–QD2 — i.e. typical desktop use. The most-asked community question ("does this actually help *me*?") is unanswerable with the current single profile, and the tool's own before/after comparison currently flatters the patch.
-  Evidence: `src/NVMeDriverPatcher.Core/Services/BenchmarkService.cs:388-404`; https://www.storagereview.com/review/windows-server-native-nvme.
-  Touches: `Services/BenchmarkService.cs`, `Services/AutoBenchmarkService.cs` (baseline/compare shape), `Data/BenchmarkRecord.cs` + schema migration, `Views/BenchmarkComparisonView.xaml`, CLI `benchmark`/`compare-benchmarks`, README.
-  Acceptance: A run records at least a QD1 4K random profile plus the existing high-QD profile; the comparison view and CLI report them separately; the summary states plainly when high-QD improves while QD1 does not.
-  Complexity: M
-
-- [ ] P2 — Use the driver's own ETW provider as first-party watchdog evidence
-  Why: `EtwTraceService` wraps a generic `wpr` profile, so post-patch traces contain no native-stack-specific evidence. `nvmedisk.sys` publishes `Microsoft-Windows-NvmeDisk` `{9799276c-fb04-47e8-845e-36946045c218}`. (The classic `nvmedisk`/129 System-log source is already covered at `EventLogWatchdogService.cs:112` — this is the ETW half only.)
-  Evidence: https://github.com/libyal/winevt-kb/blob/main/docs/sources/eventlog-providers/Provider-Microsoft-Windows-NvmeDisk.md; `Services/EtwTraceService.cs` (uses `DefaultProfile` only); repo-wide grep for the GUID returns 0 files.
-  Touches: `Services/EtwTraceService.cs` (custom WPR profile or explicit provider list), `Services/DiagnosticsService.cs` bundle, docs.
-  Acceptance: A post-patch trace enables the NvmeDisk provider when the native stack is bound, and the support bundle records whether the provider was present.
-  Complexity: M
 
 - [ ] P2 — Preflight: verify OS-native rollback (Point-in-Time Restore) and recovery (Quick Machine Recovery)
   Why: The tool gates rollback readiness on System Protection + `Checkpoint-Computer`, which does not capture user files/apps/certs. Point-in-Time Restore went GA in 2026 and does; Quick Machine Recovery is the OS's own answer to "can't boot after the change" and is **off by default on Pro/Enterprise** — exactly this tool's audience. Repo has zero references to either. `reagentc /SetRecoveryTestmode` proves the recovery path before any mutation.
