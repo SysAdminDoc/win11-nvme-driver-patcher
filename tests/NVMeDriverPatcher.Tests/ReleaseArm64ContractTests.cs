@@ -82,6 +82,21 @@ public sealed class ReleaseArm64ContractTests
     }
 
     [Fact]
+    public void LocalReleaseBuilder_RunsRepositoryWideNuGetAuditAndRegressionProof()
+    {
+        var builder = File.ReadAllText(Path.Combine(RepoRoot(), "scripts", "Build-ReleaseArtifacts.ps1"));
+        var auditProof = File.ReadAllText(Path.Combine(RepoRoot(), "scripts", "Test-NuGetAuditGate.ps1"));
+
+        Assert.Contains("NuGetAuditMode=all", builder);
+        Assert.Contains("NuGetAuditLevel=low", builder);
+        Assert.Contains("Test-NuGetAuditGate.ps1", builder);
+        Assert.Contains("NuGetAuditMode=all", auditProof);
+        Assert.Contains("NuGetAuditLevel=low", auditProof);
+        Assert.Contains("Newtonsoft.Json", auditProof);
+        Assert.Contains("NU190[0-4]", auditProof);
+    }
+
+    [Fact]
     public void PackageSandboxSmoke_ValidatesFullPortableLifecycle()
     {
         var script = File.ReadAllText(Path.Combine(RepoRoot(), "scripts/Test-PackageSandbox.ps1"));

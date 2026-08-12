@@ -63,6 +63,26 @@ function Invoke-Checked {
     if ($LASTEXITCODE -ne 0) { throw "$FilePath exited with $LASTEXITCODE" }
 }
 
+# Run the repository-wide NuGet audit before any per-RID publish. Directory.Build.props makes
+# NU1900-NU1904 errors, but keep the audit properties explicit here so a release cannot silently
+# inherit a caller's reduced audit mode or severity.
+Invoke-Checked $dotnetPath @(
+    'restore',
+    (Join-Path $repoRoot 'NVMeDriverPatcher.sln'),
+    '--force-evaluate',
+    '-p:NuGetAuditMode=all',
+    '-p:NuGetAuditLevel=low'
+)
+Invoke-Checked powershell.exe @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    (Join-Path $PSScriptRoot 'Test-NuGetAuditGate.ps1'),
+    '-DotnetPath',
+    $dotnetPath
+)
+
 function Get-Sha256Hex {
     param([Parameter(Mandatory)] [string]$Path)
 

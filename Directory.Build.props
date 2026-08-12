@@ -1,6 +1,11 @@
 <Project>
   <PropertyGroup>
     <VersionPrefix>5.7.0</VersionPrefix>
+    <!-- Audit every direct and transitive PackageReference at the lowest severity. Keep the
+         NU1900-NU1904 family as errors so a vulnerable restore cannot silently reach publish. -->
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1900;NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
     <!-- Self-contained release artifacts must carry the patched .NET runtime, because Windows Update cannot service it. -->
     <MinimumEmbeddedRuntimeVersion>10.0.11</MinimumEmbeddedRuntimeVersion>
     <Version Condition="'$(Version)' == ''">$(VersionPrefix)</Version>
