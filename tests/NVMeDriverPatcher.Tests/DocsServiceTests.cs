@@ -58,6 +58,18 @@ public sealed class DocsServiceTests
     }
 
     [Fact]
+    public void ViVeToolTopic_DisclosesDormancyAndPrimaryNativeRoute()
+    {
+        var text = DocsService.Render("vivetool");
+
+        Assert.Contains("Native FeatureStore", text);
+        Assert.Contains("is primary", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("2025-03-10", text);
+        Assert.Contains("dormant", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("secondary cross-check", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void BuildRulesTopic_DistinguishesFallbackBlockedAndFeatureFlagsBuilds()
     {
         var text = DocsService.Render("buildrules");

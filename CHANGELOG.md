@@ -17,6 +17,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   rows remain probe-only; `Always Disabled` rows are reported as known no-route evidence rather
   than being conflated with unknown data. The release freshness gate and diagnostics provenance
   report this catalog alongside the build rules and firmware database.
+- Fallback confirmations and `docs vivetool` now identify ViVeTool `v0.3.4` as the last release
+  (2025-03-10), disclose its dormant upstream, and state that native FeatureStore is the primary
+  route while ViVeTool is only a secondary cross-check.
 
 ### Changed
 - The 26200+ FeatureStore fallback now applies only `55369237` and `48433719`. `49453572`

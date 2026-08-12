@@ -23,6 +23,18 @@ public sealed class ViVeToolServiceTests : IDisposable
     }
 
     [Fact]
+    public void FallbackDisclosure_IdentifiesDormantSecondaryCrossCheck()
+    {
+        var disclosure = ViVeToolService.ViVeToolFallbackDisclosure;
+
+        Assert.Contains("Native FeatureStore is primary", disclosure);
+        Assert.Contains(ViVeToolService.ViVeToolLastKnownReleaseTag, disclosure);
+        Assert.Contains(ViVeToolService.ViVeToolLastKnownReleaseDate, disclosure);
+        Assert.Contains("secondary cross-check", disclosure);
+        Assert.Contains("dormant", disclosure);
+    }
+
+    [Fact]
     public void EmbeddedTrustManifest_IsValidAndPinsBothPublishedArchitectures()
     {
         var manifest = ViVeToolService.LoadTrustManifest();

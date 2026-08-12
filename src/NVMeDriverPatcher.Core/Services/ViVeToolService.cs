@@ -63,6 +63,14 @@ public static class ViVeToolService
     public const string ViVeToolRepo = "thebookisclosed/ViVe";
     public const string ViVeToolLatestApi = "https://api.github.com/repos/thebookisclosed/ViVe/releases/latest";
     public const string ViVeToolProjectUrl = "https://github.com/thebookisclosed/ViVe";
+    public const string ViVeToolLastKnownReleaseTag = "v0.3.4";
+    public const string ViVeToolLastKnownReleaseDate = "2025-03-10";
+    public const string ViVeToolLastKnownReleaseUrl =
+        "https://github.com/thebookisclosed/ViVe/releases/tag/v0.3.4";
+    public const string ViVeToolFallbackDisclosure =
+        "Native FeatureStore is primary. ViVeTool v0.3.4 (last release 2025-03-10) is a " +
+        "secondary cross-check only; its upstream is dormant and its feature dictionary may " +
+        "not cover current Windows builds.";
     internal const string TrustManifestResourceName = "NVMeDriverPatcher.vivetool_trusted_releases.json";
 
     private static readonly string[] AllowedAssetHosts =
