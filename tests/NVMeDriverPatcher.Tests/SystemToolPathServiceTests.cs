@@ -152,11 +152,16 @@ public sealed class SystemToolPathServiceTests
     /// validation scripts carry allowlists of forbidden and required tool names, and flagging a
     /// name being *compared* would make the gate noisy enough to be disabled.
     /// </remarks>
+    private const string KnownPowerShellTool =
+        @"(?:dotnet(?:\.exe)?|powershell(?:\.exe)?|winget(?:\.exe)?|wix(?:\.exe)?|sc(?:\.exe)?|" +
+        @"WindowsSandbox(?:\.exe)?|NVMeDriverPatcher\.Cli(?:\.exe)?)";
+
     private static readonly Regex PowerShellPathLookup = new(
-        @"Get-Command\s+(-Name\s+)?['""]?[A-Za-z0-9_.\-]+\.exe" +                   // $PATH lookup
-        @"|&\s*['""]?[A-Za-z0-9_.\-]+\.exe" +                                       // & tool.exe
-        @"|Start-Process\s+(-FilePath\s+)?['""][A-Za-z0-9_.\-]+\.exe['""]",         // Start-Process 'tool.exe'
-        RegexOptions.Compiled);
+        @"Get-Command\s+(-Name\s+)?['""]?" + KnownPowerShellTool + @"\b['""]?" +          // $PATH lookup
+        @"|&\s*['""]?" + KnownPowerShellTool + @"\b['""]?" +                                      // & tool
+        @"|Start-Process\s+(-FilePath\s+)?['""]?" + KnownPowerShellTool + @"\b['""]?" +       // Start-Process
+        @"|Invoke-Checked\s+['""]?" + KnownPowerShellTool + @"\b['""]?",                         // wrapper parameter
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     [Fact]
     public void NoShippedPackagingScriptResolvesAToolThroughPathOrTheCurrentDirectory()
@@ -168,11 +173,17 @@ public sealed class SystemToolPathServiceTests
         Assert.Matches(PowerShellPathLookup, "    & 'NVMeDriverPatcher.Cli.exe' status");
         Assert.Matches(PowerShellPathLookup, "    $output = & sc.exe $Command $serviceName"); // unquoted
         Assert.Matches(PowerShellPathLookup, "    Start-Process -FilePath 'sc.exe'");
+        Assert.Matches(PowerShellPathLookup, "    Invoke-Checked powershell.exe @(");
+        Assert.Matches(PowerShellPathLookup, "    Invoke-Checked winget.exe @(");
+        Assert.Matches(PowerShellPathLookup, "    Invoke-Checked wix @(");
+        Assert.Matches(PowerShellPathLookup, "    $output = & dotnet test project.csproj");
         // ...but stays quiet on a fully qualified launch and on a name merely being compared.
         Assert.DoesNotMatch(PowerShellPathLookup, "    (Join-Path $PSScriptRoot 'NVMeDriverPatcher.Cli.exe')");
         Assert.DoesNotMatch(PowerShellPathLookup, "    'pnputil.exe'");
         Assert.DoesNotMatch(PowerShellPathLookup, "    & $cli $Command @Arguments");
         Assert.DoesNotMatch(PowerShellPathLookup, "    $output = & $scExe $Command $serviceName");
+        Assert.DoesNotMatch(PowerShellPathLookup, "    Invoke-Checked $powerShellPath @(");
+        Assert.DoesNotMatch(PowerShellPathLookup, "    Invoke-Checked $dotnetPath @(");
 
         var offenders = new[] { "packaging", "scripts" }
             .Select(root => Path.Combine(RepoRoot(), root))

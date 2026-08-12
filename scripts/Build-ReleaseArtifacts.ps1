@@ -30,6 +30,16 @@ if ($sdkVersion -lt $minimumSdk) {
     throw "dotnet SDK $sdkVersion is older than the release floor $minimumSdk. Install SDK $minimumSdk or newer before publishing."
 }
 
+$powerShellPath = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
+if (-not (Test-Path -LiteralPath $powerShellPath -PathType Leaf)) {
+    throw "Windows PowerShell was not found at '$powerShellPath'."
+}
+
+$wingetPath = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winget.exe'
+if (-not (Test-Path -LiteralPath $wingetPath -PathType Leaf)) {
+    throw "winget.exe was not found at '$wingetPath'. Install App Installer before building release artifacts."
+}
+
 & (Join-Path $PSScriptRoot 'Validate-LegacyPowerShellBoundary.ps1') `
     -ScriptPath (Join-Path $repoRoot 'NVMe_Driver_Patcher.ps1')
 
@@ -73,7 +83,7 @@ Invoke-Checked $dotnetPath @(
     '-p:NuGetAuditMode=all',
     '-p:NuGetAuditLevel=low'
 )
-Invoke-Checked powershell.exe @(
+Invoke-Checked $powerShellPath @(
     '-NoProfile',
     '-ExecutionPolicy',
     'Bypass',
@@ -148,7 +158,9 @@ if (-not $SkipMsi) {
     Copy-Item -LiteralPath (Join-Path $repoRoot 'src/NVMeDriverPatcher/nvme.ico') -Destination (Join-Path $input 'icon.ico') -Force
 
     $wix = Join-Path $env:USERPROFILE '.dotnet/tools/wix.exe'
-    if (-not (Test-Path -LiteralPath $wix)) { $wix = 'wix' }
+    if (-not (Test-Path -LiteralPath $wix -PathType Leaf)) {
+        throw "WiX was not found at '$wix'. Install the WixToolset dotnet tool before building the MSI."
+    }
     # -arch x64 is load-bearing, not cosmetic. WiX defaults to x86, and an x86 package puts every
     # HKLM registry component under WOW6432Node on 64-bit Windows -- so the InstallLocation value
     # the PowerShell module and the Intune detection script read from 64-bit contexts is written
@@ -178,7 +190,7 @@ if (-not $SkipMsi) {
     New-Item -ItemType Directory -Path $intuneStage -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $publishRoot "NVMeDriverPatcher-$Version.msi") -Destination $intuneStage -Force
     Copy-Item -LiteralPath (Join-Path $repoRoot 'packaging/intune/Detect-NVMeDriverPatcher.ps1') -Destination $intuneStage -Force
-    Invoke-Checked powershell.exe @(
+    Invoke-Checked $powerShellPath @(
         '-NoProfile',
         '-ExecutionPolicy',
         'Bypass',
@@ -214,7 +226,7 @@ if (Test-Path -LiteralPath $moduleZip) { Remove-Item -LiteralPath $moduleZip -Fo
 Compress-Archive -Path (Join-Path $repoRoot 'packaging/powershell/*') -DestinationPath $moduleZip -Force
 
 $manifestGenerator = Join-Path $repoRoot 'scripts/Update-PackageManifests.ps1'
-Invoke-Checked powershell.exe @(
+Invoke-Checked $powerShellPath @(
     '-NoProfile',
     '-ExecutionPolicy',
     'Bypass',
@@ -231,7 +243,7 @@ Invoke-Checked powershell.exe @(
     '-OutputRoot',
     $publishRoot
 )
-Invoke-Checked winget.exe @('validate', '--manifest', (Join-Path $publishRoot 'winget'))
+Invoke-Checked $wingetPath @('validate', '--manifest', (Join-Path $publishRoot 'winget'))
 
 $chocoStage = Join-Path $publishRoot 'chocolatey-package'
 $nuspec = Join-Path $chocoStage 'nvme-driver-patcher.nuspec'
@@ -277,7 +289,7 @@ Set-Content -LiteralPath (Join-Path $publishRoot 'SHA256SUMS.txt') -Value $sumLi
 # Validate the artifacts that were just built, including the runtimeconfig embedded in every
 # self-contained executable. This keeps the runtime floor a release-builder gate, not merely a
 # check that a release operator has to remember to run separately.
-Invoke-Checked powershell.exe @(
+Invoke-Checked $powerShellPath @(
     '-NoProfile',
     '-ExecutionPolicy',
     'Bypass',
