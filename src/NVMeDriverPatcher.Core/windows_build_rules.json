@@ -64,7 +64,7 @@
       "maxUbr": 8523,
       "expectedPath": "vivetool-fallback",
       "fallbackSet": "native-nvme-stack-25h2",
-      "summary": "25H2 (26200.x before .8524): the registry override is neutered; the FeatureStore fallback works with the newer ID set (55369237 + 48433719 + 49453572 — 60786016 reportedly no longer exists on these builds).",
+      "summary": "25H2 (26200.x before .8524): the registry override is neutered; the FeatureStore fallback applies 55369237 + 48433719 (49453572 is Always Enabled and probe-only; 60786016 reportedly no longer exists on these builds).",
       "sourceUrl": "https://www.elevenforum.com/t/windows-11-25h2-nvmedisk-sys-driver-support.46678/",
       "confidence": "community-reported",
       "lastReviewed": "2026-08-02"

@@ -13,6 +13,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   sampled feature IDs for the running Windows build, calling out exact mismatches without changing
   the registry payload.
 
+### Changed
+- The 26200+ FeatureStore fallback now applies only `55369237` and `48433719`. `49453572`
+  remains in the evidence probe union so hand-applied state is still recognized, but is not
+  written because sampled velocity dumps mark `Standalone_Future` Always Enabled.
+
 ## [5.7.0] - 2026-08-11
 
 ### Fixed
@@ -249,7 +254,8 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   code change, no release and no user action. All eight verdicts were re-checked against their
   sources and all still hold: Server 2025 native NVMe remains an official opt-in (GA, disabled by
   default); the `GenNvmeDisk` compatible-ID removal still blocks binding on 26200.8524+, on later
-  Insider trains and on 26300; the 25H2 FeatureStore route (55369237 + 48433719 + 49453572) is
+  Insider trains and on 26300; the 25H2 FeatureStore route (55369237 + 48433719; 49453572 is
+  Always Enabled and probe-only) is
   still reported working below 26200.8524; and 26100.8106 remains the evidenced 24H2 block point
   with the FeatureStore fallback as the working path. The `26300-feature-flags-page` rule cited a
   community thread that did not actually evidence the Feature flags page - it now cites Microsoft's

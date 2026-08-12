@@ -78,7 +78,7 @@ public static class ViVeToolService
     private static readonly SemaphoreSlim _installLock = new(1, 1);
 
     /// <summary>
-    /// The fallback ID set to apply on THIS machine, selected by Windows build from the
+    /// The applied fallback ID set for THIS machine, selected by Windows build from the
     /// FallbackFeatureCatalog (builds >= 26200 use the newer "Native NVMe Stack" set).
     /// Falls back to the verified March-2026 set when the build can't be read.
     /// </summary>

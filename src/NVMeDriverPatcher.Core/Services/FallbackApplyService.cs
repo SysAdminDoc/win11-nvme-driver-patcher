@@ -76,6 +76,9 @@ public static class FallbackApplyService
             };
         }
 
+        // SelectFallbackSet is the build-specific applied payload. Do not substitute
+        // FeatureStoreWriterService.PostBlockFeatureIds here: that list intentionally includes
+        // probe-only IDs such as Always Enabled 49453572.
         var idSet = ViVeToolService.SelectFallbackSet();
         var prepared = MutationLedgerService.PrepareFeatureStoreFallback(workingDir, idSet.Ids, log);
         if (!prepared.Success || prepared.Ledger is null)

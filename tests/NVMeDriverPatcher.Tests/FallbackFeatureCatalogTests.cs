@@ -25,7 +25,7 @@ public sealed class FallbackFeatureCatalogTests
         Assert.Equal("native-nvme-stack-25h2", set.Name);
         Assert.Contains(55369237, set.Ids);
         Assert.Contains(48433719, set.Ids);
-        Assert.Contains(49453572, set.Ids);
+        Assert.DoesNotContain(49453572, set.Ids);
         // 60786016 reportedly no longer exists on these builds — never apply it there.
         Assert.DoesNotContain(60786016, set.Ids);
     }
@@ -35,8 +35,13 @@ public sealed class FallbackFeatureCatalogTests
     {
         Assert.Equal(new[] { 48433719, 49453572, 55369237, 60786016 },
             FallbackFeatureCatalog.AllKnownIds);
+        Assert.Equal(new[] { 55369237, 48433719 },
+            FallbackFeatureCatalog.NativeNvmeStack25H2.Ids);
+        Assert.Contains(49453572, FallbackFeatureCatalog.ProbeOnlyIds);
         // The FeatureStore evidence probe must recognize evidence from ANY known set,
-        // including ViVeTool runs the user did by hand from a forum guide.
+        // including ViVeTool runs the user did by hand from a forum guide. The applied set is
+        // intentionally smaller: 49453572 is Always Enabled in every sampled branch, so it is
+        // probe-only and must not widen the native write or its mutation obligation.
         Assert.Equal(FallbackFeatureCatalog.AllKnownIds, FeatureStoreWriterService.PostBlockFeatureIds);
     }
 
@@ -56,7 +61,7 @@ public sealed class FallbackFeatureCatalogTests
     public void IdsDisplay_RendersHumanReadableProse()
     {
         Assert.Equal("60786016 and 48433719", FallbackFeatureCatalog.PostBlockMarch2026.IdsDisplay);
-        Assert.Equal("55369237, 48433719 and 49453572", FallbackFeatureCatalog.NativeNvmeStack25H2.IdsDisplay);
+        Assert.Equal("55369237 and 48433719", FallbackFeatureCatalog.NativeNvmeStack25H2.IdsDisplay);
     }
 
     [Fact]

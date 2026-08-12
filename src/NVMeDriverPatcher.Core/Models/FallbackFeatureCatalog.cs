@@ -91,25 +91,33 @@ public static class FallbackFeatureCatalog
         "Windows 11 builds below 26200",
         "verified");
 
-    /// <summary>Newer 25H2 (26200.x) set: 55369237 ("Native NVMe Stack") reportedly
+    /// <summary>Newer 25H2 (26200.x) applied set: 55369237 ("Native NVMe Stack") reportedly
     /// REPLACES 60786016 — one community report says 60786016 no longer exists on recent
-    /// stable builds — used with 48433719 ("UX Acceleration") and 49453572 ("Standalone
-    /// Future"). Community-reported (elevenforum 46678, windowsforum 406833); needs live
-    /// validation on a 26200.8xxx system.</summary>
+    /// stable builds — used with 48433719 ("UX Acceleration"). 49453572 ("Standalone_Future")
+    /// is always enabled in the sampled branches and remains probe-only. Community-reported
+    /// (elevenforum 46678, windowsforum 406833); needs live validation on a 26200.8xxx system.</summary>
     public static FallbackIdSet NativeNvmeStack25H2 { get; } = new(
         "native-nvme-stack-25h2",
-        new[] { 55369237, 48433719, 49453572 },
+        new[] { 55369237, 48433719 },
         "Windows 11 builds 26200 and later",
         "community-reported");
+
+    /// <summary>IDs recognized by evidence probes but deliberately excluded from every
+    /// applied set because the sampled velocity dumps mark them Always Enabled.</summary>
+    public static IReadOnlyList<int> ProbeOnlyIds { get; } = [49453572];
 
     public static IReadOnlyList<FallbackIdSet> All { get; } =
         new[] { PostBlockMarch2026, NativeNvmeStack25H2 };
 
-    /// <summary>Union of every ID across all known sets — what evidence probes must scan
-    /// for, so a fallback applied by ANY known set (or by the user running ViVeTool by
-    /// hand from a forum guide) is still recognized.</summary>
+    /// <summary>Union of every applied set plus probe-only IDs — what evidence probes must
+    /// scan so a fallback applied by ANY known set (or by the user running ViVeTool by hand
+    /// from a forum guide) is still recognized.</summary>
     public static IReadOnlyList<int> AllKnownIds { get; } =
-        All.SelectMany(s => s.Ids).Distinct().OrderBy(i => i).ToArray();
+        All.SelectMany(s => s.Ids)
+            .Concat(ProbeOnlyIds)
+            .Distinct()
+            .OrderBy(i => i)
+            .ToArray();
 
     /// <summary>Returns the sampled velocity-dump name-to-ID map for a build branch.</summary>
     public static IReadOnlyDictionary<string, int> GetKnownRegistryFeatureIdsForBuild(int buildNumber) =>
