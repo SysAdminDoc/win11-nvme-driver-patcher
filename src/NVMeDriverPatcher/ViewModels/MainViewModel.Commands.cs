@@ -362,7 +362,7 @@ public partial class MainViewModel
             var status = RegistryService.GetPatchStatus();
             string label = status.Applied ? "Post-Patch" : "Pre-Patch";
             Log($"Starting storage benchmark ({label})...");
-            Log("This will take approximately 60 seconds. Do not use disk-heavy apps. Click Cancel to stop early.", "WARNING");
+            Log("This will take approximately 120 seconds. Do not use disk-heavy apps. Click Cancel to stop early.", "WARNING");
 
             var result = await BenchmarkService.RunBenchmarkAsync(
                 Config.WorkingDir, label,
@@ -376,8 +376,10 @@ public partial class MainViewModel
                 Log("");
                 Log("============ BENCHMARK RESULTS ============");
                 Log($"  {label} @ {DateTime.Now:HH:mm:ss}");
-                Log($"  4K Random Read:  {result.Read.IOPS} IOPS  |  {result.Read.ThroughputMBs} MB/s  |  {result.Read.AvgLatencyMs} ms avg", "SUCCESS");
-                Log($"  4K Random Write: {result.Write.IOPS} IOPS  |  {result.Write.ThroughputMBs} MB/s  |  {result.Write.AvgLatencyMs} ms avg", "SUCCESS");
+                Log($"  High-QD 4K Random Read (t4/o16 ≈ QD64):  {result.Read.IOPS} IOPS  |  {result.Read.ThroughputMBs} MB/s  |  {result.Read.AvgLatencyMs} ms avg", "SUCCESS");
+                Log($"  High-QD 4K Random Write (t4/o16 ≈ QD64): {result.Write.IOPS} IOPS  |  {result.Write.ThroughputMBs} MB/s  |  {result.Write.AvgLatencyMs} ms avg", "SUCCESS");
+                Log($"  Desktop QD1 4K Random Read (t1/o1):  {result.Desktop.Read.IOPS} IOPS  |  {result.Desktop.Read.ThroughputMBs} MB/s  |  {result.Desktop.Read.AvgLatencyMs} ms avg", "SUCCESS");
+                Log($"  Desktop QD1 4K Random Write (t1/o1): {result.Desktop.Write.IOPS} IOPS  |  {result.Desktop.Write.ThroughputMBs} MB/s  |  {result.Desktop.Write.AvgLatencyMs} ms avg", "SUCCESS");
 
                 // Compare with previous
                 var history = BenchmarkService.GetHistory(Config.WorkingDir);
@@ -390,6 +392,16 @@ public partial class MainViewModel
                     Log($"  --- vs. Previous ({prev.Label}) ---");
                     Log($"  Read IOPS:  {prev.Read.IOPS} --> {result.Read.IOPS} ({(readDelta >= 0 ? "+" : "")}{readDelta}%)", readDelta >= 0 ? "SUCCESS" : "WARNING");
                     Log($"  Write IOPS: {prev.Write.IOPS} --> {result.Write.IOPS} ({(writeDelta >= 0 ? "+" : "")}{writeDelta}%)", writeDelta >= 0 ? "SUCCESS" : "WARNING");
+
+                    if (prev.Desktop?.HasMetrics == true && result.Desktop.HasMetrics)
+                    {
+                        var desktopReadDelta = Math.Round((result.Desktop.Read.IOPS - prev.Desktop.Read.IOPS) / prev.Desktop.Read.IOPS * 100, 1);
+                        var desktopWriteDelta = Math.Round((result.Desktop.Write.IOPS - prev.Desktop.Write.IOPS) / prev.Desktop.Write.IOPS * 100, 1);
+                        Log($"  Desktop QD1 Read:  {prev.Desktop.Read.IOPS} --> {result.Desktop.Read.IOPS} ({(desktopReadDelta >= 0 ? "+" : "")}{desktopReadDelta}%)", desktopReadDelta >= 0 ? "SUCCESS" : "WARNING");
+                        Log($"  Desktop QD1 Write: {prev.Desktop.Write.IOPS} --> {result.Desktop.Write.IOPS} ({(desktopWriteDelta >= 0 ? "+" : "")}{desktopWriteDelta}%)", desktopWriteDelta >= 0 ? "SUCCESS" : "WARNING");
+                        if ((readDelta > 0 || writeDelta > 0) && desktopReadDelta <= 0 && desktopWriteDelta <= 0)
+                            Log("  Summary: High-QD improved while desktop QD1 did not.", "WARNING");
+                    }
                 }
                 Log("===========================================");
 

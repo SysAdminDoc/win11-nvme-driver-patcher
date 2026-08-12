@@ -728,7 +728,8 @@ public static class DiagnosticsService
         if (benchHistory.Count > 0)
         {
             foreach (var bh in benchHistory)
-                sb.AppendLine($"  [{bh.Label}] {bh.Timestamp} -- Read: {bh.Read.IOPS} IOPS, Write: {bh.Write.IOPS} IOPS");
+                sb.AppendLine($"  [{bh.Label}] {bh.Timestamp} -- High-QD read: {bh.Read.IOPS} IOPS, write: {bh.Write.IOPS} IOPS; " +
+                              $"Desktop QD1 read: {bh.Desktop.Read.IOPS} IOPS, write: {bh.Desktop.Write.IOPS} IOPS");
         }
         else sb.AppendLine("  No benchmark history");
 

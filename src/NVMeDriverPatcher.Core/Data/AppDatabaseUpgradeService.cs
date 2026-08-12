@@ -28,13 +28,13 @@ public sealed record AppDatabaseState(
 }
 
 /// <summary>
-/// Adopts the two historical EnsureCreated schemas into an explicit PRAGMA user_version chain.
+/// Adopts the historical EnsureCreated schemas into an explicit PRAGMA user_version chain.
 /// Every existing database is quick-checked first; every upgrade gets a validated SQLite Online
 /// Backup snapshot before transactional DDL. Unknown/newer schemas fail closed without mutation.
 /// </summary>
 internal static class AppDatabaseUpgradeService
 {
-    internal const int CurrentSchemaVersion = 2;
+    internal const int CurrentSchemaVersion = 3;
     private const string UpgradeMutexName = @"Global\NVMeDriverPatcher.DatabaseUpgrade";
     private static readonly TimeSpan UpgradeMutexTimeout = TimeSpan.FromSeconds(30);
 
@@ -55,7 +55,10 @@ internal static class AppDatabaseUpgradeService
             ["Benchmarks"] =
             [
                 "Id", "Label", "Timestamp", "ReadIOPS", "ReadThroughputMBs", "ReadLatencyMs",
-                "WriteIOPS", "WriteThroughputMBs", "WriteLatencyMs", "Notes"
+                "WriteIOPS", "WriteThroughputMBs", "WriteLatencyMs",
+                "DesktopProfileId", "DesktopProfileName", "DesktopThreads", "DesktopOutstandingIo",
+                "DesktopDurationSeconds", "DesktopReadIOPS", "DesktopReadThroughputMBs", "DesktopReadLatencyMs",
+                "DesktopWriteIOPS", "DesktopWriteThroughputMBs", "DesktopWriteLatencyMs", "Notes"
             ],
             ["Snapshots"] =
                 ["Id", "Timestamp", "Description", "RegistryStateJson", "PatchStatusJson", "IsPrePatch"],
@@ -130,8 +133,8 @@ internal static class AppDatabaseUpgradeService
                 return Available(CurrentSchemaVersion, "History database schema and integrity checks passed.");
             }
 
-            // Either a real v1→v2 migration or adoption of the formerly-unversioned v2
-            // layout. Both change schema metadata, so both require a validated backup.
+            // Either a real v1→v3 migration or adoption of a formerly-unversioned v2 layout.
+            // Both change schema metadata, so both require a validated backup.
             return UpgradeExisting(path, detectedVersion, beforeCommit);
         }
         catch (Exception ex)
@@ -156,7 +159,7 @@ internal static class AppDatabaseUpgradeService
             ApplyPersistentPragmas(connection);
             ValidateQuickCheck(connection);
             ValidateCurrentSchema(connection);
-            return Available(CurrentSchemaVersion, "Created history database schema v2; integrity check passed.");
+            return Available(CurrentSchemaVersion, "Created history database schema v3; integrity check passed.");
         }
         catch (Exception ex)
         {
@@ -183,8 +186,18 @@ internal static class AppDatabaseUpgradeService
             if (currentDetected != detectedVersion)
                 throw new InvalidOperationException("Database schema changed while the upgrade lock was held.");
 
+            var originalVersion = detectedVersion;
             if (detectedVersion == 1)
+            {
                 UpgradeV1ToV2(connection, transaction);
+                detectedVersion = 2;
+            }
+
+            if (detectedVersion == 2)
+            {
+                UpgradeV2ToV3(connection, transaction);
+                detectedVersion = 3;
+            }
             else if (detectedVersion != CurrentSchemaVersion)
                 throw new InvalidDataException($"No migration path exists from schema v{detectedVersion}.");
 
@@ -199,7 +212,7 @@ internal static class AppDatabaseUpgradeService
             return new AppDatabaseState(
                 AppDatabaseAvailability.Available,
                 CurrentSchemaVersion,
-                $"Upgraded history database from v{detectedVersion} to v{CurrentSchemaVersion}; backup and integrity checks passed.",
+                $"Upgraded history database from v{originalVersion} to v{CurrentSchemaVersion}; backup and integrity checks passed.",
                 "No recovery action is required.",
                 backup.SnapshotPath);
         }
@@ -232,6 +245,24 @@ internal static class AppDatabaseUpgradeService
             "CREATE INDEX \"IX_BypassIoHistory_VolumeLetter_Timestamp\" ON \"BypassIoHistory\" (\"VolumeLetter\", \"Timestamp\");");
     }
 
+    private static void UpgradeV2ToV3(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        Execute(connection, transaction,
+            """
+            ALTER TABLE "Benchmarks" ADD COLUMN "DesktopProfileId" TEXT NOT NULL DEFAULT 'desktop-qd1';
+            ALTER TABLE "Benchmarks" ADD COLUMN "DesktopProfileName" TEXT NOT NULL DEFAULT 'Desktop QD1';
+            ALTER TABLE "Benchmarks" ADD COLUMN "DesktopThreads" INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE "Benchmarks" ADD COLUMN "DesktopOutstandingIo" INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE "Benchmarks" ADD COLUMN "DesktopDurationSeconds" INTEGER NOT NULL DEFAULT 30;
+            ALTER TABLE "Benchmarks" ADD COLUMN "DesktopReadIOPS" REAL NOT NULL DEFAULT 0;
+            ALTER TABLE "Benchmarks" ADD COLUMN "DesktopReadThroughputMBs" REAL NOT NULL DEFAULT 0;
+            ALTER TABLE "Benchmarks" ADD COLUMN "DesktopReadLatencyMs" REAL NOT NULL DEFAULT 0;
+            ALTER TABLE "Benchmarks" ADD COLUMN "DesktopWriteIOPS" REAL NOT NULL DEFAULT 0;
+            ALTER TABLE "Benchmarks" ADD COLUMN "DesktopWriteThroughputMBs" REAL NOT NULL DEFAULT 0;
+            ALTER TABLE "Benchmarks" ADD COLUMN "DesktopWriteLatencyMs" REAL NOT NULL DEFAULT 0;
+            """);
+    }
+
     private static int DetectSchemaVersion(
         SqliteConnection connection,
         int declaredVersion,
@@ -242,7 +273,10 @@ internal static class AppDatabaseUpgradeService
 
         var tables = ReadObjectNames(connection, "table", transaction);
         if (CurrentTables.All(tables.Contains))
-            return CurrentSchemaVersion;
+        {
+            var benchmarkColumns = ReadColumnNames(connection, "Benchmarks", transaction);
+            return benchmarkColumns.Contains("DesktopProfileId") ? CurrentSchemaVersion : 2;
+        }
         if (BaseTables.All(tables.Contains) && !tables.Contains("BypassIoHistory"))
             return 1;
         return 0;

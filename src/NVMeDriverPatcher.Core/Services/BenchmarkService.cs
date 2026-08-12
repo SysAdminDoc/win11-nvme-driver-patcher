@@ -31,6 +31,12 @@ public static class BenchmarkService
     private const long MinExeBytes = 32 * 1024;
     private static readonly SemaphoreSlim _installLock = new(1, 1);
 
+    internal const int HighQueueThreads = 4;
+    internal const int HighQueueOutstandingIo = 16;
+    internal const int DesktopThreads = 1;
+    internal const int DesktopOutstandingIo = 1;
+    internal const int BenchmarkDurationSeconds = 30;
+
     // Repo-pinned SHA-256 of the DiskSpd v2.2 executables (amd64/arm64/x86). DiskSpd ships no
     // upstream .sha256 sidecar and we execute it, so — matching the ViVeTool bar — verify the
     // extracted exe against this allowlist and fail closed on mismatch rather than trusting host +
@@ -298,25 +304,71 @@ public static class BenchmarkService
         }
 
         var testFile = Path.Combine(benchDir, "diskspd_test.dat");
-        BenchmarkResult? result = new() { Label = label, Timestamp = DateTime.Now.ToString("o") };
+        BenchmarkResult? result = new()
+        {
+            Label = label,
+            Timestamp = DateTime.Now.ToString("o"),
+            Desktop = new BenchmarkProfileResult
+            {
+                ProfileId = "desktop-qd1",
+                ProfileName = "Desktop QD1",
+                Threads = DesktopThreads,
+                OutstandingIo = DesktopOutstandingIo,
+                DurationSeconds = BenchmarkDurationSeconds
+            }
+        };
 
         try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            log?.Invoke("Running 4K random read benchmark (30s)...");
-            ReportProgress(progress, 20, "Benchmarking reads...");
-            var readOutput = await RunDiskSpd(exe, CreateDiskSpdArguments(writePercent: 0, testFile), cancellationToken);
-            result.Read = ParseDiskSpdOutput(readOutput);
-            if (!HasAnyMetrics(result.Read))
-                throw new InvalidOperationException("DiskSpd read benchmark completed, but no parseable metrics were returned.");
+            async Task<BenchmarkMetrics> RunProfileArmAsync(
+                int writePercent,
+                string description,
+                int progressValue,
+                string progressText,
+                int threads,
+                int outstandingIo)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                log?.Invoke(description);
+                ReportProgress(progress, progressValue, progressText);
+                var output = await RunDiskSpd(
+                    exe,
+                    CreateDiskSpdArguments(writePercent, testFile, threads, outstandingIo),
+                    cancellationToken);
+                var metrics = ParseDiskSpdOutput(output);
+                if (!HasAnyMetrics(metrics))
+                    throw new InvalidOperationException($"{description} completed, but no parseable metrics were returned.");
+                return metrics;
+            }
 
-            cancellationToken.ThrowIfCancellationRequested();
-            log?.Invoke("Running 4K random write benchmark (30s)...");
-            ReportProgress(progress, 60, "Benchmarking writes...");
-            var writeOutput = await RunDiskSpd(exe, CreateDiskSpdArguments(writePercent: 100, testFile), cancellationToken);
-            result.Write = ParseDiskSpdOutput(writeOutput);
-            if (!HasAnyMetrics(result.Write))
-                throw new InvalidOperationException("DiskSpd write benchmark completed, but no parseable metrics were returned.");
+            result.Read = await RunProfileArmAsync(
+                writePercent: 0,
+                description: "Running high-QD 4K random read (t4/o16, approximately QD64; 30s)...",
+                progressValue: 10,
+                progressText: "Benchmarking high-QD reads...",
+                threads: HighQueueThreads,
+                outstandingIo: HighQueueOutstandingIo);
+            result.Write = await RunProfileArmAsync(
+                writePercent: 100,
+                description: "Running high-QD 4K random write (t4/o16, approximately QD64; 30s)...",
+                progressValue: 30,
+                progressText: "Benchmarking high-QD writes...",
+                threads: HighQueueThreads,
+                outstandingIo: HighQueueOutstandingIo);
+            result.Desktop.Read = await RunProfileArmAsync(
+                writePercent: 0,
+                description: "Running desktop QD1 4K random read (t1/o1; 30s)...",
+                progressValue: 55,
+                progressText: "Benchmarking desktop reads...",
+                threads: DesktopThreads,
+                outstandingIo: DesktopOutstandingIo);
+            result.Desktop.Write = await RunProfileArmAsync(
+                writePercent: 100,
+                description: "Running desktop QD1 4K random write (t1/o1; 30s)...",
+                progressValue: 75,
+                progressText: "Benchmarking desktop writes...",
+                threads: DesktopThreads,
+                outstandingIo: DesktopOutstandingIo);
         }
         catch (OperationCanceledException)
         {
@@ -386,15 +438,31 @@ public static class BenchmarkService
     }
 
     internal static IReadOnlyList<string> CreateDiskSpdArguments(int writePercent, string testFile)
+        => CreateDiskSpdArguments(
+            writePercent,
+            testFile,
+            HighQueueThreads,
+            HighQueueOutstandingIo,
+            BenchmarkDurationSeconds);
+
+    internal static IReadOnlyList<string> CreateDiskSpdArguments(
+        int writePercent,
+        string testFile,
+        int threads,
+        int outstandingIo,
+        int durationSeconds = BenchmarkDurationSeconds)
     {
         writePercent = Math.Clamp(writePercent, 0, 100);
+        threads = Math.Max(1, threads);
+        outstandingIo = Math.Max(1, outstandingIo);
+        durationSeconds = Math.Max(1, durationSeconds);
         return
         [
             "-c128M",
-            "-d30",
+            $"-d{durationSeconds}",
             $"-w{writePercent}",
-            "-t4",
-            "-o16",
+            $"-t{threads}",
+            $"-o{outstandingIo}",
             "-b4K",
             "-r",
             "-Sh",
@@ -533,7 +601,7 @@ public static class BenchmarkService
 
         try
         {
-            if (result.Read.IOPS > 0 || result.Write.IOPS > 0)
+            if (HasAnyMetrics(result.Read) || HasAnyMetrics(result.Write) || result.Desktop?.HasMetrics == true)
                 DataService.SaveBenchmark(result);
         }
         catch { }
@@ -566,6 +634,18 @@ public static class BenchmarkService
                 result.Timestamp ??= string.Empty;
                 result.Read ??= new BenchmarkMetrics();
                 result.Write ??= new BenchmarkMetrics();
+                result.Desktop ??= new BenchmarkProfileResult();
+                result.Desktop.ProfileId = string.IsNullOrWhiteSpace(result.Desktop.ProfileId)
+                    ? "desktop-qd1" : result.Desktop.ProfileId;
+                result.Desktop.ProfileName = string.IsNullOrWhiteSpace(result.Desktop.ProfileName)
+                    ? "Desktop QD1" : result.Desktop.ProfileName;
+                result.Desktop.Threads = result.Desktop.Threads <= 0 ? DesktopThreads : result.Desktop.Threads;
+                result.Desktop.OutstandingIo = result.Desktop.OutstandingIo <= 0
+                    ? DesktopOutstandingIo : result.Desktop.OutstandingIo;
+                result.Desktop.DurationSeconds = result.Desktop.DurationSeconds <= 0
+                    ? BenchmarkDurationSeconds : result.Desktop.DurationSeconds;
+                result.Desktop.Read ??= new BenchmarkMetrics();
+                result.Desktop.Write ??= new BenchmarkMetrics();
                 return result;
             })
             .ToList();

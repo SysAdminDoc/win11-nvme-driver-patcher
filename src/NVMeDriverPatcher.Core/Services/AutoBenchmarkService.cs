@@ -11,6 +11,10 @@ public class BenchmarkBaseline
     public double WriteIops { get; set; }
     public double ReadLatencyMs { get; set; }
     public double WriteLatencyMs { get; set; }
+    public double DesktopReadIops { get; set; }
+    public double DesktopWriteIops { get; set; }
+    public double DesktopReadLatencyMs { get; set; }
+    public double DesktopWriteLatencyMs { get; set; }
     public string Notes { get; set; } = string.Empty;
 }
 
@@ -19,6 +23,9 @@ public class RegressionVerdict
     public bool Regressed { get; set; }
     public double ReadDeltaPercent { get; set; }
     public double WriteDeltaPercent { get; set; }
+    public bool HasDesktopComparison { get; set; }
+    public double DesktopReadDeltaPercent { get; set; }
+    public double DesktopWriteDeltaPercent { get; set; }
     public string Summary { get; set; } = string.Empty;
 }
 
@@ -76,6 +83,10 @@ public static class AutoBenchmarkService
         WriteIops = result.Write?.IOPS ?? 0,
         ReadLatencyMs = result.Read?.AvgLatencyMs ?? 0,
         WriteLatencyMs = result.Write?.AvgLatencyMs ?? 0,
+        DesktopReadIops = result.Desktop?.Read?.IOPS ?? 0,
+        DesktopWriteIops = result.Desktop?.Write?.IOPS ?? 0,
+        DesktopReadLatencyMs = result.Desktop?.Read?.AvgLatencyMs ?? 0,
+        DesktopWriteLatencyMs = result.Desktop?.Write?.AvgLatencyMs ?? 0,
         Notes = result.Label ?? string.Empty
     };
 
@@ -83,17 +94,47 @@ public static class AutoBenchmarkService
     {
         double readDelta = PercentDelta(baseline.ReadIops, current.ReadIops);
         double writeDelta = PercentDelta(baseline.WriteIops, current.WriteIops);
-        bool regressed = readDelta <= -thresholdPercent || writeDelta <= -thresholdPercent;
+        bool hasDesktopRead = baseline.DesktopReadIops > 0 && current.DesktopReadIops > 0;
+        bool hasDesktopWrite = baseline.DesktopWriteIops > 0 && current.DesktopWriteIops > 0;
+        double desktopReadDelta = PercentDelta(baseline.DesktopReadIops, current.DesktopReadIops);
+        double desktopWriteDelta = PercentDelta(baseline.DesktopWriteIops, current.DesktopWriteIops);
+        bool regressed = readDelta <= -thresholdPercent ||
+                         writeDelta <= -thresholdPercent ||
+                         (hasDesktopRead && desktopReadDelta <= -thresholdPercent) ||
+                         (hasDesktopWrite && desktopWriteDelta <= -thresholdPercent);
+        bool hasDesktopComparison = hasDesktopRead || hasDesktopWrite;
+        var status = regressed ? "REGRESSION" : "OK";
+        var highQueue = $"high-QD read {FormatDelta(readDelta)} / write {FormatDelta(writeDelta)}";
+        var summary = $"{status}: {highQueue}";
+
+        if (hasDesktopComparison)
+        {
+            var desktopQueue =
+                $"desktop QD1 read {FormatDelta(desktopReadDelta)} / write {FormatDelta(desktopWriteDelta)}";
+            bool highImproved = readDelta > 0 || writeDelta > 0;
+            bool desktopDidNotImprove =
+                (!hasDesktopRead || desktopReadDelta <= 0) &&
+                (!hasDesktopWrite || desktopWriteDelta <= 0);
+            summary = highImproved && desktopDidNotImprove
+                ? $"{status}: High-QD improved while desktop QD1 did not: {highQueue}; {desktopQueue}"
+                : $"{status}: {highQueue}; {desktopQueue}";
+        }
+
         return new RegressionVerdict
         {
             Regressed = regressed,
             ReadDeltaPercent = readDelta,
             WriteDeltaPercent = writeDelta,
+            HasDesktopComparison = hasDesktopComparison,
+            DesktopReadDeltaPercent = desktopReadDelta,
+            DesktopWriteDeltaPercent = desktopWriteDelta,
             Summary = regressed
-                ? $"REGRESSION: read {readDelta:+0.0;-0.0}% / write {writeDelta:+0.0;-0.0}% (threshold ±{thresholdPercent}%)"
-                : $"OK: read {readDelta:+0.0;-0.0}% / write {writeDelta:+0.0;-0.0}%"
+                ? $"{summary} (threshold ±{thresholdPercent}%)"
+                : summary
         };
     }
+
+    private static string FormatDelta(double value) => $"{value:+0.0;-0.0}%";
 
     internal static double PercentDelta(double baseline, double current)
     {

@@ -8,6 +8,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -55,7 +56,7 @@
 
             <Border Grid.Column="0" Style="{StaticResource MetricCard}">
                 <StackPanel>
-                    <TextBlock Text="Random Read" Style="{StaticResource SectionEyebrow}"/>
+                    <TextBlock Text="High-QD Random Read" Style="{StaticResource SectionEyebrow}"/>
                     <WrapPanel Margin="0,5,0,0">
                         <TextBlock x:Name="ReadIopsValue"
                                    Text="-"
@@ -78,7 +79,7 @@
 
             <Border Grid.Column="2" Style="{StaticResource MetricCard}">
                 <StackPanel>
-                    <TextBlock Text="Random Write" Style="{StaticResource SectionEyebrow}"/>
+                    <TextBlock Text="High-QD Random Write" Style="{StaticResource SectionEyebrow}"/>
                     <WrapPanel Margin="0,5,0,0">
                         <TextBlock x:Name="WriteIopsValue"
                                    Text="-"
@@ -100,7 +101,61 @@
             </Border>
         </Grid>
 
-        <Border x:Name="InterpretationCard" Grid.Row="2" Margin="0,10,0,0" Style="{StaticResource InsetCard}">
+        <Grid Grid.Row="2" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource MetricCard}">
+                <StackPanel>
+                    <TextBlock Text="Desktop QD1 Random Read" Style="{StaticResource SectionEyebrow}"/>
+                    <WrapPanel Margin="0,5,0,0">
+                        <TextBlock x:Name="DesktopReadIopsValue"
+                                   Text="-"
+                                   Foreground="{DynamicResource Accent}"
+                                   FontSize="21"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text=" IOPS"
+                                   Margin="6,0,0,4"
+                                   VerticalAlignment="Bottom"
+                                   Foreground="{DynamicResource TextDim}"
+                                   FontSize="12"/>
+                    </WrapPanel>
+                    <TextBlock x:Name="DesktopReadDelta"
+                               Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextMuted}"
+                               FontSize="12"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource MetricCard}">
+                <StackPanel>
+                    <TextBlock Text="Desktop QD1 Random Write" Style="{StaticResource SectionEyebrow}"/>
+                    <WrapPanel Margin="0,5,0,0">
+                        <TextBlock x:Name="DesktopWriteIopsValue"
+                                   Text="-"
+                                   Foreground="{DynamicResource Yellow}"
+                                   FontSize="21"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text=" IOPS"
+                                   Margin="6,0,0,4"
+                                   VerticalAlignment="Bottom"
+                                   Foreground="{DynamicResource TextDim}"
+                                   FontSize="12"/>
+                    </WrapPanel>
+                    <TextBlock x:Name="DesktopWriteDelta"
+                               Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextMuted}"
+                               FontSize="12"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Border x:Name="InterpretationCard" Grid.Row="3" Margin="0,10,0,0" Style="{StaticResource InsetCard}">
             <StackPanel>
                 <TextBlock Text="Summary" Style="{StaticResource SectionEyebrow}"/>
                 <TextBlock x:Name="BenchmarkSummaryText"
@@ -111,12 +166,12 @@
             </StackPanel>
         </Border>
 
-        <Expander Grid.Row="3"
+        <Expander Grid.Row="4"
                   Margin="0,10,0,0"
                   IsExpanded="True"
                   Style="{StaticResource DarkExpander}">
             <Expander.Header>
-                <TextBlock Text="Trend chart"
+                <TextBlock Text="High-QD trend chart"
                            FontWeight="SemiBold"/>
             </Expander.Header>
             <StackPanel>

@@ -568,7 +568,7 @@ public partial class MainViewModel : ObservableObject
                 var last = history[^1];
                 if (last.Read.IOPS > 0)
                 {
-                    BenchLabelText = $"Last bench: {last.Read.IOPS} IOPS read / {last.Write.IOPS} IOPS write ({last.Label})";
+                    BenchLabelText = $"Last bench: {last.Read.IOPS} IOPS high-QD read / {last.Write.IOPS} IOPS high-QD write; {last.Desktop.Read.IOPS} IOPS desktop QD1 read ({last.Label})";
                     BenchLabelVisible = true;
                 }
             }

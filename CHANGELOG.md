@@ -9,6 +9,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   in every self-contained executable, and rejects older runtime payloads from the release gate.
 
 ### Added
+- The built-in DiskSpd benchmark now records the existing high-QD profile alongside a desktop
+  QD1 profile, exposes both through the GUI and CLI, and explains when a high-QD gain does not
+  carry over to desktop I/O.
 - `status` and the dry-run preview now compare the registry override IDs being written with the
   sampled feature IDs for the running Windows build, calling out exact mismatches without changing
   the registry payload.
@@ -25,6 +28,8 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   route while ViVeTool is only a secondary cross-check.
 
 ### Changed
+- Benchmark history now persists desktop profile metadata and metrics in schema v3, with a
+  transactional v2→v3 migration that defaults older records to an unmeasured desktop profile.
 - The 26200+ FeatureStore fallback now applies only `55369237` and `48433719`. `49453572`
   remains in the evidence probe union so hand-applied state is still recognized, but is not
   written because sampled velocity dumps mark `Standalone_Future` Always Enabled.

@@ -86,6 +86,42 @@ public sealed class BenchmarkServiceTests
     }
 
     [Fact]
+    public void CreateDiskSpdArguments_DesktopProfileUsesQueueDepthOne()
+    {
+        const string target = @"C:\NVMe Bench\diskspd_test.dat";
+
+        var args = BenchmarkService.CreateDiskSpdArguments(
+            writePercent: 0,
+            target,
+            threads: BenchmarkService.DesktopThreads,
+            outstandingIo: BenchmarkService.DesktopOutstandingIo);
+
+        Assert.Contains("-t1", args);
+        Assert.Contains("-o1", args);
+        Assert.Contains("-d30", args);
+        Assert.Contains("-b4K", args);
+    }
+
+    [Fact]
+    public void SanitizeBenchmarkHistory_AddsDesktopProfileToLegacyResults()
+    {
+        var sanitized = BenchmarkService.SanitizeBenchmarkHistory(
+        [
+            new BenchmarkResult
+            {
+                Label = "legacy",
+                Read = new BenchmarkMetrics { IOPS = 100 },
+                Write = new BenchmarkMetrics { IOPS = 200 }
+            }
+        ]);
+
+        var result = Assert.Single(sanitized);
+        Assert.Equal("desktop-qd1", result.Desktop.ProfileId);
+        Assert.Equal(1, result.Desktop.Threads);
+        Assert.False(result.Desktop.HasMetrics);
+    }
+
+    [Fact]
     public void ReportProgress_SwallowsCallbackFailures()
     {
         BenchmarkService.ReportProgress((_, _) => throw new InvalidOperationException("UI closed"), 50, "halfway");

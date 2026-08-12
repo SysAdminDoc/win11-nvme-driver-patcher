@@ -93,6 +93,7 @@ public static class DataService
         try
         {
             using var db = new AppDbContext();
+            var desktop = result.Desktop ?? new BenchmarkProfileResult();
 
             var record = new BenchmarkRecord
             {
@@ -109,7 +110,18 @@ public static class DataService
                 ReadLatencyMs = result.Read?.AvgLatencyMs ?? 0,
                 WriteIOPS = result.Write?.IOPS ?? 0,
                 WriteThroughputMBs = result.Write?.ThroughputMBs ?? 0,
-                WriteLatencyMs = result.Write?.AvgLatencyMs ?? 0
+                WriteLatencyMs = result.Write?.AvgLatencyMs ?? 0,
+                DesktopProfileId = string.IsNullOrWhiteSpace(desktop.ProfileId) ? "desktop-qd1" : desktop.ProfileId,
+                DesktopProfileName = string.IsNullOrWhiteSpace(desktop.ProfileName) ? "Desktop QD1" : desktop.ProfileName,
+                DesktopThreads = desktop.Threads > 0 ? desktop.Threads : 1,
+                DesktopOutstandingIo = desktop.OutstandingIo > 0 ? desktop.OutstandingIo : 1,
+                DesktopDurationSeconds = desktop.DurationSeconds > 0 ? desktop.DurationSeconds : 30,
+                DesktopReadIOPS = desktop.Read?.IOPS ?? 0,
+                DesktopReadThroughputMBs = desktop.Read?.ThroughputMBs ?? 0,
+                DesktopReadLatencyMs = desktop.Read?.AvgLatencyMs ?? 0,
+                DesktopWriteIOPS = desktop.Write?.IOPS ?? 0,
+                DesktopWriteThroughputMBs = desktop.Write?.ThroughputMBs ?? 0,
+                DesktopWriteLatencyMs = desktop.Write?.AvgLatencyMs ?? 0
             };
 
             db.Benchmarks.Add(record);
