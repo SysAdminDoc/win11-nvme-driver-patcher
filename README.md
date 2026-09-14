@@ -11,6 +11,16 @@ A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driv
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows11)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+<p align="center">
+  <a href="https://ko-fi.com/X8K126YVER">
+    <img height="42" src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" alt="Buy me a coffee on Ko-fi" />
+  </a>
+</p>
+
+<p align="center">
+  <sub><em>If NVMe Driver Patcher helps your system, a coffee helps me keep its safety checks and recovery tools current.</em></sub>
+</p>
+
 ## Quick Start
 
 **GUI (recommended)** — download [`NVMeDriverPatcher.exe`](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMeDriverPatcher.exe) from the latest release and run it. Administrator elevation is automatic; no install or prerequisites needed (self-contained single file).
