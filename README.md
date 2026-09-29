@@ -79,10 +79,10 @@ $actual = (Get-FileHash -Algorithm SHA256 -Path $file).Hash.ToLower()
 if ($expected -eq $actual) { "OK: $file" } else { "MISMATCH: expected $expected, got $actual" }
 ```
 
-The GUI's in-app auto-updater (**Help → Check for updates**) performs the same
-SHA-256 sidecar check automatically at the original GitHub release asset URL
-before falling back to any redirected CDN URL. It refuses to stage any binary
-that either fails the hash or has no release sidecar (an arbitrary valid Authenticode signer is not accepted).
+The GUI's in-app auto-updater (**Help → Check for updates**) does its own check separately: it
+fetches a per-asset `NVMeDriverPatcher.exe.sha256` sidecar at the original GitHub release asset
+URL, following redirects to the CDN, before staging anything. It refuses to stage a binary that
+either fails the hash or has no sidecar (an arbitrary valid Authenticode signer is not accepted).
 This is load-bearing supply-chain defense, not just UI polish. Staged executables live in an
 Administrators/SYSTEM-only ProgramData directory; the post-exit replacement command re-checks
 the release SHA-256 immediately before copy and verifies the installed target again before launch.
