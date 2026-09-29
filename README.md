@@ -23,9 +23,9 @@ A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driv
 
 ## Quick Start
 
-**GUI (recommended)** — download [`NVMeDriverPatcher.exe`](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMeDriverPatcher.exe) from the latest release and run it. Administrator elevation is automatic; no install or prerequisites needed (self-contained single file).
+**GUI (recommended)**: download [`NVMeDriverPatcher.exe`](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMeDriverPatcher.exe) from the latest release and run it. Administrator elevation is automatic; no install or prerequisites needed (self-contained single file).
 
-**CLI (automation/fleets)** — download [`NVMeDriverPatcher.Cli.exe`](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMeDriverPatcher.Cli.exe):
+**CLI (automation/fleets)**: download [`NVMeDriverPatcher.Cli.exe`](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMeDriverPatcher.Cli.exe):
 
 ```powershell
 .\NVMeDriverPatcher.Cli.exe status
@@ -36,16 +36,18 @@ A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driv
 and watchdog. These are diagnostic/status builds until Microsoft ships an ARM64 `nvmedisk.sys`;
 use the x64 assets under emulation if you need the current native-NVMe enablement path.
 
-**MSI (managed deployment)** — `NVMeDriverPatcher-<version>.msi` from the release installs GUI + CLI + tray per-machine; the real-time watchdog service is an opt-in feature (`ADDLOCAL=WatchdogService`).
+**MSI (managed deployment)**: `NVMeDriverPatcher-<version>.msi` from the release installs GUI + CLI + tray per-machine; the real-time watchdog service is an opt-in feature (`ADDLOCAL=WatchdogService`).
 
 <details>
 <summary><b>Legacy PowerShell script (deprecated)</b></summary>
 
+Download [`NVMe_Driver_Patcher.ps1`](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMe_Driver_Patcher.ps1), read it, then run it from the folder you saved it to:
+
 ```powershell
-irm https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/NVMe_Driver_Patcher.ps1 -OutFile NVMe_Driver_Patcher.ps1; .\NVMe_Driver_Patcher.ps1
+.\NVMe_Driver_Patcher.ps1
 ```
 
-> **Deprecated — read/recover-only on every build.** The script's unsafe registry-only apply
+> **Deprecated: read/recover-only on every build.** The script's unsafe registry-only apply
 > path has been retired because it could report success without a driver bind and bypassed the
 > maintained app's build policy and recovery ledger. `-Apply` now exits 5 before elevation or
 > any machine change and points to the current GUI/CLI. These capabilities remain:
@@ -64,14 +66,15 @@ irm https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/dow
 
 ### Verify the download (recommended)
 
-Every release artifact ships with a matching `<asset>.sha256` sidecar and a combined
-`SHA256SUMS.txt`. Verify before running — this catches a tampered CDN, a corrupted
-download, or a masquerading file under the same name:
+Every release also carries a combined [`SHA256SUMS.txt`](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/SHA256SUMS.txt) listing every asset's hash.
+Download it into the same folder as whatever you saved, then verify locally before running
+anything. This catches a tampered CDN, a corrupted download, or a masquerading file under the
+same name:
 
 ```powershell
-# Verify any single artifact against its .sha256 sidecar
+# Verify any single artifact against SHA256SUMS.txt
 $file = 'NVMe_Driver_Patcher.ps1'
-$expected = (Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/$file.sha256").Content.Split(' ')[0].Trim()
+$expected = ((Get-Content .\SHA256SUMS.txt | Select-String -Pattern ([regex]::Escape($file))) -split '\s+')[0]
 $actual = (Get-FileHash -Algorithm SHA256 -Path $file).Hash.ToLower()
 if ($expected -eq $actual) { "OK: $file" } else { "MISMATCH: expected $expected, got $actual" }
 ```
@@ -79,8 +82,8 @@ if ($expected -eq $actual) { "OK: $file" } else { "MISMATCH: expected $expected,
 The GUI's in-app auto-updater (**Help → Check for updates**) performs the same
 SHA-256 sidecar check automatically at the original GitHub release asset URL
 before falling back to any redirected CDN URL. It refuses to stage any binary
-that either fails the hash or has no release sidecar (an arbitrary valid Authenticode signer is not accepted)
-— this is load-bearing supply-chain defense, not just UI polish. Staged executables live in an
+that either fails the hash or has no release sidecar (an arbitrary valid Authenticode signer is not accepted).
+This is load-bearing supply-chain defense, not just UI polish. Staged executables live in an
 Administrators/SYSTEM-only ProgramData directory; the post-exit replacement command re-checks
 the release SHA-256 immediately before copy and verifies the installed target again before launch.
 
@@ -98,7 +101,7 @@ Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the 
 | SafeBoot Minimal Key | Prevents INACCESSIBLE_BOOT_DEVICE BSOD in Safe Mode |
 | SafeBoot Network Key | Safe Mode with Networking support |
 
-Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be included via checkbox. **Recommended** -- without it, the new I/O scheduler may not activate and results can be inconsistent.
+Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be included via checkbox. **Recommended**: without it, the new I/O scheduler may not activate and results can be inconsistent.
 
 The three registry override IDs above are the historical payload the tool still writes; Windows
 has rotated the corresponding feature IDs on sampled branches. `status` and the dry-run preview
@@ -114,79 +117,79 @@ and an `Always Disabled` row is reported as a known no-route result rather than 
 
 Since v4.6.1 the patch also writes two **service-name** SafeBoot entries for KB5079391 / 25H2
 (`SafeBoot\Minimal\nvmedisk` and `SafeBoot\Network\nvmedisk`). They are not counted in the five
-components above, but removal must delete them too — the Recovery Kit and `remove` both do.
+components above, but removal must delete them too. The Recovery Kit and `remove` both do.
 `NVMeDriverPatcher.Cli upgrade-safeboot` adds them to a machine patched before v4.6.1.
 
-> **Important:** The SafeBoot keys are critical. Without them, your system cannot boot into Safe Mode after enabling Native NVMe. Many manual guides omit these keys -- this tool includes them automatically.
+> **Important:** The SafeBoot keys are critical. Without them, your system cannot boot into Safe Mode after enabling Native NVMe. Many manual guides omit these keys; this tool includes them automatically.
 
 ## Features
 
 **Safety & Compatibility**
-- **VeraCrypt hard block** -- detects system encryption and refuses to patch ([breaks boot entirely](https://github.com/veracrypt/VeraCrypt/issues/1640))
-- **Typed critical environment gate** -- administrator, VeraCrypt, Intel RST/VMD, BitLocker, and SafeBoot probes return `Pass`, `Fail`, or `Unknown` with reason code, native error, evidence, and timestamp; `Fail`/`Unknown` cannot be forced past
-- **Proved BitLocker recovery + suspension** -- requires a numerical recovery-password protector, surfaces only its safe-to-match ID, refreshes AD/Entra escrow on joined devices, and WMI-confirms an exact one-reboot suspension before mutation
-- **Crash-consistent, access-controlled mutation ledger** -- durably captures the first clean registry, SafeBoot, and FeatureStore baseline before mutation under `%ProgramData%\NVMePatcher\State`; the protected administrator/SYSTEM-only DACL, owner/reparse/hard-link checks, and atomic publication prevent standard-user pre-creation or replacement. Interrupted work and uninstall restore that exact state, and restart is not offered until the reboot checkpoint is durable
-- **Fail-closed startup recovery** -- an incomplete interrupted-ledger restore, FeatureStore recovery, or watchdog auto-revert disables Apply, reinstall, fallback, SafeBoot upgrade, and hot-swap for the rest of the process. Removal, recovery exports, verification, and diagnostics remain available with the exact failure recorded in support evidence
-- **Durable registry commit proof** -- every feature override and SafeBoot value must complete `SetValue`, a successful `Flush`, and readback through a newly opened HKLM64 handle before the ledger can advance to Applied or a restart can be offered; any failed key restores the exact baseline
-- **Versioned history database upgrades** -- legacy v1 and formerly-unversioned v2 SQLite files are detected from their real schema, quick-checked, copied through SQLite Online Backup, upgraded transactionally, and revalidated before history is served. Corrupt, incomplete, or newer schemas remain untouched and surface an exact backup/recovery path instead of appearing as empty history
-- **Durable shared configuration** -- GUI, CLI, Tray, and Watchdog configuration access fails closed on cross-process lock contention; validated, flushed staging files publish atomically while retaining a validated `config.json.bak`, and corrupt primary/backup evidence is preserved before safe defaults are used
-- **Authenticated ViVeTool fallback** -- the native FeatureStore path is primary and ViVeTool is a secondary cross-check only; the signed app embeds exact v0.3.4 x64/ARM64 archive and member hashes. That trusted upstream release was published on 2025-03-10 and is dormant, so its dictionary may not cover current Windows builds. An unlisted release, wrong architecture, missing/extra/nested file, modified companion DLL/data file, or tampered cache is rejected before installation and rechecked before every elevated launch
-- **Verified non-boot hot-swap transaction** -- a live swap aborts before dismount if any volume flush fails, uses the controller's documented SetupAPI property-state change, honors restart flags, and reports success only after the exact controller driver/service and every original volume mount are independently proved
-- **Comprehensive software detection** -- warns about Intel RST (BSOD risk), Intel VMD (boot failures), Hyper-V/WSL2 (40% I/O regression), Storage Spaces (array degradation), Veeam, Acronis, Macrium, UrBackup, NinjaOne, Paragon, Samsung Magician, WD Dashboard, Crucial Storage Executive, CrystalDiskInfo, Data Deduplication
-- **Laptop/power warning** -- detects laptops and warns about APST battery regression (~15% impact)
-- **Rollback on partial failure** -- restores pre-existing values from the durable baseline instead of assuming every touched value was absent
+- **VeraCrypt hard block**: detects system encryption and refuses to patch ([breaks boot entirely](https://github.com/veracrypt/VeraCrypt/issues/1640))
+- **Typed critical environment gate**: administrator, VeraCrypt, Intel RST/VMD, BitLocker, and SafeBoot probes return `Pass`, `Fail`, or `Unknown` with reason code, native error, evidence, and timestamp; `Fail`/`Unknown` cannot be forced past
+- **Proved BitLocker recovery + suspension**: requires a numerical recovery-password protector, surfaces only its safe-to-match ID, refreshes AD/Entra escrow on joined devices, and WMI-confirms an exact one-reboot suspension before mutation
+- **Crash-consistent, access-controlled mutation ledger**: durably captures the first clean registry, SafeBoot, and FeatureStore baseline before mutation under `%ProgramData%\NVMePatcher\State`; the protected administrator/SYSTEM-only DACL, owner/reparse/hard-link checks, and atomic publication prevent standard-user pre-creation or replacement. Interrupted work and uninstall restore that exact state, and restart is not offered until the reboot checkpoint is durable
+- **Fail-closed startup recovery**: an incomplete interrupted-ledger restore, FeatureStore recovery, or watchdog auto-revert disables Apply, reinstall, fallback, SafeBoot upgrade, and hot-swap for the rest of the process. Removal, recovery exports, verification, and diagnostics remain available with the exact failure recorded in support evidence
+- **Durable registry commit proof**: every feature override and SafeBoot value must complete `SetValue`, a successful `Flush`, and readback through a newly opened HKLM64 handle before the ledger can advance to Applied or a restart can be offered; any failed key restores the exact baseline
+- **Versioned history database upgrades**: legacy v1 and formerly-unversioned v2 SQLite files are detected from their real schema, quick-checked, copied through SQLite Online Backup, upgraded transactionally, and revalidated before history is served. Corrupt, incomplete, or newer schemas remain untouched and surface an exact backup/recovery path instead of appearing as empty history
+- **Durable shared configuration**: GUI, CLI, Tray, and Watchdog configuration access fails closed on cross-process lock contention; validated, flushed staging files publish atomically while retaining a validated `config.json.bak`, and corrupt primary/backup evidence is preserved before safe defaults are used
+- **Authenticated ViVeTool fallback**: the native FeatureStore path is primary and ViVeTool is a secondary cross-check only; the signed app embeds exact v0.3.4 x64/ARM64 archive and member hashes. That trusted upstream release was published on 2025-03-10 and is dormant, so its dictionary may not cover current Windows builds. An unlisted release, wrong architecture, missing/extra/nested file, modified companion DLL/data file, or tampered cache is rejected before installation and rechecked before every elevated launch
+- **Verified non-boot hot-swap transaction**: a live swap aborts before dismount if any volume flush fails, uses the controller's documented SetupAPI property-state change, honors restart flags, and reports success only after the exact controller driver/service and every original volume mount are independently proved
+- **Comprehensive software detection**: warns about Intel RST (BSOD risk), Intel VMD (boot failures), Hyper-V/WSL2 (40% I/O regression), Storage Spaces (array degradation), Veeam, Acronis, Macrium, UrBackup, NinjaOne, Paragon, Samsung Magician, WD Dashboard, Crucial Storage Executive, CrystalDiskInfo, Data Deduplication
+- **Laptop/power warning**: detects laptops and warns about APST battery regression (~15% impact)
+- **Rollback on partial failure**: restores pre-existing values from the durable baseline instead of assuming every touched value was absent
 - **Registry backup** export + system restore point creation before any changes
-- **OS-native recovery advisory** -- preflight reports whether the Windows build exposes Point-in-Time Restore, the newest restore-point age when queryable, and Quick Machine Recovery/remediation state. These are informational signals; the offline Recovery Kit and the existing recovery gate remain the primary rollback path.
+- **OS-native recovery advisory**: preflight reports whether the Windows build exposes Point-in-Time Restore, the newest restore-point age when queryable, and Quick Machine Recovery/remediation state. These are informational signals; the offline Recovery Kit and the existing recovery gate remain the primary rollback path.
 - **Third-party driver detection** (Samsung, WD, Intel RST, AMD, SK Hynix, Crucial, Phison)
-- **Custom INF / TESTSIGNING warning** -- flags test-signed native NVMe driver-store workarounds that the registry rollback cannot remove
-- **Recovery Kit generation** -- creates .reg + .bat files for offline WinRE recovery (auto-detects WinRE, loads offline registry hive)
+- **Custom INF / TESTSIGNING warning**: flags test-signed native NVMe driver-store workarounds that the registry rollback cannot remove
+- **Recovery Kit generation**: creates .reg + .bat files for offline WinRE recovery (auto-detects WinRE, loads offline registry hive)
 
 **Diagnostics & Benchmarking**
-- **Automated verification** -- 1,000+ discovered test cases cover mutation safety, recovery, packaging, CLI, accessibility, and update integrity; release validation derives the live count from the test project
-- **Built-in DiskSpd benchmark** -- high-QD (t4/o16 ≈ QD64) plus desktop QD1 4K random read/write profiles with before/after comparison (auto-downloads [Microsoft DiskSpd](https://github.com/microsoft/diskspd))
+- **Automated verification**: 1,000+ discovered test cases cover mutation safety, recovery, packaging, CLI, accessibility, and update integrity; release validation derives the live count from the test project
+- **Built-in DiskSpd benchmark**: high-QD (t4/o16 ≈ QD64) plus desktop QD1 4K random read/write profiles with before/after comparison (auto-downloads [Microsoft DiskSpd](https://github.com/microsoft/diskspd))
 - **11 async preflight checks** run in a background thread without freezing the GUI
-- **OS-native recovery evidence** -- the readiness summary, CLI JSON, GUI recovery tab, diagnostics report, and support bundle carry the PiTR/QMR advisory snapshot without turning unavailable OS evidence into a new hard block
-- **NVMe health badges** -- temperature, wear %, firmware, power-on hours, media errors (hover for SMART details)
-- **Per-drive NATIVE/LEGACY badges** -- shows whether each NVMe drive migrated to `nvmedisk.sys` or remains on `stornvme.sys`
-- **Post-reboot drive migration verification** -- per-drive confirmation of which drives moved to "Storage disks"
+- **OS-native recovery evidence**: the readiness summary, CLI JSON, GUI recovery tab, diagnostics report, and support bundle carry the PiTR/QMR advisory snapshot without turning unavailable OS evidence into a new hard block
+- **NVMe health badges**: temperature, wear %, firmware, power-on hours, media errors (hover for SMART details)
+- **Per-drive NATIVE/LEGACY badges**: shows whether each NVMe drive migrated to `nvmedisk.sys` or remains on `stornvme.sys`
+- **Post-reboot drive migration verification**: per-drive confirmation of which drives moved to "Storage disks"
 - **BypassIO/DirectStorage** status check with named-game gaming impact warning; the verdict
   uses the non-localized storport registry switch and PnP service binding rather than localized
   `fsutil` prose
-- **Before/after comparison** -- shows exactly what changed after patch/unpatch
-- **Diagnostics export** -- full system report with SMART health, compat software, migration status, benchmark history, and rules/feature-ID/compat DB provenance (source, schema, SHA-256, review freshness)
+- **Before/after comparison**: shows exactly what changed after patch/unpatch
+- **Diagnostics export**: full system report with SMART health, compat software, migration status, benchmark history, and rules/feature-ID/compat DB provenance (source, schema, SHA-256, review freshness)
 - **GitHub update check** with clickable badge in title bar
 - **Windows Event Log** integration for audit trails
 
 **UI/UX**
-- **Storage control-center shell** -- persistent left navigation, page-specific headers, an at-a-glance native NVMe status hero, Windows/drive/recovery metrics, and dedicated driver-path and rollback-health panels
-- **Light, dark, and high-contrast themes** -- shared WPF surfaces and controls retain the same information hierarchy across every palette
-- **Live reduced-motion support** -- honors Windows client-area animation settings without a restart, replacing repeating and transitional motion with stable status states
-- **Responsive workspace** -- the activity rail moves below the active tool on narrow windows instead of compressing safety-critical controls; the window remains clamped to the work area at high DPI
-- **Toast notifications** -- Windows balloon tips for patch results
+- **Storage control-center shell**: persistent left navigation, page-specific headers, an at-a-glance native NVMe status hero, Windows/drive/recovery metrics, and dedicated driver-path and rollback-health panels
+- **Light, dark, and high-contrast themes**: shared WPF surfaces and controls retain the same information hierarchy across every palette
+- **Live reduced-motion support**: honors Windows client-area animation settings without a restart, replacing repeating and transitional motion with stable status states
+- **Responsive workspace**: the activity rail moves below the active tool on narrow windows instead of compressing safety-critical controls; the window remains clamped to the work area at high DPI
+- **Toast notifications**: Windows balloon tips for patch results
 - **Activity log** with right-click context menu (Copy Selection, Select All, Copy All, Clear)
-- **Collapsible Settings panel** -- Auto-save, Toasts, Event Log, Restart Delay, Open Data Folder
+- **Collapsible Settings panel**: Auto-save, Toasts, Event Log, Restart Delay, Open Data Folder
 - **Benchmark IOPS display** in patch status card
-- **Refresh button** -- re-run all preflight checks without restarting
-- **Skip warnings checkbox** -- for experienced users who don't need confirmation dialogs
+- **Refresh button**: re-run all preflight checks without restarting
+- **Skip warnings checkbox**: for experienced users who don't need confirmation dialogs
 - **Silent/CLI mode** for scripting and automation
 
-**v4.4 — Stability, correlation, enterprise (new)**
-- **Post-patch event-log watchdog** -- scans `System` channel for Storport ID 129 command timeouts, disk ID 51/153, Kernel-Power 41, and BugCheck 1001 inside a configurable window (default 48h). Crosses the revert threshold? Stages an auto-revert on next boot. Missing state or Event Log evidence is reported as unavailable rather than healthy; the optional LocalService restarts after its first two failures and runs with only the state-directory and System-log access it needs.
-- **Separated privileged/service state** -- standard users receive read-only access to shared status/configuration, boot-critical state remains administrator/SYSTEM-only even in portable mode, and the restricted LocalService watchdog can modify only `%ProgramData%\NVMePatcher\Watchdog`.
-- **Reliability Monitor correlation** -- pulls `Win32_ReliabilityStabilityMetrics`, overlays the patch-apply timestamp, reports pre/post stability averages with delta.
-- **Minidump triage** -- scans `C:\Windows\Minidump` for dumps newer than the patch and flags any that reference `nvmedisk.sys`, `stornvme.sys`, `storport.sys`, `disk.sys`.
-- **Firmware + controller compat JSON** -- shipped `compat.json` maps `{controller, firmware}` → `{Good, Caution, Bad}` and flags power-loss-risk entries such as Phison E18/E26. Preflight consults it before proceeding.
-- **Honest machine-wide scope** -- the registry and FeatureStore routes affect Windows driver selection for every eligible NVMe drive/controller. Legacy `drive_scope.json` preferences are detected and reported as unenforced; the tool does not claim a drive can stay independently on `stornvme.sys`.
-- **Dry-run preview** (`--dry-run` / "Preview Changes") -- prints every registry write the patch would perform, without touching the registry.
-- **ETW storage trace** (`etw`) -- wraps `wpr.exe` for 60-second pre/post captures; ETL files land in `%ProgramData%\NVMePatcher\etl\`. Post-patch captures add Microsoft's `Microsoft-Windows-NvmeDisk` provider (`{9799276c-fb04-47e8-845e-36946045c218}`) when `nvmedisk.sys` is bound, and support bundles record whether WPR reported that provider as active.
-- **Controller-complete WinPE recovery USB builder** (`winpe`) -- detects the Windows ADK + WinPE add-on, inventories every present hardware-backed storage controller, exports each bound OEM package once, injects signed packages into `boot.wim`, and retains the same INFs for manual `drvload`. The published tree/ISO includes a verified Recovery Kit, controller coverage report, custom `startnet.cmd`, and final SHA-256 inventory. `winpe-freshness` verifies that media and reports stale when the app, Recovery Kit, rollback script, WinRE image, or controller INF/version has changed.
-- **Opt-in compatibility telemetry** -- build an anonymized `{controller, firmware, OS build, profile, verification, watchdog, reliability delta}` JSON and optionally `POST` it to a user-configured HTTPS endpoint. No serials, machine names, drive letters, or user names.
-- **Driver Verifier harness** (`verifier-on` / `-off` / `-status`) -- dev/tester-mode wrapper around `verifier.exe` for kernel-level stress checks on the NVMe stack.
-- **GPO / ADMX templates** (`packaging/admx/`) -- pin Safe/Full profile, IncludeServerKey, SkipWarnings, watchdog behavior, and telemetry across a fleet via `HKLM\SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher`. Policy overrides local config.
-- **Intune source bundle** (`NVMeDriverPatcher.Intune-<version>.zip`) -- release builds package the MSI and detection script with a versioned, per-file SHA-256 manifest before upload or `.intunewin` wrapping.
-- **winget manifest** (`packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml`) -- `winget install SysAdminDoc.NVMeDriverPatcher`.
-- **Non-admin status tray agent** (`NVMeDriverPatcher.Tray`) -- separate exe, no UAC. Shows patch state + watchdog verdict from the system tray; right-click → "Open Main App (elevated)" for the admin GUI.
-- **Rotating logs** -- `crash.log`, `activity.log`, `watchdog.log`, `diagnostics.log` rotate at 5MB each with 5 generations retained.
+**v4.4: stability, correlation, enterprise (new)**
+- **Post-patch event-log watchdog**: scans `System` channel for Storport ID 129 command timeouts, disk ID 51/153, Kernel-Power 41, and BugCheck 1001 inside a configurable window (default 48h). Crosses the revert threshold? Stages an auto-revert on next boot. Missing state or Event Log evidence is reported as unavailable rather than healthy; the optional LocalService restarts after its first two failures and runs with only the state-directory and System-log access it needs.
+- **Separated privileged/service state**: standard users receive read-only access to shared status/configuration, boot-critical state remains administrator/SYSTEM-only even in portable mode, and the restricted LocalService watchdog can modify only `%ProgramData%\NVMePatcher\Watchdog`.
+- **Reliability Monitor correlation**: pulls `Win32_ReliabilityStabilityMetrics`, overlays the patch-apply timestamp, reports pre/post stability averages with delta.
+- **Minidump triage**: scans `C:\Windows\Minidump` for dumps newer than the patch and flags any that reference `nvmedisk.sys`, `stornvme.sys`, `storport.sys`, `disk.sys`.
+- **Firmware + controller compat JSON**: shipped `compat.json` maps `{controller, firmware}` → `{Good, Caution, Bad}` and flags power-loss-risk entries such as Phison E18/E26. Preflight consults it before proceeding.
+- **Honest machine-wide scope**: the registry and FeatureStore routes affect Windows driver selection for every eligible NVMe drive/controller. Legacy `drive_scope.json` preferences are detected and reported as unenforced; the tool does not claim a drive can stay independently on `stornvme.sys`.
+- **Dry-run preview** (`--dry-run` / "Preview Changes"): prints every registry write the patch would perform, without touching the registry.
+- **ETW storage trace** (`etw`): wraps `wpr.exe` for 60-second pre/post captures; ETL files land in `%ProgramData%\NVMePatcher\etl\`. Post-patch captures add Microsoft's `Microsoft-Windows-NvmeDisk` provider (`{9799276c-fb04-47e8-845e-36946045c218}`) when `nvmedisk.sys` is bound, and support bundles record whether WPR reported that provider as active.
+- **Controller-complete WinPE recovery USB builder** (`winpe`): detects the Windows ADK + WinPE add-on, inventories every present hardware-backed storage controller, exports each bound OEM package once, injects signed packages into `boot.wim`, and retains the same INFs for manual `drvload`. The published tree/ISO includes a verified Recovery Kit, controller coverage report, custom `startnet.cmd`, and final SHA-256 inventory. `winpe-freshness` verifies that media and reports stale when the app, Recovery Kit, rollback script, WinRE image, or controller INF/version has changed.
+- **Opt-in compatibility telemetry**: build an anonymized `{controller, firmware, OS build, profile, verification, watchdog, reliability delta}` JSON and optionally `POST` it to a user-configured HTTPS endpoint. No serials, machine names, drive letters, or user names.
+- **Driver Verifier harness** (`verifier-on` / `-off` / `-status`): dev/tester-mode wrapper around `verifier.exe` for kernel-level stress checks on the NVMe stack.
+- **GPO / ADMX templates** (`packaging/admx/`): pin Safe/Full profile, IncludeServerKey, SkipWarnings, watchdog behavior, and telemetry across a fleet via `HKLM\SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher`. Policy overrides local config.
+- **Intune source bundle** (`NVMeDriverPatcher.Intune-<version>.zip`): release builds package the MSI and detection script with a versioned, per-file SHA-256 manifest before upload or `.intunewin` wrapping.
+- **winget manifest** (`packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml`): `winget install SysAdminDoc.NVMeDriverPatcher`.
+- **Non-admin status tray agent** (`NVMeDriverPatcher.Tray`): separate exe, no UAC. Shows patch state + watchdog verdict from the system tray; right-click → "Open Main App (elevated)" for the admin GUI.
+- **Rotating logs**: `crash.log`, `activity.log`, `watchdog.log`, `diagnostics.log` rotate at 5MB each with 5 generations retained.
 
 ## CLI Usage
 
@@ -218,7 +221,7 @@ NVMeDriverPatcher.Cli.exe apply --safe
 .\NVMe_Driver_Patcher.ps1 -ExportRecoveryKit
 ```
 
-### Extended CLI (C# binary — 62 commands)
+### Extended CLI (C# binary, 62 commands)
 
 Run `NVMeDriverPatcher.Cli help` for the full grouped command reference.
 
@@ -324,7 +327,7 @@ Run preflight before enabling the patch. The bundled `compat.json` flags known r
 
 | Brand | Notes |
 |-------|-------|
-| Samsung (with Samsung NVMe Driver) | Uses `samsungnvmedriver.sys` -- patch has no effect |
+| Samsung (with Samsung NVMe Driver) | Uses `samsungnvmedriver.sys`; patch has no effect |
 | WD (with WD Dashboard driver) | Uses proprietary driver |
 
 To check which driver your drive uses: **Device Manager > Disk drives > [Your NVMe] > Properties > Driver > Driver Files**
@@ -349,7 +352,7 @@ The native NVMe driver delivers significant gains by eliminating the SCSI transl
 
 | Workload | Expected Gains |
 |----------|---------------|
-| Random 4K read/write (high queue depth) | **+20% to +85%** -- biggest wins |
+| Random 4K read/write (high queue depth) | **+20% to +85%**: biggest wins |
 | Sequential read/write | +10% to +30% |
 | Desktop responsiveness (app launches, boot) | Single-digit % (desktop I/O runs at QD1-2) |
 | Gaming (load times) | Minimal difference |
@@ -369,7 +372,7 @@ The tool automatically detects and warns about all of these. VeraCrypt is a hard
 | **Intel VMD** | Boot failures on VMD-configured systems | High | Yes (warns) |
 | **Hyper-V / WSL2** | WSL2 disk I/O ~40% slower (no paravirt) | Medium | Yes (warns) |
 | **Storage Spaces** | Arrays may degrade or disappear | High | Yes (warns) |
-| **Acronis True Image** | Disk-ID change moves the drive under Storage disks — backup jobs lose it; re-register after the swap | High | Yes (warns) |
+| **Acronis True Image** | Disk-ID change moves the drive under Storage disks, so backup jobs lose it; re-register after the swap | High | Yes (warns) |
 | **Veeam Backup** | Disk-ID change → agent stops detecting the drive; re-add it to the job after the swap | High | Yes (warns) |
 | **Macrium Reflect** | May need update for compatibility | Medium | Yes (warns) |
 | **UrBackup / NinjaOne / Paragon** | Backup image-mount driver may be blocked by Windows CodeIntegrity after KB5083769 | Medium | Yes (service + event-log evidence) |
@@ -385,13 +388,13 @@ If you experience problems, use the **Remove Patch** button (or `-Silent -Remove
 
 ## Recovery Kit
 
-The tool can generate a **WinRE-compatible Recovery Kit** -- a folder containing:
+The tool can generate a **WinRE-compatible Recovery Kit**: a folder containing:
 
-- **`Remove_NVMe_Patch.bat`** -- canonical entry point; verifies exact file count, byte lengths, and SHA-256 before any registry mutation
-- **`Apply_Recovery_Mutation.bat`** -- guarded removal logic that auto-detects WinRE vs Windows, loads the offline SYSTEM hive, and removes the patch from all ControlSets
-- **`NVMe_Remove_Patch.reg`** -- manual fallback after independent payload verification
-- **`ARTIFACT-MANIFEST.json`** -- schema/tool version plus role, byte length, and SHA-256 for every required file
-- **`README.txt`** -- step-by-step instructions for both Windows and WinRE recovery
+- **`Remove_NVMe_Patch.bat`**: canonical entry point; verifies exact file count, byte lengths, and SHA-256 before any registry mutation
+- **`Apply_Recovery_Mutation.bat`**: guarded removal logic that auto-detects WinRE vs Windows, loads the offline SYSTEM hive, and removes the patch from all ControlSets
+- **`NVMe_Remove_Patch.reg`**: manual fallback after independent payload verification
+- **`ARTIFACT-MANIFEST.json`**: schema/tool version plus role, byte length, and SHA-256 for every required file
+- **`README.txt`**: step-by-step instructions for both Windows and WinRE recovery
 
 A recovery kit is **automatically generated** after each successful patch installation. You can also create one manually via the **RECOVERY KIT** button or `.\NVMe_Driver_Patcher.ps1 -ExportRecoveryKit`.
 
@@ -434,7 +437,7 @@ Advanced hardening: `NVMeDriverPatcher.Cli.exe winre-inject` previews the DISM p
 ```cmd
 reg load HKLM\OFFLINE C:\Windows\System32\config\SYSTEM
 ```
-(If C: doesn't work, try D: or E: -- drive letters differ in WinRE)
+(If C: doesn't work, try D: or E:. Drive letters differ in WinRE.)
 3. Remove the patch:
 ```cmd
 for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Policies\Microsoft\FeatureManagement\Overrides" /v 735209102 /f
@@ -454,7 +457,7 @@ reg unload HKLM\OFFLINE
 > GUID keys and the patch is not fully reverted.
 >
 > **If you enabled the patch through the FeatureStore fallback**, these registry deletions are not
-> enough on their own — the fallback writes FeatureStore configuration that the overrides above do
+> enough on their own. The fallback writes FeatureStore configuration that the overrides above do
 > not touch, so `nvmedisk` can still bind after reboot. Use the Recovery Kit, or run
 > `NVMeDriverPatcher.Cli remove` once Windows boots, which resets the fallback as well.
 
@@ -472,19 +475,19 @@ Samsung Magician, WD Dashboard, Crucial Storage Executive, and CrystalDiskInfo u
 
 ## Credits & Sources
 
-- **Microsoft TechCommunity** -- [Announcing Native NVMe in Windows Server 2025](https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353)
-- **Tom's Hardware** -- [Native NVMe Driver Benchmarks: Up to 64.89% Gains](https://www.tomshardware.com/pc-components/ssds/new-windows-native-nvme-driver-benchmarks-reveal-transformative-performance-gains-up-to-64-89-percent-lightning-fast-random-reads-and-breakthrough-cpu-efficiency)
-- **Tom's Hardware** -- [Up to 85% Higher Random Workload Performance](https://www.tomshardware.com/pc-components/ssds/windows-11-rockets-ssd-performance-to-new-heights-with-hacked-native-nvme-driver-up-to-85-percent-higher-random-workload-performance-in-some-tests)
-- **StorageReview** -- [Windows Server 2025 Native NVMe Benchmarks](https://www.storagereview.com/review/windows-server-native-nvme)
-- **NotebookCheck** -- [Higher SSD Speeds with New Microsoft NVMe Driver](https://www.notebookcheck.net/Windows-11-hack-Higher-SSD-speeds-with-new-Microsoft-NVMe-driver.1190489.0.html)
-- **Ghacks** -- [This Registry Hack Unlocks a Faster NVMe Driver in Windows 11](https://www.ghacks.net/2025/12/26/this-registry-hack-unlocks-a-faster-nvme-driver-in-windows-11/)
-- **XDA Developers** -- [Windows 11 Free NVMe Speed Boost](https://www.xda-developers.com/windows-11-nvme-owners-free-speed-boost-enable/)
-- **Overclock.net** -- [Community Testing Thread](https://www.overclock.net/threads/enable-native-nvme-driver-in-windows-11-24h2-25h2-with-last-update.1818467/)
-- **Win-Raid Level1Techs** -- [Native NVMe Discussion](https://winraid.level1techs.com/t/discussion-microsofts-native-nvme-disk-drive-support/113111)
-- **VeraCrypt** -- [Issue #1640: Breaks boot with native NVMe driver](https://github.com/veracrypt/VeraCrypt/issues/1640)
-- **4sysops** -- [Windows Server 2025 Native NVMe Support](https://4sysops.com/archives/windows-server-2025-introduces-native-nvme-support-with-performance-gains-of-up-to-80-percent/)
-- **StarWind** -- [Windows Server 2025 Native NVMe Support](https://www.starwindsoftware.com/blog/windows-server-native-nvme-support/)
-- **Thomas-Krenn Wiki** -- [Activation of Native NVMe Driver](https://www.thomas-krenn.com/en/wiki/Activation_of_native_NVME_driver_in_Windows_Server_2025)
+- **Microsoft TechCommunity**: [Announcing Native NVMe in Windows Server 2025](https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353)
+- **Tom's Hardware**: [Native NVMe Driver Benchmarks: Up to 64.89% Gains](https://www.tomshardware.com/pc-components/ssds/new-windows-native-nvme-driver-benchmarks-reveal-transformative-performance-gains-up-to-64-89-percent-lightning-fast-random-reads-and-breakthrough-cpu-efficiency)
+- **Tom's Hardware**: [Up to 85% Higher Random Workload Performance](https://www.tomshardware.com/pc-components/ssds/windows-11-rockets-ssd-performance-to-new-heights-with-hacked-native-nvme-driver-up-to-85-percent-higher-random-workload-performance-in-some-tests)
+- **StorageReview**: [Windows Server 2025 Native NVMe Benchmarks](https://www.storagereview.com/review/windows-server-native-nvme)
+- **NotebookCheck**: [Higher SSD Speeds with New Microsoft NVMe Driver](https://www.notebookcheck.net/Windows-11-hack-Higher-SSD-speeds-with-new-Microsoft-NVMe-driver.1190489.0.html)
+- **Ghacks**: [This Registry Hack Unlocks a Faster NVMe Driver in Windows 11](https://www.ghacks.net/2025/12/26/this-registry-hack-unlocks-a-faster-nvme-driver-in-windows-11/)
+- **XDA Developers**: [Windows 11 Free NVMe Speed Boost](https://www.xda-developers.com/windows-11-nvme-owners-free-speed-boost-enable/)
+- **Overclock.net**: [Community Testing Thread](https://www.overclock.net/threads/enable-native-nvme-driver-in-windows-11-24h2-25h2-with-last-update.1818467/)
+- **Win-Raid Level1Techs**: [Native NVMe Discussion](https://winraid.level1techs.com/t/discussion-microsofts-native-nvme-disk-drive-support/113111)
+- **VeraCrypt**: [Issue #1640: Breaks boot with native NVMe driver](https://github.com/veracrypt/VeraCrypt/issues/1640)
+- **4sysops**: [Windows Server 2025 Native NVMe Support](https://4sysops.com/archives/windows-server-2025-introduces-native-nvme-support-with-performance-gains-of-up-to-80-percent/)
+- **StarWind**: [Windows Server 2025 Native NVMe Support](https://www.starwindsoftware.com/blog/windows-server-native-nvme-support/)
+- **Thomas-Krenn Wiki**: [Activation of Native NVMe Driver](https://www.thomas-krenn.com/en/wiki/Activation_of_native_NVME_driver_in_Windows_Server_2025)
 
 ## Disclaimer
 

@@ -4,6 +4,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 
 ## [Unreleased]
 
+### Docs
+- The README no longer asks a visitor to paste a fetch-and-run command. The GUI, CLI, MSI, and
+  legacy PowerShell downloads are all a link first, then local commands only, and the "Verify the
+  download" snippet now reads the combined `SHA256SUMS.txt` instead of the per-asset `.sha256`
+  sidecar it used to fetch: that sidecar has 404'd on every release since 5.5.0 (see the Unreleased
+  Added entry for `Validate-ReleaseAssets.ps1`), so the old one-liner never actually worked.
+
 ### Security
 - Release publishing now requires SDK 10.0.303 or newer, embeds .NET runtime 10.0.11 or newer
   in every self-contained executable, and rejects older runtime payloads from the release gate.
