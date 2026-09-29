@@ -8,8 +8,18 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - The README no longer asks a visitor to paste a fetch-and-run command. The GUI, CLI, MSI, and
   legacy PowerShell downloads are all a link first, then local commands only, and the "Verify the
   download" snippet now reads the combined `SHA256SUMS.txt` instead of the per-asset `.sha256`
-  sidecar it used to fetch: that sidecar has 404'd on every release since 5.5.0 (see the Unreleased
-  Added entry for `Validate-ReleaseAssets.ps1`), so the old one-liner never actually worked.
+  sidecar it used to fetch, since a visitor comparing one file by hand has no reason to need the
+  same sidecar the in-app updater uses.
+- Uploaded the missing `NVMeDriverPatcher.exe.sha256` sidecar to the live v5.6.0 release. The
+  in-app updater only ever verifies that one asset (`AutoUpdaterService.GuiAssetName`), and its
+  sidecar has 404'd on every release since 5.5.0 (see the Unreleased Added entry for
+  `Validate-ReleaseAssets.ps1`), so `Help -> Check for updates` could never pass its
+  `RequireIntegrity` check against a real release. Verified the uploaded hash against
+  `SHA256SUMS.txt` before uploading, and confirmed the live URL the updater builds
+  (`<asset-url>.sha256`, redirects followed) now returns it with no BOM and the same
+  `<hash>  <filename>` line the parser expects. This does not fix future releases by itself;
+  `Validate-ReleaseAssets.ps1 -PublishedTag` still needs to run after `gh release create` so the
+  next cut actually uploads its sidecars.
 
 ### Security
 - Release publishing now requires SDK 10.0.303 or newer, embeds .NET runtime 10.0.11 or newer
