@@ -455,10 +455,12 @@ reg unload HKLM\OFFLINE
 ```
 4. Restart
 
-> The SafeBoot lines use `/ve`, which clears only the default value this tool writes and leaves the
-> key itself alone. Recent Windows builds (26200.8737 and later, and current 24H2 builds such as
-> 26100.9550) create that same `{75416E63-...}` key with a `NvmeDisk` value of their own, and deleting
-> the whole key takes Windows' Safe Mode disk registration with it. The last two lines clear the
+> The SafeBoot lines use `/ve`, which clears only the key's default value (the one this tool writes)
+> and leaves the key itself alone. Recent Windows builds (26200.8737 and later, and current 24H2 builds
+> such as 26100.9550) create that same `{75416E63-...}` key themselves, and deleting the whole key
+> takes Windows' Safe Mode disk registration with it. On 24H2, Windows keeps its own `NvmeDisk` text
+> in that default value and locks the key so only TrustedInstaller can change it, so expect "Access
+> is denied" from the two GUID lines there. That's fine, and Windows' value stays. The last two lines clear the
 > KB5079391-era **service-name** SafeBoot entries that every patch has written since v4.6.1. The
 > Recovery Kit clears all four the same way; clear only the two GUID keys and the patch isn't
 > fully reverted.

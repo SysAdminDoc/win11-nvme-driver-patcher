@@ -260,12 +260,13 @@ FILES:
         }
 
         // Clear only the default value, never the key. Builds 26200.8737+ and current 24H2 (seen on
-        // 26100.9550) ship these SafeBoot keys themselves carrying a NvmeDisk value, and deleting the key takes the OS's own Safe Mode
-        // storage-disk class registration with it — on a machine already being recovered, that can
-        // turn "Safe Mode still works" into "Safe Mode cannot see the boot disk" (issue #13). The
-        // default value is exactly what this tool writes, and it is what the residue probe checks,
-        // so clearing it removes all of ours and none of Windows'. A key we created is left behind
-        // empty, which registers nothing.
+        // 26100.9550) ship these SafeBoot keys themselves, and deleting the key takes the OS's own
+        // Safe Mode storage-disk class registration with it. On a machine already being recovered,
+        // that can turn "Safe Mode still works" into "Safe Mode cannot see the boot disk" (issue
+        // #13). The default value is what this tool writes and what the residue probe checks. On
+        // 26200.8737 Windows' NvmeDisk is a named value, which /ve leaves alone. On 26100.9550 it is
+        // the default value itself, but TrustedInstaller owns the key and even SYSTEM can only read
+        // it, so the delete is refused and Windows' value stays. A key we created is left empty.
         foreach (var leaf in new[] { AppConfig.SafeBootGuid, AppConfig.SafeBootServiceName })
         {
             foreach (var cs in controlSets)
@@ -291,7 +292,8 @@ FILES:
         foreach (var id in RecoveryFeatureIds())
             sb.Append($"{indent}\"{Sys32}\\reg.exe\" delete \"{regBase}\\{overridesRel}\" /v {id} /f 2>nul\r\n");
         // /ve deletes only the default value, leaving the key and any OS-owned values (NvmeDisk on
-        // 26200.8737+) intact — see the .reg builder above for why removing the key is unsafe here.
+        // 26200.8737+) intact. See the .reg builder above for why removing the key is unsafe here
+        // and why the write-protected 24H2 key refuses even this.
         foreach (var leaf in new[] { AppConfig.SafeBootGuid, AppConfig.SafeBootServiceName })
             foreach (var store in new[] { "Minimal", "Network" })
                 sb.Append($"{indent}\"{Sys32}\\reg.exe\" delete \"{regBase}\\Control\\SafeBoot\\{store}\\{leaf}\" /ve /f 2>nul\r\n");

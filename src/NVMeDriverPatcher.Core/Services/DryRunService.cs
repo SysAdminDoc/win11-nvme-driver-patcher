@@ -43,7 +43,20 @@ public static class DryRunService
     internal static DryRunReport PlanInstall(
         AppConfig config,
         PreflightResult? preflight,
-        IReadOnlyList<string> mirrorControlSets)
+        IReadOnlyList<string> mirrorControlSets) =>
+        PlanInstall(config, preflight, mirrorControlSets, ReadCurrentValue);
+
+    /// <summary>
+    /// The rows come from <see cref="PatchService.BuildRequiredRegistryMutations(PatchProfile, bool, IReadOnlyList{string}?)"/>,
+    /// the same list apply commits, so the preview can't drift from the real write set. The
+    /// reader is injectable because the live SafeBoot keys differ by build: 24H2 26100.9550
+    /// and 26200.8737+ ship the GUID keys themselves.
+    /// </summary>
+    internal static DryRunReport PlanInstall(
+        AppConfig config,
+        PreflightResult? preflight,
+        IReadOnlyList<string> mirrorControlSets,
+        Func<string, string, CurrentRegistryValue> readCurrent)
     {
         var report = new DryRunReport
         {
@@ -58,85 +71,22 @@ public static class DryRunService
             preflight?.BuildDetails,
             featureIDs.Where(id => AppConfig.FeatureIDs.Contains(id)));
 
-        foreach (var id in featureIDs)
+        // Apply mirrors every CurrentControlSet write into each spare control set (issue #15), and
+        // appends those mirrors after the primary writes. A preview that omitted them would
+        // under-report the real change set, which is the whole thing this command exists to prevent.
+        int primaryCount = PatchService.BuildRequiredRegistryMutations(config.PatchProfile, config.IncludeServerKey).Count;
+        var mutations = PatchService.BuildRequiredRegistryMutations(config.PatchProfile, config.IncludeServerKey, mirrorControlSets);
+        for (int i = 0; i < mutations.Count; i++)
         {
-            string friendly = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn : "Feature Flag";
-            int? current = ReadCurrentDword(AppConfig.RegistrySubKey, id);
-            report.Items.Add(new DryRunPlanItem
-            {
-                Action = "WRITE",
-                Target = AppConfig.RegistryPath,
-                ValueName = id,
-                Before = current is null ? "(absent)" : current.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                After = "1",
-                Kind = "DWord",
-                Note = friendly
-            });
-            report.TotalWrites++;
+            var mutation = mutations[i];
+            var current = readCurrent(mutation.Path, mutation.ValueName);
+            string? mirrorNote = i >= primaryCount ? $"Boot-recovery mirror ({mutation.Path.Split('\\')[1]})" : null;
+            report.Items.Add(mutation.ValueKind == Microsoft.Win32.RegistryValueKind.DWord
+                ? OverrideRow(mutation, current, mirrorNote)
+                : SafeBootRow(mutation, current, mirrorNote));
         }
-
-        report.Items.Add(new DryRunPlanItem
-        {
-            Action = "CREATE",
-            Target = $@"HKEY_LOCAL_MACHINE\{AppConfig.SafeBootMinimalPath}",
-            ValueName = "(default)",
-            Before = "(absent)",
-            After = AppConfig.SafeBootValue,
-            Kind = "String",
-            Note = "SafeBoot Minimal support — prevents INACCESSIBLE_BOOT_DEVICE in Safe Mode"
-        });
-        report.Items.Add(new DryRunPlanItem
-        {
-            Action = "CREATE",
-            Target = $@"HKEY_LOCAL_MACHINE\{AppConfig.SafeBootNetworkPath}",
-            ValueName = "(default)",
-            Before = "(absent)",
-            After = AppConfig.SafeBootValue,
-            Kind = "String",
-            Note = "SafeBoot Network support"
-        });
-        report.TotalCreates += 2;
-
-        // Apply mirrors every CurrentControlSet write into each spare control set (issue #15).
-        // A preview that omitted them would under-report the real change set, which is the whole
-        // thing this command exists to prevent.
-        foreach (var controlSet in mirrorControlSets)
-        {
-            foreach (var id in featureIDs)
-            {
-                var path = ControlSetService.MirrorPath(AppConfig.RegistrySubKey, controlSet);
-                if (path is null) continue;
-                int? current = ReadCurrentDword(path, id);
-                report.Items.Add(new DryRunPlanItem
-                {
-                    Action = "WRITE",
-                    Target = $@"HKEY_LOCAL_MACHINE\{path}",
-                    ValueName = id,
-                    Before = current is null ? "(absent)" : current.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    After = "1",
-                    Kind = "DWord",
-                    Note = $"Boot-recovery mirror ({controlSet})"
-                });
-                report.TotalWrites++;
-            }
-
-            foreach (var safeBootPath in new[] { AppConfig.SafeBootMinimalPath, AppConfig.SafeBootNetworkPath })
-            {
-                var path = ControlSetService.MirrorPath(safeBootPath, controlSet);
-                if (path is null) continue;
-                report.Items.Add(new DryRunPlanItem
-                {
-                    Action = "CREATE",
-                    Target = $@"HKEY_LOCAL_MACHINE\{path}",
-                    ValueName = "(default)",
-                    Before = "(absent)",
-                    After = AppConfig.SafeBootValue,
-                    Kind = "String",
-                    Note = $"Boot-recovery mirror ({controlSet})"
-                });
-                report.TotalCreates++;
-            }
-        }
+        report.TotalWrites = report.Items.Count(item => item.Action == "WRITE");
+        report.TotalCreates = report.Items.Count(item => item.Action == "CREATE");
 
         if (preflight is not null)
         {
@@ -249,12 +199,12 @@ public static class DryRunService
     {
         var sb = new StringBuilder();
         sb.Append("Dry-run install: ");
-        sb.Append($"{report.TotalWrites} feature-flag write(s), {report.TotalCreates} subkey creation(s). ");
+        sb.Append($"{report.TotalWrites} value write(s), {report.TotalCreates} new key(s). ");
         sb.Append("Scope: machine-wide across every eligible NVMe drive/controller; per-drive exclusions are not enforced. ");
         sb.Append($"Profile: {report.Profile}");
         if (report.IncludeServerKey) sb.Append(" + Server 2025 key");
         if (report.RegistryOverrideAssessment is not null)
-            sb.Append($" | {report.RegistryOverrideAssessment.Summary}");
+            sb.Append($" | {report.RegistryOverrideAssessment.Summary.TrimEnd('.')}");
         if (report.PreflightBlockers.Count > 0) sb.Append($" | {report.PreflightBlockers.Count} BLOCKER(s)");
         if (report.PreflightWarnings.Count > 0) sb.Append($" | {report.PreflightWarnings.Count} warning(s)");
         sb.Append('.');
@@ -298,6 +248,68 @@ public static class DryRunService
             sb.AppendLine($"| {item.Action} | `{item.Target}` | `{item.ValueName}` | `{item.Before}` → `{item.After}` | {item.Note} |");
         }
         return sb.ToString();
+    }
+
+    /// <summary>What the preview knows about one registry value right now.</summary>
+    internal readonly record struct CurrentRegistryValue(bool KeyExists, object? Value);
+
+    private static DryRunPlanItem OverrideRow(DurableRegistryMutation mutation, CurrentRegistryValue current, string? mirrorNote) => new()
+    {
+        Action = "WRITE",
+        Target = $@"HKEY_LOCAL_MACHINE\{mutation.Path}",
+        ValueName = mutation.ValueName,
+        Before = current.Value switch
+        {
+            null => "(absent)",
+            int i => i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            var other => other.ToString() ?? "(absent)"
+        },
+        After = Convert.ToString(mutation.ExpectedValue, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+        Kind = "DWord",
+        Note = mirrorNote ?? (AppConfig.FeatureNames.TryGetValue(mutation.ValueName, out var friendly) ? friendly : "Feature Flag")
+    };
+
+    private static DryRunPlanItem SafeBootRow(DurableRegistryMutation mutation, CurrentRegistryValue current, string? mirrorNote)
+    {
+        var expected = (string)mutation.ExpectedValue;
+        var existing = current.Value as string;
+        var note = mirrorNote ?? mutation.Path switch
+        {
+            AppConfig.SafeBootMinimalPath => "SafeBoot Minimal support (prevents INACCESSIBLE_BOOT_DEVICE in Safe Mode)",
+            AppConfig.SafeBootNetworkPath => "SafeBoot Network support",
+            AppConfig.SafeBootMinimalServicePath => "SafeBoot Minimal entry for the nvmedisk service",
+            _ => "SafeBoot Network entry for the nvmedisk service"
+        };
+        if (existing is not null && !string.Equals(existing, expected, StringComparison.OrdinalIgnoreCase))
+            note += $". Replaces the existing default '{existing}', which removal puts back";
+
+        return new DryRunPlanItem
+        {
+            Action = current.KeyExists ? "WRITE" : "CREATE",
+            Target = $@"HKEY_LOCAL_MACHINE\{mutation.Path}",
+            ValueName = "(default)",
+            Before = existing ?? "(absent)",
+            After = expected,
+            Kind = "String",
+            Note = note
+        };
+    }
+
+    private static CurrentRegistryValue ReadCurrentValue(string subkey, string valueName)
+    {
+        try
+        {
+            using var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(
+                Microsoft.Win32.RegistryHive.LocalMachine,
+                Microsoft.Win32.RegistryView.Registry64);
+            using var key = hklm.OpenSubKey(subkey);
+            return key is null ? new(false, null) : new(true, key.GetValue(valueName));
+        }
+        catch (Exception ex) when (PatchService.IsAccessDenied(ex))
+        {
+            // A key we may not read still exists; its value is unknown.
+            return new(true, null);
+        }
     }
 
     private static int? ReadCurrentDword(string subkey, string valueName)

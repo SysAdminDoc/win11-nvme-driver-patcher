@@ -9,39 +9,80 @@ namespace NVMeDriverPatcher.Tests;
 // "what will change" summary — a regression here would silently under-/over-count writes.
 public sealed class DryRunServiceTests
 {
+    // A clean machine: no override values and none of the SafeBoot keys.
+    private static readonly Func<string, string, DryRunService.CurrentRegistryValue> CleanMachine =
+        (_, _) => new DryRunService.CurrentRegistryValue(false, null);
+
     [Fact]
-    public void SafeProfile_Plans_OnePrimaryWrite_TwoSafeBootCreates()
+    public void SafeProfile_Plans_OnePrimaryWrite_FourSafeBootCreates()
     {
         var config = new AppConfig { PatchProfile = PatchProfile.Safe, IncludeServerKey = false };
-        var report = DryRunService.PlanInstall(config, preflight: null);
+        var report = DryRunService.PlanInstall(config, null, [], CleanMachine);
 
         Assert.Equal(PatchProfile.Safe, report.Profile);
         Assert.False(report.IncludeServerKey);
         Assert.Equal(1, report.TotalWrites);
-        Assert.Equal(2, report.TotalCreates);
+        Assert.Equal(SafeBootStateService.ManagedKeys.Count, report.TotalCreates);
         Assert.Contains(report.Items, i => i.Action == "WRITE" && i.ValueName == AppConfig.PrimaryFeatureID);
-        Assert.Equal(2, report.Items.Count(i => i.Action == "CREATE"));
+        Assert.Equal(4, report.Items.Count(i => i.Action == "CREATE"));
         Assert.Contains("machine-wide", report.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("per-drive exclusions are not enforced", report.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("..", report.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void FullProfile_Plans_ThreeWrites_TwoSafeBootCreates()
+    public void FullProfile_Plans_ThreeWrites_FourSafeBootCreates()
     {
         var config = new AppConfig { PatchProfile = PatchProfile.Full, IncludeServerKey = false };
-        var report = DryRunService.PlanInstall(config, preflight: null);
+        var report = DryRunService.PlanInstall(config, null, [], CleanMachine);
 
         Assert.Equal(3, report.TotalWrites);
-        Assert.Equal(2, report.TotalCreates);
+        Assert.Equal(4, report.TotalCreates);
         foreach (var id in AppConfig.FeatureIDs)
             Assert.Contains(report.Items, i => i.Action == "WRITE" && i.ValueName == id);
+    }
+
+    [Theory]
+    [InlineData(PatchProfile.Safe, false)]
+    [InlineData(PatchProfile.Full, true)]
+    public void Preview_ListsExactlyWhatApplyWrites(PatchProfile profile, bool includeServer)
+    {
+        // The preview used to hardcode two SafeBoot rows while apply wrote four. Pin it to the
+        // same list apply commits, mirrors included.
+        string[] mirrors = ["ControlSet002"];
+        var config = new AppConfig { PatchProfile = profile, IncludeServerKey = includeServer };
+        var report = DryRunService.PlanInstall(config, null, mirrors, CleanMachine);
+        var applies = PatchService.BuildRequiredRegistryMutations(profile, includeServer, mirrors);
+
+        Assert.Equal(
+            applies.Select(m => $@"HKEY_LOCAL_MACHINE\{m.Path}|{(m.ValueName.Length == 0 ? "(default)" : m.ValueName)}"),
+            report.Items.Select(i => $"{i.Target}|{i.ValueName}"));
+    }
+
+    [Fact]
+    public void WindowsOwnedSafeBootKey_IsAWriteOverItsExistingValue()
+    {
+        // 24H2 26100.9550 ships the GUID keys itself with a "NvmeDisk" default value.
+        var config = new AppConfig { PatchProfile = PatchProfile.Safe, IncludeServerKey = false };
+        var report = DryRunService.PlanInstall(config, null, [], (path, _) =>
+            path.EndsWith(AppConfig.SafeBootGuid, StringComparison.OrdinalIgnoreCase)
+                ? new DryRunService.CurrentRegistryValue(true, "NvmeDisk")
+                : new DryRunService.CurrentRegistryValue(false, null));
+
+        var minimal = Assert.Single(report.Items, i => i.Target.EndsWith(AppConfig.SafeBootMinimalPath, StringComparison.Ordinal));
+        Assert.Equal("WRITE", minimal.Action);
+        Assert.Equal("NvmeDisk", minimal.Before);
+        Assert.Equal(AppConfig.SafeBootValue, minimal.After);
+        Assert.Contains("removal puts back", minimal.Note, StringComparison.Ordinal);
+        Assert.Equal(3, report.TotalWrites);   // the override plus both existing GUID keys
+        Assert.Equal(2, report.TotalCreates);  // the two nvmedisk service-name keys
     }
 
     [Fact]
     public void ServerKey_AddsOneMoreWrite()
     {
         var config = new AppConfig { PatchProfile = PatchProfile.Safe, IncludeServerKey = true };
-        var report = DryRunService.PlanInstall(config, preflight: null);
+        var report = DryRunService.PlanInstall(config, null, [], CleanMachine);
         Assert.Equal(2, report.TotalWrites);
         Assert.Contains(report.Items, i => i.ValueName == AppConfig.ServerFeatureID);
     }

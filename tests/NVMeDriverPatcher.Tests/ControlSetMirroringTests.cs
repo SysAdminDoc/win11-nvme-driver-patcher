@@ -196,7 +196,7 @@ public class ControlSetMirroringTests
         var plan = DryRunService.PlanInstall(config, null, mirrors);
 
         int perControlSet = AppConfig.GetFeatureIDsForProfile(PatchProfile.Full).Count() + 1 // + server key
-                            + 2;                                                             // + two SafeBoot keys
+                            + SafeBootStateService.ManagedKeys.Count;                         // + every SafeBoot key
         int mirrorRows = plan.Items.Count(i => i.Note.StartsWith("Boot-recovery mirror", StringComparison.Ordinal));
 
         Assert.Equal(mirrors.Length * perControlSet, mirrorRows);
