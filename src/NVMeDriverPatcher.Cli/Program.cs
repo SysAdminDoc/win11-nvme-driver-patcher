@@ -174,7 +174,7 @@ class Program
                 "re-enable-after-update" or "reenable-after-update" => ReEnableAfterUpdateCommand(config, force, noRestart, unattended, forceUnsupportedBuild),
                 "diagnostics" or "export-diagnostics" => DiagnosticsCommand(config),
                 "bundle" or "export-bundle" or "support-bundle" => SupportBundleCommand(config),
-                "fallback" or "vivetool-fallback" or "apply-fallback" => FallbackCommand(config, forceUnsupportedBuild),
+                "fallback" or "vivetool-fallback" or "apply-fallback" => FallbackCommand(config, force, forceUnsupportedBuild),
                 "recovery-kit" or "export-recovery-kit" => RecoveryKitCommand(config),
                 "verify" => VerifyCommand(config),
                 "persistence-guard" or "guard" => PersistenceGuardCommand(config, args),
@@ -1583,7 +1583,7 @@ class Program
         return 1;
     }
 
-    static int FallbackCommand(AppConfig config, bool forceUnsupportedBuild = false)
+    static int FallbackCommand(AppConfig config, bool force, bool forceUnsupportedBuild = false)
     {
         // Same build-rule action policy as apply: the FeatureStore fallback is still a mutation.
         var policy = BuildActionPolicyService.EvaluateCurrent(config.WorkingDir);
@@ -1607,7 +1607,7 @@ class Program
                 Console.Error.WriteLine($"  FAIL: {item.Label} — {item.Detail}");
             Console.Error.WriteLine();
             Console.Error.WriteLine("Fix the above or use --force to override (not recommended).");
-            if (!Environment.GetCommandLineArgs().Any(a => a.Equals("--force", StringComparison.OrdinalIgnoreCase)))
+            if (!force)
                 return 1;
             Console.WriteLine("--force specified: proceeding despite recovery proof failure.");
         }
