@@ -117,24 +117,20 @@ public static class PreflightService
         // (FR33THY's 3244671118), and their reverts can strip the overrides, or the whole
         // Policies\Microsoft tree, while leaving the SafeBoot entries behind. Advisory, and only
         // when something is found.
-        bool orphanedSafeBoot = false;
         try
         {
-            var residueSnapshot = ThirdPartyResidueService.ReadSnapshot();
-            orphanedSafeBoot = ThirdPartyResidueService.FindOrphanedSafeBootStores(residueSnapshot).Count > 0;
-            var residue = ThirdPartyResidueService.Classify(residueSnapshot);
+            var residue = ThirdPartyResidueService.Classify(ThirdPartyResidueService.ReadSnapshot());
             if (residue is not null) checks["ThirdPartyResidue"] = residue;
         }
         catch { /* advisory */ }
 
         // SafeBoot upgrade state (RD-002): patches applied before v4.6.1 wrote only the
         // GUID-class SafeBoot entries; KB5079391 made 25H2 Safe Mode require the
-        // service-name entries too. Only surfaces when an upgrade is actually needed, and not
-        // for orphaned entries, where the residue check already says what to do.
+        // service-name entries too. Only surfaces when an upgrade is actually needed.
         try
         {
             var safeBoot = SafeBootUpgradeService.Evaluate();
-            if (safeBoot.UpgradeNeeded && !orphanedSafeBoot)
+            if (safeBoot.UpgradeNeeded)
                 checks["SafeBootEntries"] = new(CheckStatus.Warning,
                     "SafeBoot entries predate KB5079391. Run the SafeBoot upgrade (Safe Mode risk on 25H2+)");
         }
