@@ -4,5 +4,12 @@
   "private": true,
   "type": "module",
   "description": "Reference Cloudflare Worker for the NVMe Driver Patcher opt-in compat-telemetry endpoint.",
-  "main": "cloudflare-worker.js"
+  "main": "cloudflare-worker.js",
+  "scripts": {
+    "check": "wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.143.0"
+  }
 }
