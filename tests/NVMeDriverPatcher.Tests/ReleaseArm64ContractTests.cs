@@ -90,10 +90,33 @@ public sealed class ReleaseArm64ContractTests
         Assert.Contains("NuGetAuditMode=all", builder);
         Assert.Contains("NuGetAuditLevel=low", builder);
         Assert.Contains("Test-NuGetAuditGate.ps1", builder);
-        Assert.Contains("NuGetAuditMode=all", auditProof);
-        Assert.Contains("NuGetAuditLevel=low", auditProof);
         Assert.Contains("Newtonsoft.Json", auditProof);
         Assert.Contains("NU190[0-4]", auditProof);
+    }
+
+    [Fact]
+    public void NuGetAuditProof_ExercisesTheRepositoryGateNotItsOwnFlags()
+    {
+        // A probe in %TEMP% that passed its own audit flags only proved NuGet honors those flags,
+        // and kept passing with the gate deleted from Directory.Build.props. The probe has to sit
+        // under the repo root, where that file is imported, and restore with no audit settings.
+        var auditProof = File.ReadAllText(Path.Combine(RepoRoot(), "scripts", "Test-NuGetAuditGate.ps1"));
+        var buildProps = File.ReadAllText(Path.Combine(RepoRoot(), "Directory.Build.props"));
+
+        Assert.Contains("Split-Path -Parent $PSScriptRoot", auditProof);
+        Assert.Contains("Join-Path $repoRoot 'obj'", auditProof);
+        Assert.Contains("Directory.Build.props", auditProof);
+        Assert.DoesNotContain("GetTempPath", auditProof);
+        Assert.DoesNotContain("NuGetAuditMode", auditProof);
+        Assert.DoesNotContain("NuGetAuditLevel", auditProof);
+        Assert.DoesNotContain("WarningsAsErrors", auditProof);
+        Assert.Contains("Remove-Item -LiteralPath $root -Recurse -Force", auditProof);
+        Assert.Contains("CreateNoWindow = $true", auditProof);
+        Assert.Contains("WaitForExit($TimeoutSeconds * 1000)", auditProof);
+
+        Assert.Contains("<NuGetAuditMode>all</NuGetAuditMode>", buildProps);
+        Assert.Contains("<NuGetAuditLevel>low</NuGetAuditLevel>", buildProps);
+        Assert.Contains("NU1900;NU1901;NU1902;NU1903;NU1904", buildProps);
     }
 
     [Fact]
