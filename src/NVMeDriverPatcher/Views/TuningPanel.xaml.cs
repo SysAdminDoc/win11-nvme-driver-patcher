@@ -53,8 +53,8 @@ public partial class TuningPanel : UserControl
             UpdateChangeSummary();
             SetStatus(
                 _loadedProfileHasExplicitOverrides
-                    ? "Loaded current StorNVMe registry overrides. Apply only if you want to replace them."
-                    : "Loaded Windows defaults. Apply only if you want to create explicit StorNVMe overrides.",
+                    ? "Loaded the StorNVMe values stored in the registry."
+                    : "Windows defaults loaded. Nothing is stored for StorNVMe yet.",
                 "muted");
         }
         catch
@@ -244,20 +244,20 @@ public partial class TuningPanel : UserControl
 
         if (matchedPreset is not null)
         {
-            ProfileTitleText.Text = $"{matchedPreset.Name} profile ready";
+            ProfileTitleText.Text = $"{matchedPreset.Name} preset";
             ProfileDescriptionText.Text = matchedPreset.Description;
             ProfileImpactText.Text = matchedPreset.Name switch
             {
-                "Performance" => "Best for well-cooled desktops and benchmark-driven tuning. Expect more heat and less aggressive power saving.",
-                "Balanced" => "Closest to Windows defaults. This is the safest starting point when you want a clear baseline with mild tuning intent.",
-                _ => "Better suited to laptops or battery-sensitive systems. Throughput may dip, but idle behavior is calmer and more power-aware."
+                "Performance" => "For well-cooled desktops. Expect more heat and less power saving.",
+                "Balanced" => "Closest to Windows defaults, and the safest place to start.",
+                _ => "For laptops. Throughput may dip, but the drive idles sooner and uses less power."
             };
         }
         else
         {
             ProfileTitleText.Text = "Custom profile";
-            ProfileDescriptionText.Text = "These values no longer match a built-in preset. Change one dimension at a time so you can tell what helped and what did not.";
-            ProfileImpactText.Text = "Queue count 0 keeps automatic queue allocation, while timeout values of 0 disable that power-saving path. Treat custom values like an experiment until they earn a place.";
+            ProfileDescriptionText.Text = "These values don't match a preset. Change one at a time so you can tell what helped.";
+            ProfileImpactText.Text = "Treat custom values as an experiment until a benchmark backs them up.";
         }
 
         SetActiveProfileButton(matchedPreset?.Name);
@@ -280,11 +280,11 @@ public partial class TuningPanel : UserControl
         var pendingPreset = FindMatchingPreset(pendingProfile);
 
         CurrentConfigText.Text = _loadedProfileHasExplicitOverrides
-            ? $"{(baselinePreset?.Name ?? "Custom")} values are currently stored in the registry. {BuildCompactSummary(_loadedProfile)}"
-            : $"Windows defaults are effectively active. {BuildCompactSummary(_loadedProfile)}";
+            ? $"{(baselinePreset?.Name ?? "Custom")} values are stored in the registry. {BuildCompactSummary(_loadedProfile)}"
+            : $"Windows defaults are in effect. {BuildCompactSummary(_loadedProfile)}";
 
         PendingConfigText.Text = changedSettingCount == 0
-            ? "No pending changes. Apply stays disabled until you move a control or choose a different preset."
+            ? "Nothing to apply. Move a control or pick a different preset."
             : $"{changedSettingCount} setting {Pluralize(changedSettingCount, "change")} pending. {(pendingPreset?.Name ?? "Custom")} will write {BuildCompactSummary(pendingProfile)}";
 
         BtnApplyTuning.IsEnabled = changedSettingCount > 0;

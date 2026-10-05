@@ -14,41 +14,6 @@ public partial class MainViewModel
     // DispatcherTimer lives on the UI thread; OnClosing() stops it before the final save.
     private System.Windows.Threading.DispatcherTimer? _settingsSaveDebouncer;
 
-    private void UpdateOptionsSummary()
-    {
-        var serverKeyText = IncludeServerKey
-            ? "Server 2025 compatibility key is on."
-            : "Server 2025 compatibility key is off.";
-        var warningsText = SkipWarnings
-            ? "Expert mode reduces prompts; review before acting."
-            : "Confirmation prompts stay on.";
-
-        OptionsSummaryText = $"{serverKeyText} {warningsText}";
-    }
-
-    private void UpdatePreferenceSummary()
-    {
-        string themeSummary = $"Theme: {ThemeService.GetModeLabel(Config.ThemeMode)}.";
-
-        string restartSummary = int.TryParse(RestartDelayText, out int delay) && delay >= 5 && delay <= 300
-            ? $"Restart: {delay}s."
-            : "Restart: enter 5-300s.";
-
-        string toastSummary = EnableToasts
-            ? "Toasts on."
-            : "Toasts muted.";
-
-        string auditSummary = WriteEventLog
-            ? "Event Log on."
-            : "Event Log off.";
-
-        string autosaveSummary = AutoSaveLog
-            ? "Auto-save on."
-            : "Manual export only.";
-
-        PreferenceSummaryText = $"{themeSummary} {toastSummary} {auditSummary} {autosaveSummary} {restartSummary}";
-    }
-
     public void SetThemeMode(AppThemeMode mode)
     {
         mode = ThemeService.NormalizeMode(mode);
@@ -111,14 +76,12 @@ public partial class MainViewModel
 
     partial void OnIncludeServerKeyChanged(bool value)
     {
-        UpdateOptionsSummary();
         UpdateChangePlan();
         DebouncedSaveSettings();
     }
 
     partial void OnSkipWarningsChanged(bool value)
     {
-        UpdateOptionsSummary();
         UpdateChangePlan();
         DebouncedSaveSettings();
     }
@@ -126,28 +89,18 @@ public partial class MainViewModel
     partial void OnAutoSaveLogChanged(bool value)
     {
         UpdateActivitySummary();
-        UpdatePreferenceSummary();
         DebouncedSaveSettings();
     }
 
-    partial void OnEnableToastsChanged(bool value)
-    {
-        UpdatePreferenceSummary();
-        DebouncedSaveSettings();
-    }
+    partial void OnEnableToastsChanged(bool value) => DebouncedSaveSettings();
 
     partial void OnWriteEventLogChanged(bool value)
     {
         UpdateActivitySummary();
-        UpdatePreferenceSummary();
         DebouncedSaveSettings();
     }
 
-    partial void OnRestartDelayTextChanged(string value)
-    {
-        UpdatePreferenceSummary();
-        DebouncedSaveSettings();
-    }
+    partial void OnRestartDelayTextChanged(string value) => DebouncedSaveSettings();
 
     partial void OnButtonsEnabledChanged(bool value)
     {

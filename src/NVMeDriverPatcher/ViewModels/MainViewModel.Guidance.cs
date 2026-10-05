@@ -284,100 +284,100 @@ public partial class MainViewModel
         if (IsLoading)
         {
             ScanStageStateText = "Readiness scan in progress";
-            ScanStageDetailText = "Windows build support, storage inventory, and hard safety blockers are being checked.";
+            ScanStageDetailText = "Checking Windows build support, the drive inventory and the hard safety blockers.";
             ScanStageColor = "Accent";
         }
         else if (CriticalCount > 0)
         {
             ScanStageStateText = $"{CriticalCount} blocking {Pluralize(CriticalCount, "issue")}";
-            ScanStageDetailText = "Mutation stays locked until every critical readiness result is resolved and the scan runs cleanly.";
+            ScanStageDetailText = "Patch actions stay locked until every critical check passes on a clean scan.";
             ScanStageColor = "Red";
         }
         else if (WarningCount > 0)
         {
             ScanStageStateText = $"Clear with {WarningCount} {Pluralize(WarningCount, "warning")}";
-            ScanStageDetailText = "The hard safety gate passed. Review the remaining compatibility tradeoffs before staging a change.";
+            ScanStageDetailText = "The hard safety checks passed. Read the warnings before you apply.";
             ScanStageColor = "Yellow";
         }
         else
         {
             ScanStageStateText = "Readiness scan clear";
-            ScanStageDetailText = "The current build, storage inventory, and critical safeguards passed the scan.";
+            ScanStageDetailText = "This build and its drives passed every critical check.";
             ScanStageColor = "Green";
         }
 
         if (CriticalCount > 0)
         {
             PreparationStageStateText = "Blocked by readiness checks";
-            PreparationStageDetailText = "Resolve the critical preflight issues first. Backups and baselines matter, but only after the system is allowed to proceed.";
+            PreparationStageDetailText = "Fix the critical readiness issues first. Backups come after that.";
             PreparationStageColor = "Red";
         }
         else if (prepReady)
         {
             PreparationStageStateText = "Prepared for a controlled change";
-            PreparationStageDetailText = "Backups and baseline evidence are in place, so the patch can be staged with a much clearer rollback story.";
+            PreparationStageDetailText = "Backups and a baseline are in place, so rolling back is straightforward.";
             PreparationStageColor = "Green";
         }
         else if (prepEvidenceReady)
         {
             PreparationStageStateText = "Partially prepared";
-            PreparationStageDetailText = "You already captured some safety material. Add the missing backup or baseline pieces before treating this as a fully documented change.";
+            PreparationStageDetailText = "Some safety files are in place. Add the missing backup or baseline before you apply.";
             PreparationStageColor = "Yellow";
         }
         else
         {
             PreparationStageStateText = "Capture baseline and safety artifacts";
-            PreparationStageDetailText = "Start with a registry backup, optional pre-patch benchmark, and recovery materials so the change stays easy to explain and reverse.";
+            PreparationStageDetailText = "Start with a registry backup and a recovery kit. A benchmark before the patch is optional, but it gives you something to compare against.";
             PreparationStageColor = "Accent";
         }
 
         if (nativeDriverActive)
         {
             RestartStageStateText = "Migration is live";
-            RestartStageDetailText = "Windows is already running on nvmedisk.sys, so the reboot phase is complete for this machine.";
+            RestartStageDetailText = "Windows is already running on nvmedisk.sys. There's nothing left to restart for.";
             RestartStageColor = "Green";
         }
         else if (patchStatus.Applied)
         {
             RestartStageStateText = "Restart required";
-            RestartStageDetailText = "The patch is staged, but Windows will stay on the legacy path until the next reboot actually completes.";
+            RestartStageDetailText = "The patch is staged. Windows stays on the old driver until you restart.";
             RestartStageColor = "Yellow";
         }
         else if (patchStatus.Partial)
         {
             RestartStageStateText = "Staging is incomplete";
-            RestartStageDetailText = "Some components are present, but the system is not in a clean restart-ready state yet. Repair or remove the partial patch first.";
+            RestartStageDetailText = "Only some patch components are present. Repair or remove the partial patch before you restart.";
             RestartStageColor = "Red";
         }
         else
         {
             RestartStageStateText = "Patch not staged yet";
-            RestartStageDetailText = "Once the patch is applied, this phase will flip to a clear restart requirement instead of making you infer it from logs.";
+            RestartStageDetailText = "After you apply the patch, this step tells you when to restart.";
             RestartStageColor = "TextDim";
         }
 
         if (nativeDriverActive && validationEvidenceReady && HasVerificationScript)
         {
             ValidationStageStateText = "Validated with local evidence";
-            ValidationStageDetailText = "The native path is active and this machine has local proof through benchmarks, diagnostics, and verification materials.";
+            ValidationStageDetailText = "The native driver is active, and this machine has local evidence to back it up.";
             ValidationStageColor = "Green";
         }
         else if (nativeDriverActive && (validationEvidenceReady || HasVerificationScript))
         {
             ValidationStageStateText = "Validation is in progress";
-            ValidationStageDetailText = "The driver migration is live. Finish the proof trail with a benchmark comparison or diagnostics export so the outcome is easy to defend later.";
+            ValidationStageDetailText = "The native driver is live. Add a benchmark comparison or a diagnostics export to confirm it.";
             ValidationStageColor = "Yellow";
         }
         else if (patchStatus.Applied)
         {
             ValidationStageStateText = "Available after reboot";
-            ValidationStageDetailText = "Telemetry, benchmarks, and diagnostics become meaningful proof once Windows has restarted onto the native driver.";
+            ValidationStageDetailText = "After the restart, run a benchmark or export diagnostics to confirm the change.";
             ValidationStageColor = "Accent";
         }
         else
         {
-            ValidationStageStateText = "Validation comes after the driver changes";
-            ValidationStageDetailText = "Use benchmarks, telemetry, and diagnostics after reboot to confirm the migration on this exact machine.";
+            ValidationStageStateText = "Starts after the restart";
+            ValidationStageDetailText = "Once Windows restarts on the native driver, benchmarks and diagnostics confirm the change on this machine.";
             ValidationStageColor = "TextDim";
         }
     }

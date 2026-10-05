@@ -977,9 +977,9 @@ public partial class MainViewModel
     // Kept at the bottom of the class so the existing UI layout is untouched.
     // =====================================================================
 
-    [ObservableProperty] private string _watchdogVerdictText = "Watchdog status has not been checked in this session.";
-    [ObservableProperty] private string _reliabilitySummaryText = "Reliability correlation has not been refreshed yet.";
-    [ObservableProperty] private string _minidumpSummaryText = "Minidumps have not been triaged for NVMe-related crashes yet.";
+    [ObservableProperty] private string _watchdogVerdictText = "Not checked yet. Looks for storage errors since the patch and checks the watchdog task.";
+    [ObservableProperty] private string _reliabilitySummaryText = "Not checked yet. Compares Reliability Monitor records from before and after the patch.";
+    [ObservableProperty] private string _minidumpSummaryText = "Not checked yet. Scans crash dumps written since the patch for storage driver faults.";
     [ObservableProperty] private string _dryRunPreviewText = "Select Dry Run to inspect planned registry writes before anything changes.";
 
     [RelayCommand]

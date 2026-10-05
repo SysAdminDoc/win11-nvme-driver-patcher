@@ -60,15 +60,6 @@ public static class ThemeService
     public static AppThemeMode NormalizeMode(AppThemeMode mode) =>
         Enum.IsDefined(typeof(AppThemeMode), mode) ? mode : AppThemeMode.System;
 
-    public static string GetModeLabel(AppThemeMode mode) =>
-        NormalizeMode(mode) switch
-        {
-            AppThemeMode.Light => "Light",
-            AppThemeMode.Dark => "Dark",
-            AppThemeMode.HighContrast => "High Contrast",
-            _ => "System"
-        };
-
     public static string GetModeDescription(AppThemeMode mode)
     {
         mode = NormalizeMode(mode);

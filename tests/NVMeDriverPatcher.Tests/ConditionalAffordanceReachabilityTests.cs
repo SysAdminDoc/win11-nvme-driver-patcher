@@ -49,7 +49,7 @@ public sealed class ConditionalAffordanceReachabilityTests
                              "Cancel running benchmark",
                              "Try the native FeatureStore fallback",
                              "Upgrade Safe Boot entries",
-                             "Mutation actions disabled"
+                             "Patch actions turned off"
                          })
                 {
                     var element = Descendants(window)

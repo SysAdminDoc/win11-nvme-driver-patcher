@@ -19,9 +19,9 @@ public partial class MainViewModel : ObservableObject
     private const string NoBackupHistoryText = "No registry backups are saved in the working folder yet.";
     private const string NoSnapshotHistoryText = "No change snapshots saved yet.";
     private const string NoBenchmarkHistoryText = "No benchmark runs saved yet.";
-    private const string NoRecoveryKitText = "No recovery kit is ready yet. Generate one before a risky reboot or remote handoff.";
-    private const string NoVerificationScriptText = "No verification script is ready yet. Generate one so post-reboot checks stay predictable.";
-    private const string NoDiagnosticsReportText = "No diagnostics report is saved yet. Export one when you need a support-ready snapshot.";
+    private const string NoRecoveryKitText = "No recovery kit yet. Create one before you restart or hand the machine off.";
+    private const string NoVerificationScriptText = "No verification script yet. Generate one to check the driver after the restart.";
+    private const string NoDiagnosticsReportText = "No diagnostics report yet. Export one when you need to share this machine's state.";
     private const string SafeProfileHelpText = "Safe profile writes only feature flag 735209102, plus the Safe Boot entries used for rollback. That's enough to swap the driver, with no community boot-crash reports against it. This is what you want on a daily-driver machine.";
     private const string FullProfileHelpText = "Full profile adds 1853569164 (UxAccOptimization) and 156965516 (Standalone_Future). Higher peak performance on some drives, but community boot-crash reports cluster on these two flags, and while 156965516 is set DISM /ScanHealth reports component store corruption on 24H2 (SFC stays clean, and it clears once the patch is removed). Try Safe profile first; you can always opt in later.";
 
@@ -46,6 +46,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _applyEnabled;
     // Empty when all mutation policies pass; otherwise the exact build/recovery reason shown on
     // the readiness card and used to keep Apply/Fallback/SafeBoot upgrade disabled.
+    [ObservableProperty] private string _mutationBlockedTitle = "";
     [ObservableProperty] private string _mutationBlockedReason = "";
     [ObservableProperty] private string _mutationBlockedGuidance = "";
     [ObservableProperty] private bool _mutationCommandsEnabled;
@@ -79,8 +80,6 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _driveInventorySummaryText = "Scanning local drives";
     [ObservableProperty] private string _riskSummaryText = "Risk summary pending";
     [ObservableProperty] private string _riskSummaryColor = "Accent";
-    [ObservableProperty] private string _optionsSummaryText = "Safe defaults keep confirmations, rollback, and audit helpers on.";
-    [ObservableProperty] private string _preferenceSummaryText = "Theme, alerts, audit trail, and restart delay.";
     [ObservableProperty] private string _themeModeSummaryText = "Follows Windows. Current effective theme: dark.";
     [ObservableProperty] private string _attentionSummaryText = "Important compatibility notes will surface here after the readiness scan completes.";
     [ObservableProperty] private bool _hasAttentionNotes;
@@ -107,7 +106,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _recoveryKitStatusText = NoRecoveryKitText;
     [ObservableProperty] private string _verificationScriptStatusText = NoVerificationScriptText;
     [ObservableProperty] private string _diagnosticsReportStatusText = NoDiagnosticsReportText;
-    [ObservableProperty] private string _recoveryWorkspaceSummaryText = "Generate rollback, verification, and diagnostics assets so the system can be reversed or confirmed without guesswork.";
+    [ObservableProperty] private string _recoveryWorkspaceSummaryText = "Create a recovery kit and a verification script before you apply, so the change is easy to undo or confirm.";
     [ObservableProperty] private string _osRecoverySummaryText = "OS-native Point-in-Time Restore and Quick Machine Recovery evidence will appear after the readiness scan.";
     [ObservableProperty] private bool _hasRecoveryKit;
     [ObservableProperty] private bool _hasVerificationScript;
@@ -118,13 +117,13 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _scanStageDetailText = "Windows build support, storage inventory, and hard safety blockers are being checked.";
     [ObservableProperty] private string _scanStageColor = "Accent";
     [ObservableProperty] private string _preparationStageStateText = "Review readiness and capture a baseline";
-    [ObservableProperty] private string _preparationStageDetailText = "Readiness checks, backups, and optional benchmarks make the driver change easier to trust.";
+    [ObservableProperty] private string _preparationStageDetailText = "Back up first. A benchmark before the patch is optional, but it gives you something to compare against.";
     [ObservableProperty] private string _preparationStageColor = "Accent";
     [ObservableProperty] private string _restartStageStateText = "Patch not staged yet";
-    [ObservableProperty] private string _restartStageDetailText = "Once the patch is applied, this phase will tell you when a reboot is actually required.";
+    [ObservableProperty] private string _restartStageDetailText = "After you apply the patch, this step tells you when to restart.";
     [ObservableProperty] private string _restartStageColor = "TextDim";
-    [ObservableProperty] private string _validationStageStateText = "Validation comes after the driver changes";
-    [ObservableProperty] private string _validationStageDetailText = "Use benchmarks, telemetry, and diagnostics after reboot to confirm the migration on this exact machine.";
+    [ObservableProperty] private string _validationStageStateText = "Starts after the restart";
+    [ObservableProperty] private string _validationStageDetailText = "Once Windows restarts on the native driver, benchmarks and diagnostics confirm the change on this machine.";
     [ObservableProperty] private string _validationStageColor = "TextDim";
     [ObservableProperty] private int _warningCount;
     [ObservableProperty] private int _criticalCount;
@@ -222,8 +221,6 @@ public partial class MainViewModel : ObservableObject
             _suppressConfigWrites = false;
         }
         RefreshPatchProfileHelpText();
-        UpdateOptionsSummary();
-        UpdatePreferenceSummary();
         UpdateOperationalHistory();
         UpdateActivitySummary();
         UpdateWorkspaceBadges();
@@ -236,7 +233,6 @@ public partial class MainViewModel : ObservableObject
         Config.PatchProfile = PatchProfile.Safe;
         if (!_suppressConfigWrites) { try { ConfigService.Save(Config); } catch { } }
         RefreshPatchProfileHelpText();
-        UpdateOptionsSummary();
     }
 
     partial void OnIsFullModeSelectedChanged(bool value)
@@ -246,7 +242,6 @@ public partial class MainViewModel : ObservableObject
         Config.PatchProfile = PatchProfile.Full;
         if (!_suppressConfigWrites) { try { ConfigService.Save(Config); } catch { } }
         RefreshPatchProfileHelpText();
-        UpdateOptionsSummary();
     }
 
     private void RefreshPatchProfileHelpText()
@@ -595,8 +590,10 @@ public partial class MainViewModel : ObservableObject
             // without a single line in the activity log, so a user whose Apply button had gone
             // quiet had nowhere to find out why.
             if (!buildPolicy.MutationAllowed)
-                Log($"Mutation actions disabled by build policy: {buildPolicy.Reason}", "WARNING");
+                Log($"Patch actions turned off by build policy: {buildPolicy.Reason}", "WARNING");
             RefreshMutationSafetyState();
+            // The overview was written before the build policy was known.
+            UpdateOverviewSummary();
             });
         }
         catch (Exception ex)
@@ -652,6 +649,9 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // False until the build policy has been evaluated, so nothing reads as blocked during the first scan.
+    private bool BlockedByBuild => !_mutationAllowedByBuild && !string.IsNullOrWhiteSpace(_buildMutationBlockedReason);
+
     private void RefreshMutationSafetyState()
     {
         var recovery = RecoverySafetyGateService.Snapshot();
@@ -660,10 +660,13 @@ public partial class MainViewModel : ObservableObject
         var reasons = new List<string>();
         if (!_mutationAllowedByRecovery)
             reasons.Add(recovery.Summary);
-        if (!_mutationAllowedByBuild && !string.IsNullOrWhiteSpace(_buildMutationBlockedReason))
+        if (BlockedByBuild)
             reasons.Add(_buildMutationBlockedReason);
 
         MutationBlockedReason = string.Join("\n\n", reasons);
+        MutationBlockedTitle = !_mutationAllowedByRecovery
+            ? "Patch actions are turned off until recovery is resolved"
+            : "Patch actions are turned off on this Windows build";
         BuildPolicyBlocked = reasons.Count > 0;
         MutationBlockedGuidance = !_mutationAllowedByRecovery
             ? "Removal, recovery exports, logs, diagnostics, and verification remain available. Resolve recovery, then restart the app to re-prove a clean startup state."
@@ -949,6 +952,8 @@ public partial class MainViewModel : ObservableObject
                 StatusSummaryText = "The patch is configured, but Windows is still on the legacy path until after the next reboot.";
             else if (CriticalCount > 0)
                 StatusSummaryText = "A critical safeguard failed. Resolve the blocking item before applying any driver changes.";
+            else if (BlockedByBuild)
+                StatusSummaryText = "There's no known way to turn on the native driver on this build yet.";
             else if (WarningCount > 0)
                 StatusSummaryText = "This system can proceed, but there are caveats worth reviewing before you commit.";
             else
@@ -980,6 +985,12 @@ public partial class MainViewModel : ObservableObject
         {
             NextStepTitle = "Restart to finish the migration";
             NextStepDescription = "Windows has the patch staged, but the live driver path will not change until after the next reboot. Restart when ready, then use the Recovery workspace to review the verification script or rollback kit before you walk away.";
+            NextStepColor = "Yellow";
+        }
+        else if (BlockedByBuild)
+        {
+            NextStepTitle = "Nothing to apply on this build yet";
+            NextStepDescription = "App updates bring new build rules. Create a recovery kit now so it's ready when this build gets a working method.";
             NextStepColor = "Yellow";
         }
         else if (WarningCount > 0)
@@ -1182,8 +1193,7 @@ public partial class MainViewModel : ObservableObject
     // UpdateRecommendedActions live in MainViewModel.Guidance.cs (same partial class).
 
 
-    // Settings & preferences partials (UpdateOptionsSummary, UpdatePreferenceSummary,
-    // SetThemeMode, RefreshThemeModeSummary, DebouncedSaveSettings + its timer field, all
+    // Settings & preferences partials (SetThemeMode, RefreshThemeModeSummary, DebouncedSaveSettings + its timer field, all
     // OnXxxChanged hooks, SyncConfigFromUI) live in MainViewModel.Settings.cs — same class,
     // split for readability.
 
