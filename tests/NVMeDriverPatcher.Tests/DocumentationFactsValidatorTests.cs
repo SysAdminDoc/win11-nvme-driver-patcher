@@ -13,7 +13,7 @@ public sealed class DocumentationFactsValidatorTests
         var result = RunValidator(fixture.Root);
 
         Assert.True(result.ExitCode == 0, result.Output);
-        Assert.Contains("2 commands; 12 discovered tests (floor 10)", result.Output);
+        Assert.Contains("2 commands; 2 preflight checks; 12 discovered tests (floor 10)", result.Output);
     }
 
     [Theory]
@@ -21,6 +21,8 @@ public sealed class DocumentationFactsValidatorTests
     [InlineData("runtime", "README.md .NET badge major '9' should be '10'")]
     [InlineData("tests", "README.md discovered-test floor '20' exceeds actual discovery count '12'")]
     [InlineData("path", "README.md repository path 'src/Missing.cs' does not exist")]
+    [InlineData("preflight", "README.md preflight check count '3' should be '2' from PreflightService")]
+    [InlineData("preflight-missing", "README.md: missing preflight check count")]
     public void Validator_NamesTheExactStaleField(string drift, string expectedFailure)
     {
         using var fixture = new DocumentationFixture();
@@ -88,6 +90,7 @@ public sealed class DocumentationFactsValidatorTests
                 ![.NET](https://img.shields.io/badge/.NET-10.0-blue)
                 ### Extended CLI (C# binary — 2 commands)
                 - **Automated verification** -- 10+ discovered test cases cover safety behavior.
+                - **Up to 2 preflight checks** run on a background thread.
                 `src/NVMeDriverPatcher.Core/NVMeDriverPatcher.Core.csproj`
                 """);
             Write("Directory.Build.props", "<Project><PropertyGroup><VersionPrefix>5.0.0</VersionPrefix></PropertyGroup></Project>");
@@ -98,6 +101,12 @@ public sealed class DocumentationFactsValidatorTests
                     new("status", [], CommandGroup.Lifecycle, "Status"),
                     new("apply", [], CommandGroup.Lifecycle, "Apply")
                 };
+                """);
+            // A key assigned on more than one branch is still one check.
+            Write("src/NVMeDriverPatcher.Core/Services/PreflightService.cs", """
+                checks["AdminPrivileges"] = Pass();
+                checks["WindowsVersion"] = Pass();
+                checks["WindowsVersion"] = new(CheckStatus.Fail, "old build");
                 """);
             foreach (var project in ProjectPaths)
                 Write(project, "<Project><PropertyGroup><TargetFramework>net10.0-windows10.0.19041.0</TargetFramework></PropertyGroup></Project>");
@@ -115,6 +124,8 @@ public sealed class DocumentationFactsValidatorTests
                 "runtime" => readme.Replace(".NET-10.0", ".NET-9.0", StringComparison.Ordinal),
                 "tests" => readme.Replace("10+ discovered", "20+ discovered", StringComparison.Ordinal),
                 "path" => readme + Environment.NewLine + "`src/Missing.cs`",
+                "preflight" => readme.Replace("Up to 2 preflight", "Up to 3 preflight", StringComparison.Ordinal),
+                "preflight-missing" => readme.Replace("Up to 2 preflight checks", "Preflight checks", StringComparison.Ordinal),
                 _ => throw new ArgumentOutOfRangeException(nameof(drift))
             };
             File.WriteAllText(readmePath, readme);

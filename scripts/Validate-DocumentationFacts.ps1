@@ -47,6 +47,7 @@ $readme = Read-Required 'README.md'
 $propsText = Read-Required 'Directory.Build.props'
 $globalJsonText = Read-Required 'global.json'
 $registryText = Read-Required 'src/NVMeDriverPatcher.Cli/CliCommandRegistry.cs'
+$preflightText = Read-Required 'src/NVMeDriverPatcher.Core/Services/PreflightService.cs'
 
 # Command count comes from the canonical descriptor array, not aliases or switch arms.
 $commandCount = 0
@@ -63,6 +64,26 @@ if ($null -ne $registryText) {
             $failures.Add('README.md: missing Extended CLI command-count heading')
         } elseif ([int]$documented.Groups['count'].Value -ne $commandCount) {
             $failures.Add("README.md command count '$($documented.Groups['count'].Value)' should be '$commandCount' from CliCommandRegistry.All")
+        }
+    }
+}
+
+# Preflight check count is the number of distinct result keys PreflightService can emit. Several
+# are conditional, so the README states it as a ceiling ("Up to N preflight checks").
+$preflightCount = 0
+if ($null -ne $preflightText) {
+    $preflightCount = @([regex]::Matches($preflightText, 'checks\["(?<key>[A-Za-z0-9]+)"\]\s*=') |
+        ForEach-Object { $_.Groups['key'].Value } |
+        Sort-Object -Unique).Count
+    if ($preflightCount -eq 0) {
+        $failures.Add('src/NVMeDriverPatcher.Core/Services/PreflightService.cs: no preflight check keys found')
+    }
+    if ($null -ne $readme) {
+        $documented = [regex]::Match($readme, '(?<count>[0-9]+) preflight checks\b')
+        if (-not $documented.Success) {
+            $failures.Add('README.md: missing preflight check count')
+        } elseif ([int]$documented.Groups['count'].Value -ne $preflightCount) {
+            $failures.Add("README.md preflight check count '$($documented.Groups['count'].Value)' should be '$preflightCount' from PreflightService")
         }
     }
 }
@@ -193,6 +214,6 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Host ("Documentation facts valid: {0} commands; {1} discovered tests (floor {2}); v{3}; {4}; {5} shipped projects." -f
-    $commandCount, $DiscoveredTestCount, $testFloor, $canonicalVersion, $targetFramework, $projectFiles.Count) -ForegroundColor Green
+Write-Host ("Documentation facts valid: {0} commands; {1} preflight checks; {2} discovered tests (floor {3}); v{4}; {5}; {6} shipped projects." -f
+    $commandCount, $preflightCount, $DiscoveredTestCount, $testFloor, $canonicalVersion, $targetFramework, $projectFiles.Count) -ForegroundColor Green
 exit 0
