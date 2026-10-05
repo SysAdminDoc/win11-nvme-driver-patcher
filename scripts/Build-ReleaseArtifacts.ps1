@@ -189,7 +189,9 @@ if (-not $SkipMsi) {
     $intuneStage = Join-Path $publishRoot 'intune-input'
     New-Item -ItemType Directory -Path $intuneStage -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $publishRoot "NVMeDriverPatcher-$Version.msi") -Destination $intuneStage -Force
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'packaging/intune/Detect-NVMeDriverPatcher.ps1') -Destination $intuneStage -Force
+    foreach ($script in 'Detect-NVMeDriverPatcher.ps1', 'Check-NVMeDriverPatcher.ps1', 'Remediate-NVMeDriverPatcher.ps1') {
+        Copy-Item -LiteralPath (Join-Path $repoRoot "packaging/intune/$script") -Destination $intuneStage -Force
+    }
     Invoke-Checked $powerShellPath @(
         '-NoProfile',
         '-ExecutionPolicy',

@@ -153,6 +153,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   `Invoke-Checked` or extensionless names; release tools are resolved to absolute paths first.
 
 ### Added
+- The Intune bundle now carries a remediation pair. `Check-NVMeDriverPatcher.ps1` and `Remediate-NVMeDriverPatcher.ps1` go under Devices > Scripts and remediations and keep the patch applied across a fleet through the installed CLI. The check reads `status --json` and treats a build the policy won't patch as compliant, so those devices stop failing remediation every cycle. The remediation runs an unattended apply without restarting and never forces past the CLI's safety refusals. `status --json` gained `applyAllowed` and `applyBlockedReason` for scripts that need the same answer.
 - Preflight, `recovery-proof`, the GUI recovery workspace, diagnostics, and CLI JSON now carry
   advisory OS-native recovery evidence: Point-in-Time Restore support/newest restore-point age
   and Quick Machine Recovery/remediation state read from Windows. Unavailable evidence remains

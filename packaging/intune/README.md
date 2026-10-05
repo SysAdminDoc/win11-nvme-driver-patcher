@@ -13,6 +13,21 @@ Thin deployment assets for fleet installs. The primary installer is the WiX MSI
 6. **Requirements**: Windows 11 23H2 (10.0.22631) or later. x64 for full enablement; ARM64 portable builds are available for diagnostics/status only (until Microsoft ships an ARM64 `nvmedisk.sys`).
 7. **Return codes**: `0` success, `1707` success, `1641`/`3010` success (restart required).
 
+## Intune remediation
+
+The Win32 app above installs the tool. To keep the patch applied across a fleet, add a remediation that uses the CLI the MSI installed:
+
+1. In Intune, open **Devices** → **Scripts and remediations** → **Create**.
+2. **Detection script file**: `Check-NVMeDriverPatcher.ps1`. **Remediation script file**: `Remediate-NVMeDriverPatcher.ps1`.
+3. **Run this script using the logged-on credentials**: No. **Run script in 64-bit PowerShell**: Yes. Both scripts need SYSTEM rights.
+4. Assign it to the same devices as the Win32 app, on whatever schedule suits you. Daily is plenty.
+
+The check script reads `NVMeDriverPatcher.Cli.exe status --json` and exits 1 only when the patch is missing or partial on a Windows build where apply is allowed. A device that's already patched, or already running the native driver, exits 0. So does a build with no known enablement path or with stale build rules, and the reason shows up in the script output column, so those devices read as "nothing to fix" instead of failing remediation on every run.
+
+The remediation script runs `apply --unattended --no-restart` and hands the CLI's exit code back to Intune. It never passes `--force` or `--force-unsupported-build`, so the CLI's own refusals still stand: a blocked build, a failed critical safety check, or recovery files that aren't in place all end the run with exit 1 and the CLI's reason in the output. The native driver loads at the device's next restart. If you'd rather restart right away, set `$restartAfterApply = $true` near the top of the remediation script before uploading it.
+
+`Detect-NVMeDriverPatcher.ps1` stays the Win32 app's detection script. It only answers "is the tool installed", which is a different question from the remediation check's "is the patch in place".
+
 ## SCCM / MEMCM
 
 Create an Application with:
