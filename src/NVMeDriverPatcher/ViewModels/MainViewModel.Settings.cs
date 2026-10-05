@@ -65,7 +65,22 @@ public partial class MainViewModel
     public void RefreshThemeModeSummary()
     {
         ThemeModeSummaryText = ThemeService.GetModeDescription(Config.ThemeMode);
-        UpdatePreferenceSummary();
+    }
+
+    // The *Color properties hold theme resource keys that StrToBrush turns into a brush only when its
+    // binding updates. A theme switch replaces every brush, so the status chip, stage markers and
+    // badges kept the previous theme's colors until their state next changed. Re-raise the keys.
+    private static readonly string[] ThemeBrushKeyProperties = typeof(MainViewModel).GetProperties()
+        .Where(p => p.PropertyType == typeof(string) && p.Name.EndsWith("Color", StringComparison.Ordinal))
+        .Select(p => p.Name)
+        .ToArray();
+
+    internal static IReadOnlyList<string> ThemeBrushKeyPropertyNames => ThemeBrushKeyProperties;
+
+    public void RefreshThemeBrushes()
+    {
+        foreach (var name in ThemeBrushKeyProperties)
+            OnPropertyChanged(name);
     }
 
     // Persist settings shortly after a change so a crash before normal close doesn't lose

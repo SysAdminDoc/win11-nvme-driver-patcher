@@ -24,7 +24,7 @@ public static class HtmlDashboardService
         sb.AppendLine("<title>NVMe Driver Patcher: Diagnostics Snapshot</title>");
         sb.AppendLine("<style>");
         sb.AppendLine(":root{color-scheme:dark light;--bg:#0d0f13;--surface:#14181e;--inset:#101318;--border:#2a3038;--fg:#f6f9ff;--secondary:#d5deeb;--muted:#aab6c8;--dim:#8694a8;--accent:#7ab8ff;--ok:#7ad7ae;--warn:#e4bd73;--err:#f0a1a1;--shadow:rgba(0,0,0,.18)}");
-        sb.AppendLine("@media (prefers-color-scheme:light){:root{--bg:#f7fafe;--surface:#fff;--inset:#f2f5fa;--border:#d5dce6;--fg:#0b1220;--secondary:#1e2a3b;--muted:#4a5668;--dim:#6b7788;--accent:#2563eb;--ok:#047857;--warn:#b45309;--err:#b91c1c;--shadow:rgba(82,96,112,.12)}}");
+        sb.AppendLine("@media (prefers-color-scheme:light){:root{--bg:#f7fafe;--surface:#fff;--inset:#f2f5fa;--border:#d5dce6;--fg:#0b1220;--secondary:#1e2a3b;--muted:#4a5668;--dim:#5e6877;--accent:#2563eb;--ok:#047857;--warn:#a84d08;--err:#b91c1c;--shadow:rgba(82,96,112,.12)}}");
         sb.AppendLine("@media (prefers-contrast:more){:root{--bg:#000;--surface:#050505;--inset:#000;--border:#fff;--fg:#fff;--secondary:#f2f2f2;--muted:#e0e0e0;--dim:#cfcfcf;--accent:#66d9ff;--ok:#6dffb1;--warn:#ffe066;--err:#ff8a8a;--shadow:transparent}}");
         sb.AppendLine("*{box-sizing:border-box}html{background:var(--bg)}body{font:13px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:var(--secondary);background:var(--bg);margin:0 auto;padding:22px;max-width:1040px}");
         sb.AppendLine("h1{color:var(--fg);margin:0 0 6px;font-size:22px;line-height:1.18;font-weight:650}h2{color:var(--fg);margin:24px 0 8px;font-size:14px;line-height:1.25;font-weight:650;border-bottom:1px solid var(--border);padding-bottom:7px}");

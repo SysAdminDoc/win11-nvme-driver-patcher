@@ -74,6 +74,42 @@ public sealed class ThemeContrastTests
         Assert.True(ContrastRatio(expectedForeground, expectedPressed) >= 4.5);
     }
 
+    // Most status lines, captions and detail text are set inline in the views (Foreground="{DynamicResource
+    // TextDim}" on a card), which the style walk above never sees. TextDim sat at 4.0 to 4.4:1 on the light
+    // canvas and on the tinted notice backgrounds in both themes, below AA for 10.5 to 11.5 px text.
+    [Theory]
+    [InlineData("DarkTheme.xaml")]
+    [InlineData("LightTheme.xaml")]
+    [InlineData("HighContrastTheme.xaml")]
+    public void InformationalTextTokens_MeetAaOnEverySurfaceTheyCanSitOn(string themeFile)
+    {
+        var themeRoot = Path.Combine(RepoRoot(), "src", "NVMeDriverPatcher", "Themes");
+        var palette = new Dictionary<string, string>(ReadPalette(Path.Combine(themeRoot, "DarkTheme.xaml")), StringComparer.Ordinal);
+        foreach (var pair in ReadPalette(Path.Combine(themeRoot, themeFile)))
+            palette[pair.Key] = pair.Value;
+
+        string[] neutral =
+        [
+            "WindowCanvasBrush", "BgDarkest", "BgDark", "BgMedium", "BgLight", "SurfaceInset",
+            "SurfaceCardBrush", "InsetCardBrush", "HeroSurfaceBrush"
+        ];
+        string[] tinted = ["AccentBg", "GreenBg", "YellowBg", "RedBg"];
+
+        var pairs = new List<(string Foreground, string Background)>();
+        foreach (var text in new[] { "TextPrimary", "TextSecondary", "TextMuted", "TextDim" })
+            pairs.AddRange(neutral.Concat(tinted).Select(surface => (text, surface)));
+        foreach (var status in new[] { "Accent", "Green", "Yellow", "Red" })
+            pairs.AddRange(neutral.Append(status + "Bg").Select(surface => (status, surface)));
+
+        var violations = pairs
+            .Select(pair => (pair.Foreground, pair.Background, Ratio: ContrastRatio(palette[pair.Foreground], palette[pair.Background])))
+            .Where(result => result.Ratio + 0.01 < 4.5)
+            .Select(result => $"{themeFile}: {result.Foreground} on {result.Background} = {result.Ratio:F2}:1")
+            .ToList();
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
     private static IEnumerable<ThemeState> EnumerateStates(
         XElement style,
         IReadOnlyDictionary<string, string> baseProperties)
