@@ -107,11 +107,33 @@ public static class ApstInspectorService
     {
         if (report is null || identifyStates is null) return;
 
-        var byIndex = identifyStates
+        var valid = identifyStates
             .Where(state => state is not null && state.Index >= 0 &&
                             double.IsFinite(state.MaxPowerWatts) && state.MaxPowerWatts > 0)
             .GroupBy(state => state.Index)
-            .ToDictionary(group => group.Key, group => group.First().MaxPowerWatts);
+            .Select(group => group.First())
+            .OrderBy(state => state.Index)
+            .ToList();
+
+        // stornvme rarely has per-state registry entries, so the controller's own table is the
+        // list when the registry gave none. Idle times stay unknown; only the registry has them.
+        if (report.States.Count == 0)
+        {
+            foreach (var state in valid)
+            {
+                report.States.Add(new ApstPowerState
+                {
+                    PowerStateNumber = state.Index,
+                    MaxPowerWatts = state.MaxPowerWatts,
+                    EntryLatencyUs = state.EntryLatencyUs,
+                    ExitLatencyUs = state.ExitLatencyUs,
+                    NonOperational = state.NonOperational
+                });
+            }
+            return;
+        }
+
+        var byIndex = valid.ToDictionary(state => state.Index, state => state.MaxPowerWatts);
 
         foreach (var state in report.States)
         {

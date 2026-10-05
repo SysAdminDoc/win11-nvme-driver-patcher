@@ -19,13 +19,13 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Confirmed
   Effort: S
 
-- [ ] P3 — NVMe Identify has never been seen working on a real drive; pass-through may be refused for Identify
+- [ ] P3 — APST inspector says "APST disabled" from registry values stornvme doesn't write
   Category: correctness
-  Where: `src/NVMeDriverPatcher.Core/Services/NvmeIdentifyService.cs` (`Query`); consumers are the CLI `identify` command, `ApstInspectorService` (Identify power states) and `DiagnosticsService`
-  Problem: Until the protocol-status fix, the request used IOCTL code 0x2DD4C0 (function 0x530, not IOCTL_STORAGE_PROTOCOL_COMMAND) and left CommandSpecific at 0, so every Query most likely failed inside DeviceIoControl and callers quietly fell back. The corrected request (0x2DD3C0, NVMe admin CommandSpecific) is pinned against winioctl.h by tests but hasn't run on hardware. Microsoft's NVMe guide shows Identify going through IOCTL_STORAGE_QUERY_PROPERTY and describes protocol-command pass-through for vendor-specific commands, so stornvme/nvmedisk may still refuse this request.
-  Evidence: The ReturnStatus gate now reports any refusal as a failure instead of an empty identity, so nothing breaks either way; the open question is whether Identify data ever arrives.
-  Fix: From an elevated shell run `NVMeDriverPatcher.Cli identify` on a stornvme-bound and an nvmedisk-bound drive. If the request is refused (Win32 error or a non-success protocol status), switch `Query` to IOCTL_STORAGE_QUERY_PROPERTY with StorageAdapterProtocolSpecificProperty / NVMeDataTypeIdentify / CNS controller, which also works on a handle opened with no access rights.
-  Acceptance: `identify` prints the real model, serial, firmware and VID on at least one drive per driver, and the APST inspector shows Identify power states.
+  Where: `src/NVMeDriverPatcher.Core/Services/ApstInspectorService.cs` (`Inspect` reads `AutonomousPowerStateTransitionEnabled`, `ApstIdleTimeout`, `NoLowPowerTransitions` and `PowerState{i}_*` under `stornvme\Parameters\Device`)
+  Problem: None of those values exist on this PC (stornvme, Samsung PM9C1b and KIOXIA BG6 with five power states each) or in the 26100.9550 VM, so the inspector always reports APST as disabled and the battery estimate says "APST honored: No". Whether stornvme reads these names at all is unverified. The state the controller actually runs with is Get Features 0x0C (Autonomous Power State Transition).
+  Evidence: Found while fixing NVMe Identify; Identify now fills the power table, but the enabled flag and idle times still come from the empty registry key.
+  Fix: Read APST enablement and the transition table from Get Features FID 0x0C through `IOCTL_STORAGE_QUERY_PROPERTY` (`StorageDeviceProtocolSpecificProperty`, `NVMeDataTypeFeature`), keep the registry values as overrides only when present, and say "not reported" rather than "disabled" when neither answers.
+  Acceptance: On a stornvme machine with APST on, the inspector says enabled and shows idle times per state; a missing registry value never reads as disabled.
   Confidence: Likely
   Effort: M
 
