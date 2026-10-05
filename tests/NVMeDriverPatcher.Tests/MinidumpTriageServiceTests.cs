@@ -35,6 +35,6 @@ public sealed class MinidumpTriageServiceTests
         var report = new MinidumpTriageReport { TotalFound = 3, NewerThanPatch = 2, NVMeRelated = 1 };
         var s = MinidumpTriageService.BuildSummary(report);
         Assert.Contains("1/2", s);
-        Assert.Contains("investigate", s);
+        Assert.Contains("Investigate", s);
     }
 }

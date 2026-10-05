@@ -78,7 +78,7 @@ public static class FallbackRecoveryCoordinator
             var reset = resetFn();
             if (!reset.Success)
             {
-                log?.Invoke("[FALLBACK-RECOVERY] Reset failed — checkpoint retained for retry. " + reset.Summary);
+                log?.Invoke("[FALLBACK-RECOVERY] Reset failed. Checkpoint retained for retry. " + reset.Summary);
                 return new FallbackRecoveryResult(true, false,
                     "Fallback reset failed; checkpoint retained for retry. " + reset.Summary);
             }
@@ -88,7 +88,7 @@ public static class FallbackRecoveryCoordinator
             var saved = ConfigService.Save(config);
             if (!saved)
             {
-                log?.Invoke("[FALLBACK-RECOVERY] FeatureStore IDs were reset but the checkpoint clear failed to persist — will re-verify next launch.");
+                log?.Invoke("[FALLBACK-RECOVERY] FeatureStore IDs were reset but the checkpoint clear failed to persist. Will re-verify next launch.");
                 return new FallbackRecoveryResult(true, false,
                     "Fallback IDs reset but the checkpoint could not be persisted; it will be re-evaluated next launch. " + reset.Summary);
             }
@@ -107,7 +107,7 @@ public static class FallbackRecoveryCoordinator
         }
         catch (Exception ex)
         {
-            log?.Invoke("[FALLBACK-RECOVERY] Reset threw — checkpoint retained: " + ex.Message);
+            log?.Invoke("[FALLBACK-RECOVERY] Reset threw. Checkpoint retained: " + ex.Message);
             return new FallbackRecoveryResult(true, false, "Fallback recovery threw: " + ex.Message);
         }
     }

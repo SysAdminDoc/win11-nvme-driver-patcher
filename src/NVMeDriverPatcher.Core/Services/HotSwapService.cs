@@ -382,7 +382,7 @@ public static partial class HotSwapService
             try { stderr = (stderrTask.GetAwaiter().GetResult() ?? string.Empty).Trim(); } catch { }
             if (proc.ExitCode != 0)
             {
-                log?.Invoke($"  [FAIL] mountvol {driveLetter} -> {volumeGuidPath}: exit {proc.ExitCode}{(string.IsNullOrEmpty(stderr) ? "" : $" — {stderr}")}");
+                log?.Invoke($"  [FAIL] mountvol {driveLetter} -> {volumeGuidPath}: exit {proc.ExitCode}{(string.IsNullOrEmpty(stderr) ? "" : $": {stderr}")}");
                 return false;
             }
             return true;

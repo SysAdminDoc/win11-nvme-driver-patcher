@@ -120,7 +120,7 @@ public static class VerifiedDownloader
                 if (!string.Equals(actual, sidecarHash, StringComparison.OrdinalIgnoreCase))
                 {
                     TryDelete(partPath);
-                    return Failure($"SHA-256 mismatch — aborting. Expected {sidecarHash}, got {actual}.");
+                    return Failure($"SHA-256 mismatch. Aborting. Expected {sidecarHash}, got {actual}.");
                 }
                 signal = IntegritySignal.Sha256Sidecar;
                 verifiedSha256 = actual;

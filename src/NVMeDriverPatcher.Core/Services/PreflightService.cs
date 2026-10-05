@@ -68,7 +68,7 @@ public static class PreflightService
             else if (build.BuildNumber < AppConfig.MinWinBuild)
                 checks["WindowsVersion"] = new(CheckStatus.Fail, $"Build {build.BuildNumber} < {AppConfig.MinWinBuild}", true);
             else if (!build.Is24H2OrLater)
-                checks["WindowsVersion"] = new(CheckStatus.Warning, $"Build {build.BuildNumber} ({build.DisplayVersion}) - 24H2+ recommended", true);
+                checks["WindowsVersion"] = new(CheckStatus.Warning, $"Build {build.BuildNumber} ({build.DisplayVersion}), 24H2+ recommended", true);
             else
                 checks["WindowsVersion"] = new(CheckStatus.Pass, $"Win 11 {build.DisplayVersion} (Build {build.BuildNumber})", true);
 
@@ -78,7 +78,7 @@ public static class PreflightService
             // stable-channel impact unconfirmed → Warning, not a blocker.
             if (build is not null && AppConfig.IsKnownBindBlockedBuild(build.BuildNumber, build.UBR))
                 checks["NativeBindSupport"] = new(CheckStatus.Warning,
-                    $"Build {build.BuildNumber}.{build.UBR}: nvmedisk may be unable to bind on this build — " +
+                    $"Build {build.BuildNumber}.{build.UBR}: nvmedisk may be unable to bind on this build. " +
                     "the patch (and the ViVeTool fallback) may have no effect");
 
             // 26300+ ships a native "Feature flags" page (Settings > Windows Update > Windows
@@ -87,7 +87,7 @@ public static class PreflightService
             if (build is not null && AppConfig.HasNativeFeatureFlagsPage(build.BuildNumber))
                 checks["FeatureFlagsPage"] = new(CheckStatus.Info,
                     "Windows 11 26300+ has a native 'Feature flags' page (Settings > Windows Update > " +
-                    "Windows Insider Program) — check there for an official NVMe toggle before using overrides");
+                    "Windows Insider Program). Check there for an official NVMe toggle before using overrides");
 
             // Matched enablement rule (AR-2026-006): one updatable data file explains what
             // route is expected to work on this exact build instead of generic copy.
@@ -96,7 +96,7 @@ public static class PreflightService
                 result.DataFileProvenance = DataFileProvenanceService.InspectAll();
                 var rule = WindowsBuildRulesService.MatchCurrent();
                 checks["EnablementRule"] = rule is null
-                    ? new(CheckStatus.Info, "No enablement rule matches this build — behavior unknown, proceed conservatively")
+                    ? new(CheckStatus.Info, "No enablement rule matches this build. Behavior unknown, proceed conservatively")
                     : new(rule.ExpectedPath == "none-known" ? CheckStatus.Warning : CheckStatus.Info,
                         WindowsBuildRulesService.Describe(rule));
                 checks["DataFileProvenance"] = new(
@@ -121,7 +121,7 @@ public static class PreflightService
             var safeBoot = SafeBootUpgradeService.Evaluate();
             if (safeBoot.UpgradeNeeded)
                 checks["SafeBootEntries"] = new(CheckStatus.Warning,
-                    "SafeBoot entries predate KB5079391 — run the SafeBoot upgrade (Safe Mode risk on 25H2+)");
+                    "SafeBoot entries predate KB5079391. Run the SafeBoot upgrade (Safe Mode risk on 25H2+)");
         }
         catch { /* probe is best-effort */ }
 
@@ -165,7 +165,7 @@ public static class PreflightService
             var dataVols = DriveService.DataVolumesNeedingAttention(DriveService.GetBitLockerVolumes());
             if (dataVols.Count > 0)
                 checks["BitLockerDataDrives"] = new(CheckStatus.Warning,
-                    $"BitLocker data volume(s) {string.Join(", ", dataVols.Select(v => v.DriveLetter))} have no auto-unlock — they will re-lock after reboot. The patch suspends them for one reboot; keep their recovery keys handy.");
+                    $"BitLocker data volume(s) {string.Join(", ", dataVols.Select(v => v.DriveLetter))} have no auto-unlock. They will re-lock after reboot. The patch suspends them for one reboot; keep their recovery keys handy.");
         }
         catch (Exception ex)
         {
@@ -518,7 +518,7 @@ public static class PreflightService
         if (cbsRebootPending) sources.Add("servicing");
         if (windowsUpdateRebootRequired) sources.Add("Windows Update");
         return new(CheckStatus.Warning,
-            $"Reboot pending ({string.Join(" + ", sources)}) — restart Windows first, then retry the patch");
+            $"Reboot pending ({string.Join(" + ", sources)}). Restart Windows first, then retry the patch");
     }
 
     /// <summary>
@@ -542,7 +542,7 @@ public static class PreflightService
         if (reasons.Count == 0) return null;
         return new(CheckStatus.Warning,
             $"Boot recovery risk: {string.Join(", and ", reasons)}. A recovery boot can promote a " +
-            "pre-patch control set, silently reverting to the legacy NVMe driver — re-run Verify " +
+            "pre-patch control set, silently reverting to the legacy NVMe driver. Re-run Verify " +
             "after the next reboot and re-apply if the patch is gone");
     }
 
@@ -565,7 +565,7 @@ public static class PreflightService
         if (availableBytes is null || availableBytes.Value >= minBytes) return null;
         long mb = availableBytes.Value / (1024 * 1024);
         return new(CheckStatus.Warning,
-            $"Low disk space on working-dir drive (~{mb} MB free) — recovery kit, bundles, and logs may fail to write");
+            $"Low disk space on working-dir drive (~{mb} MB free). Recovery kit, bundles, and logs may fail to write");
     }
 
     internal static PreflightCheck ClassifyCompatibility(IReadOnlyCollection<IncompatibleSoftwareInfo> incompatibleSoftware)

@@ -21,7 +21,7 @@ public static class HtmlDashboardService
     {
         var sb = new StringBuilder();
         sb.AppendLine("<!doctype html><html><head><meta charset=\"utf-8\">");
-        sb.AppendLine("<title>NVMe Driver Patcher — Diagnostics Snapshot</title>");
+        sb.AppendLine("<title>NVMe Driver Patcher: Diagnostics Snapshot</title>");
         sb.AppendLine("<style>");
         sb.AppendLine(":root{color-scheme:dark light;--bg:#0d0f13;--surface:#14181e;--inset:#101318;--border:#2a3038;--fg:#f6f9ff;--secondary:#d5deeb;--muted:#aab6c8;--dim:#8694a8;--accent:#7ab8ff;--ok:#7ad7ae;--warn:#e4bd73;--err:#f0a1a1;--shadow:rgba(0,0,0,.18)}");
         sb.AppendLine("@media (prefers-color-scheme:light){:root{--bg:#f7fafe;--surface:#fff;--inset:#f2f5fa;--border:#d5dce6;--fg:#0b1220;--secondary:#1e2a3b;--muted:#4a5668;--dim:#6b7788;--accent:#2563eb;--ok:#047857;--warn:#b45309;--err:#b91c1c;--shadow:rgba(82,96,112,.12)}}");
@@ -32,7 +32,7 @@ public static class HtmlDashboardService
         sb.AppendLine("table{border-collapse:collapse;width:100%;margin-top:2px}td,th{text-align:left;padding:7px 9px;border-bottom:1px solid var(--border);vertical-align:top}tr:last-child td{border-bottom:0}th{color:var(--muted);font-weight:650;font-size:11px;text-transform:uppercase;letter-spacing:.04em}");
         sb.AppendLine(".ok{color:var(--ok)}.warn{color:var(--warn)}.err{color:var(--err)}.muted{color:var(--dim)}strong{color:var(--fg)}code{color:var(--fg);background:var(--inset);border:1px solid var(--border);padding:2px 5px;border-radius:4px;font-family:Cascadia Code,Consolas,monospace;font-size:12px}");
         sb.AppendLine("</style></head><body>");
-        sb.AppendLine($"<h1>NVMe Driver Patcher — diagnostics snapshot</h1>");
+        sb.AppendLine($"<h1>NVMe Driver Patcher: diagnostics snapshot</h1>");
         sb.AppendLine($"<div class=\"meta\">Generated {DateTime.UtcNow:u} · app v{AppConfig.AppVersion} · profile {config.PatchProfile}</div>");
 
         Section(sb, "Verification", () =>
@@ -44,10 +44,10 @@ public static class HtmlDashboardService
         Section(sb, "Watchdog", () =>
         {
             if (watchdog is null) { sb.AppendLine("<div class=\"muted\">Watchdog idle.</div>"); return; }
-            sb.AppendLine($"<div class=\"card\"><strong>Verdict:</strong> {watchdog.Verdict} — {WebEscape(watchdog.Summary)}");
+            sb.AppendLine($"<div class=\"card\"><strong>Verdict:</strong> {watchdog.Verdict}: {WebEscape(watchdog.Summary)}");
             sb.AppendLine("<table><tr><th>Source/ID</th><th>Count</th><th>Latest</th></tr>");
             foreach (var c in watchdog.Counts.Where(c => c.Count > 0))
-                sb.AppendLine($"<tr><td><code>{WebEscape(c.Source)}/{c.Id}</code> — {WebEscape(c.Description)}</td><td>{c.Count}</td><td class=\"muted\">{c.LatestOccurrence:u}</td></tr>");
+                sb.AppendLine($"<tr><td><code>{WebEscape(c.Source)}/{c.Id}</code>: {WebEscape(c.Description)}</td><td>{c.Count}</td><td class=\"muted\">{c.LatestOccurrence:u}</td></tr>");
             sb.AppendLine("</table></div>");
         });
 

@@ -91,8 +91,8 @@ public static class MaintenanceWindowService
 
     public static string Summarize(MaintenanceWindow window)
     {
-        if (!window.Enabled) return "Maintenance window disabled — actions run any time.";
+        if (!window.Enabled) return "Maintenance window disabled. Actions run any time.";
         var days = string.Join(", ", window.ActiveDays.Select(d => d.ToString()[..3]));
-        return $"Maintenance window: {window.StartHour:00}:00–{window.EndHour:00}:00 on {days}.";
+        return $"Maintenance window: {window.StartHour:00}:00 to {window.EndHour:00}:00 on {days}.";
     }
 }

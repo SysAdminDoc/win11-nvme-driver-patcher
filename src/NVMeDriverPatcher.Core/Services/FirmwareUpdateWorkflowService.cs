@@ -89,7 +89,7 @@ public static class FirmwareUpdateWorkflowService
     public static string BuildDisableInstructions(IReadOnlyList<FirmwareUpdateNudge> nudges)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Native NVMe (nvmedisk.sys) is now disabled — your drives are back on the legacy");
+        sb.AppendLine("Native NVMe (nvmedisk.sys) is now disabled. Your drives are back on the legacy");
         sb.AppendLine("stack so vendor tools can detect them. Update firmware, then run 're-enable-after-update'");
         sb.AppendLine("to restore the same profile.");
         if (nudges.Count == 0)

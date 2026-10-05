@@ -88,7 +88,7 @@ public static class PatchVerificationService
     public const string UntrackedDriverActivationNote =
         "nvmedisk.sys is active but this tool did not enable it (no override keys or known fallback flags). " +
         "This is either Microsoft's official rollout or a forced 'driver method' install via Device Manager/PnPUtil. " +
-        "To revert a forced install, use Device Manager - roll back/replace the disk driver with stornvme; " +
+        "To revert a forced install, use Device Manager to roll back or replace the disk driver with stornvme; " +
         "registry cleanup alone will not undo it.";
 
     // If a user applies but never reboots, we don't want to nag them for months. After
@@ -152,7 +152,7 @@ public static class PatchVerificationService
         if (lastBoot is null || lastBoot <= appliedAt - BootClockSkewTolerance)
         {
             report.Outcome = VerificationOutcome.AwaitingRestart;
-            report.Summary = "Patch applied — restart pending";
+            report.Summary = "Patch applied, restart pending";
             report.Detail = "The registry changes are in place. They take effect after the next restart.";
             return report;
         }
@@ -217,7 +217,7 @@ public static class PatchVerificationService
         {
             var detail = overrideKeyCount > 0
                 ? $"nvmedisk.sys is bound ({activeDriver}). Your patch is working as intended."
-                : $"nvmedisk.sys is bound ({activeDriver}). No registry override keys are present — " +
+                : $"nvmedisk.sys is bound ({activeDriver}). No registry override keys are present. " +
                   "enablement is via the ViVeTool/FeatureStore fallback or an official Windows rollout.";
             return (VerificationOutcome.Confirmed, "Native NVMe driver is active", detail);
         }
@@ -230,7 +230,7 @@ public static class PatchVerificationService
                 "but Windows is still using the legacy stornvme.sys driver. On builds 26200.8524 and " +
                 "later, stornvme no longer exposes the compatible ID that nvmedisk.inf matches, so the " +
                 "native driver cannot bind by any supported means (thebookisclosed/ViVe issue #164). " +
-                "There is currently no working enablement path on this build — you can leave the flags " +
+                "There is currently no working enablement path on this build. You can leave the flags " +
                 "in place (harmless) or remove the patch and wait for Microsoft's official rollout.");
         }
 
@@ -240,7 +240,7 @@ public static class PatchVerificationService
             // between reboot and now. Silent.
             return (VerificationOutcome.Reverted,
                 "Patch no longer present",
-                "Registry keys are gone — likely uninstalled, reverted by a Windows update, or " +
+                "Registry keys are gone, likely uninstalled, reverted by a Windows update, or " +
                 "dropped by Windows boot recovery. A scheduled chkdsk of the system volume, a " +
                 "deleted bootstat.dat, or 2-3 failed boots can make Windows promote the " +
                 "LastKnownGood control set, which predates the patch and so does not contain its " +

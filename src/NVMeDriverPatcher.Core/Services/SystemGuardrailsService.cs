@@ -60,7 +60,7 @@ public static class SystemGuardrailsService
                         {
                             Name = "AppLocker",
                             Severity = GuardrailSeverity.Warning,
-                            Detail = $"AppLocker collection '{name}' is in Enforced mode. The secondary ViVeTool binary may be blocked if native FeatureStore writing fails — pre-approve or whitelist the hash."
+                            Detail = $"AppLocker collection '{name}' is in Enforced mode. The secondary ViVeTool binary may be blocked if native FeatureStore writing fails. Pre-approve or whitelist the hash."
                         };
                     }
                 }
@@ -107,7 +107,7 @@ public static class SystemGuardrailsService
                         {
                             Name = "HVCI / Memory Integrity",
                             Severity = GuardrailSeverity.Warning,
-                            Detail = "HVCI is active. Unsigned or mismatched NVMe driver loads can be blocked — verify nvmedisk.sys is WHQL-signed on this build."
+                            Detail = "HVCI is active. Unsigned or mismatched NVMe driver loads can be blocked. Verify nvmedisk.sys is WHQL-signed on this build."
                         };
                     }
                 }
@@ -118,7 +118,7 @@ public static class SystemGuardrailsService
         {
             Name = "HVCI / Memory Integrity",
             Severity = GuardrailSeverity.Info,
-            Detail = "HVCI not active — no memory-integrity restriction on driver load."
+            Detail = "HVCI not active. No memory-integrity restriction on driver load."
         };
     }
 
@@ -139,7 +139,7 @@ public static class SystemGuardrailsService
                     {
                         Name = "WDAC enforcement",
                         Severity = GuardrailSeverity.Warning,
-                        Detail = "Windows Defender Application Control is enforced. The native FeatureStore fallback is still local, but the secondary ViVeTool download will likely be blocked — have a pre-approved copy ready."
+                        Detail = "Windows Defender Application Control is enforced. The native FeatureStore fallback is still local, but the secondary ViVeTool download will likely be blocked. Have a pre-approved copy ready."
                     };
                 }
             }
@@ -206,7 +206,7 @@ public static class SystemGuardrailsService
                 {
                     Name = "NTFS compression on SystemDrive",
                     Severity = GuardrailSeverity.Warning,
-                    Detail = $"{sys} is NTFS-compressed at the root. Expect higher CPU load under Native NVMe — consider disabling compression on the OS drive."
+                    Detail = $"{sys} is NTFS-compressed at the root. Expect higher CPU load under Native NVMe. Consider disabling compression on the OS drive."
                 };
             }
         }
@@ -223,8 +223,8 @@ public static class SystemGuardrailsService
     {
         int blockers = report.Findings.Count(f => f.Severity == GuardrailSeverity.Blocker);
         int warnings = report.Findings.Count(f => f.Severity == GuardrailSeverity.Warning);
-        if (blockers > 0) return $"{blockers} blocker(s), {warnings} warning(s) — review before applying.";
-        if (warnings > 0) return $"{warnings} guardrail warning(s) — review before applying.";
+        if (blockers > 0) return $"{blockers} blocker(s), {warnings} warning(s). Review before applying.";
+        if (warnings > 0) return $"{warnings} guardrail warning(s). Review before applying.";
         return "No guardrail issues detected.";
     }
 }

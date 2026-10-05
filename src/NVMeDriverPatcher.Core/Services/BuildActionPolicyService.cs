@@ -57,7 +57,7 @@ public static class BuildActionPolicyService
         if (rule is null)
             return new BuildActionPolicy(
                 PatchActionDisposition.VerifyRollbackOnly,
-                "No rule matches this Windows build — behavior is unknown. Verify/rollback only.",
+                "No rule matches this Windows build. Behavior is unknown. Verify/rollback only.",
                 null, string.Empty, RulesetValid: true, Stale: false);
 
         var stale = IsStale(rule.LastReviewed, nowUtc ?? DateTime.UtcNow, staleAfterDays);
@@ -76,7 +76,7 @@ public static class BuildActionPolicyService
         var reason = rule.ExpectedPath switch
         {
             "none-known" => $"Build rule [{rule.Id}] reports no known enablement path binds on this build. Verify/rollback only.",
-            "official-optin" => $"Build rule [{rule.Id}] reports native NVMe is an official opt-in on this build — use Windows' own path, not a registry mutation. Verify/rollback only.",
+            "official-optin" => $"Build rule [{rule.Id}] reports native NVMe is an official opt-in on this build. Use Windows' own path, not a registry mutation. Verify/rollback only.",
             _ => $"Build rule [{rule.Id}] has an unrecognized expected path '{rule.ExpectedPath}'. Verify/rollback only."
         };
         return new BuildActionPolicy(

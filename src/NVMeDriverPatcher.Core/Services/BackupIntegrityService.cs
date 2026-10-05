@@ -40,7 +40,7 @@ public static class BackupIntegrityService
             if (!header.StartsWith("Windows Registry Editor", StringComparison.Ordinal) &&
                 !header.StartsWith("REGEDIT4", StringComparison.Ordinal))
             {
-                result.Summary = "Backup file missing the Windows Registry Editor header — not a valid .reg export.";
+                result.Summary = "Backup file missing the Windows Registry Editor header. Not a valid .reg export.";
                 return result;
             }
         }

@@ -26,7 +26,7 @@ public sealed class RecoveryProofReport
                 ? "No recovery checks performed."
                 : AllPassed
                     ? $"Recovery readiness: {PassedCount}/{TotalCount} checks passed."
-                    : $"Recovery readiness: {PassedCount}/{TotalCount} — not ready: {string.Join(", ", Items.Where(i => !i.Passed).Select(i => i.Label))}.";
+                    : $"Recovery readiness: {PassedCount}/{TotalCount}, not ready: {string.Join(", ", Items.Where(i => !i.Passed).Select(i => i.Label))}.";
             return OsRecovery is null
                 ? readiness
                 : $"{readiness} Advisory: {OsRecovery.Summary}";
@@ -90,13 +90,13 @@ public static class RecoveryProofGateService
                 {
                     Label = "Recovery kit",
                     Passed = false,
-                    Detail = $"Stale ({freshness.AgeDays} day(s) old) — regenerate before applying"
+                    Detail = $"Stale ({freshness.AgeDays} day(s) old). Regenerate before applying"
                 },
                 RecoveryKitFreshness.Missing => new()
                 {
                     Label = "Recovery kit",
                     Passed = false,
-                    Detail = "No recovery kit found — generate one before applying"
+                    Detail = "No recovery kit found. Generate one before applying"
                 },
                 _ => new()
                 {
@@ -151,7 +151,7 @@ public static class RecoveryProofGateService
             {
                 Label = "Backup directory",
                 Passed = false,
-                Detail = $"Configured operation directory is not writable — registry backup would fail ({ex.GetType().Name})"
+                Detail = $"Configured operation directory is not writable. Registry backup would fail ({ex.GetType().Name})"
             };
         }
         finally
@@ -169,7 +169,7 @@ public static class RecoveryProofGateService
             if (sb.GuidEntriesPresent && sb.ServiceEntriesComplete)
                 return new() { Label = "SafeBoot entries", Passed = true, Detail = "GUID + service-name entries both present" };
             if (sb.GuidEntriesPresent && !sb.ServiceEntriesComplete)
-                return new() { Label = "SafeBoot entries", Passed = false, Detail = "GUID entries present but KB5079391 service-name entries missing — run upgrade-safeboot" };
+                return new() { Label = "SafeBoot entries", Passed = false, Detail = "GUID entries present but KB5079391 service-name entries missing. Run upgrade-safeboot" };
             return new() { Label = "SafeBoot entries", Passed = true, Detail = "No existing SafeBoot entries (will be created during apply)" };
         }
         catch (Exception ex)
@@ -242,10 +242,10 @@ public static class RecoveryProofGateService
     internal static (bool Passed, string Detail) ClassifyRestoreCapability(bool globallyDisabled, bool systemDriveProtected)
     {
         if (globallyDisabled)
-            return (false, "System Restore is disabled (DisableSR=1) — no automatic rollback point will be created");
+            return (false, "System Restore is disabled (DisableSR=1). No automatic rollback point will be created");
         if (!systemDriveProtected)
-            return (false, "System Protection is off for the system drive — CreateRestorePoint would silently no-op, so no rollback point will be created");
-        return (true, "System Protection is enabled for the system drive — a restore point will be created");
+            return (false, "System Protection is off for the system drive. CreateRestorePoint would silently no-op, so no rollback point will be created");
+        return (true, "System Protection is enabled for the system drive. A restore point will be created");
     }
 
     // Best-effort: does the system drive have shadow-copy storage configured (MaxSpace > 0)?

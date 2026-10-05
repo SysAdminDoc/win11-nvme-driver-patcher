@@ -73,7 +73,7 @@ public static class PatchService
                 id,
                 1,
                 RegistryValueKind.DWord,
-                $"{id} - {friendlyName}",
+                $"{id} ({friendlyName})",
                 CountsTowardPatchTotal: true));
         }
 
@@ -96,14 +96,14 @@ public static class PatchService
             string.Empty,
             AppConfig.SafeBootServiceValue,
             RegistryValueKind.String,
-            "SafeBoot Minimal (service name) - 25H2 compatibility",
+            "SafeBoot Minimal (service name, 25H2 compatibility)",
             CountsTowardPatchTotal: false));
         mutations.Add(new DurableRegistryMutation(
             AppConfig.SafeBootNetworkServicePath,
             string.Empty,
             AppConfig.SafeBootServiceValue,
             RegistryValueKind.String,
-            "SafeBoot Network (service name) - 25H2 compatibility",
+            "SafeBoot Network (service name, 25H2 compatibility)",
             CountsTowardPatchTotal: false));
 
         if (mirrorControlSets is { Count: > 0 })
@@ -279,7 +279,7 @@ public static class PatchService
             {
                 log?.Invoke("[ERROR] BLOCKED: " + bitLockerPreparation.Summary);
                 EventLogService.Write("Patch aborted: BitLocker recoverability or suspension proof failed", EventLogEntryType.Error, 3002);
-                throw new PatchAbortedException("BitLocker recovery/suspension proof failed — patch aborted before registry writes.");
+                throw new PatchAbortedException("BitLocker recovery/suspension proof failed. Patch aborted before registry writes.");
             }
             if (bitLockerPreparation.Proof.Volume.IsEncrypted)
                 log?.Invoke("[SUCCESS] " + bitLockerPreparation.Summary);
@@ -327,7 +327,7 @@ public static class PatchService
                 {
                     result.Success = true;
                     result.NeedsRestart = true;
-                    log?.Invoke($"[SUCCESS] Patch Status: SUCCESS - Applied {successCount}/{effectiveTotal} components");
+                    log?.Invoke($"[SUCCESS] Patch Status: SUCCESS, applied {successCount}/{effectiveTotal} components");
                     log?.Invoke("[INFO] Registry mutation is durable; finalizing the reboot checkpoint before restart is offered.");
                     EventLogService.Write($"NVMe Driver Patch applied successfully ({successCount}/{effectiveTotal} components)");
                 }
@@ -341,7 +341,7 @@ public static class PatchService
             }
             else
             {
-                log?.Invoke($"[WARNING] Patch Status: PARTIAL - Applied {successCount}/{effectiveTotal} components");
+                log?.Invoke($"[WARNING] Patch Status: PARTIAL, applied {successCount}/{effectiveTotal} components");
                 log?.Invoke("[WARNING] Rolling back partial installation...");
                 ReportProgress(progress, 96, "Rolling back...");
 
@@ -352,13 +352,13 @@ public static class PatchService
 
                 if (rollbackFullyReversed)
                 {
-                    log?.Invoke("[WARNING] Rollback complete - system returned to pre-patch state");
+                    log?.Invoke("[WARNING] Rollback complete. System returned to pre-patch state");
                     EventLogService.Write($"NVMe Driver Patch rolled back after partial failure ({successCount}/{effectiveTotal})",
                         EventLogEntryType.Warning, 2001);
                 }
                 else
                 {
-                    log?.Invoke("[ERROR] Rollback INCOMPLETE - some writes could not be reversed");
+                    log?.Invoke("[ERROR] Rollback INCOMPLETE: some writes could not be reversed");
                     log?.Invoke("[ERROR] Use the pre-patch registry backup or System Restore to recover");
                     EventLogService.Write(
                         $"NVMe Driver Patch rollback INCOMPLETE after partial failure ({successCount}/{effectiveTotal}). Some registry keys may remain set; consult the registry backup.",
@@ -482,9 +482,9 @@ public static class PatchService
             var dataVols = DriveService.DataVolumesNeedingAttention(DriveService.GetBitLockerVolumes());
             foreach (var v in dataVols)
             {
-                log?.Invoke($"[WARNING] BitLocker data volume {v.DriveLetter} has no auto-unlock — suspending it for one reboot so it doesn't re-lock.");
+                log?.Invoke($"[WARNING] BitLocker data volume {v.DriveLetter} has no auto-unlock. Suspending it for one reboot so it doesn't re-lock.");
                 if (!SuspendBitLockerDrive(v.DriveLetter, log))
-                    log?.Invoke($"[WARNING] Could not suspend BitLocker on {v.DriveLetter}. Keep its recovery key handy — it may prompt after reboot.");
+                    log?.Invoke($"[WARNING] Could not suspend BitLocker on {v.DriveLetter}. Keep its recovery key handy. It may prompt after reboot.");
             }
         }
         catch (Exception ex)
@@ -513,7 +513,7 @@ public static class PatchService
             using var proc = Process.Start(psi);
             if (proc is null)
             {
-                log?.Invoke($"[ERROR] BitLocker suspension FAILED on {drive} - manage-bde could not start");
+                log?.Invoke($"[ERROR] BitLocker suspension FAILED on {drive}: manage-bde could not start");
                 return false;
             }
             // Drain stdout/stderr asynchronously to avoid the buffer-full deadlock on chatty
@@ -523,7 +523,7 @@ public static class PatchService
             if (!proc.WaitForExit(30000))
             {
                 try { proc.Kill(true); } catch { }
-                log?.Invoke($"[ERROR] BitLocker suspension FAILED on {drive} - manage-bde timed out after 30s");
+                log?.Invoke($"[ERROR] BitLocker suspension FAILED on {drive}: manage-bde timed out after 30s");
                 return false;
             }
             string stdout = stdoutTask.GetAwaiter().GetResult();
@@ -690,7 +690,7 @@ public static class PatchService
                 if (result.Success)
                 {
                     SafeBootStateService.DeleteJournal(workingDir);
-                    log?.Invoke("[SUCCESS] Patch Status: REMOVED - exact pre-mutation state restored and verified");
+                    log?.Invoke("[SUCCESS] Patch Status: REMOVED, exact pre-mutation state restored and verified");
                     EventLogService.Write("NVMe Driver Patch removed (exact ledger baseline restored)");
                 }
                 else
@@ -726,7 +726,7 @@ public static class PatchService
                             if (overrides.GetValue(id) is not null)
                             {
                                 overrides.DeleteValue(id);
-                                log?.Invoke($"  [REMOVED] {id} - {friendlyName}");
+                                log?.Invoke($"  [REMOVED] {id} ({friendlyName})");
                                 removedCount++;
                             }
                             else
@@ -826,7 +826,7 @@ public static class PatchService
             log?.Invoke("========================================");
             if (result.Success)
             {
-                log?.Invoke($"[SUCCESS] Patch Status: REMOVED - Removed {removedCount} components (zero residue verified)");
+                log?.Invoke($"[SUCCESS] Patch Status: REMOVED, removed {removedCount} components (zero residue verified)");
                 if (result.NeedsRestart)
                     log?.Invoke("[INFO] After reboot: Drives will return to 'Disk drives' using stornvme.sys");
                 else
@@ -835,14 +835,14 @@ public static class PatchService
             }
             else
             {
-                log?.Invoke($"[PARTIAL] Patch removal INCOMPLETE — {result.Residue.Count} component(s) still present after removal:");
+                log?.Invoke($"[PARTIAL] Patch removal INCOMPLETE: {result.Residue.Count} component(s) still present after removal:");
                 foreach (var r in result.Residue)
                     log?.Invoke($"  [RESIDUE] {r}");
                 log?.Invoke("[RECOVERY] Re-run 'Remove Patch' as Administrator. If residue persists, restore the");
                 log?.Invoke("[RECOVERY] pre-removal registry backup or run the Recovery Kit from WinRE. The watchdog");
                 log?.Invoke("[RECOVERY] stays armed until removal is clean.");
                 EventLogService.Write(
-                    $"NVMe Driver Patch removal INCOMPLETE — residue: {string.Join(", ", result.Residue)}",
+                    $"NVMe Driver Patch removal INCOMPLETE. Residue: {string.Join(", ", result.Residue)}",
                     EventLogEntryType.Warning, 3002);
             }
         }
@@ -944,7 +944,7 @@ public static class PatchService
                     Owner: "(none)",
                     CurrentUserCanWrite: true,
                     RemainingValueNames: Array.Empty<string>(),
-                    Summary: $"Registry override ownership: clean — {AppConfig.RegistryPath} is absent.");
+                    Summary: $"Registry override ownership: clean. {AppConfig.RegistryPath} is absent.");
             }
 
             var allValues = overrides.GetValueNames()
@@ -955,10 +955,10 @@ public static class PatchService
             string owner = GetRegistryOwner(overrides);
             bool canWrite = CanOpenRegistryKeyWritable(hklm);
             string summary = remaining.Length == 0
-                ? $"Registry override ownership: clean — key is readable and contains none of this tool's values (owner {owner})."
+                ? $"Registry override ownership: clean. Key is readable and contains none of this tool's values (owner {owner})."
                 : canWrite
                     ? $"Registry override residue: {remaining.Length} value(s) remain under {AppConfig.RegistryPath}; owner {owner}; current user can rewrite."
-                    : $"Registry override ownership: BLOCKED — {remaining.Length} value(s) remain under {AppConfig.RegistryPath}; owner {owner}; current user cannot rewrite.";
+                    : $"Registry override ownership: BLOCKED. {remaining.Length} value(s) remain under {AppConfig.RegistryPath}; owner {owner}; current user cannot rewrite.";
             if (foreign.Length > 0)
             {
                 summary += $" {foreign.Length} other value(s) there belong to Windows or another tool and were left alone: " +
@@ -984,7 +984,7 @@ public static class PatchService
                 Owner: "(unavailable)",
                 CurrentUserCanWrite: false,
                 RemainingValueNames: Array.Empty<string>(),
-                Summary: $"Registry override ownership: UNKNOWN — {AppConfig.RegistryPath} could not be read ({ex.GetType().Name}).");
+                Summary: $"Registry override ownership: UNKNOWN. {AppConfig.RegistryPath} could not be read ({ex.GetType().Name}).");
         }
         finally
         {
@@ -1007,7 +1007,7 @@ public static class PatchService
                 Owner: "(unavailable)",
                 CurrentUserCanWrite: false,
                 RemainingValueNames: Array.Empty<string>(),
-                Summary: $"Registry override ownership: UNKNOWN — {AppConfig.RegistryPath} could not be opened ({ex.GetType().Name}).");
+                Summary: $"Registry override ownership: UNKNOWN. {AppConfig.RegistryPath} could not be opened ({ex.GetType().Name}).");
         }
     }
 
@@ -1077,7 +1077,7 @@ public static class PatchService
             // never created it, and there is nothing of ours to remove. Reporting it as
             // [FAIL] made a clean removal look broken (issue #13). Never take ownership or
             // rewrite the ACL on a boot-critical key.
-            log?.Invoke($"  [PRESERVED] {label} — OS-owned and ACL-protected by Windows; nothing to remove");
+            log?.Invoke($"  [PRESERVED] {label}: OS-owned and ACL-protected by Windows; nothing to remove");
             return;
         }
         catch (Exception ex)
@@ -1202,12 +1202,12 @@ public static class PatchService
                         {
                             if (key.GetValue(id) is not null)
                             {
-                                log?.Invoke($"  [ROLLBACK FAIL] {id} - {friendlyName} still present after DeleteValue");
+                                log?.Invoke($"  [ROLLBACK FAIL] {id} ({friendlyName}) still present after DeleteValue");
                                 allReversed = false;
                             }
                             else
                             {
-                                log?.Invoke($"  [ROLLBACK] {id} - {friendlyName}");
+                                log?.Invoke($"  [ROLLBACK] {id} ({friendlyName})");
                             }
                         }
                     }
@@ -1382,7 +1382,7 @@ public static class PatchService
             psi.ArgumentList.Add("/t");
             psi.ArgumentList.Add(delaySeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
             psi.ArgumentList.Add("/c");
-            psi.ArgumentList.Add($"NVMe Driver Patch - Restarting in {delaySeconds} seconds. Save your work!");
+            psi.ArgumentList.Add($"NVMe Driver Patch: Restarting in {delaySeconds} seconds. Save your work!");
             using var proc = Process.Start(psi);
             if (proc is null)
             {
@@ -1398,7 +1398,7 @@ public static class PatchService
                 // Don't kill it — if shutdown.exe is taking >5s, the request is almost certainly
                 // already enqueued. Killing it would only abort the restart we just asked for. But
                 // we can't PROVE it was enqueued, so report Unconfirmed rather than success.
-                log?.Invoke("[WARN] Restart status UNCONFIRMED — shutdown.exe has not returned. The reboot is likely enqueued; if the system does not restart, run 'shutdown /r' manually.");
+                log?.Invoke("[WARN] Restart status UNCONFIRMED, shutdown.exe has not returned. The reboot is likely enqueued; if the system does not restart, run 'shutdown /r' manually.");
                 return ClassifyRestart(processStarted: true, exitedWithinTimeout: false, exitCode: 0);
             }
             try { stdoutTask.GetAwaiter().GetResult(); } catch { }

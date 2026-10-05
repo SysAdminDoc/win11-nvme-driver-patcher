@@ -157,7 +157,7 @@ public class PersistenceGuardServiceTests
     {
         var message = PersistenceGuardService.Describe(PersistenceGuardDecision.BudgetExhausted, 2, 2);
         Assert.Contains("2 consecutive", message);
-        Assert.Contains("apply it manually", message);
+        Assert.Contains("Apply it manually", message);
     }
 
     [Fact]

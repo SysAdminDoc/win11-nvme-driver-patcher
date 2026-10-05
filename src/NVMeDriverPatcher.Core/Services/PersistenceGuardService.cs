@@ -142,15 +142,15 @@ public static class PersistenceGuardService
                 "Persistence guard: nothing to restore.",
             PersistenceGuardDecision.BudgetExhausted =>
                 $"Persistence guard stood down after {consecutiveReapplies} consecutive automatic re-applies (limit {max}). " +
-                "Windows keeps removing this patch — apply it manually to investigate and reset the budget.",
+                "Windows keeps removing this patch. Apply it manually to investigate and reset the budget.",
             PersistenceGuardDecision.DeferredUnstable =>
-                "Persistence guard deferred — the stability watchdog cannot vouch for this machine.",
+                "Persistence guard deferred. The stability watchdog cannot vouch for this machine.",
             PersistenceGuardDecision.DeferredBuildPolicy =>
-                "Persistence guard deferred — build policy currently allows verify/rollback only.",
+                "Persistence guard deferred. Build policy currently allows verify/rollback only.",
             PersistenceGuardDecision.DeferredRecoveryLatch =>
-                "Persistence guard deferred — unresolved startup recovery has disabled mutation.",
+                "Persistence guard deferred. Unresolved startup recovery has disabled mutation.",
             PersistenceGuardDecision.Reapply =>
-                "Persistence guard: the patch was removed without an uninstall — re-applying.",
+                "Persistence guard: the patch was removed without an uninstall. Re-applying.",
             _ => "Persistence guard: unknown decision."
         };
 
@@ -205,7 +205,7 @@ public static class PersistenceGuardService
             config.PersistenceGuardConsecutiveReapplies++;
             if (!ConfigService.Save(config))
             {
-                var failure = "Persistence guard aborted — the re-apply budget could not be persisted, " +
+                var failure = "Persistence guard aborted. The re-apply budget could not be persisted, " +
                               "so a retry loop could not be bounded.";
                 log?.Invoke("[GUARD] " + failure);
                 EventLogService.Write(failure, System.Diagnostics.EventLogEntryType.Error, 3013);

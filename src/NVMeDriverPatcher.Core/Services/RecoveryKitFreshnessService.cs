@@ -66,8 +66,8 @@ public static class RecoveryKitFreshnessService
                 ? RecoveryKitFreshness.Stale
                 : RecoveryKitFreshness.Fresh;
             report.Summary = report.State == RecoveryKitFreshness.Stale
-                ? $"Recovery kit is {age} day(s) old — regenerate before the next apply."
-                : $"Recovery kit is {age} day(s) old — fresh.";
+                ? $"Recovery kit is {age} day(s) old. Regenerate before the next apply."
+                : $"Recovery kit is {age} day(s) old (fresh).";
         }
         catch (Exception ex)
         {
