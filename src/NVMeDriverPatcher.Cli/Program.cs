@@ -178,7 +178,7 @@ class Program
 
             return command switch
             {
-                "status" => StatusCommand(json),
+                "status" => StatusCommand(config, json),
                 "apply" or "install" => dryRun ? DryRunCommand(config) : ApplyCommand(config, force, noRestart, unattended, forceUnsupportedBuild),
                 "remove" or "uninstall" => RemoveCommand(config, noRestart),
                 "disable-for-update" or "disable-for-firmware" => DisableForUpdateCommand(config, noRestart),
@@ -1184,7 +1184,7 @@ class Program
         return 0;
     }
 
-    static int StatusCommand(bool json = false)
+    static int StatusCommand(AppConfig config, bool json = false)
     {
         var preflight = PreflightService.RunAll();
         var status = RegistryService.GetPatchStatus();
@@ -1199,7 +1199,8 @@ class Program
             try { evidence = FeatureStoreWriterService.HasFallbackEvidence(); } catch { }
             var src = PatchVerificationService.ClassifyEnablementSource(native?.IsActive ?? false, status.Count, evidence);
             Console.WriteLine(CliJson.Serialize("status",
-                CliJson.BuildStatus(status, native, src, WindowsBuildRulesService.MatchCurrent(), registryOverride)));
+                CliJson.BuildStatus(status, native, src, WindowsBuildRulesService.MatchCurrent(), registryOverride,
+                    BuildActionPolicyService.EvaluateCurrent(config.WorkingDir))));
             return status.Applied ? 0 : status.Partial ? 2 : 1;
         }
 

@@ -189,7 +189,7 @@ components above, but removal must delete them too. The Recovery Kit and `remove
 - **Opt-in compatibility telemetry**: build an anonymized `{controller, firmware, OS build, profile, verification, watchdog, reliability delta}` JSON and optionally `POST` it to a user-configured HTTPS endpoint. No serials, machine names, drive letters, or user names.
 - **Driver Verifier harness** (`verifier-on` / `-off` / `-status`): dev/tester-mode wrapper around `verifier.exe` for kernel-level stress checks on the NVMe stack.
 - **GPO / ADMX templates** (`packaging/admx/`): pin Safe/Full profile, IncludeServerKey, SkipWarnings, watchdog behavior, and telemetry across a fleet via `HKLM\SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher`. Policy overrides local config.
-- **Intune source bundle** (`NVMeDriverPatcher.Intune-<version>.zip`): release builds package the MSI and detection script with a versioned, per-file SHA-256 manifest before upload or `.intunewin` wrapping.
+- **Intune source bundle** (`NVMeDriverPatcher.Intune-<version>.zip`): release builds package the MSI, the Win32 detection script and the Check/Remediate remediation pair with a versioned, per-file SHA-256 manifest before upload or `.intunewin` wrapping.
 - **winget manifest** (`packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml`): `winget install SysAdminDoc.NVMeDriverPatcher`.
 - **Non-admin status tray agent** (`NVMeDriverPatcher.Tray`): separate exe, no UAC. Shows patch state + watchdog verdict from the system tray; right-click → "Open Main App (elevated)" for the admin GUI.
 - **Rotating logs**: `crash.log`, `activity.log`, `watchdog.log`, `diagnostics.log` rotate at 5MB each with 5 generations retained.

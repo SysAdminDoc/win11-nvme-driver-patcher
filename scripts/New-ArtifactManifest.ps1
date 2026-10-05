@@ -25,6 +25,8 @@ function Get-Role {
     $extension = [IO.Path]::GetExtension($name)
     if ($extension -ieq '.msi') { return 'installer' }
     if ($name -like 'Detect-*.ps1') { return 'detection-script' }
+    if ($name -like 'Check-*.ps1') { return 'remediation-detection-script' }
+    if ($name -like 'Remediate-*.ps1') { return 'remediation-script' }
     if ($extension -ieq '.ps1') { return 'deployment-script' }
     if ($extension -ieq '.cmd' -or $extension -ieq '.bat') { return 'deployment-script' }
     return 'deployment-payload'

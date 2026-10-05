@@ -341,13 +341,6 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
 
 ### P2
 
-- [ ] P2 — Ship the Intune Check/Remediate proactive-remediation pair
-  Why: `packaging/intune/` ships only `Detect-NVMeDriverPatcher.ps1` plus MSI wrapping instructions. Intune's proactive-remediation contract is a *pair*, and a competing repo already ships one for this exact tweak — fleet operators currently have to write the remediation half themselves.
-  Evidence: `packaging/intune/README.md`; https://github.com/jhochwald/PowerShell-collection (`Check-`/`Remediate-EnablingNvmeNativeDrivers.ps1`).
-  Touches: `packaging/intune/` (new `Remediate-*.ps1`), `packaging/intune/README.md`, `packaging/release-artifacts.json`, `scripts/New-ArtifactManifest.ps1`, `InstallerContentTests`.
-  Acceptance: A detect/remediate pair ships in the Intune zip; the remediation calls the CLI and honors `BuildActionPolicyService` (never mutates on a `none-known`/stale-rules build); exit codes match Intune's contract.
-  Complexity: S
-
 - [ ] P2 — Detect and repair damage left by third-party debloat scripts
   Why: FR33THY "Ultimate" (631★) applies a 5th override value `3244671118` this tool does not know, and its revert runs `reg delete HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft /f`, destroying the entire policy subtree. Users arrive with orphaned SafeBoot entries and a wiped Policies tree, and the tool currently reads that as an ordinary clean state.
   Evidence: https://github.com/FR33THYFR33THY/Ultimate/blob/main/8%20Advanced/19%20NVME%20Faster%20Driver.ps1; repo-wide grep for `3244671118` returns 0 files. Related to the blocked "debloat tools break feature-management prerequisites" item in Roadmap_Blocked.md, but this is registry-state detection and needs no VM repro.

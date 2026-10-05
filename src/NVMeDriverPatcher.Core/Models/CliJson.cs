@@ -27,7 +27,8 @@ public static class CliJson
         NativeNVMeStatus? native,
         EnablementSource source,
         WindowsBuildRule? rule,
-        RegistryOverrideAssessment? registryOverride = null) => new()
+        RegistryOverrideAssessment? registryOverride = null,
+        BuildActionPolicy? policy = null) => new()
     {
         Status = status.Applied ? "applied" : status.Partial ? "partial" : "not-applied",
         Applied = status.Applied,
@@ -42,6 +43,8 @@ public static class CliJson
         BuildRuleSource = rule?.SourceUrl,
         BuildRuleConfidence = rule?.Confidence,
         BuildRuleLastReviewed = rule?.LastReviewed,
+        ApplyAllowed = policy?.MutationAllowed ?? false,
+        ApplyBlockedReason = policy is { MutationAllowed: false } ? policy.Reason : null,
         RegistryOverride = registryOverride is null ? null : new RegistryOverrideJson
         {
             BuildNumber = registryOverride.BuildNumber,
@@ -280,6 +283,10 @@ public sealed class StatusJson
     public string? BuildRuleSource { get; set; }
     public string? BuildRuleConfidence { get; set; }
     public string? BuildRuleLastReviewed { get; set; }
+    // Whether the build policy lets apply run here. Fleet scripts read it so a build with no known
+    // enablement path reads as "nothing to fix" instead of failing remediation on every cycle.
+    public bool ApplyAllowed { get; set; }
+    public string? ApplyBlockedReason { get; set; }
     public RegistryOverrideJson? RegistryOverride { get; set; }
 }
 

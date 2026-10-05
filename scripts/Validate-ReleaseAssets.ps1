@@ -284,6 +284,14 @@ foreach ($a in $contract.artifacts) {
                     if ($null -eq $detectRecord -or $detectRecord.role -ne 'detection-script') {
                         $failures.Add('Intune source manifest must declare Detect-NVMeDriverPatcher.ps1 with detection-script role')
                     }
+                    foreach ($pair in @(
+                            @('check-nvmedriverpatcher.ps1', 'remediation-detection-script'),
+                            @('remediate-nvmedriverpatcher.ps1', 'remediation-script'))) {
+                        $record = $records[$pair[0]]
+                        if ($null -eq $record -or $record.role -ne $pair[1]) {
+                            $failures.Add("Intune source manifest must declare $($pair[0]) with $($pair[1]) role")
+                        }
+                    }
                 }
             }
             finally { $zip.Dispose() }
