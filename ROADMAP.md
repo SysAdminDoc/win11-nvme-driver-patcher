@@ -10,16 +10,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
-- [ ] P3 — Preflight passes SafeBoot GUID keys that Windows write-protects
-  Category: correctness
-  Where: `CriticalEnvironmentProbeService.ProbeSafeBoot`, `SafeBootStateService.Classify`, `RealSafeBootRegistry.Read`
-  Problem: AccessDenied is only detected when reading fails. On 24H2 26100.9550 the GUID keys are owned by TrustedInstaller and readable by everyone, with Windows' `NvmeDisk` in the default value, so preflight reports `ConflictingDefault` and passes while apply's write of `Storage Disks` would be refused even as SYSTEM.
-  Evidence: 2026-10-05 VM run on 26100.9550: `reg delete` and a .NET write were refused as SYSTEM; preflight printed `Minimal=ConflictingDefault`, Pass. Apply is build-gated on every build known to ship these keys today, so nothing reaches the write yet.
-  Fix: Probe writability (open with SetValue rights without writing) and classify a refused open as AccessDenied, or treat an existing TrustedInstaller-owned key as already registered and leave it out of the write set and the journal.
-  Acceptance: Preflight on 26100.9550 names the keys as Windows-owned, and a forced apply there doesn't fail partway through on them.
-  Confidence: Confirmed
-  Effort: M
-
 - [ ] P3 — Full profile's 156965516 makes DISM /ScanHealth report store corruption (#19)
   Category: product
   Where: `AppConfig.GetFeatureIDsForProfile(PatchProfile.Full)`

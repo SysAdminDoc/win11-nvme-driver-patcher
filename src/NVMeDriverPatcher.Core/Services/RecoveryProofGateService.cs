@@ -166,16 +166,36 @@ public static class RecoveryProofGateService
         try
         {
             var sb = SafeBootUpgradeService.Evaluate();
-            if (sb.GuidEntriesPresent && sb.ServiceEntriesComplete)
-                return new() { Label = "SafeBoot entries", Passed = true, Detail = "GUID + service-name entries both present" };
-            if (sb.GuidEntriesPresent && !sb.ServiceEntriesComplete)
-                return new() { Label = "SafeBoot entries", Passed = false, Detail = "GUID entries present but KB5079391 service-name entries missing. Run upgrade-safeboot" };
-            return new() { Label = "SafeBoot entries", Passed = true, Detail = "No existing SafeBoot entries (will be created during apply)" };
+            var registry = new RealSafeBootRegistry();
+            bool windowsOwnsGuidKeys = registry.Read(AppConfig.SafeBootMinimalPath).WindowsOwned ||
+                                       registry.Read(AppConfig.SafeBootNetworkPath).WindowsOwned;
+            return ClassifySafeBootEntries(sb.GuidEntriesPresent, sb.ServiceEntriesComplete, windowsOwnsGuidKeys);
         }
         catch (Exception ex)
         {
             return new() { Label = "SafeBoot entries", Passed = false, Detail = $"Check failed: {ex.Message}" };
         }
+    }
+
+    /// <summary>Pure: the gate's SafeBoot verdict. <paramref name="guidEntriesPresent"/> means this
+    /// tool's GUID entries; Windows-owned GUID keys (24H2 26100.9550) are left as they are.</summary>
+    internal static RecoveryProofItem ClassifySafeBootEntries(
+        bool guidEntriesPresent,
+        bool serviceEntriesComplete,
+        bool windowsOwnsGuidKeys)
+    {
+        if (guidEntriesPresent && serviceEntriesComplete)
+            return new() { Label = "SafeBoot entries", Passed = true, Detail = "GUID + service-name entries both present" };
+        if (guidEntriesPresent && !serviceEntriesComplete)
+            return new() { Label = "SafeBoot entries", Passed = false, Detail = "GUID entries present but KB5079391 service-name entries missing. Run upgrade-safeboot" };
+        return new()
+        {
+            Label = "SafeBoot entries",
+            Passed = true,
+            Detail = windowsOwnsGuidKeys
+                ? "Windows' own GUID entries are in place and stay as they are. Apply adds the service-name entries"
+                : "No SafeBoot entries from this tool yet. Apply creates them"
+        };
     }
 
     internal static RecoveryProofItem EvaluateWinReInjectionPlan(WinReInjectionPlan plan)

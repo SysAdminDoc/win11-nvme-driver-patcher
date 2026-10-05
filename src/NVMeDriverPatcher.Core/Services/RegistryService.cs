@@ -16,6 +16,8 @@ public static class RegistryService
         bool extendedB = false;   // 156965516
         bool safeBootMin = false;
         bool safeBootNet = false;
+        bool windowsSafeBootMin = false;
+        bool windowsSafeBootNet = false;
 
         try
         {
@@ -53,6 +55,10 @@ public static class RegistryService
                     keys.Add("SafeBootMinimal");
                     safeBootMin = true;
                 }
+                else if (safeMin is not null)
+                {
+                    windowsSafeBootMin = SafeBootStateService.IsTrustedInstallerOwned(safeMin);
+                }
             }
 
             // SafeBoot Network
@@ -64,6 +70,10 @@ public static class RegistryService
                     keys.Add("SafeBootNetwork");
                     safeBootNet = true;
                 }
+                else if (safeNet is not null)
+                {
+                    windowsSafeBootNet = SafeBootStateService.IsTrustedInstallerOwned(safeNet);
+                }
             }
         }
         catch
@@ -71,6 +81,13 @@ public static class RegistryService
             // Registry view denied or hive missing. Return whatever partial state we accumulated
             // — callers treat zero-applied as "Not Applied" which is the right default.
         }
+
+        var credit = CreditWindowsOwnedSafeBoot(
+            primarySet || extendedA || extendedB, safeBootMin, safeBootNet, windowsSafeBootMin, windowsSafeBootNet);
+        if (credit.Minimal && !safeBootMin) keys.Add("SafeBootMinimal");
+        if (credit.Network && !safeBootNet) keys.Add("SafeBootNetwork");
+        (safeBootMin, safeBootNet) = (credit.Minimal, credit.Network);
+        count += credit.Added;
 
         // Profile detection + Applied/Partial derivation is pushed into a pure helper so it
         // can be exhaustively unit-tested without touching the live registry.
@@ -100,6 +117,24 @@ public static class RegistryService
     /// Applied is true for either clean profile; Partial is the leftover "something is set
     /// but it's not a clean install" bucket.
     /// </summary>
+    /// <summary>
+    /// Pure: a SafeBoot GUID key that Windows owns and write-protects already registers the driver
+    /// for Safe Mode, and apply leaves it alone. It satisfies that component once one of the
+    /// patch's flags is set, and never on its own, so a stock machine still reads "not applied".
+    /// </summary>
+    internal static (bool Minimal, bool Network, int Added) CreditWindowsOwnedSafeBoot(
+        bool anyFlagSet,
+        bool ourMinimal,
+        bool ourNetwork,
+        bool windowsMinimal,
+        bool windowsNetwork)
+    {
+        if (!anyFlagSet) return (ourMinimal, ourNetwork, 0);
+        bool minimal = ourMinimal || windowsMinimal;
+        bool network = ourNetwork || windowsNetwork;
+        return (minimal, network, (minimal && !ourMinimal ? 1 : 0) + (network && !ourNetwork ? 1 : 0));
+    }
+
     internal readonly record struct PatchClassification(
         PatchAppliedProfile Profile,
         bool Applied,

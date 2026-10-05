@@ -252,6 +252,37 @@ public sealed class CriticalEnvironmentProbeServiceTests
     }
 
     [Theory]
+    [InlineData(SafeBootKeyDisposition.WindowsOwned, SafeBootKeyDisposition.WindowsOwned,
+        "Windows owns the SafeBoot Minimal and Network keys for this driver and write-protects them", "leaves them as they are")]
+    [InlineData(SafeBootKeyDisposition.WindowsOwned, SafeBootKeyDisposition.WritableAbsent,
+        "Windows owns the SafeBoot Minimal key for this driver and write-protects it", "leaves it as it is")]
+    [InlineData(SafeBootKeyDisposition.AlreadyCorrect, SafeBootKeyDisposition.WindowsOwned,
+        "Windows owns the SafeBoot Network key for this driver and write-protects it", "leaves it as it is")]
+    public void Evaluate_WindowsOwnedSafeBootKeys_PassAndAreNamed(
+        SafeBootKeyDisposition minimal, SafeBootKeyDisposition network, string named, string outcome)
+    {
+        // 24H2 26100.9550 used to print Minimal=ConflictingDefault and pass, then refuse the write.
+        var probe = Evaluate(new FakePlatform { SafeBoot = (minimal, network) }).Items.Single(item => item.Id == "SafeBoot");
+
+        Assert.Equal(CriticalProbeVerdict.Pass, probe.Verdict);
+        Assert.Equal(CriticalProbeReasonCode.ConfirmedSafe, probe.ReasonCode);
+        Assert.Contains(named, probe.Detail, StringComparison.Ordinal);
+        Assert.Contains("already registers the driver for Safe Mode", probe.Detail, StringComparison.Ordinal);
+        Assert.Contains(outcome, probe.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evaluate_DeniedKeyStillFailsNextToAWindowsOwnedOne()
+    {
+        var probe = Evaluate(new FakePlatform
+        {
+            SafeBoot = (SafeBootKeyDisposition.WindowsOwned, SafeBootKeyDisposition.AccessDenied)
+        }).Items.Single(item => item.Id == "SafeBoot");
+
+        Assert.Equal(CriticalProbeVerdict.Fail, probe.Verdict);
+    }
+
+    [Theory]
     [InlineData("stornvme", false)]
     [InlineData("iaStorAVC", true)]
     [InlineData("vmd_bus", true)]

@@ -302,6 +302,18 @@ public static class CriticalEnvironmentProbeService
                     "SafeBoot GUID key access is denied; recovery entries cannot be proved writable.",
                     evidence, observedAtUtc);
             }
+            var windowsOwned = new List<string>();
+            if (keys.Minimal == SafeBootKeyDisposition.WindowsOwned) windowsOwned.Add("Minimal");
+            if (keys.Network == SafeBootKeyDisposition.WindowsOwned) windowsOwned.Add("Network");
+            if (windowsOwned.Count > 0)
+            {
+                bool both = windowsOwned.Count == 2;
+                return Result(id, label, CriticalProbeVerdict.Pass, CriticalProbeReasonCode.ConfirmedSafe,
+                    $"Windows owns the SafeBoot {string.Join(" and ", windowsOwned)} {(both ? "keys" : "key")} for this driver " +
+                    $"and write-protects {(both ? "them" : "it")}. Windows already registers the driver for Safe Mode there, " +
+                    $"so the patch leaves {(both ? "them" : "it")} as {(both ? "they are" : "it is")}.",
+                    evidence, observedAtUtc);
+            }
             return Result(id, label, CriticalProbeVerdict.Pass, CriticalProbeReasonCode.ConfirmedSafe,
                 "SafeBoot GUID key state is readable and preserves any pre-existing values.",
                 evidence, observedAtUtc);

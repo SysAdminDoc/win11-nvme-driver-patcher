@@ -797,14 +797,8 @@ public static class MutationLedgerService
           (left.StringArrayData ?? new()).SequenceEqual(right.StringArrayData ?? new(), StringComparer.Ordinal) &&
           string.Equals(left.BinaryBase64, right.BinaryBase64, StringComparison.Ordinal)));
 
-    private static bool SafeBootSnapshotsEqual(SafeBootKeySnapshot left, SafeBootKeySnapshot right)
-    {
-        if (left.Existed != right.Existed || left.AccessDenied != right.AccessDenied)
-            return false;
-        var l = left.Values.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase).ToArray();
-        var r = right.Values.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase).ToArray();
-        return l.SequenceEqual(r);
-    }
+    private static bool SafeBootSnapshotsEqual(SafeBootKeySnapshot left, SafeBootKeySnapshot right) =>
+        SafeBootStateService.SnapshotsMatch(left, right);
 
     private static MutationOperationLedger? LoadUnsafe(string workingDir)
     {

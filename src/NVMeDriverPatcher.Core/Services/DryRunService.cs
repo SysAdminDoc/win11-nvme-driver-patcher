@@ -251,7 +251,7 @@ public static class DryRunService
     }
 
     /// <summary>What the preview knows about one registry value right now.</summary>
-    internal readonly record struct CurrentRegistryValue(bool KeyExists, object? Value);
+    internal readonly record struct CurrentRegistryValue(bool KeyExists, object? Value, bool WindowsOwned = false);
 
     private static DryRunPlanItem OverrideRow(DurableRegistryMutation mutation, CurrentRegistryValue current, string? mirrorNote) => new()
     {
@@ -280,6 +280,20 @@ public static class DryRunService
             AppConfig.SafeBootMinimalServicePath => "SafeBoot Minimal entry for the nvmedisk service",
             _ => "SafeBoot Network entry for the nvmedisk service"
         };
+        if (current.WindowsOwned)
+        {
+            // Apply leaves these alone (PatchService.SplitWindowsOwnedSafeBootWrites).
+            return new DryRunPlanItem
+            {
+                Action = "KEEP",
+                Target = $@"HKEY_LOCAL_MACHINE\{mutation.Path}",
+                ValueName = "(default)",
+                Before = existing ?? "(absent)",
+                After = existing ?? "(absent)",
+                Kind = "String",
+                Note = note + ". Windows owns and write-protects this key and already registers the driver for Safe Mode in it, so apply leaves it as is"
+            };
+        }
         if (existing is not null && !string.Equals(existing, expected, StringComparison.OrdinalIgnoreCase))
             note += $". Replaces the existing default '{existing}', which removal puts back";
 
@@ -303,7 +317,9 @@ public static class DryRunService
                 Microsoft.Win32.RegistryHive.LocalMachine,
                 Microsoft.Win32.RegistryView.Registry64);
             using var key = hklm.OpenSubKey(subkey);
-            return key is null ? new(false, null) : new(true, key.GetValue(valueName));
+            return key is null
+                ? new(false, null)
+                : new(true, key.GetValue(valueName), SafeBootStateService.IsTrustedInstallerOwned(key));
         }
         catch (Exception ex) when (PatchService.IsAccessDenied(ex))
         {

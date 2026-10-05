@@ -60,9 +60,32 @@ public sealed class DryRunServiceTests
     }
 
     [Fact]
-    public void WindowsOwnedSafeBootKey_IsAWriteOverItsExistingValue()
+    public void WindowsOwnedSafeBootKeys_AreKeptAsTheyAre()
     {
-        // 24H2 26100.9550 ships the GUID keys itself with a "NvmeDisk" default value.
+        // 24H2 26100.9550 ships the GUID keys owned by TrustedInstaller with a "NvmeDisk" default
+        // value. Apply leaves them alone, so the preview must too.
+        var config = new AppConfig { PatchProfile = PatchProfile.Safe, IncludeServerKey = false };
+        var report = DryRunService.PlanInstall(config, null, [], (path, _) =>
+            path.EndsWith(AppConfig.SafeBootGuid, StringComparison.OrdinalIgnoreCase)
+                ? new DryRunService.CurrentRegistryValue(true, "NvmeDisk", WindowsOwned: true)
+                : new DryRunService.CurrentRegistryValue(false, null));
+
+        foreach (var path in new[] { AppConfig.SafeBootMinimalPath, AppConfig.SafeBootNetworkPath })
+        {
+            var row = Assert.Single(report.Items, i => i.Target.EndsWith(path, StringComparison.Ordinal));
+            Assert.Equal("KEEP", row.Action);
+            Assert.Equal("NvmeDisk", row.Before);
+            Assert.Equal("NvmeDisk", row.After);
+            Assert.Contains("Windows owns and write-protects this key", row.Note, StringComparison.Ordinal);
+        }
+        Assert.Equal(1, report.TotalWrites);   // the override only
+        Assert.Equal(2, report.TotalCreates);  // the two nvmedisk service-name keys
+    }
+
+    [Fact]
+    public void WritableSafeBootKeyHoldingWindowsValue_IsAWriteOverItsExistingValue()
+    {
+        // The same "NvmeDisk" default in a key this tool may write (not TrustedInstaller-owned).
         var config = new AppConfig { PatchProfile = PatchProfile.Safe, IncludeServerKey = false };
         var report = DryRunService.PlanInstall(config, null, [], (path, _) =>
             path.EndsWith(AppConfig.SafeBootGuid, StringComparison.OrdinalIgnoreCase)
