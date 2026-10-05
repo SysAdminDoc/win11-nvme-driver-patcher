@@ -27,6 +27,15 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   than implying every later retail 25H2 build, the 25H2 note no longer claims 60786016 is gone,
   and the 26100.8106 note points at the newer 24H2 override reports. None of this changes what
   the app applies on any build.
+- Re-checked every entry in the drive compatibility list (`compat.json`) against its source, which
+  also clears the "STALE" warning support bundles were showing for it. Samsung 990 PRO `7B2QJXD7`
+  and `8B2QJXD7` now read Good, since Samsung's own notes say `7B2QJXD7` fixes the drive dropping
+  off and blue screens, and the slowdown report it was flagged for was withdrawn by its author.
+  Older 990 PRO and 980 PRO firmware gets a nudge to update in Samsung Magician first, because
+  Magician can't see the drive once `nvmedisk.sys` is active. The 980 PRO note no longer points at
+  a `5B2QGXA8` firmware that doesn't exist. Intel 670p/665p and the `EIFM72.1` Phison row drop from
+  Bad to Caution and say their original reports couldn't be confirmed. CVE-2026-34332 is listed as
+  Important, matching Microsoft's rating.
 
 ### Docs
 - The README no longer asks a visitor to paste a fetch-and-run command. The GUI, CLI, MSI, and
