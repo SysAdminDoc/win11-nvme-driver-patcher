@@ -120,6 +120,18 @@ public class AppConfig
 
     public static IReadOnlyList<string> FeatureIDs { get; } = ["735209102", "1853569164", "156965516"];
 
+    /// <summary>
+    /// Every value name this tool writes under the FeatureManagement Overrides key: the patch
+    /// flags plus the optional Server key. Removal and the recovery kit delete exactly these, so
+    /// only these count as residue. Anything else there belongs to Windows (Known Issue Rollback
+    /// policies) or another tool and is reported for information only.
+    /// </summary>
+    public static IReadOnlyList<string> OwnedOverrideValueNames => [.. FeatureIDs, ServerFeatureID];
+
+    public static bool IsOwnedOverrideValueName(string? name) =>
+        !string.IsNullOrEmpty(name) &&
+        OwnedOverrideValueNames.Contains(name, StringComparer.OrdinalIgnoreCase);
+
     public static readonly Dictionary<string, string> FeatureNames = new()
     {
         ["735209102"] = "NativeNVMeStackForGeClient (Primary enable)",

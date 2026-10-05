@@ -78,8 +78,10 @@ takeown /f W:\Windows\System32\config\SYSTEM /a
 reg load HKLM\NVME_OFFLINE W:\Windows\System32\config\SYSTEM
 reg delete HKLM\NVME_OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides /v VALUE_NAME /f
 reg unload HKLM\NVME_OFFLINE
-Delete only the reported value names; never delete the entire Overrides key. If the hive
-cannot be loaded or edited, stop and use the backup or System Restore.
+Delete only this tool's values that the report still lists; never delete the entire
+Overrides key. The report lists any other values there separately, for information. Those
+belong to Windows (Known Issue Rollback policies, for example) or another tool, so leave
+them alone. If the hive cannot be loaded or edited, stop and use the backup or System Restore.
 ",
         ["watchdog"] = @"
 The post-patch watchdog counts storage-stack distress signals (Storport 129, disk 51/153,
@@ -193,11 +195,13 @@ proof and know which INF owns the binding.
 3. Unregister tasks:   `NVMeDriverPatcher.Cli unregister-tasks`
 4. If installed via MSI: use Programs and Features. Otherwise just delete the exe.
 
-Removal enumerates every value under the FeatureManagement Overrides key. If it reports
-that the current user cannot rewrite a remaining value, the owner may be TrustedInstaller
-and ViVeTool /fullreset can fail independently. Use the WinRE ownership-recovery sequence
-in docs recovery: back up SYSTEM, takeown the offline hive file, reg load, delete only
-the reported value with reg delete, then reg unload.
+Removal checks this tool's values under the FeatureManagement Overrides key. Other values
+there, such as Known Issue Rollback policies, belong to Windows or another tool. Removal
+lists them for information and leaves them alone, and they never make a removal partial.
+If it reports that the current user cannot rewrite one of this tool's values, the owner may
+be TrustedInstaller and ViVeTool /fullreset can fail independently. Use the WinRE
+ownership-recovery sequence in docs recovery: back up SYSTEM, takeown the offline hive
+file, reg load, delete only the reported value with reg delete, then reg unload.
 "
     };
 

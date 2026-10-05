@@ -131,12 +131,15 @@ offline SYSTEM hive before editing it:
 3. Run: takeown /f W:\Windows\System32\config\SYSTEM /a
 4. Run: reg load HKLM\NVME_OFFLINE W:\Windows\System32\config\SYSTEM
 5. Run: reg query HKLM\NVME_OFFLINE\Select /v Current and note the control-set number.
-6. For each value named by the removal report, run (replace 001 and VALUE_NAME):
+6. For each of this tool's values the removal report still lists ({string.Join(", ", RecoveryFeatureIds())}),
+   run (replace 001 and VALUE_NAME):
    reg delete HKLM\NVME_OFFLINE\ControlSet001\Policies\Microsoft\FeatureManagement\Overrides /v VALUE_NAME /f
 7. Run: reg unload HKLM\NVME_OFFLINE
 If reg load or reg delete fails, stop and restore the SYSTEM hive backup or use System
 Restore. Do not delete the entire Overrides key: Windows or another feature-management
-owner may have values there that this tool did not create.
+owner may have values there that this tool did not create. The removal report lists those
+other values separately, for information only (Known Issue Rollback policies, for example).
+Leave them in place.
 
 FILES:
 - Remove_NVMe_Patch.bat     - Integrity gate and canonical recovery entry point
@@ -224,8 +227,7 @@ FILES:
     // Feature IDs the recovery kit removes = the patch's flag set + the optional Server key,
     // matching PatchService.Uninstall. Sourced from AppConfig so an ID change can't strand the
     // kit deleting the wrong values.
-    private static IReadOnlyList<string> RecoveryFeatureIds() =>
-        AppConfig.FeatureIDs.Append(AppConfig.ServerFeatureID).ToList();
+    private static IReadOnlyList<string> RecoveryFeatureIds() => AppConfig.OwnedOverrideValueNames;
 
     // The path under SYSTEM\<controlset>\ where the FeatureManagement overrides live, derived
     // from AppConfig.RegistrySubKey (the SSOT) rather than hardcoded.
