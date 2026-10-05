@@ -444,17 +444,21 @@ for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Policies\Microso
 for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Policies\Microsoft\FeatureManagement\Overrides" /v 1853569164 /f
 for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Policies\Microsoft\FeatureManagement\Overrides" /v 156965516 /f
 for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Policies\Microsoft\FeatureManagement\Overrides" /v 1176759950 /f
-for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /f
-for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /f
-for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Minimal\nvmedisk" /f
-for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Network\nvmedisk" /f
+for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Minimal\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f
+for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Network\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" /ve /f
+for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Minimal\nvmedisk" /ve /f
+for /L %N in (1,1,9) do reg delete "HKLM\OFFLINE\ControlSet00%N\Control\SafeBoot\Network\nvmedisk" /ve /f
 reg unload HKLM\OFFLINE
 ```
 4. Restart
 
-> The last two deletes remove the KB5079391-era **service-name** SafeBoot entries that every
-> patch has written since v4.6.1. The Recovery Kit removes all four leaves; delete only the two
-> GUID keys and the patch is not fully reverted.
+> The SafeBoot lines use `/ve`, which clears only the default value this tool writes and leaves the
+> key itself alone. Recent Windows builds (26200.8737 and later, and current 24H2 builds such as
+> 26100.9550) create that same `{75416E63-...}` key with a `NvmeDisk` value of their own, and deleting
+> the whole key takes Windows' Safe Mode disk registration with it. The last two lines clear the
+> KB5079391-era **service-name** SafeBoot entries that every patch has written since v4.6.1. The
+> Recovery Kit clears all four the same way; clear only the two GUID keys and the patch isn't
+> fully reverted.
 >
 > **If you enabled the patch through the FeatureStore fallback**, these registry deletions are not
 > enough on their own. The fallback writes FeatureStore configuration that the overrides above do

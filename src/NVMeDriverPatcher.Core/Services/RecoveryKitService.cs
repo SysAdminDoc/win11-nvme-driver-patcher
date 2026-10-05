@@ -257,8 +257,8 @@ FILES:
             sb.Append("\r\n");
         }
 
-        // Clear only the default value, never the key. Build 26200.8737+ ships these SafeBoot keys
-        // itself carrying a NvmeDisk value, and deleting the key takes the OS's own Safe Mode
+        // Clear only the default value, never the key. Builds 26200.8737+ and current 24H2 (seen on
+        // 26100.9550) ship these SafeBoot keys themselves carrying a NvmeDisk value, and deleting the key takes the OS's own Safe Mode
         // storage-disk class registration with it — on a machine already being recovered, that can
         // turn "Safe Mode still works" into "Safe Mode cannot see the boot disk" (issue #13). The
         // default value is exactly what this tool writes, and it is what the residue probe checks,

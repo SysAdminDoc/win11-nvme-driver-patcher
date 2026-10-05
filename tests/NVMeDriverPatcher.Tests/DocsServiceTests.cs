@@ -113,6 +113,22 @@ public sealed class DocsServiceTests
         Assert.Contains("windows_build_rules.json", readme);
     }
 
+    [Fact]
+    public void ReadmeManualSafeBootRemoval_ClearsOnlyTheDefaultValue()
+    {
+        // Windows ships the SafeBoot storage-disk keys itself on current builds (issue #13), so a
+        // manual step that deletes the whole key strips the OS's own Safe Mode registration.
+        // Every documented SafeBoot delete has to match the Recovery Kit's /ve form.
+        var readme = File.ReadAllText(Path.Combine(RepoRoot(), "README.md"));
+        var safeBootDeletes = readme.Split('\n')
+            .Where(line => line.Contains("reg delete", StringComparison.OrdinalIgnoreCase)
+                        && line.Contains(@"\SafeBoot\", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        Assert.NotEmpty(safeBootDeletes);
+        Assert.All(safeBootDeletes, line => Assert.Contains(" /ve /f", line));
+    }
+
     private static string RepoRoot([CallerFilePath] string sourceFile = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFile)!, "..", ".."));
 }
