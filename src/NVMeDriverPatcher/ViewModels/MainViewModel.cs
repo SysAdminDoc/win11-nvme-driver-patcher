@@ -23,7 +23,7 @@ public partial class MainViewModel : ObservableObject
     private const string NoVerificationScriptText = "No verification script yet. Generate one to check the driver after the restart.";
     private const string NoDiagnosticsReportText = "No diagnostics report yet. Export one when you need to share this machine's state.";
     private const string SafeProfileHelpText = "Safe profile writes only feature flag 735209102, plus the Safe Boot entries used for rollback. That's enough to swap the driver, with no community boot-crash reports against it. This is what you want on a daily-driver machine.";
-    private const string FullProfileHelpText = "Full profile adds 1853569164 (UxAccOptimization) and 156965516 (Standalone_Future). Higher peak performance on some drives, but community boot-crash reports cluster on these two flags, and while 156965516 is set DISM /ScanHealth reports component store corruption on 24H2 (SFC stays clean, and it clears once the patch is removed). Try Safe profile first; you can always opt in later.";
+    private const string FullProfileHelpText = "Full profile adds 1853569164 (UxAccOptimization). Higher peak performance on some drives, but community boot-crash reports cluster on the extended flags. 156965516 (Standalone_Future) has its own checkbox and stays off unless you tick it, because DISM /ScanHealth reports component store corruption on 24H2 while it's set. SFC stays clean, and the report clears once the value is removed. Try Safe profile first. You can always opt in later.";
 
     public AppConfig Config { get; }
 
@@ -132,6 +132,7 @@ public partial class MainViewModel : ObservableObject
 
     // Settings bindings
     [ObservableProperty] private bool _includeServerKey;
+    [ObservableProperty] private bool _includeStandaloneFuture;
     [ObservableProperty] private bool _skipWarnings;
     [ObservableProperty] private bool _autoSaveLog;
     [ObservableProperty] private bool _enableToasts;
@@ -205,6 +206,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             IncludeServerKey = Config.IncludeServerKey;
+            IncludeStandaloneFuture = Config.IncludeStandaloneFuture;
             SkipWarnings = Config.SkipWarnings;
             AutoSaveLog = Config.AutoSaveLog;
             EnableToasts = Config.EnableToasts;
@@ -823,7 +825,8 @@ public partial class MainViewModel : ObservableObject
         {
             bool isSet = status.Keys.Contains(id);
             string name = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn.Split('(')[0].Trim() : "Unknown";
-            RegistryFlags.Add(new RegistryFlagVM { Id = id, Name = name, IsSet = isSet });
+            bool optional = id == AppConfig.StandaloneFutureFeatureID && !Config.IncludeStandaloneFuture && !isSet;
+            RegistryFlags.Add(new RegistryFlagVM { Id = id, Name = optional ? $"{name} (optional)" : name, IsSet = isSet, IsOptional = optional });
         }
 
         // Server key
@@ -1201,7 +1204,7 @@ public partial class MainViewModel : ObservableObject
         => count == 1 ? singular : plural ?? $"{singular}s";
 
     private int GetPlannedComponentCount() =>
-        AppConfig.GetTotalComponents(Config.PatchProfile, IncludeServerKey);
+        AppConfig.GetTotalComponents(Config.PatchProfile, IncludeServerKey, IncludeStandaloneFuture);
 
     private void CheckPostReboot()
     {
@@ -1287,7 +1290,9 @@ public partial class MainViewModel : ObservableObject
             // understand WHAT they're turning on, not just what might break.
             var profileLine = Config.PatchProfile == PatchProfile.Safe
                 ? "Mode: SAFE. Writes only the primary feature flag (735209102). Extended flags stay off because they correlate with community BSOD reports."
-                : "Mode: FULL. Writes the primary flag plus two extended flags. This can improve peak performance on some drives, but carries higher crash risk. While 156965516 is set, DISM /ScanHealth reports component store corruption (seen on 24H2 26100.9550); SFC stays clean and the report clears once the patch is removed. Community reports also describe rare power-loss data corruption under the extended flags (unconfirmed, single-source).";
+                : Config.IncludeStandaloneFuture
+                    ? "Mode: FULL with 156965516. Writes the primary flag plus 1853569164 and 156965516. This can improve peak performance on some drives, but carries higher crash risk. While 156965516 is set, DISM /ScanHealth reports component store corruption (seen on 24H2 26100.9550). SFC stays clean, and the report clears once the value is removed. Community reports also describe rare power-loss data corruption under the extended flags (unconfirmed, single-source)."
+                    : "Mode: FULL. Writes the primary flag plus 1853569164. This can improve peak performance on some drives, but carries higher crash risk. 156965516 stays off. Community reports also describe rare power-loss data corruption under the extended flags (unconfirmed, single-source).";
             notes.Insert(0, profileLine);
 
             // BypassIO / DirectStorage — elevated from an afterthought to a first-class

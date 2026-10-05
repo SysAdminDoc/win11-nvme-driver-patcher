@@ -7,6 +7,7 @@ public class PolicyOverlay
 {
     public PatchProfile? PatchProfile { get; set; }
     public bool? IncludeServerKey { get; set; }
+    public bool? IncludeStandaloneFuture { get; set; }
     public bool? SkipWarnings { get; set; }
     public bool? WatchdogAutoRevert { get; set; }
     public int? WatchdogWindowHours { get; set; }
@@ -15,7 +16,8 @@ public class PolicyOverlay
     public int? PersistenceGuardMaxReapplies { get; set; }
 
     public bool AnyApplied =>
-        PatchProfile is not null || IncludeServerKey is not null || SkipWarnings is not null ||
+        PatchProfile is not null || IncludeServerKey is not null || IncludeStandaloneFuture is not null ||
+        SkipWarnings is not null ||
         WatchdogAutoRevert is not null || WatchdogWindowHours is not null ||
         CompatTelemetryEnabled is not null || PersistenceGuardEnabled is not null ||
         PersistenceGuardMaxReapplies is not null;
@@ -40,6 +42,7 @@ public static class GpoPolicyService
 
             overlay.PatchProfile = ReadProfile(key, "PatchProfile");
             overlay.IncludeServerKey = ReadBoolDword(key, "IncludeServerKey");
+            overlay.IncludeStandaloneFuture = ReadBoolDword(key, "IncludeStandaloneFuture");
             overlay.SkipWarnings = ReadBoolDword(key, "SkipWarnings");
             overlay.WatchdogAutoRevert = ReadBoolDword(key, "WatchdogAutoRevert");
             // Schema bounds (watchdog.schema.json / ADMX): 1–168 hours. Out-of-range or
@@ -66,6 +69,7 @@ public static class GpoPolicyService
     {
         if (overlay.PatchProfile is PatchProfile profile) config.PatchProfile = profile;
         if (overlay.IncludeServerKey is bool inc) config.IncludeServerKey = inc;
+        if (overlay.IncludeStandaloneFuture is bool future) config.IncludeStandaloneFuture = future;
         if (overlay.SkipWarnings is bool skip) config.SkipWarnings = skip;
         if (overlay.CompatTelemetryEnabled is bool telem) config.CompatTelemetryEnabled = telem;
         if (overlay.PersistenceGuardEnabled is bool guard) config.PersistenceGuardEnabled = guard;

@@ -44,6 +44,18 @@
       <disabledValue><decimal value="0" /></disabledValue>
     </policy>
 
+    <policy name="IncludeStandaloneFuture"
+            class="Machine"
+            displayName="$(string.POL_IncludeStandaloneFuture)"
+            explainText="$(string.POL_IncludeStandaloneFuture_Explain)"
+            key="SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher"
+            valueName="IncludeStandaloneFuture">
+      <parentCategory ref="NVMeDriverPatcher" />
+      <supportedOn ref="SUPPORTED_Win11_22000" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+
     <policy name="SkipWarnings"
             class="Machine"
             displayName="$(string.POL_SkipWarnings)"

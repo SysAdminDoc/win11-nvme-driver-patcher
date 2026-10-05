@@ -31,28 +31,55 @@ public sealed class DryRunServiceTests
     }
 
     [Fact]
-    public void FullProfile_Plans_ThreeWrites_FourSafeBootCreates()
+    public void FullProfile_Plans_TwoWrites_FourSafeBootCreates_WithoutStandaloneFuture()
     {
+        // #19: Full alone no longer writes 156965516.
         var config = new AppConfig { PatchProfile = PatchProfile.Full, IncludeServerKey = false };
         var report = DryRunService.PlanInstall(config, null, [], CleanMachine);
 
-        Assert.Equal(3, report.TotalWrites);
+        Assert.Equal(2, report.TotalWrites);
         Assert.Equal(4, report.TotalCreates);
+        Assert.Contains(report.Items, i => i.Action == "WRITE" && i.ValueName == AppConfig.PrimaryFeatureID);
+        Assert.Contains(report.Items, i => i.Action == "WRITE" && i.ValueName == "1853569164");
+        Assert.DoesNotContain(report.Items, i => i.ValueName == AppConfig.StandaloneFutureFeatureID);
+        Assert.DoesNotContain("156965516", report.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FullProfile_WithStandaloneFutureOptIn_Plans_ThreeWrites()
+    {
+        var config = new AppConfig { PatchProfile = PatchProfile.Full, IncludeStandaloneFuture = true };
+        var report = DryRunService.PlanInstall(config, null, [], CleanMachine);
+
+        Assert.Equal(3, report.TotalWrites);
         foreach (var id in AppConfig.FeatureIDs)
             Assert.Contains(report.Items, i => i.Action == "WRITE" && i.ValueName == id);
+        Assert.Contains("+ 156965516", report.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SafeProfile_IgnoresAStaleStandaloneFutureOptIn()
+    {
+        var config = new AppConfig { PatchProfile = PatchProfile.Safe, IncludeStandaloneFuture = true };
+        var report = DryRunService.PlanInstall(config, null, [], CleanMachine);
+
+        Assert.False(report.IncludeStandaloneFuture);
+        Assert.Equal(1, report.TotalWrites);
+        Assert.DoesNotContain(report.Items, i => i.ValueName == AppConfig.StandaloneFutureFeatureID);
     }
 
     [Theory]
-    [InlineData(PatchProfile.Safe, false)]
-    [InlineData(PatchProfile.Full, true)]
-    public void Preview_ListsExactlyWhatApplyWrites(PatchProfile profile, bool includeServer)
+    [InlineData(PatchProfile.Safe, false, false)]
+    [InlineData(PatchProfile.Full, true, false)]
+    [InlineData(PatchProfile.Full, true, true)]
+    public void Preview_ListsExactlyWhatApplyWrites(PatchProfile profile, bool includeServer, bool standaloneFuture)
     {
         // The preview used to hardcode two SafeBoot rows while apply wrote four. Pin it to the
         // same list apply commits, mirrors included.
         string[] mirrors = ["ControlSet002"];
-        var config = new AppConfig { PatchProfile = profile, IncludeServerKey = includeServer };
+        var config = new AppConfig { PatchProfile = profile, IncludeServerKey = includeServer, IncludeStandaloneFuture = standaloneFuture };
         var report = DryRunService.PlanInstall(config, null, mirrors, CleanMachine);
-        var applies = PatchService.BuildRequiredRegistryMutations(profile, includeServer, mirrors);
+        var applies = PatchService.BuildRequiredRegistryMutations(profile, includeServer, mirrors, standaloneFuture);
 
         Assert.Equal(
             applies.Select(m => $@"HKEY_LOCAL_MACHINE\{m.Path}|{(m.ValueName.Length == 0 ? "(default)" : m.ValueName)}"),
@@ -154,7 +181,8 @@ public sealed class DryRunServiceTests
     [Fact]
     public void Preview_ListsRegistryOverrideIdsBesideTheBranchFeatureStoreIds()
     {
-        var config = new AppConfig { PatchProfile = PatchProfile.Full };
+        // The opt-in puts all three override IDs in the plan, so the assessment covers each one.
+        var config = new AppConfig { PatchProfile = PatchProfile.Full, IncludeStandaloneFuture = true };
         var preflight = new PreflightResult
         {
             BuildDetails = new WindowsBuildDetails { BuildNumber = 26404, UBR = 5000 }

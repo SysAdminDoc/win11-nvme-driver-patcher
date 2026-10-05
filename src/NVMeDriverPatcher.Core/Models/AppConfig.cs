@@ -89,6 +89,10 @@ public class AppConfig
     // In Safe Mode we write ONLY this (plus SafeBoot) — the two flags below are opt-in.
     public const string PrimaryFeatureID = "735209102";
 
+    // 156965516 (Standalone_Future) is its own opt-in on top of Full. On 24H2 26100.9550 it made
+    // DISM /ScanHealth flag WinSxS rollback payloads as corrupt for as long as it was set (#19).
+    public const string StandaloneFutureFeatureID = "156965516";
+
     // Extended flags — gated behind Full Mode because community BSOD reports (Jan–Mar 2026
     // Overclock.net / windowsforum.com threads) correlate crashes with these two.
     public static IReadOnlyList<string> ExtendedFeatureIDs { get; } = ["1853569164", "156965516"];
@@ -99,15 +103,18 @@ public class AppConfig
     public static int TotalComponents => FeatureIDs.Count + 2;
 
     // The set of feature flags actually written for a given profile, NOT counting SafeBoot
-    // keys (callers add +2 for those). Safe = primary only; Full = primary + extended.
-    public static IReadOnlyList<string> GetFeatureIDsForProfile(PatchProfile profile) =>
+    // keys (callers add +2 for those). Safe = primary only; Full = primary + 1853569164, plus
+    // 156965516 only when it's asked for.
+    public static IReadOnlyList<string> GetFeatureIDsForProfile(PatchProfile profile, bool includeStandaloneFuture = false) =>
         profile == PatchProfile.Safe
             ? new[] { PrimaryFeatureID }
-            : FeatureIDs;
+            : includeStandaloneFuture
+                ? FeatureIDs
+                : FeatureIDs.Where(id => id != StandaloneFutureFeatureID).ToArray();
 
     // Component count the installer is aiming for, given profile + optional Server 2025 key.
-    public static int GetTotalComponents(PatchProfile profile, bool includeServerKey) =>
-        GetFeatureIDsForProfile(profile).Count + (includeServerKey ? 1 : 0) + 2;
+    public static int GetTotalComponents(PatchProfile profile, bool includeServerKey, bool includeStandaloneFuture = false) =>
+        GetFeatureIDsForProfile(profile, includeStandaloneFuture).Count + (includeServerKey ? 1 : 0) + 2;
     public const string EventLogSourceName = "NVMe Driver Patcher";
     public const string GitHubURL = "https://github.com/SysAdminDoc/win11-nvme-driver-patcher";
     public const string DocumentationURL = "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353";
@@ -176,6 +183,9 @@ public class AppConfig
         set => _restartDelay = Math.Clamp(value, 0, 3600);
     }
     public bool IncludeServerKey { get; set; }
+    // Full profile only: also write 156965516. Off by default because DISM reports component
+    // store corruption while it's set (#19).
+    public bool IncludeStandaloneFuture { get; set; }
     public bool SkipWarnings { get; set; }
     public bool CompatTelemetryEnabled { get; set; } = true;
 

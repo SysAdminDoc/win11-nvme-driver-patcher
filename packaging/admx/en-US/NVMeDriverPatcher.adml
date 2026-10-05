@@ -16,11 +16,14 @@
       <string id="POL_PatchProfile_Explain">Controls which set of feature flags the tool writes.
 
 Enabled = Safe (primary feature flag only — community-recommended, lowest BSOD risk).
-Disabled = Full (primary + two extended flags — matches the original Server 2025 release notes; higher performance, higher BSOD correlation).
+Disabled = Full (primary + 1853569164. Higher performance, higher BSOD correlation. 156965516 has its own policy below).
 Not configured = user choice, defaulting to Safe.</string>
 
       <string id="POL_IncludeServerKey">Include Microsoft Server 2025 feature key (1176759950)</string>
       <string id="POL_IncludeServerKey_Explain">When enabled, the optional Microsoft Server 2025 feature flag is included in the patch. Recommended — without it, the new I/O scheduler may not activate.</string>
+
+      <string id="POL_IncludeStandaloneFuture">Also write feature key 156965516 with the Full profile</string>
+      <string id="POL_IncludeStandaloneFuture_Explain">When enabled and the Full profile is in use, the tool also writes 156965516 (Standalone_Future). While it's set, DISM /ScanHealth reports component store corruption on 24H2. SFC stays clean, and the report clears once the value is removed and Windows restarts. Disabled turns it off. The Safe profile never writes it.</string>
 
       <string id="POL_SkipWarnings">Skip confirmation dialogs (unattended)</string>
       <string id="POL_SkipWarnings_Explain">Suppresses the pre-patch confirmation dialogs. Use only for imaging and attended lab deployments.</string>

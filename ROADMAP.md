@@ -10,16 +10,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
-- [ ] P3 — Full profile's 156965516 makes DISM /ScanHealth report store corruption (#19)
-  Category: product
-  Where: `AppConfig.GetFeatureIDsForProfile(PatchProfile.Full)`
-  Problem: On 24H2 26100.9550, override 156965516 alone made DISM flag 192 reverse-delta payloads as corrupt while it was set (SFC clean, cleared on removal). The Full profile writes it, and binding on that build needed 3244671118 + 1853569164 + 156965516 anyway, a set this tool doesn't write.
-  Evidence: VM matrix 2026-10-05 (repo CLAUDE.md, vault log 2026-10). The warning now ships in the GUI, CLI help, docs and README.
-  Fix: Decide whether Full keeps 156965516, makes it a separate opt-in, or drops it. Needs a reading on real hardware of what it does for performance.
-  Acceptance: The Full profile either doesn't write 156965516 or asks for it separately with the DISM caveat attached.
-  Confidence: Confirmed
-  Effort: S
-
 - [ ] P3 — CLI output loses non-ASCII characters when redirected
   Category: correctness
   Where: `src/NVMeDriverPatcher.Cli/Program.cs` startup; visible in `dry-run` ("Before → After"). The 2026-10-05 string sweep removed the em dashes from CLI text, so the arrow is the main non-ASCII character left
@@ -188,6 +178,16 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Acceptance: A config.json with `ConfigVersion` above the current schema produces one visible warning per run in the CLI and the GUI; a current or older config produces none.
   Confidence: Verified
   Effort: S
+
+- [ ] P3 — Group Policy pins only apply at load; CLI flags and GUI toggles override them for the rest of the run
+  Category: reliability
+  Where: `src/NVMeDriverPatcher.Cli/Program.cs:97` then `:140-144` (`--include-server-key`, `--no-server-key`, `--standalone-future`, `--safe`/`--full` are applied after `GpoPolicyService.ApplyTo`); `src/NVMeDriverPatcher/ViewModels/MainViewModel.cs:199` (policy applied once, every Settings control stays editable and saves to config.json)
+  Problem: The ADMX and README say policy overrides local config, and the CLI comment says a pinned fleet policy isn't quietly overridden by a local run. In practice a pinned PatchProfile, IncludeServerKey or IncludeStandaloneFuture lasts only until a CLI flag or a Settings click changes it, so an admin who pins Safe can still get Full on a machine.
+  Evidence: Found while adding the IncludeStandaloneFuture policy for #19; the ADML text was kept to "Disabled turns it off" instead of claiming enforcement.
+  Fix: Keep the overlay from `GpoPolicyService.Read()` and re-apply it after CLI parsing, with a `[WARNING]` naming each flag the policy overrode. In the GUI, disable the pinned controls with a "Set by Group Policy" tooltip and skip pinned fields in `SyncConfigFromUI`.
+  Acceptance: With a policy pinning Safe, `apply --full` writes the Safe set and warns once; the Settings profile radios are disabled and the saved config keeps Safe.
+  Confidence: Verified
+  Effort: M
 
 - [ ] P3 — CHANGELOG versions 5.4.0/5.5.0 have no git tags; 5.3.0 was released with no CHANGELOG entry; stray malformed tag `v.3.0.0`
   Category: docs

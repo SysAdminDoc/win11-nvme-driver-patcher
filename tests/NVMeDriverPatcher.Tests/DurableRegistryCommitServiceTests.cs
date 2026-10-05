@@ -35,17 +35,21 @@ public sealed class DurableRegistryCommitServiceTests
     }
 
     [Theory]
-    [InlineData(PatchProfile.Safe, false, 5, 3)]
-    [InlineData(PatchProfile.Safe, true, 6, 4)]
-    [InlineData(PatchProfile.Full, false, 7, 5)]
-    [InlineData(PatchProfile.Full, true, 8, 6)]
+    [InlineData(PatchProfile.Safe, false, false, 5, 3)]
+    [InlineData(PatchProfile.Safe, true, false, 6, 4)]
+    [InlineData(PatchProfile.Safe, false, true, 5, 3)]   // Safe never writes 156965516
+    [InlineData(PatchProfile.Full, false, false, 6, 4)]  // Full leaves 156965516 off by default (#19)
+    [InlineData(PatchProfile.Full, true, false, 7, 5)]
+    [InlineData(PatchProfile.Full, false, true, 7, 5)]
+    [InlineData(PatchProfile.Full, true, true, 8, 6)]
     public void BuildRequiredRegistryMutations_CoversFeatureAndEverySafeBootWrite(
         PatchProfile profile,
         bool includeServer,
+        bool standaloneFuture,
         int expectedWrites,
         int expectedCounted)
     {
-        var mutations = PatchService.BuildRequiredRegistryMutations(profile, includeServer);
+        var mutations = PatchService.BuildRequiredRegistryMutations(profile, includeServer, mirrorControlSets: null, standaloneFuture);
 
         Assert.Equal(expectedWrites, mutations.Count);
         Assert.Equal(expectedCounted, mutations.Count(mutation => mutation.CountsTowardPatchTotal));

@@ -115,7 +115,8 @@ public partial class MainViewModel
                 var verificationScriptPath = RecoveryKitService.GenerateVerificationScript(
                     Config.WorkingDir,
                     Config.PatchProfile,
-                    Config.IncludeServerKey);
+                    Config.IncludeServerKey,
+                    Config.IncludeStandaloneFuture);
                 if (verificationScriptPath is not null)
                     Config.LastVerificationScriptPath = verificationScriptPath;
 
@@ -813,6 +814,7 @@ public partial class MainViewModel
     private void UseRecommendedSetup()
     {
         IncludeServerKey = true;
+        IncludeStandaloneFuture = false;
         SkipWarnings = false;
         AutoSaveLog = true;
         EnableToasts = true;
@@ -938,7 +940,8 @@ public partial class MainViewModel
         var verificationScriptPath = RecoveryKitService.GenerateVerificationScript(
             Config.WorkingDir,
             Config.PatchProfile,
-            Config.IncludeServerKey);
+            Config.IncludeServerKey,
+            Config.IncludeStandaloneFuture);
         if (verificationScriptPath is null)
         {
             Log("Failed to generate verification script.", "ERROR");
@@ -1047,6 +1050,8 @@ public partial class MainViewModel
     {
         try
         {
+            // Settings saves on a 750 ms debounce, so pick up a just-ticked box the way Apply does.
+            SyncConfigFromUI();
             var report = DryRunService.PlanInstall(Config, _preflight);
             DryRunPreviewText = DryRunService.RenderMarkdown(report);
             Log(report.Summary);

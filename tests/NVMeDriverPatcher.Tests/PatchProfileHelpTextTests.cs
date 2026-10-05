@@ -28,9 +28,14 @@ public sealed class PatchProfileHelpTextTests
             "src", "NVMeDriverPatcher", "ViewModels", "MainViewModel.cs"));
         var lines = File.ReadAllLines(sourcePath);
 
+        // Full alone leaves it off, so the help says it's a separate box and the plain Full
+        // confirmation says it stays off. The opt-in confirmation carries the DISM caveat.
         var fullHelp = Assert.Single(lines, l => l.Contains("const string FullProfileHelpText", StringComparison.Ordinal));
-        Assert.Contains("while 156965516 is set DISM /ScanHealth", fullHelp, StringComparison.Ordinal);
+        Assert.Contains("156965516 (Standalone_Future) has its own checkbox", fullHelp, StringComparison.Ordinal);
+        Assert.Contains("DISM /ScanHealth reports component store corruption", fullHelp, StringComparison.Ordinal);
         var fullConfirm = Assert.Single(lines, l => l.Contains("\"Mode: FULL.", StringComparison.Ordinal));
-        Assert.Contains("While 156965516 is set, DISM /ScanHealth", fullConfirm, StringComparison.Ordinal);
+        Assert.Contains("156965516 stays off", fullConfirm, StringComparison.Ordinal);
+        var optInConfirm = Assert.Single(lines, l => l.Contains("\"Mode: FULL with 156965516.", StringComparison.Ordinal));
+        Assert.Contains("While 156965516 is set, DISM /ScanHealth", optInConfirm, StringComparison.Ordinal);
     }
 }

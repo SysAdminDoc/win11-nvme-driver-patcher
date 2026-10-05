@@ -28,6 +28,10 @@
       "type": "boolean",
       "default": false
     },
+    "IncludeStandaloneFuture": {
+      "type": "boolean",
+      "default": false
+    },
     "SkipWarnings": {
       "type": "boolean",
       "default": false

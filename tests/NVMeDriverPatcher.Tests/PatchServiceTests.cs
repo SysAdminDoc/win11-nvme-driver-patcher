@@ -148,23 +148,47 @@ public sealed class PatchServiceTests
     }
 
     [Fact]
-    public void FullProfile_IncludesAllFeatureIds()
+    public void FullProfile_LeavesStandaloneFutureOffUnlessAskedFor()
     {
+        // #19: 156965516 makes DISM /ScanHealth report store corruption, so Full alone doesn't write it.
         var ids = AppConfig.GetFeatureIDsForProfile(PatchProfile.Full);
-        Assert.Equal(AppConfig.FeatureIDs.Count, ids.Count);
-        Assert.Contains("735209102", ids);
-        Assert.Contains("1853569164", ids);
-        Assert.Contains("156965516", ids);
+        Assert.Equal(["735209102", "1853569164"], ids);
+
+        var withOptIn = AppConfig.GetFeatureIDsForProfile(PatchProfile.Full, includeStandaloneFuture: true);
+        Assert.Equal(AppConfig.FeatureIDs, withOptIn);
+        Assert.Contains(AppConfig.StandaloneFutureFeatureID, withOptIn);
+    }
+
+    [Fact]
+    public void SafeProfile_IgnoresTheStandaloneFutureOptIn()
+    {
+        Assert.Equal([AppConfig.PrimaryFeatureID], AppConfig.GetFeatureIDsForProfile(PatchProfile.Safe, includeStandaloneFuture: true));
     }
 
     [Theory]
-    [InlineData(PatchProfile.Safe, false, 3)]  // 1 feature + 2 safeboot
-    [InlineData(PatchProfile.Safe, true, 4)]   // 1 feature + server + 2 safeboot
-    [InlineData(PatchProfile.Full, false, 5)]  // 3 features + 2 safeboot
-    [InlineData(PatchProfile.Full, true, 6)]   // 3 features + server + 2 safeboot
-    public void GetTotalComponents_MatchesProfileAndServerKeyCombination(PatchProfile profile, bool server, int expected)
+    [InlineData(PatchProfile.Safe, false, false, 3)]  // 1 feature + 2 safeboot
+    [InlineData(PatchProfile.Safe, true, false, 4)]   // 1 feature + server + 2 safeboot
+    [InlineData(PatchProfile.Safe, false, true, 3)]   // Safe never writes 156965516
+    [InlineData(PatchProfile.Full, false, false, 4)]  // 2 features + 2 safeboot
+    [InlineData(PatchProfile.Full, true, false, 5)]   // 2 features + server + 2 safeboot
+    [InlineData(PatchProfile.Full, false, true, 5)]   // 3 features + 2 safeboot
+    [InlineData(PatchProfile.Full, true, true, 6)]    // 3 features + server + 2 safeboot
+    public void GetTotalComponents_MatchesProfileServerKeyAndOptInCombination(
+        PatchProfile profile, bool server, bool standaloneFuture, int expected)
     {
-        Assert.Equal(expected, AppConfig.GetTotalComponents(profile, server));
+        Assert.Equal(expected, AppConfig.GetTotalComponents(profile, server, standaloneFuture));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BuildRequiredRegistryMutations_WritesStandaloneFutureOnlyWhenAskedFor(bool optIn)
+    {
+        var mutations = PatchService.BuildRequiredRegistryMutations(
+            PatchProfile.Full, includeServer: false, mirrorControlSets: null, includeStandaloneFuture: optIn);
+
+        Assert.Contains(mutations, m => m.ValueName == "1853569164");
+        Assert.Equal(optIn, mutations.Any(m => m.ValueName == AppConfig.StandaloneFutureFeatureID));
     }
 
     // ========================================================================
