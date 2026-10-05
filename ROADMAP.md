@@ -50,16 +50,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: S
 
-- [ ] P3 — `SchedulerService` clamps the sweep interval to 1440, but schtasks `/SC MINUTE /MO` maxes at 1439
-  Category: correctness
-  Where: `src/NVMeDriverPatcher.Core/Services/SchedulerService.cs:39` (`Math.Clamp(intervalMinutes, 5, 1440)`)
-  Problem: A caller passing ≥ 1440 gets "ERROR: The /MO value is invalid" from schtasks instead of a daily sweep — a confusing failure at exactly the boundary the clamp was meant to allow.
-  Evidence: Clamp read; schtasks documented range 1–1439.
-  Fix: Clamp to 1439 (or switch to `/SC DAILY` at 1440).
-  Acceptance: `register-tasks` with a 1440-minute interval succeeds.
-  Confidence: Likely (documented range; not executed)
-  Effort: S
-
 - [ ] P3 — SafeBoot journal restore re-types non-REG_SZ defaults and expands REG_EXPAND_SZ, breaking the byte-for-byte claim
   Category: correctness
   Where: `src/NVMeDriverPatcher.Core/Services/SafeBootStateService.cs:325-330` (`Read` uses `key.GetValue(name)` — expands), `:362-365` (`ApplyRestore` always writes `RegistryValueKind.String`)
