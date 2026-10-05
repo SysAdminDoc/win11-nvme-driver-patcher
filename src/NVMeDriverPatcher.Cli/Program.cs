@@ -731,7 +731,7 @@ class Program
     {
         var shipped = Path.Combine(AppContext.BaseDirectory, "compat.json");
         var local = Path.Combine(config.WorkingDir, "compat.json");
-        var r = CompatChecksumService.Verify(local, shipped);
+        var r = CompatChecksumService.Verify(local, shipped, embeddedFileName: "compat.json");
         Console.WriteLine(r.Summary);
         Console.WriteLine($"  sha256={r.Sha256}");
         Console.WriteLine($"  shipped={r.ShippedSha256}");
@@ -797,7 +797,13 @@ class Program
         bool json,
         bool forceUnsupportedBuild)
     {
-        bool hasFallback = FeatureStoreWriterService.HasFallbackEvidence();
+        bool hasFallback;
+        try { hasFallback = FeatureStoreWriterService.HasFallbackEvidence(); }
+        catch (InvalidOperationException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
         var configurations = FeatureStoreWriterService.QueryAllKnownConfigurations();
 
         if (json && !writeNative && !resetNative)

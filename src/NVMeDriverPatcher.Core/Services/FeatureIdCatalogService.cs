@@ -17,7 +17,10 @@ public static class FeatureIdCatalogService
         PropertyNameCaseInsensitive = true,
     };
 
-    public static FeatureIdCatalog LoadCatalog(string? workingDir = null)
+    public static FeatureIdCatalog LoadCatalog(string? workingDir = null) =>
+        LoadCatalog(workingDir, AppContext.BaseDirectory);
+
+    internal static FeatureIdCatalog LoadCatalog(string? workingDir, string? appDir)
     {
         var candidates = new List<string>();
         // A null workingDir means "use the shipped catalog". Runtime callers that support a
@@ -45,16 +48,20 @@ public static class FeatureIdCatalogService
             }
         }
 
-        candidates.Add(BundledPath());
-        return LoadFirstUsable(candidates);
+        candidates.Add(BundledPath(appDir));
+        return LoadFirstUsable(candidates, includeEmbedded: true);
     }
 
-    /// <summary>Loads only the immutable catalog shipped beside the application.</summary>
-    public static FeatureIdCatalog LoadBundledCatalog() => LoadFirstUsable([BundledPath()]);
+    /// <summary>Loads only the shipped catalog: the copy beside the application, then the copy
+    /// embedded in Core (a bare single-file download has no loose copy).</summary>
+    public static FeatureIdCatalog LoadBundledCatalog() => LoadBundledCatalog(AppContext.BaseDirectory);
+
+    internal static FeatureIdCatalog LoadBundledCatalog(string? appDir) =>
+        LoadFirstUsable([BundledPath(appDir)], includeEmbedded: true);
 
     /// <summary>Loads a catalog fixture or operator-supplied file for validation tooling.</summary>
     public static FeatureIdCatalog LoadFromPath(string path) =>
-        LoadFirstUsable([path]);
+        LoadFirstUsable([path], includeEmbedded: false);
 
     public static FeatureIdBranch? ResolveBranch(
         FeatureIdCatalog catalog,
@@ -218,27 +225,46 @@ public static class FeatureIdCatalogService
             branch.Confidence);
     }
 
-    private static FeatureIdCatalog LoadFirstUsable(IEnumerable<string> paths)
+    private static FeatureIdCatalog LoadFirstUsable(IEnumerable<string> paths, bool includeEmbedded)
     {
         foreach (var path in paths.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             try
             {
                 if (!File.Exists(path)) continue;
-                var json = File.ReadAllText(path);
-                if (string.IsNullOrWhiteSpace(json)) continue;
-                var catalog = JsonSerializer.Deserialize<FeatureIdCatalog>(json, JsonOptions);
-                if (catalog is not null && catalog.SchemaVersion == 1 && catalog.Branches.Count > 0)
+                if (TryParse(File.ReadAllText(path), out var catalog))
                     return catalog;
             }
             catch { /* try the next candidate */ }
         }
 
+        if (includeEmbedded &&
+            TryParse(BundledDataFileService.ReadEmbeddedText(BundledCatalogFile), out var embedded))
+            return embedded;
+
         return new FeatureIdCatalog();
     }
 
-    private static string BundledPath() =>
-        Path.Combine(AppContext.BaseDirectory, BundledCatalogFile);
+    private static bool TryParse(string? json, out FeatureIdCatalog catalog)
+    {
+        catalog = new FeatureIdCatalog();
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<FeatureIdCatalog>(json, JsonOptions);
+            if (parsed is null || parsed.SchemaVersion != 1 || parsed.Branches.Count == 0)
+                return false;
+            catalog = parsed;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string BundledPath(string? appDir) =>
+        string.IsNullOrWhiteSpace(appDir) ? string.Empty : Path.Combine(appDir, BundledCatalogFile);
 
     private static FallbackIdSet EmptySet(string appliesTo) =>
         new("catalog-unavailable", Array.Empty<int>(), appliesTo, "unknown");

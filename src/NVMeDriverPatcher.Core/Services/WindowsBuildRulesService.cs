@@ -77,6 +77,13 @@ public static class WindowsBuildRulesService
 
     public static WindowsBuildRuleset LoadRuleset(string? workingDir = null)
     {
+        string? appDir = null;
+        try { appDir = AppContext.BaseDirectory; } catch { }
+        return LoadRuleset(workingDir, appDir);
+    }
+
+    internal static WindowsBuildRuleset LoadRuleset(string? workingDir, string? appDir)
+    {
         var candidates = new List<string>();
         var workDir = workingDir ?? AppConfig.GetWorkingDir();
         if (!string.IsNullOrEmpty(workDir))
@@ -95,27 +102,41 @@ public static class WindowsBuildRulesService
                 candidates.Add(Path.Combine(workDir, BundledRulesFile));
             }
         }
-        try
-        {
-            var appDir = AppContext.BaseDirectory;
-            if (!string.IsNullOrEmpty(appDir)) candidates.Add(Path.Combine(appDir, BundledRulesFile));
-        }
-        catch { }
+        if (!string.IsNullOrEmpty(appDir)) candidates.Add(Path.Combine(appDir, BundledRulesFile));
 
         foreach (var path in candidates)
         {
             try
             {
                 if (!File.Exists(path)) continue;
-                var json = File.ReadAllText(path);
-                if (string.IsNullOrWhiteSpace(json)) continue;
-                var rules = JsonSerializer.Deserialize<WindowsBuildRuleset>(json, JsonOptions);
-                if (rules is not null && rules.Rules.Count > 0) return rules;
+                if (TryParse(File.ReadAllText(path), out var rules)) return rules;
             }
             catch { /* try next candidate */ }
         }
 
+        // A bare single-file download has no loose copy beside the exe. Without this the empty
+        // ruleset matches nothing and every build becomes verify/rollback-only.
+        if (TryParse(BundledDataFileService.ReadEmbeddedText(BundledRulesFile), out var embedded))
+            return embedded;
+
         return new WindowsBuildRuleset();
+    }
+
+    private static bool TryParse(string? json, out WindowsBuildRuleset ruleset)
+    {
+        ruleset = new WindowsBuildRuleset();
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<WindowsBuildRuleset>(json, JsonOptions);
+            if (parsed is null || parsed.Rules.Count == 0) return false;
+            ruleset = parsed;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>

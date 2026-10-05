@@ -24,6 +24,18 @@ public sealed class InstallerContentTests
             Assert.DoesNotContain(placeholder, text, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("feature_ids.json")]
+    [InlineData("windows_build_rules.json")]
+    [InlineData("compat.json")]
+    public void Msi_InstallsEveryCuratedDataFileBesideTheExe(string fileName)
+    {
+        // Without feature_ids.json beside the exe an MSI install fell back to an empty catalog,
+        // so the FeatureStore evidence probe had no IDs to look for.
+        var wxs = Read("packaging", "wix", "NVMeDriverPatcher.wxs");
+        Assert.Contains($@"<File Source=""$(var.PublishDir)\{fileName}""", wxs);
+    }
+
     [Fact]
     public void LicenseRtf_HasProductSpecificPurposeRiskAndRecovery()
     {

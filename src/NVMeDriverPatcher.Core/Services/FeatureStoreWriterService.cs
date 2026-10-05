@@ -146,6 +146,9 @@ public static class FeatureStoreWriterService
     public static readonly int[] FeatureStoreProbeIds =
         PostBlockFeatureIds.Concat(CandidateProbeFeatureIds).Distinct().ToArray();
 
+    internal const string CatalogUnavailableMessage =
+        "The fallback feature ID catalog didn't load, so the FeatureStore can't be checked for fallback IDs.";
+
     #region ntdll interop (mirrors ViVe's NativeStructs/NativeMethods)
 
     private enum ConfigurationType : uint { Boot = 0, Runtime = 1 }
@@ -414,6 +417,10 @@ public static class FeatureStoreWriterService
 
     private static FeatureStoreWriteResult ResetAppliedFallbackCore()
     {
+        // An empty catalog means nothing was queried, not that nothing is enabled.
+        if (PostBlockFeatureIds.Length == 0)
+            return new FeatureStoreWriteResult { Success = false, Summary = CatalogUnavailableMessage };
+
         int[] enabled;
         try
         {
@@ -663,11 +670,19 @@ public static class FeatureStoreWriterService
     /// falls back to the legacy FeatureStore blob scan if the native query finds nothing
     /// (covers exotic states the query can't see, and pre-2004 Windows).
     /// </summary>
-    public static bool HasFallbackEvidence()
+    /// <exception cref="InvalidOperationException">The fallback feature ID catalog is empty, so
+    /// there was nothing to look for. Removal and verification count that as unverified residue
+    /// instead of a clean store.</exception>
+    public static bool HasFallbackEvidence() => HasFallbackEvidence(PostBlockFeatureIds);
+
+    internal static bool HasFallbackEvidence(IReadOnlyList<int> knownIds)
     {
+        if (knownIds.Count == 0)
+            throw new InvalidOperationException(CatalogUnavailableMessage);
+
         try
         {
-            foreach (var id in PostBlockFeatureIds)
+            foreach (var id in knownIds)
             {
                 if (QueryConfiguration(id, bootStore: false).IsEnabled) return true;
                 if (QueryConfiguration(id, bootStore: true).IsEnabled) return true;
@@ -675,14 +690,14 @@ public static class FeatureStoreWriterService
         }
         catch { }
 
-        return HasBlobEvidence();
+        return HasBlobEvidence(knownIds);
     }
 
     /// <summary>
     /// Legacy heuristic: scans the FeatureStore blob for little-endian occurrences of each
     /// known post-block feature ID.
     /// </summary>
-    internal static bool HasBlobEvidence()
+    internal static bool HasBlobEvidence(IReadOnlyList<int> knownIds)
     {
         try
         {
@@ -691,7 +706,7 @@ public static class FeatureStoreWriterService
             if (key is null) return false;
             var blob = key.GetValue(DataValueName) as byte[];
             if (blob is null || blob.Length == 0) return false;
-            foreach (var id in PostBlockFeatureIds)
+            foreach (var id in knownIds)
             {
                 var bytes = BitConverter.GetBytes(id);
                 if (IndexOfBytes(blob, bytes) >= 0) return true;

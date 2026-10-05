@@ -2,9 +2,9 @@
 
 Produces a per-machine MSI installer for NVMe Driver Patcher with four features:
 
-- **Main** — GUI exe, CLI exe, shipped `compat.json`, icon, Start Menu shortcut
-- **TrayAgent** — non-admin status tray (drops `NVMeDriverPatcher.Tray.exe`)
-- **AdmxTemplates** — ADMX + ADML into the install dir. To activate the policies, install them into the local policy store with the CLI (no manual copy needed):
+- **Main**: GUI exe, CLI exe, the shipped data files (`compat.json`, `windows_build_rules.json`, `feature_ids.json`), icon, Start Menu shortcut. The exes also carry built-in copies of those files, so a bare exe download still has them.
+- **TrayAgent**: non-admin status tray (drops `NVMeDriverPatcher.Tray.exe`)
+- **AdmxTemplates**: ADMX + ADML into the install dir. To activate the policies, install them into the local policy store with the CLI (no manual copy needed):
 
   ```powershell
   # Install local machine templates (ADMX -> PolicyDefinitions, ADML -> PolicyDefinitions\<lang>)
@@ -18,13 +18,13 @@ Produces a per-machine MSI installer for NVMe Driver Patcher with four features:
   ```
 
   `policy-install` copies the bundled `admx\` templates beside the exe; pass `--source=<dir>` to point at a different template set. Both commands need an elevated shell. Central Store deployment makes the templates available to every Group Policy editor in the domain; local install only affects the current machine.
-- **WatchdogService** — opt-in (Level 2, NOT installed by default): drops `NVMeDriverPatcher.Watchdog.exe` and registers/starts the `NVMeDriverPatcherWatchdog` service as **NT AUTHORITY\LocalService** (least privilege — matches the wxs `ServiceInstall` Account); removed cleanly on uninstall. Select via the installer feature tree or `msiexec /i NVMeDriverPatcher.msi ADDLOCAL=WatchdogService`
+- **WatchdogService**: opt-in (Level 2, NOT installed by default): drops `NVMeDriverPatcher.Watchdog.exe` and registers/starts the `NVMeDriverPatcherWatchdog` service as **NT AUTHORITY\LocalService** (least privilege, matching the wxs `ServiceInstall` Account); removed cleanly on uninstall. Select via the installer feature tree or `msiexec /i NVMeDriverPatcher.msi ADDLOCAL=WatchdogService`
 
-The installer's license/info page and product-facing strings come from `packaging\wix\License.rtf` (no placeholder text — issue #12) and the `packaging\wix\en-US.wxl` string contract.
+The installer's license/info page and product-facing strings come from `packaging\wix\License.rtf` (no placeholder text, see issue #12) and the `packaging\wix\en-US.wxl` string contract.
 
 ## Prereqs
 
-WiX is pinned in the repo tool manifest (`.config/dotnet-tools.json`, currently 5.0.2 — WiX 7.x
+WiX is pinned in the repo tool manifest (`.config/dotnet-tools.json`, currently 5.0.2, because WiX 7.x
 requires Open Source Maintenance Fee acceptance). Restore it and add the matching extensions:
 
 ```powershell
@@ -66,5 +66,5 @@ wix build packaging\wix\NVMeDriverPatcher.wxs `
 
 ## Signing
 
-Not applicable — this project ships **unsigned**. Do not code-sign the MSI or its payload. If
+Not applicable. This project ships **unsigned**. Do not code-sign the MSI or its payload. If
 SmartScreen warns, choose "More info → Run anyway"; installation does not require a signature.

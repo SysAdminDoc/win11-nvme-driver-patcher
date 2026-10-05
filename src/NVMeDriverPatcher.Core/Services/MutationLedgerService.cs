@@ -690,7 +690,9 @@ public static class MutationLedgerService
                     : "FeatureStore baseline was not fully queryable."
             };
         });
+        // An empty catalog captures zero entries, which would otherwise read as a complete baseline.
         return (entries, locked.Success && complete &&
+            FeatureStoreWriterService.PostBlockFeatureIds.Length > 0 &&
             entries.Count == FeatureStoreWriterService.PostBlockFeatureIds.Length * 2);
     }
 
