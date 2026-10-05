@@ -346,6 +346,48 @@ public partial class MainViewModel
         }
     }
 
+    /// <summary>
+    /// The "vs. Previous" lines for the benchmark log. A previous run can carry desktop QD1
+    /// metrics with a zero IOPS figure (HasMetrics is true when any one value is set), and dividing
+    /// by it logged NaN% or Infinity%. A zero previous value now says there's nothing to compare.
+    /// </summary>
+    internal static IReadOnlyList<(string Text, string Level)> BuildBenchmarkComparison(
+        BenchmarkResult prev,
+        BenchmarkResult result)
+    {
+        var readDelta = IopsChangePercent(prev.Read.IOPS, result.Read.IOPS);
+        var writeDelta = IopsChangePercent(prev.Write.IOPS, result.Write.IOPS);
+        var lines = new List<(string Text, string Level)>
+        {
+            ("", "INFO"),
+            ($"  --- vs. Previous ({prev.Label}) ---", "INFO"),
+            ChangeLine("Read IOPS:  ", prev.Read.IOPS, result.Read.IOPS, readDelta),
+            ChangeLine("Write IOPS: ", prev.Write.IOPS, result.Write.IOPS, writeDelta),
+        };
+
+        if (prev.Desktop?.HasMetrics == true && result.Desktop.HasMetrics)
+        {
+            var desktopReadDelta = IopsChangePercent(prev.Desktop.Read.IOPS, result.Desktop.Read.IOPS);
+            var desktopWriteDelta = IopsChangePercent(prev.Desktop.Write.IOPS, result.Desktop.Write.IOPS);
+            lines.Add(ChangeLine("Desktop QD1 Read:  ", prev.Desktop.Read.IOPS, result.Desktop.Read.IOPS, desktopReadDelta));
+            lines.Add(ChangeLine("Desktop QD1 Write: ", prev.Desktop.Write.IOPS, result.Desktop.Write.IOPS, desktopWriteDelta));
+            // Lifted comparisons are false for a missing delta, so no verdict rests on one.
+            if ((readDelta > 0 || writeDelta > 0) && desktopReadDelta <= 0 && desktopWriteDelta <= 0)
+                lines.Add(("  Summary: High-QD improved while desktop QD1 did not.", "WARNING"));
+        }
+        return lines;
+    }
+
+    internal static double? IopsChangePercent(double previous, double current) =>
+        previous > 0 && double.IsFinite(current)
+            ? Math.Round((current - previous) / previous * 100, 1)
+            : null;
+
+    private static (string Text, string Level) ChangeLine(string name, double previous, double current, double? delta) =>
+        delta is double change
+            ? ($"  {name}{previous} --> {current} ({(change >= 0 ? "+" : "")}{change}%)", change >= 0 ? "SUCCESS" : "WARNING")
+            : ($"  {name}{previous} --> {current} (no earlier value to compare)", "INFO");
+
     [RelayCommand]
     private async Task RunBenchmark()
     {
@@ -386,22 +428,8 @@ public partial class MainViewModel
                 var prev = history.Where(h => h.Label != label).LastOrDefault();
                 if (prev?.Read.IOPS > 0)
                 {
-                    var readDelta = prev.Read.IOPS > 0 ? Math.Round((result.Read.IOPS - prev.Read.IOPS) / prev.Read.IOPS * 100, 1) : 0;
-                    var writeDelta = prev.Write.IOPS > 0 ? Math.Round((result.Write.IOPS - prev.Write.IOPS) / prev.Write.IOPS * 100, 1) : 0;
-                    Log("");
-                    Log($"  --- vs. Previous ({prev.Label}) ---");
-                    Log($"  Read IOPS:  {prev.Read.IOPS} --> {result.Read.IOPS} ({(readDelta >= 0 ? "+" : "")}{readDelta}%)", readDelta >= 0 ? "SUCCESS" : "WARNING");
-                    Log($"  Write IOPS: {prev.Write.IOPS} --> {result.Write.IOPS} ({(writeDelta >= 0 ? "+" : "")}{writeDelta}%)", writeDelta >= 0 ? "SUCCESS" : "WARNING");
-
-                    if (prev.Desktop?.HasMetrics == true && result.Desktop.HasMetrics)
-                    {
-                        var desktopReadDelta = Math.Round((result.Desktop.Read.IOPS - prev.Desktop.Read.IOPS) / prev.Desktop.Read.IOPS * 100, 1);
-                        var desktopWriteDelta = Math.Round((result.Desktop.Write.IOPS - prev.Desktop.Write.IOPS) / prev.Desktop.Write.IOPS * 100, 1);
-                        Log($"  Desktop QD1 Read:  {prev.Desktop.Read.IOPS} --> {result.Desktop.Read.IOPS} ({(desktopReadDelta >= 0 ? "+" : "")}{desktopReadDelta}%)", desktopReadDelta >= 0 ? "SUCCESS" : "WARNING");
-                        Log($"  Desktop QD1 Write: {prev.Desktop.Write.IOPS} --> {result.Desktop.Write.IOPS} ({(desktopWriteDelta >= 0 ? "+" : "")}{desktopWriteDelta}%)", desktopWriteDelta >= 0 ? "SUCCESS" : "WARNING");
-                        if ((readDelta > 0 || writeDelta > 0) && desktopReadDelta <= 0 && desktopWriteDelta <= 0)
-                            Log("  Summary: High-QD improved while desktop QD1 did not.", "WARNING");
-                    }
+                    foreach (var (text, level) in BuildBenchmarkComparison(prev, result))
+                        Log(text, level);
                 }
                 Log("===========================================");
 
