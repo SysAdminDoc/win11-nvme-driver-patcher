@@ -879,7 +879,17 @@
                                                                 <TextBlock Text="RECOVERY HEALTH" Style="{StaticResource SectionEyebrow}"/>
                                                                 <TextBlock Text="Rollback readiness" Margin="0,5,0,0" Style="{StaticResource SectionTitle}"/>
                                                             </StackPanel>
-                                                            <Border Grid.Column="1" Padding="8,4" Background="{DynamicResource YellowBg}" CornerRadius="9">
+                                                            <Border Grid.Column="1" Padding="8,4" CornerRadius="9">
+                                                                <Border.Style>
+                                                                    <Style TargetType="Border">
+                                                                        <Setter Property="Background" Value="{DynamicResource YellowBg}"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding RecoveryTabBadgeText}" Value="Ready">
+                                                                                <Setter Property="Background" Value="{DynamicResource GreenBg}"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Border.Style>
                                                                 <TextBlock Text="{Binding RecoveryTabBadgeText}" Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}" FontSize="9.5" FontWeight="SemiBold"/>
                                                             </Border>
                                                         </Grid>
