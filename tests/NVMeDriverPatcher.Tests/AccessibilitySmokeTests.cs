@@ -92,7 +92,7 @@ public sealed class AccessibilitySmokeTests
                 var toggles = FindControls<CheckBox>(wideAuditCard)
                     .Concat(FindControls<CheckBox>(Assert.IsType<Border>(window.FindName("SettingsProfileCard"))))
                     .ToList();
-                Assert.Equal(4, toggles.Count);
+                Assert.Equal(5, toggles.Count); // + the 156965516 opt-in under Full (#19)
                 var clipped = toggles
                     .Select(toggle => (Label: toggle.Content as string, Arranged: toggle.ActualWidth, Natural: NaturalWidth(toggle)))
                     .Where(toggle => toggle.Natural > toggle.Arranged + 0.5)

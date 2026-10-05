@@ -101,7 +101,7 @@ Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the 
 | SafeBoot Minimal Key | Prevents INACCESSIBLE_BOOT_DEVICE BSOD in Safe Mode |
 | SafeBoot Network Key | Safe Mode with Networking support |
 
-The Safe profile (the default) writes `735209102` and the two SafeBoot keys. The Full profile adds `1853569164` and `156965516`, and while `156965516` is set, `DISM /ScanHealth` reports component store corruption on 24H2 (see [Troubleshooting](#dism-scanhealth-reports-component-store-corruption)).
+The Safe profile (the default) writes `735209102` and the two SafeBoot keys. The Full profile adds `1853569164`. `156965516` is a separate opt-in on top of Full (the "Also write 156965516" box in Settings, or `--standalone-future` in the CLI) because while it's set, `DISM /ScanHealth` reports component store corruption on 24H2 (see [Troubleshooting](#dism-scanhealth-reports-component-store-corruption)). Remove always clears all three.
 
 Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be included via checkbox. **Recommended**: without it, the new I/O scheduler may not activate and results can be inconsistent.
 
@@ -190,7 +190,7 @@ Some builds ship the two GUID SafeBoot keys themselves. On 24H2 26100.9550 and 2
 - **Controller-complete WinPE recovery USB builder** (`winpe`): detects the Windows ADK + WinPE add-on, inventories every present hardware-backed storage controller, exports each bound OEM package once, injects signed packages into `boot.wim`, and retains the same INFs for manual `drvload`. The published tree/ISO includes a verified Recovery Kit, controller coverage report, custom `startnet.cmd`, and final SHA-256 inventory. `winpe-freshness` verifies that media and reports stale when the app, Recovery Kit, rollback script, WinRE image, or controller INF/version has changed.
 - **Opt-in compatibility telemetry**: build an anonymized `{controller, firmware, OS build, profile, verification, watchdog, reliability delta}` JSON and optionally `POST` it to a user-configured HTTPS endpoint. No serials, machine names, drive letters, or user names.
 - **Driver Verifier harness** (`verifier-on` / `-off` / `-status`): dev/tester-mode wrapper around `verifier.exe` for kernel-level stress checks on the NVMe stack.
-- **GPO / ADMX templates** (`packaging/admx/`): pin Safe/Full profile, IncludeServerKey, SkipWarnings, watchdog behavior, and telemetry across a fleet via `HKLM\SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher`. Policy overrides local config.
+- **GPO / ADMX templates** (`packaging/admx/`): pin Safe/Full profile, IncludeServerKey, IncludeStandaloneFuture, SkipWarnings, watchdog behavior, and telemetry across a fleet via `HKLM\SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher`. Policy overrides local config.
 - **Intune source bundle** (`NVMeDriverPatcher.Intune-<version>.zip`): release builds package the MSI, the Win32 detection script and the Check/Remediate remediation pair with a versioned, per-file SHA-256 manifest before upload or `.intunewin` wrapping.
 - **winget manifest** (`packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml`): `winget install SysAdminDoc.NVMeDriverPatcher`.
 - **Non-admin status tray agent** (`NVMeDriverPatcher.Tray`): separate exe, no UAC. Shows patch state + watchdog verdict from the system tray; right-click → "Open Main App (elevated)" for the admin GUI.
@@ -234,6 +234,7 @@ Run `NVMeDriverPatcher.Cli help` for the full grouped command reference.
 # Lifecycle
 NVMeDriverPatcher.Cli status                              # Patch state + build rule (exit: 0/1/2)
 NVMeDriverPatcher.Cli apply --safe                         # Apply with Safe Mode profile
+NVMeDriverPatcher.Cli apply --full --standalone-future     # Full profile plus 156965516 (trips DISM /ScanHealth)
 NVMeDriverPatcher.Cli apply --dry-run                      # Preview registry changes only
 NVMeDriverPatcher.Cli remove                               # Undo the patch
 NVMeDriverPatcher.Cli persistence-guard                    # Show the boot-time persistence guard
@@ -478,9 +479,9 @@ Windows automatically disables the native NVMe driver after 2-3 consecutive fail
 
 ### DISM /ScanHealth reports component store corruption
 
-This comes from feature override `156965516` (Standalone_Future), which the Full profile writes and which the community 24H2 override sets also use. On a test install of 24H2 26100.9550, setting it made `DISM /Online /Cleanup-Image /ScanHealth` report 192 corrupt payloads ("The component store is repairable") whether or not the native driver was bound. Every flagged file was a reverse-delta copy in WinSxS (the `\r\` folders servicing keeps for rolling a file back), not a live system file, and `sfc /verifyonly` stayed clean the whole time. Removing the value and restarting made the next scan come back clean.
+This comes from feature override `156965516` (Standalone_Future), which the community 24H2 override sets use and which this tool writes only when you ask for it on top of the Full profile. On a test install of 24H2 26100.9550, setting it made `DISM /Online /Cleanup-Image /ScanHealth` report 192 corrupt payloads ("The component store is repairable") whether or not the native driver was bound. Every flagged file was a reverse-delta copy in WinSxS (the `\r\` folders servicing keeps for rolling a file back), not a live system file, and `sfc /verifyonly` stayed clean the whole time. Removing the value and restarting made the next scan come back clean.
 
-If you need a clean DISM result, for example before a feature update or when someone asks you to run it for support, remove the patch (or switch to the Safe profile), restart, and scan again. The Safe profile's `735209102` alone didn't trigger the report.
+If you need a clean DISM result, for example before a feature update or when someone asks you to run it for support, remove the patch, restart, and scan again. You can then re-apply without the 156965516 opt-in. The Safe profile's `735209102` alone didn't trigger the report, and a patch from an earlier version that wrote all three flags clears it the same way.
 
 ### Custom/test-signed native NVMe workaround detected
 Some community workarounds force `nvmedisk.sys` with a custom OEM INF and BCD TESTSIGNING. This tool warns on that evidence but will not automate or remove the route because it changes driver-store state outside the registry/FeatureStore rollback model. Capture evidence with `pnputil /enum-drivers /files`, then revert through Device Manager or remove the confirmed package with `pnputil /delete-driver <oem#.inf> /uninstall` only after you know which INF owns the binding.

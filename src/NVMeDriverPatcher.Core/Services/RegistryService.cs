@@ -159,7 +159,8 @@ public static class RegistryService
         // Both SafeBoot keys are required for either profile to count as clean; either one
         // missing demotes the install to Mixed even if the feature flags look right.
         bool cleanSafe = primarySet && !extendedA && !extendedB && safeBootMin && safeBootNet;
-        bool cleanFull = primarySet && extendedA && extendedB && safeBootMin && safeBootNet;
+        // 156965516 is an opt-in on top of Full (#19), so Full is clean with or without it.
+        bool cleanFull = primarySet && extendedA && safeBootMin && safeBootNet;
 
         if (cleanSafe)
             return new PatchClassification(
@@ -172,7 +173,7 @@ public static class RegistryService
                 PatchAppliedProfile.Full,
                 Applied: true,
                 Partial: false,
-                ExpectedTotal: AppConfig.GetTotalComponents(PatchProfile.Full, includeServerKey: false));
+                ExpectedTotal: AppConfig.GetTotalComponents(PatchProfile.Full, includeServerKey: false, includeStandaloneFuture: extendedB));
 
         bool looksLikeFullAttempt = extendedA || extendedB;
         return new PatchClassification(
@@ -181,7 +182,8 @@ public static class RegistryService
             Partial: true,
             ExpectedTotal: AppConfig.GetTotalComponents(
                 looksLikeFullAttempt ? PatchProfile.Full : PatchProfile.Safe,
-                includeServerKey: false));
+                includeServerKey: false,
+                includeStandaloneFuture: extendedB));
     }
 
     public static string? ExportRegistryBackup(string workingDir, string description = "NVMe_Backup")

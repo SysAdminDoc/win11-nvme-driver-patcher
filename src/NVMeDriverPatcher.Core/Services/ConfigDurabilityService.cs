@@ -227,6 +227,7 @@ public static partial class ConfigService
             config.WriteEventLog,
             config.RestartDelay,
             config.IncludeServerKey,
+            config.IncludeStandaloneFuture,
             config.SkipWarnings,
             config.CompatTelemetryEnabled,
             config.PersistenceGuardEnabled,
@@ -284,6 +285,7 @@ public static partial class ConfigService
         config.WriteEventLog = saved.WriteEventLog;
         config.RestartDelay = saved.RestartDelay;
         config.IncludeServerKey = saved.IncludeServerKey;
+        config.IncludeStandaloneFuture = saved.IncludeStandaloneFuture;
         config.SkipWarnings = saved.SkipWarnings;
         config.CompatTelemetryEnabled = saved.CompatTelemetryEnabled;
         // The guard's re-apply budget is the only thing bounding an automatic re-arm loop, and it

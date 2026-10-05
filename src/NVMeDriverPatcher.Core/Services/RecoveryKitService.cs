@@ -454,18 +454,22 @@ exit /b 2
     public static string? GenerateVerificationScript(string workingDir, bool includeServerKey)
     {
         // Compatibility overload for older callers. The historical script checked all core
-        // feature flags, which corresponds to Full mode.
-        return GenerateVerificationScript(workingDir, PatchProfile.Full, includeServerKey);
+        // feature flags, which is Full mode with 156965516.
+        return GenerateVerificationScript(workingDir, PatchProfile.Full, includeServerKey, includeStandaloneFuture: true);
     }
 
-    public static string? GenerateVerificationScript(string workingDir, PatchProfile profile, bool includeServerKey)
+    public static string? GenerateVerificationScript(
+        string workingDir,
+        PatchProfile profile,
+        bool includeServerKey,
+        bool includeStandaloneFuture = false)
     {
         if (string.IsNullOrEmpty(workingDir))
             return null;
         try { Directory.CreateDirectory(workingDir); } catch { return null; }
 
         var outputPath = Path.Combine(workingDir, "Verify_NVMe_Patch.ps1");
-        var expectedFeatureIds = AppConfig.GetFeatureIDsForProfile(profile).ToList();
+        var expectedFeatureIds = AppConfig.GetFeatureIDsForProfile(profile, includeStandaloneFuture).ToList();
         if (includeServerKey)
             expectedFeatureIds.Add(AppConfig.ServerFeatureID);
 

@@ -1,5 +1,7 @@
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 
@@ -44,6 +46,32 @@ public sealed class GpoPolicyServiceTests
         {
             Assert.Matches($@"overlay\.{field.Name}\s*=\s*Read\w+\(key,\s*""{field.Name}""", source);
             Assert.Matches($@"overlay\.{field.Name}\s+is\s", source);
+        }
+    }
+
+    [Fact]
+    public void EveryPolicyField_HasAnAdmxPolicyAndLocalizedStrings()
+    {
+        // A field the service reads but the template doesn't offer can't be set from Group Policy.
+        var admx = XDocument.Parse(ReadRepoFile("packaging", "admx", "NVMeDriverPatcher.admx"));
+        var stringIds = XDocument.Parse(ReadRepoFile("packaging", "admx", "en-US", "NVMeDriverPatcher.adml"))
+            .Descendants().Where(e => e.Name.LocalName == "string")
+            .Select(e => (string?)e.Attribute("id"))
+            .ToHashSet(StringComparer.Ordinal);
+        var policies = admx.Descendants().Where(e => e.Name.LocalName == "policy").ToList();
+        Assert.NotEmpty(policies);
+
+        foreach (var field in OverlayFields())
+        {
+            // Toggles carry valueName on the policy; numeric ones carry it on an <elements> child.
+            var policy = policies.SingleOrDefault(p => p.DescendantsAndSelf()
+                .Any(e => (string?)e.Attribute("valueName") == field.Name));
+            Assert.True(policy is not null, $"{field.Name} has no ADMX policy");
+            foreach (var attribute in new[] { "displayName", "explainText" })
+            {
+                var id = Regex.Match((string?)policy!.Attribute(attribute) ?? "", @"^\$\(string\.(\w+)\)$").Groups[1].Value;
+                Assert.True(stringIds.Contains(id), $"{field.Name}'s {attribute} has no ADML string");
+            }
         }
     }
 

@@ -133,10 +133,11 @@ public sealed class DocsServiceTests
     public void FullProfileDocs_WarnThatStandaloneFutureTripsDismScanHealth()
     {
         // Issue #19: on 24H2 26100.9550, override 156965516 alone made DISM /ScanHealth report
-        // reverse-delta payloads as corrupt until it was removed. The Full profile writes it, so
-        // the offline docs and README both have to say so before someone picks Full.
+        // reverse-delta payloads as corrupt until it was removed. Full writes it only on request,
+        // and the offline docs and README both have to say why before someone asks for it.
         var profiles = DocsService.Render("profiles");
-        Assert.Contains("156965516", profiles);
+        Assert.Contains("156965516 is a separate opt-in on top of Full", profiles);
+        Assert.Contains("--standalone-future", profiles);
         Assert.Contains("DISM /ScanHealth", profiles);
         Assert.Contains("SFC stays clean", profiles);
 

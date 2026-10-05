@@ -130,6 +130,8 @@ class Program
             bool forceUnsupportedBuild = args.Any(a => a is not null && MatchesAny(a, "--force-unsupported-build"));
             bool includeServerKeyOverride = args.Any(a => a is not null && MatchesAny(a, "--include-server-key"));
             bool excludeServerKeyOverride = args.Any(a => a is not null && MatchesAny(a, "--no-server-key"));
+            bool includeStandaloneFutureOverride = args.Any(a => a is not null && MatchesAny(a, "--standalone-future"));
+            bool excludeStandaloneFutureOverride = args.Any(a => a is not null && MatchesAny(a, "--no-standalone-future"));
             bool safeMode = args.Any(a => a is not null && MatchesAny(a, "--safe", "--safe-mode"));
             bool fullMode = args.Any(a => a is not null && MatchesAny(a, "--full", "--full-mode"));
 
@@ -137,6 +139,9 @@ class Program
             // need to first edit config.json. --no-server-key wins if both are passed by mistake.
             if (includeServerKeyOverride) config.IncludeServerKey = true;
             if (excludeServerKeyOverride) config.IncludeServerKey = false;
+            // Same rule for 156965516, which only Full writes. --no-standalone-future wins.
+            if (includeStandaloneFutureOverride) config.IncludeStandaloneFuture = true;
+            if (excludeStandaloneFutureOverride) config.IncludeStandaloneFuture = false;
 
             // Reject conflicting mode flags instead of silently picking one — automation callers
             // deserve a clear error so the intended profile is written to the audit trail.
@@ -1714,7 +1719,8 @@ class Program
         var path = RecoveryKitService.GenerateVerificationScript(
             config.WorkingDir,
             config.PatchProfile,
-            config.IncludeServerKey);
+            config.IncludeServerKey,
+            config.IncludeStandaloneFuture);
         if (path is not null)
         {
             config.LastVerificationScriptPath = path;

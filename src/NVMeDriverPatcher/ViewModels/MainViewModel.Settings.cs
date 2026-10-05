@@ -80,6 +80,12 @@ public partial class MainViewModel
         DebouncedSaveSettings();
     }
 
+    partial void OnIncludeStandaloneFutureChanged(bool value)
+    {
+        UpdateChangePlan();
+        DebouncedSaveSettings();
+    }
+
     partial void OnSkipWarningsChanged(bool value)
     {
         UpdateChangePlan();
@@ -124,6 +130,7 @@ public partial class MainViewModel
     public void SyncConfigFromUI()
     {
         Config.IncludeServerKey = IncludeServerKey;
+        Config.IncludeStandaloneFuture = IncludeStandaloneFuture;
         Config.SkipWarnings = SkipWarnings;
         Config.AutoSaveLog = AutoSaveLog;
         Config.EnableToasts = EnableToasts;

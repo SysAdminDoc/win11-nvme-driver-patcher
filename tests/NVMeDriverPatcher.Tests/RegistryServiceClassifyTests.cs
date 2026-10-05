@@ -84,18 +84,35 @@ public sealed class RegistryServiceClassifyTests
     }
 
     [Fact]
-    public void FullProfileMissingOneExtendedFlag_ClassifiesAsMixed()
+    public void FullProfileWithoutStandaloneFuture_ClassifiesAsFullApplied()
     {
-        // Windows Update (or a failed rollback) dropped one of the two extended flags. Not
-        // a clean Safe (because one extended IS still set), not a clean Full (because one is
-        // missing) → Mixed.
+        // #19: Full writes 156965516 only on request, so primary + 1853569164 + SafeBoot is a
+        // complete Full install, not a Full install missing a flag.
         var c = RegistryService.ClassifyPatchState(
             primarySet: true, extendedA: true, extendedB: false,
+            safeBootMin: true, safeBootNet: true, count: 4);
+
+        Assert.Equal(PatchAppliedProfile.Full, c.Profile);
+        Assert.True(c.Applied);
+        Assert.False(c.Partial);
+        Assert.Equal(4, c.ExpectedTotal);
+    }
+
+    [Fact]
+    public void FullProfileMissingUxAccOptimization_ClassifiesAsMixed()
+    {
+        // Windows Update (or a failed rollback) dropped 1853569164 but left 156965516. Not a
+        // clean Safe (an extended flag IS still set), not a clean Full (Full always writes
+        // 1853569164) → Mixed. Before #19 this case was 1853569164 present, 156965516 missing,
+        // which is now the default Full install above.
+        var c = RegistryService.ClassifyPatchState(
+            primarySet: true, extendedA: false, extendedB: true,
             safeBootMin: true, safeBootNet: true, count: 4);
 
         Assert.Equal(PatchAppliedProfile.Mixed, c.Profile);
         Assert.False(c.Applied);
         Assert.True(c.Partial);
+        Assert.Equal(5, c.ExpectedTotal);
     }
 
     [Fact]
@@ -159,13 +176,15 @@ public sealed class RegistryServiceClassifyTests
     [Theory]
     // Every possible combination of the 5 boolean inputs with a plausible count (count
     // matters for the edge cases handled in the dedicated tests above, but most
-    // combinations yield Mixed regardless). This is a cheap sanity net: the two CLEAN
-    // profiles each have exactly ONE row, everything else must be Mixed or None.
+    // combinations yield Mixed regardless). This is a cheap sanity net: clean Safe has one
+    // row, clean Full has two (with and without the 156965516 opt-in, #19), and everything
+    // else must be Mixed or None.
     [InlineData(false, false, false, false, true,  1, PatchAppliedProfile.Mixed)]
     [InlineData(false, false, false, true,  true,  2, PatchAppliedProfile.Mixed)]
     [InlineData(true,  false, false, false, true,  2, PatchAppliedProfile.Mixed)]
     [InlineData(true,  false, false, true,  true,  3, PatchAppliedProfile.Safe)]  // clean Safe
-    [InlineData(true,  true,  false, true,  true,  4, PatchAppliedProfile.Mixed)] // partial Full
+    [InlineData(true,  true,  false, true,  true,  4, PatchAppliedProfile.Full)]  // clean Full without 156965516
+    [InlineData(true,  false, true,  true,  true,  4, PatchAppliedProfile.Mixed)] // partial Full
     [InlineData(true,  true,  true,  true,  true,  5, PatchAppliedProfile.Full)]  // clean Full
     [InlineData(true,  true,  true,  true,  false, 4, PatchAppliedProfile.Mixed)] // Full minus one SafeBoot
     [InlineData(true,  true,  true,  false, true,  4, PatchAppliedProfile.Mixed)] // Full minus other SafeBoot

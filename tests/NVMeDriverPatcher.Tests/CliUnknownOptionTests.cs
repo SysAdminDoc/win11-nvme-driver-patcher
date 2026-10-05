@@ -26,6 +26,8 @@ public sealed class CliUnknownOptionTests
     [InlineData("--preview")]
     [InlineData("--safe")]
     [InlineData("--full-mode")]
+    [InlineData("--standalone-future")]
+    [InlineData("--no-standalone-future")]
     [InlineData("-f")]
     [InlineData("--force-unsupported-build")]
     [InlineData("--json")]

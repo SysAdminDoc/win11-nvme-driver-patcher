@@ -18,6 +18,7 @@ public class DryRunReport
 {
     public PatchProfile Profile { get; set; }
     public bool IncludeServerKey { get; set; }
+    public bool IncludeStandaloneFuture { get; set; }
     public int TotalWrites { get; set; }
     public int TotalCreates { get; set; }
     public RegistryOverrideAssessment? RegistryOverrideAssessment { get; set; }
@@ -61,10 +62,11 @@ public static class DryRunService
         var report = new DryRunReport
         {
             Profile = config.PatchProfile,
-            IncludeServerKey = config.IncludeServerKey
+            IncludeServerKey = config.IncludeServerKey,
+            IncludeStandaloneFuture = config.PatchProfile == PatchProfile.Full && config.IncludeStandaloneFuture
         };
 
-        var featureIDs = AppConfig.GetFeatureIDsForProfile(config.PatchProfile).ToList();
+        var featureIDs = AppConfig.GetFeatureIDsForProfile(config.PatchProfile, report.IncludeStandaloneFuture).ToList();
         if (config.IncludeServerKey) featureIDs.Add(AppConfig.ServerFeatureID);
 
         report.RegistryOverrideAssessment = FallbackFeatureCatalog.AssessRegistryOverrides(
@@ -74,8 +76,10 @@ public static class DryRunService
         // Apply mirrors every CurrentControlSet write into each spare control set (issue #15), and
         // appends those mirrors after the primary writes. A preview that omitted them would
         // under-report the real change set, which is the whole thing this command exists to prevent.
-        int primaryCount = PatchService.BuildRequiredRegistryMutations(config.PatchProfile, config.IncludeServerKey).Count;
-        var mutations = PatchService.BuildRequiredRegistryMutations(config.PatchProfile, config.IncludeServerKey, mirrorControlSets);
+        int primaryCount = PatchService.BuildRequiredRegistryMutations(
+            config.PatchProfile, config.IncludeServerKey, mirrorControlSets: null, report.IncludeStandaloneFuture).Count;
+        var mutations = PatchService.BuildRequiredRegistryMutations(
+            config.PatchProfile, config.IncludeServerKey, mirrorControlSets, report.IncludeStandaloneFuture);
         for (int i = 0; i < mutations.Count; i++)
         {
             var mutation = mutations[i];
@@ -203,6 +207,7 @@ public static class DryRunService
         sb.Append("Scope: machine-wide across every eligible NVMe drive/controller; per-drive exclusions are not enforced. ");
         sb.Append($"Profile: {report.Profile}");
         if (report.IncludeServerKey) sb.Append(" + Server 2025 key");
+        if (report.IncludeStandaloneFuture) sb.Append(" + 156965516");
         if (report.RegistryOverrideAssessment is not null)
             sb.Append($" | {report.RegistryOverrideAssessment.Summary.TrimEnd('.')}");
         if (report.PreflightBlockers.Count > 0) sb.Append($" | {report.PreflightBlockers.Count} BLOCKER(s)");

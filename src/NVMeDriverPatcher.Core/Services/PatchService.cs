@@ -56,10 +56,11 @@ public static class PatchService
     internal static IReadOnlyList<DurableRegistryMutation> BuildRequiredRegistryMutations(
         PatchProfile profile,
         bool includeServer,
-        IReadOnlyList<string>? mirrorControlSets)
+        IReadOnlyList<string>? mirrorControlSets,
+        bool includeStandaloneFuture = false)
     {
         var mutations = new List<DurableRegistryMutation>();
-        var featureIds = new List<string>(AppConfig.GetFeatureIDsForProfile(profile));
+        var featureIds = new List<string>(AppConfig.GetFeatureIDsForProfile(profile, includeStandaloneFuture));
         if (includeServer)
             featureIds.Add(AppConfig.ServerFeatureID);
 
@@ -214,9 +215,12 @@ public static class PatchService
         // the extended flags are correlated with BSOD reports). Full = all three.
         var profile = config.PatchProfile;
         bool includeServer = config.IncludeServerKey;
-        var featureIDsToApply = new List<string>(AppConfig.GetFeatureIDsForProfile(profile));
-        int effectiveTotal = AppConfig.GetTotalComponents(profile, includeServer);
-        log?.Invoke($"Mode: {profile.ToString().ToUpperInvariant()} ({(profile == PatchProfile.Safe ? "primary flag only" : "primary + extended flags")})");
+        bool includeStandaloneFuture = profile == PatchProfile.Full && config.IncludeStandaloneFuture;
+        var featureIDsToApply = new List<string>(AppConfig.GetFeatureIDsForProfile(profile, includeStandaloneFuture));
+        int effectiveTotal = AppConfig.GetTotalComponents(profile, includeServer, includeStandaloneFuture);
+        log?.Invoke($"Mode: {profile.ToString().ToUpperInvariant()} ({(profile == PatchProfile.Safe ? "primary flag only" : includeStandaloneFuture ? "primary + 1853569164 + 156965516" : "primary + 1853569164")})");
+        if (includeStandaloneFuture)
+            log?.Invoke("[WARNING] Including 156965516 (Standalone_Future). While it's set, DISM /ScanHealth reports component store corruption on 24H2; SFC stays clean and it clears once the value is removed.");
         if (includeServer)
         {
             featureIDsToApply.Add(AppConfig.ServerFeatureID);
@@ -327,7 +331,7 @@ public static class PatchService
             var safeBootRegistry = new RealSafeBootRegistry();
             var (writes, leftToWindows) = SplitWindowsOwnedSafeBootWrites(
                 BuildRequiredRegistryMutations(
-                    profile, includeServer, ledgerPreparation.Ledger.MirroredControlSets),
+                    profile, includeServer, ledgerPreparation.Ledger.MirroredControlSets, includeStandaloneFuture),
                 path => safeBootRegistry.Read(path).WindowsOwned);
             foreach (var left in leftToWindows)
                 log?.Invoke($"  [KEPT] {left.Label}: Windows owns and write-protects this key and already registers the driver for Safe Mode in it");

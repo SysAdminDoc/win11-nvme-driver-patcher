@@ -35,7 +35,8 @@ public static class CliCommandRegistry
     public static readonly string[] KnownOptions =
     [
         "--force", "-f", "--no-restart", "--force-unsupported-build", "--include-server-key",
-        "--no-server-key", "--safe", "--safe-mode", "--full", "--full-mode", "--json",
+        "--no-server-key", "--standalone-future", "--no-standalone-future",
+        "--safe", "--safe-mode", "--full", "--full-mode", "--json",
         "--dry-run", "--preview", "--apply", "--unattended", "--auto-revert", "--history",
         "--write-native", "--reset-native", "--on", "--off", "--reset"
     ];
@@ -357,7 +358,9 @@ public static class CliCommandRegistry
         sb.AppendLine("  --force, -f                Skip overridable safety checks (VeraCrypt remains blocked)");
         sb.AppendLine("  --no-restart               Don't prompt for restart after apply/remove");
         sb.AppendLine("  --safe                     Safe Mode: write primary flag only (735209102), recommended");
-        sb.AppendLine("  --full                     Full Mode: write all three flags (higher perf, higher risk; DISM reports store corruption while 156965516 is set)");
+        sb.AppendLine("  --full                     Full Mode: write the primary flag plus 1853569164 (higher perf, higher risk)");
+        sb.AppendLine("  --standalone-future        With --full, also write 156965516 (DISM reports store corruption while it's set)");
+        sb.AppendLine("  --no-standalone-future     Force 156965516 off for this run");
         sb.AppendLine("  --include-server-key       Force the optional Server 2025 key on for this run");
         sb.AppendLine("  --no-server-key            Force the optional Server 2025 key off for this run");
         sb.AppendLine("  --dry-run, --preview       Preview changes without applying them (works with 'apply')");

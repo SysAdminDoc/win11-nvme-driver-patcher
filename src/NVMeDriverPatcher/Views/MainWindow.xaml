@@ -1582,6 +1582,13 @@
                                                                  GroupName="VisiblePatchProfile"
                                                                  ToolTip="Adds related optimization flags. Use only when the machine-specific evidence supports the higher-risk profile."
                                                                  IsChecked="{Binding IsFullModeSelected}"/>
+                                                    <CheckBox Content="Also write 156965516"
+                                                              Margin="26,2,0,0"
+                                                              Style="{StaticResource DarkCheckBox}"
+                                                              AutomationProperties.Name="Also write feature flag 156965516 with the Full profile"
+                                                              ToolTip="Full profile only. While 156965516 (Standalone_Future) is set, DISM /ScanHealth reports component store corruption on 24H2. SFC stays clean, and it clears once the value is removed."
+                                                              IsEnabled="{Binding IsFullModeSelected}"
+                                                              IsChecked="{Binding IncludeStandaloneFuture}"/>
                                                     <TextBlock Text="{Binding PatchProfileHelpText}"
                                                                Margin="0,6,0,0"
                                                                Foreground="{DynamicResource TextMuted}"

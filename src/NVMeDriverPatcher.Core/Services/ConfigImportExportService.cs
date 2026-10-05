@@ -65,6 +65,7 @@ public static class ConfigImportExportService
                 config.WriteEventLog = bundle.Config.WriteEventLog;
                 config.RestartDelay = bundle.Config.RestartDelay;
                 config.IncludeServerKey = bundle.Config.IncludeServerKey;
+                config.IncludeStandaloneFuture = bundle.Config.IncludeStandaloneFuture;
                 config.SkipWarnings = bundle.Config.SkipWarnings;
                 config.PatchProfile = bundle.Config.PatchProfile;
                 // Honour the save result the same way the watchdog save below does. Discarding it

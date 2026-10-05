@@ -52,9 +52,22 @@ public sealed class RecoveryKitServiceTests : IDisposable
     }
 
     [Fact]
+    public void GenerateVerificationScript_FullProfileWithoutOptInDoesNotExpectStandaloneFuture()
+    {
+        var path = RecoveryKitService.GenerateVerificationScript(_tempRoot, PatchProfile.Full, includeServerKey: false);
+
+        Assert.NotNull(path);
+        var script = File.ReadAllText(path!);
+        Assert.Contains("Expected profile: Full", script, StringComparison.Ordinal);
+        Assert.Contains("1853569164", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("156965516", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void GenerateVerificationScript_FullProfileIncludesExtendedAndServerKeysWhenRequested()
     {
-        var path = RecoveryKitService.GenerateVerificationScript(_tempRoot, PatchProfile.Full, includeServerKey: true);
+        var path = RecoveryKitService.GenerateVerificationScript(
+            _tempRoot, PatchProfile.Full, includeServerKey: true, includeStandaloneFuture: true);
 
         Assert.NotNull(path);
         var script = File.ReadAllText(path!);
