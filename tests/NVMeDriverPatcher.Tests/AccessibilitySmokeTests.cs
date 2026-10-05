@@ -80,23 +80,9 @@ public sealed class AccessibilitySmokeTests
                 Assert.True(hero.ActualHeight >= 250, $"Hero height was {hero.ActualHeight}.");
                 Assert.True(workspace.ActualWidth >= 500, $"Workspace width was {workspace.ActualWidth}.");
 
-                vm.IsLoading = false;
-                root.UpdateLayout();
-                var snapshotPath = Environment.GetEnvironmentVariable("NVME_UI_SNAPSHOT_PATH");
-                if (!string.IsNullOrWhiteSpace(snapshotPath))
-                    SavePng(root, snapshotPath);
-
-                var updateAdaptiveLayout = typeof(MainWindow).GetMethod(
-                    "UpdateAdaptiveLayout",
-                    BindingFlags.Instance | BindingFlags.NonPublic);
-                Assert.NotNull(updateAdaptiveLayout);
-
-                var snapshotDirectory = Environment.GetEnvironmentVariable("NVME_UI_SNAPSHOT_DIR");
-                if (!string.IsNullOrWhiteSpace(snapshotDirectory))
-                    SaveWorkspaceSnapshots(window, root, workspace, updateAdaptiveLayout, snapshotDirectory);
-
-                // Wide layout at 1240 px: the audit card's toggles sat in two half-width columns and
-                // clipped to "Windows Event Lo" and "Toast notification".
+                // Wide layout at 1240 px: the audit card's toggles sat in two half-width columns, which
+                // clipped "Auto-save activity log" and "Windows Event Log". This runs before the
+                // snapshot harness, which leaves the never-shown window in its compact layout.
                 workspace.SelectedIndex = 5;
                 root.Measure(new Size(1240, 800));
                 root.Arrange(new Rect(0, 0, 1240, 800));
@@ -117,6 +103,21 @@ public sealed class AccessibilitySmokeTests
                 root.Measure(new Size(1360, 980));
                 root.Arrange(new Rect(0, 0, 1360, 980));
                 root.UpdateLayout();
+
+                vm.IsLoading = false;
+                root.UpdateLayout();
+                var snapshotPath = Environment.GetEnvironmentVariable("NVME_UI_SNAPSHOT_PATH");
+                if (!string.IsNullOrWhiteSpace(snapshotPath))
+                    SavePng(root, snapshotPath);
+
+                var updateAdaptiveLayout = typeof(MainWindow).GetMethod(
+                    "UpdateAdaptiveLayout",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(updateAdaptiveLayout);
+
+                var snapshotDirectory = Environment.GetEnvironmentVariable("NVME_UI_SNAPSHOT_DIR");
+                if (!string.IsNullOrWhiteSpace(snapshotDirectory))
+                    SaveWorkspaceSnapshots(window, root, workspace, updateAdaptiveLayout, snapshotDirectory);
 
                 updateAdaptiveLayout.Invoke(window, null);
                 var activityRail = Assert.IsType<Border>(window.FindName("ActivityRail"));
