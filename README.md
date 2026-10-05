@@ -105,11 +105,11 @@ The Safe profile (the default) writes `735209102` and the two SafeBoot keys. The
 
 Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be included via checkbox. **Recommended**: without it, the new I/O scheduler may not activate and results can be inconsistent.
 
-The three registry override IDs above are the historical payload the tool still writes; Windows
-has rotated the corresponding feature IDs on sampled branches. `status` and the dry-run preview
-now identify the running build branch and explicitly report whether each registry ID matches a
-known feature name/ID. This is diagnostic only and does not silently substitute a different
-registry payload while live-hardware validation remains open.
+The three registry override IDs above are policy override value names. They use a separate
+numbering from the FeatureStore feature IDs in the velocity dumps, so the two never match.
+`status` and the dry-run preview identify the running build branch and list each registry ID
+beside that branch's FeatureStore ID for the same feature. That listing is information only and
+never changes the registry payload.
 
 The FeatureStore fallback is resolved from the reviewed `src/NVMeDriverPatcher.Core/feature_ids.json`
 catalog, not from a blanket build-number cutoff. It records the sampled branch, UBR range, feature

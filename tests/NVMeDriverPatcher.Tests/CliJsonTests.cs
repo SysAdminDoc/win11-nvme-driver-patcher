@@ -64,10 +64,11 @@ public sealed class CliJsonTests
         var registry = data.GetProperty("registryOverride");
         Assert.Equal(26100, registry.GetProperty("buildNumber").GetInt32());
         Assert.Equal("pre-26200 sampled branch", registry.GetProperty("branch").GetString());
-        Assert.True(registry.GetProperty("hasMismatch").GetBoolean());
+        Assert.False(registry.TryGetProperty("hasMismatch", out _));
         Assert.Equal("735209102", registry.GetProperty("features")[0].GetProperty("registryId").GetString());
         Assert.Equal(60786016, registry.GetProperty("features")[0].GetProperty("knownBranchId").GetInt32());
-        Assert.False(registry.GetProperty("features")[0].GetProperty("matchesKnownFeature").GetBoolean());
+        Assert.False(registry.GetProperty("features")[0].TryGetProperty("matchesKnownFeature", out _));
+        Assert.DoesNotContain("MISMATCH", registry.GetProperty("summary").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

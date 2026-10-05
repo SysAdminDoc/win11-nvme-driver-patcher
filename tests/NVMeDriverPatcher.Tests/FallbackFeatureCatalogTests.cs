@@ -69,24 +69,52 @@ public sealed class FallbackFeatureCatalogTests
     }
 
     [Fact]
-    public void RegistryOverrideAssessment_Pre26200_ReportsExplicitMismatches()
+    public void RegistryOverrideIds_AreASeparateNumberingFromEveryCuratedFeatureStoreId()
+    {
+        // The Policies override value names never appear in any sampled velocity dump, so a
+        // comparison between the two sets can only ever say "different". That is expected.
+        var catalogIds = FeatureIdCatalogService.LoadBundledCatalog().Branches
+            .SelectMany(branch => branch.Features)
+            .Select(feature => feature.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.DoesNotContain(AppConfig.OwnedOverrideValueNames, catalogIds.Contains);
+    }
+
+    [Theory]
+    [InlineData(26100, 8687)]
+    [InlineData(26404, 5000)]
+    public void RegistryOverrideAssessment_ListsBothIdSetsWithoutAMismatchVerdict(int build, int ubr)
+    {
+        var assessment = FallbackFeatureCatalog.AssessRegistryOverrides(
+            new WindowsBuildDetails { BuildNumber = build, UBR = ubr },
+            AppConfig.FeatureIDs);
+
+        Assert.True(assessment.BranchKnown);
+        Assert.DoesNotContain("MISMATCH", assessment.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.All(assessment.Features, feature =>
+        {
+            Assert.DoesNotContain("MISMATCH", feature.Detail, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(feature.RegistryId, feature.Detail, StringComparison.Ordinal);
+            Assert.Contains(feature.KnownBranchId!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), feature.Detail, StringComparison.Ordinal);
+        });
+        Assert.Contains("separate numbering", assessment.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RegistryOverrideAssessment_Pre26200_ListsTheBranchFeatureStoreIds()
     {
         var assessment = FallbackFeatureCatalog.AssessRegistryOverrides(
             new WindowsBuildDetails { BuildNumber = 26100, UBR = 8687 },
             AppConfig.FeatureIDs);
 
-        Assert.True(assessment.BranchKnown);
         Assert.Equal("pre-26200 sampled branch", assessment.Branch);
-        Assert.Equal(3, assessment.MismatchCount);
         Assert.Equal(60786016, assessment.Features[0].KnownBranchId);
         Assert.Equal("NativeNVMeStackForGeClient", assessment.Features[0].FeatureName);
-        Assert.All(assessment.Features, feature => Assert.False(feature.MatchesKnownFeature));
-        Assert.Contains("MISMATCH", assessment.Features[0].Detail);
-        Assert.Contains("3 MISMATCH(es)", assessment.Summary);
     }
 
     [Fact]
-    public void RegistryOverrideAssessment_Post26200_UsesRotatedPrimaryId()
+    public void RegistryOverrideAssessment_Post26200_ListsTheRotatedFeatureStoreIds()
     {
         var assessment = FallbackFeatureCatalog.AssessRegistryOverrides(
             new WindowsBuildDetails { BuildNumber = 26404, UBR = 5000 },
@@ -95,17 +123,16 @@ public sealed class FallbackFeatureCatalogTests
         Assert.Equal(55369237, assessment.Features.Single(f => f.FeatureName == "NativeNVMeStackForGeClient").KnownBranchId);
         Assert.Equal(48433719, assessment.Features.Single(f => f.FeatureName == "UxAccOptimization").KnownBranchId);
         Assert.Equal(49453572, assessment.Features.Single(f => f.FeatureName == "Standalone_Future").KnownBranchId);
-        Assert.True(assessment.HasMismatch);
     }
 
     [Fact]
-    public void RegistryOverrideAssessment_WithoutBuild_IsExplicitlyUnknown()
+    public void RegistryOverrideAssessment_WithoutBuild_SaysTheBranchIsUnknown()
     {
         var assessment = FallbackFeatureCatalog.AssessRegistryOverrides(null, AppConfig.FeatureIDs);
 
         Assert.False(assessment.BranchKnown);
-        Assert.False(assessment.HasMismatch);
         Assert.Contains("build unavailable", assessment.Summary, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("UNKNOWN", assessment.Features[0].Detail);
+        Assert.Null(assessment.Features[0].KnownBranchId);
+        Assert.Contains("no FeatureStore ID", assessment.Features[0].Detail, StringComparison.Ordinal);
     }
 }

@@ -15,17 +15,21 @@ public sealed record FallbackIdSet(
         : string.Join(", ", Ids.Take(Ids.Count - 1)) + " and " + Ids[^1];
 }
 
+/// <summary>
+/// One registry override value shown beside the FeatureStore ID the curated catalog lists for the
+/// same feature name on this branch. The two are separate numbering schemes: the Policies override
+/// value names (735209102 and the rest, plus Microsoft's own Server key 1176759950) appear in no
+/// velocity dump on any branch, and the registry route enabled the driver on 26100 builds whose
+/// FeatureStore ID for the same feature was 60786016. They are never expected to match.
+/// </summary>
 public sealed record RegistryOverrideFeatureAssessment(
     string RegistryId,
     string FeatureName,
-    int? KnownBranchId,
-    bool MatchesKnownFeature)
+    int? KnownBranchId)
 {
     public string Detail => KnownBranchId is null
-        ? $"{RegistryId} ({FeatureName}): UNKNOWN — no curated branch ID is available."
-        : MatchesKnownFeature
-            ? $"{RegistryId} ({FeatureName}): MATCH — this is the known branch ID."
-            : $"{RegistryId} ({FeatureName}): MISMATCH — this branch lists {KnownBranchId} for {FeatureName}.";
+        ? $"{RegistryId} ({FeatureName}): registry override ID; no FeatureStore ID is listed for this feature on this branch."
+        : $"{RegistryId} ({FeatureName}): registry override ID; FeatureStore ID on this branch is {KnownBranchId}.";
 }
 
 public sealed record RegistryOverrideAssessment(
@@ -35,25 +39,9 @@ public sealed record RegistryOverrideAssessment(
     bool BranchKnown,
     IReadOnlyList<RegistryOverrideFeatureAssessment> Features)
 {
-    public bool HasMismatch => BranchKnown && Features.Any(f =>
-        f.KnownBranchId is not null && !f.MatchesKnownFeature);
-
-    public int MismatchCount => Features.Count(f =>
-        f.KnownBranchId is not null && !f.MatchesKnownFeature);
-
-    public string Summary
-    {
-        get
-        {
-            if (!BranchKnown)
-                return $"Registry override IDs: Windows build unavailable; cannot compare {Features.Count} ID(s) to a known branch.";
-
-            var verdict = HasMismatch
-                ? $"{MismatchCount} MISMATCH(es)"
-                : "all curated IDs match";
-            return $"Registry override IDs for Windows build {BuildNumber}.{Ubr} ({Branch}): {verdict}.";
-        }
-    }
+    public string Summary => !BranchKnown
+        ? $"Registry override IDs: Windows build unavailable, so this branch's FeatureStore IDs can't be listed beside the {Features.Count} registry ID(s)."
+        : $"Registry override IDs for Windows build {BuildNumber}.{Ubr} ({Branch}): {Features.Count} listed beside this branch's FeatureStore IDs. The two use separate numbering, so they don't match by design.";
 }
 
 /// <summary>
@@ -110,9 +98,9 @@ public static class FallbackFeatureCatalog
         FeatureIdCatalogService.GetKnownFeatureIds(BundledCatalog, buildNumber, ubr);
 
     /// <summary>
-    /// Compares the IDs the registry route would write with the current curated feature names
-    /// for the detected branch. This is deliberately diagnostic: it does not change the IDs in
-    /// <see cref="AppConfig"/> or authorize a different mutation payload.
+    /// Lists the IDs the registry route would write beside the curated FeatureStore IDs for the
+    /// same feature names on the detected branch. Information only: the two are separate numbering
+    /// schemes, and this never changes the IDs in <see cref="AppConfig"/> or the mutation payload.
     /// </summary>
     public static RegistryOverrideAssessment AssessRegistryOverrides(
         WindowsBuildDetails? buildDetails,
@@ -129,8 +117,7 @@ public static class FallbackFeatureCatalog
                 ids.Select(id => new RegistryOverrideFeatureAssessment(
                     id,
                     GetFeatureName(id),
-                    null,
-                    false)).ToArray());
+                    null)).ToArray());
         }
 
         var knownIds = GetKnownRegistryFeatureIdsForBuild(buildDetails.BuildNumber, buildDetails.UBR);
@@ -138,12 +125,10 @@ public static class FallbackFeatureCatalog
         {
             var name = GetFeatureName(id);
             var hasKnownId = knownIds.TryGetValue(name, out var knownId);
-            var matches = hasKnownId && id == knownId.ToString(System.Globalization.CultureInfo.InvariantCulture);
             return new RegistryOverrideFeatureAssessment(
                 id,
                 name,
-                hasKnownId ? knownId : null,
-                matches);
+                hasKnownId ? knownId : null);
         }).ToArray();
 
         var branch = FeatureIdCatalogService.ResolveBranch(
