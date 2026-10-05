@@ -512,9 +512,18 @@ public partial class MainWindow : Window
     private void CopySelection_Click(object sender, RoutedEventArgs e)
     {
         string selectedText = ActivityRailLogOutput.SelectedText;
+        if (string.IsNullOrEmpty(selectedText)) return;
 
-        if (!string.IsNullOrEmpty(selectedText))
+        try
+        {
             Clipboard.SetText(selectedText);
+        }
+        catch (ExternalException ex)
+        {
+            // CLIPBRD_E_CANT_OPEN whenever another app holds the clipboard lock. Routine
+            // contention, not a crash: report it the way Copy Entire Log does.
+            _vm.Log($"Couldn't copy the selection: {ex.Message}", "ERROR");
+        }
     }
 
     private void SelectAll_Click(object sender, RoutedEventArgs e)
@@ -528,7 +537,7 @@ public partial class MainWindow : Window
         if (_vm.LogEntryCount > 0)
         {
             bool confirmed = ThemedDialog.Show(
-                $"This clears {FormatCount(_vm.LogEntryCount, "visible activity entry")} from the current session.\n\nExport the log first if you need a saved audit trail.",
+                MainViewModel.BuildClearLogPrompt(_vm.LogEntryCount),
                 "Clear Activity Log",
                 DialogButtons.YesNo,
                 DialogIcon.Warning,
@@ -1040,10 +1049,5 @@ public partial class MainWindow : Window
             || title.Contains("inactive", StringComparison.OrdinalIgnoreCase)
                 ? DialogIcon.Warning
                 : DialogIcon.Question;
-    }
-
-    private static string FormatCount(int count, string singular)
-    {
-        return count == 1 ? $"1 {singular}" : $"{count} {singular}s";
     }
 }

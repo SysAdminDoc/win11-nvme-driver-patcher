@@ -110,16 +110,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: S
 
-- [ ] P3 — Activity log: "entrys" pluralization, WARN not counted, clipboard crash, O(n²) rendering
-  Category: ux
-  Where: `Views/MainWindow.xaml.cs:1046-1049` (`FormatCount` bare `s` → "2 visible activity entrys" via `:532`); `ViewModels/MainViewModel.Commands.cs:995` (level "WARN") vs `MainViewModel.cs:1523-1534` (switch matches only "WARNING"); `MainWindow.xaml.cs:513-519` (`Clipboard.SetText` uncaught — `CLIPBRD_E_CANT_OPEN` COMException escalates to the crash dialog; sibling `CopyLog` at `Commands.cs:677-691` catches it); `MainViewModel.cs:183, 1538` (`LogText` re-joins up to 5000 entries per appended line)
-  Problem: Four small defects in one surface: broken plural, minidump warnings not counted in the badge (and rendered `[WARN]` amid `[WARNING]`s), copy-selection can crash-dialog on clipboard contention, and chatty operations re-render the whole log per entry.
-  Evidence: Each site read.
-  Fix: Use the VM's `Pluralize` helper; log "WARNING" at `:995`; wrap `SetText` in the same try/catch as `CopyLog`; append to the TextBox incrementally or debounce `LogText` notifications.
-  Acceptance: "1 visible activity entry"/"2 ... entries"; minidump warnings increment `LogWarningCount`; copy under clipboard contention shows a toast not a crash dialog; preflight burst no longer re-renders per line (profile or entry-count instrumentation).
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — "Rollback readiness" chip background hardcoded yellow while its text turns green when Ready
   Category: visual
   Where: `Views/MainWindow.xaml:1371-1373` (chip `Background=YellowBg`, text binds `RecoveryTabBadgeColor`); pattern to copy at `:1686-1712`

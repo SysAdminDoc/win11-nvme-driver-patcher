@@ -1551,8 +1551,38 @@ public partial class MainViewModel : ObservableObject
 
         LatestActivityText = message;
         UpdateActivitySummary();
-        OnPropertyChanged(nameof(LogText));
+        QueueLogTextRefresh();
     }
+
+    private bool _logTextRefreshQueued;
+
+    // LogText re-joins every visible entry and the bound TextBox re-lays out all of it, so
+    // raising it per appended line made a burst of N lines (a preflight scan logs dozens)
+    // cost O(N^2). Coalesce the burst into one refresh once the dispatcher has drained the
+    // higher-priority work that is still appending. AppendLogEntry only runs on the UI thread,
+    // so the flag needs no lock.
+    private void QueueLogTextRefresh()
+    {
+        if (_logTextRefreshQueued) return;
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null)
+        {
+            OnPropertyChanged(nameof(LogText));
+            return;
+        }
+
+        _logTextRefreshQueued = true;
+        dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+        {
+            _logTextRefreshQueued = false;
+            OnPropertyChanged(nameof(LogText));
+        }));
+    }
+
+    internal static string BuildClearLogPrompt(int entryCount) =>
+        $"This clears {entryCount} activity {Pluralize(entryCount, "entry", "entries")} from the current session.\n\n" +
+        "Export the log first if you need a saved audit trail.";
 
     // UpdateActivitySummary + UpdateWorkspaceBadges live in MainViewModel.Workspace.cs.
 

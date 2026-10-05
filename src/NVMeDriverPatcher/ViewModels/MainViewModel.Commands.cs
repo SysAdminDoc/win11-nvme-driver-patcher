@@ -1006,7 +1006,7 @@ public partial class MainViewModel
             MinidumpSummaryText = report.Summary;
             Log($"Minidump triage: {report.Summary}");
             foreach (var d in report.Dumps.Where(d => d.MentionsNVMeStack))
-                Log($"  [NVMe] {d.CreatedUtc:u} — {Path.GetFileName(d.FilePath)}: {d.Notes}", "WARN");
+                Log($"  [NVMe] {d.CreatedUtc:u} — {Path.GetFileName(d.FilePath)}: {d.Notes}", "WARNING");
         }
         catch (Exception ex)
         {
