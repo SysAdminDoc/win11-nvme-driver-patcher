@@ -21,6 +21,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   now needs a drive under Storage disks or an `nvmedisk.inf` device binding. The legacy
   PowerShell status script and the verification script it writes got the same fix.
 
+### Changed
+- Re-reviewed the bundled Windows build rules and feature-ID catalog against current sources on
+  2026-10-05. The 26200.8524 rule now says what its evidence covers (one Insider build) rather
+  than implying every later retail 25H2 build, the 25H2 note no longer claims 60786016 is gone,
+  and the 26100.8106 note points at the newer 24H2 override reports. None of this changes what
+  the app applies on any build.
+
 ### Docs
 - The README no longer asks a visitor to paste a fetch-and-run command. The GUI, CLI, MSI, and
   legacy PowerShell downloads are all a link first, then local commands only, and the "Verify the

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updated": "2026-08-12",
+  "updated": "2026-10-05",
   "sourceUrl": "https://github.com/phantomofearth/windows-velocity-feature-lists",
   "branches": [
     {
@@ -13,7 +13,7 @@
       "fallbackSet": "post-block-2026-03",
       "confidence": "verified sample; compatibility range",
       "sourceUrl": "https://raw.githubusercontent.com/phantomofearth/windows-velocity-feature-lists/main/ge_prerelease_im/amd64/26100.8687.txt",
-      "lastReviewed": "2026-08-12",
+      "lastReviewed": "2026-10-05",
       "features": [
         {
           "name": "NativeNVMeStackForGeClient",
@@ -45,7 +45,7 @@
       "fallbackSet": "post-block-2026-03",
       "confidence": "verified",
       "sourceUrl": "https://raw.githubusercontent.com/phantomofearth/windows-velocity-feature-lists/main/ge_prerelease_im/amd64/26100.8687.txt",
-      "lastReviewed": "2026-08-12",
+      "lastReviewed": "2026-10-05",
       "features": [
         {
           "name": "NativeNVMeStackForGeClient",
@@ -77,7 +77,7 @@
       "fallbackSet": "native-nvme-stack-25h2",
       "confidence": "community-reported",
       "sourceUrl": "https://raw.githubusercontent.com/phantomofearth/windows-velocity-feature-lists/main/ge_prerelease/amd64/26404.5000.txt",
-      "lastReviewed": "2026-08-12",
+      "lastReviewed": "2026-10-05",
       "features": [
         {
           "name": "NativeNVMeStackForGeClient",
@@ -109,7 +109,7 @@
       "fallbackSet": "native-nvme-stack-25h2",
       "confidence": "community-reported",
       "sourceUrl": "https://raw.githubusercontent.com/phantomofearth/windows-velocity-feature-lists/main/rs_prerelease/amd64/29531.1000.txt",
-      "lastReviewed": "2026-08-12",
+      "lastReviewed": "2026-10-05",
       "features": [
         {
           "name": "NativeNVMeStackEnableForClientOS",
@@ -147,7 +147,7 @@
       "fallbackSet": "native-nvme-stack-25h2",
       "confidence": "community-reported; compatibility range",
       "sourceUrl": "https://github.com/phantomofearth/windows-velocity-feature-lists",
-      "lastReviewed": "2026-08-12",
+      "lastReviewed": "2026-10-05",
       "features": [
         {
           "name": "NativeNVMeStackForGeClient",
