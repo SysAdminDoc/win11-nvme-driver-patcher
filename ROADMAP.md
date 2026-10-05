@@ -10,16 +10,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
-- [ ] P3 — CLI output loses non-ASCII characters when redirected
-  Category: correctness
-  Where: `src/NVMeDriverPatcher.Cli/Program.cs` startup; visible in `dry-run` ("Before → After"). The 2026-10-05 string sweep removed the em dashes from CLI text, so the arrow is the main non-ASCII character left
-  Problem: The CLI never sets `Console.OutputEncoding`, so redirected output is written in the OEM code page. Run as SYSTEM with stdout redirected on 26100.9550, `dry-run` printed "Before  After" with the arrow gone.
-  Evidence: 2026-10-05 VM run.
-  Fix: Write UTF-8 without BOM when stdout is redirected (check first that it doesn't switch the parent console's code page), or swap the arrow for "to" and keep CLI text ASCII-only.
-  Acceptance: `NVMeDriverPatcher.Cli dry-run > plan.md` produces a UTF-8 file with the arrow intact.
-  Confidence: Confirmed
-  Effort: S
-
 - [ ] P3 — `DryRunService.PlanUninstall` has no caller and previews a whole-key delete
   Category: cleanup
   Where: `DryRunService.PlanUninstall`
