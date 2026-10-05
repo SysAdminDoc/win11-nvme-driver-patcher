@@ -191,39 +191,8 @@ public static class BypassIoInspectorService
         try
         {
             using var key = Registry.LocalMachine.OpenSubKey(RegistrySubKey, writable: false);
-            if (key is null)
-            {
-                return new BypassIoRegistryEvidence(
-                    Readable: true,
-                    ValuePresent: false,
-                    Enabled: false,
-                    Detail: $"HKLM\\{RegistrySubKey}\\{RegistryValueName} is not present (treated as disabled).");
-            }
-
-            var raw = key.GetValue(RegistryValueName, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
-            if (raw is null)
-            {
-                return new BypassIoRegistryEvidence(
-                    Readable: true,
-                    ValuePresent: false,
-                    Enabled: false,
-                    Detail: $"HKLM\\{RegistrySubKey}\\{RegistryValueName} is not present (treated as disabled).");
-            }
-
-            var numeric = raw switch
-            {
-                int value => (long)value,
-                uint value => value,
-                long value => value,
-                ulong value when value <= long.MaxValue => (long)value,
-                _ => -1L
-            };
-            var enabled = numeric == 1;
-            return new BypassIoRegistryEvidence(
-                Readable: true,
-                ValuePresent: true,
-                Enabled: enabled,
-                Detail: $"HKLM\\{RegistrySubKey}\\{RegistryValueName}={(numeric >= 0 ? numeric : "invalid")}; enabled={enabled}.");
+            var raw = key?.GetValue(RegistryValueName, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+            return ClassifyRegistryValue(raw);
         }
         catch (Exception ex)
         {
@@ -233,6 +202,38 @@ public static class BypassIoInspectorService
                 Enabled: false,
                 Detail: $"Unable to read HKLM\\{RegistrySubKey}\\{RegistryValueName}: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Stock Windows never writes EnableBypassIO (the storport service key itself is usually
+    /// absent), so a missing value means storport's default, which allows BypassIO. Only an
+    /// explicit value other than 1 turns it off.
+    /// </summary>
+    internal static BypassIoRegistryEvidence ClassifyRegistryValue(object? raw)
+    {
+        if (raw is null)
+        {
+            return new BypassIoRegistryEvidence(
+                Readable: true,
+                ValuePresent: false,
+                Enabled: true,
+                Detail: $"HKLM\\{RegistrySubKey}\\{RegistryValueName} is not set, so storport uses its default (BypassIO allowed).");
+        }
+
+        var numeric = raw switch
+        {
+            int value => (long)value,
+            uint value => value,
+            long value => value,
+            ulong value when value <= long.MaxValue => (long)value,
+            _ => -1L
+        };
+        var enabled = numeric == 1;
+        return new BypassIoRegistryEvidence(
+            Readable: true,
+            ValuePresent: true,
+            Enabled: enabled,
+            Detail: $"HKLM\\{RegistrySubKey}\\{RegistryValueName}={(numeric >= 0 ? numeric : "invalid")}; enabled={enabled}.");
     }
 
     internal static BypassIoDeviceEvidence ReadDeviceServiceEvidence()

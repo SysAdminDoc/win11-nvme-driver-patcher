@@ -100,7 +100,8 @@ cannot be excluded independently. Remove the patch or accept that global tradeof
 EasyAntiCheat's EOSSys.sys can also veto BypassIO
 independently, so an EOSSys.sys blocker is separate from the storage-driver choice.
 The live verdict uses the non-localized storport EnableBypassIO DWORD and the PnP
-DEVPKEY_Device_Service storage binding. fsutil output is retained as diagnostic evidence,
+DEVPKEY_Device_Service storage binding. Windows doesn't set that DWORD on a stock install, and
+a missing value means the default, which allows BypassIO. Only an explicit 0 turns it off. fsutil output is retained as diagnostic evidence,
 but localized output is never parsed for the Enabled/Disabled decision.
 ",
         ["vivetool"] = @"

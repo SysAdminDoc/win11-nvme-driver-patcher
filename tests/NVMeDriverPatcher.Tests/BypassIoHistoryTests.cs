@@ -65,6 +65,75 @@ public sealed class BypassIoHistoryTests
         Assert.Equal("stornvme", info.DeviceService);
     }
 
+    [Fact]
+    public void BypassIoInspectorService_LiveRegistryRead_AbsentValueIsTheDefaultNotDisabled()
+    {
+        // Stock Windows never writes storport\Parameters\EnableBypassIO (the whole storport key is
+        // usually missing). Reading "absent" as disabled made every stock PC report BypassIO off.
+        var evidence = BypassIoInspectorService.ReadRegistryEvidence();
+        if (!evidence.Readable || evidence.ValuePresent) return;
+
+        Assert.True(evidence.Enabled);
+        Assert.DoesNotContain("treated as disabled", evidence.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(null, false, true)]
+    [InlineData(1, true, true)]
+    [InlineData(0, true, false)]
+    [InlineData("1", true, false)]
+    public void BypassIoInspectorService_RegistryValue_AbsentMeansStorportDefault(
+        object? raw,
+        bool expectedPresent,
+        bool expectedEnabled)
+    {
+        var evidence = BypassIoInspectorService.ClassifyRegistryValue(raw);
+
+        Assert.True(evidence.Readable);
+        Assert.Equal(expectedPresent, evidence.ValuePresent);
+        Assert.Equal(expectedEnabled, evidence.Enabled);
+    }
+
+    [Fact]
+    public void BypassIoInspectorService_StockStornvmeVolumeWithNoRegistryValue_ReportsEnabled()
+    {
+        var info = BypassIoInspectorService.BuildVolumeInfo(
+            @"C:\",
+            BypassIoInspectorService.ClassifyRegistryValue(null),
+            new BypassIoDeviceEvidence(true, "stornvme", "DEVPKEY_Device_Service=stornvme"),
+            queryExitCode: 0,
+            stdout: string.Empty,
+            stderr: string.Empty);
+
+        Assert.True(info.Enabled);
+        Assert.Equal("Enabled", info.Status);
+        Assert.Contains("Gaming impact: BypassIO is active on 1 volume(s)",
+            BypassIoInspectorService.BuildGamingImpactSummary([info]));
+    }
+
+    [Fact]
+    public void DriveService_BypassIoBlocker_DoesNotBlameAnAbsentRegistryValue()
+    {
+        var volume = BypassIoInspectorService.BuildVolumeInfo(
+            @"D:\",
+            BypassIoInspectorService.ClassifyRegistryValue(null),
+            new BypassIoDeviceEvidence(true, "storahci", "DEVPKEY_Device_Service=storahci"),
+            queryExitCode: 0,
+            stdout: string.Empty,
+            stderr: string.Empty);
+
+        Assert.Equal("storahci.sys", DriveService.DetermineBypassIoBlocker(volume));
+
+        var explicitlyOff = BypassIoInspectorService.BuildVolumeInfo(
+            @"D:\",
+            BypassIoInspectorService.ClassifyRegistryValue(0),
+            new BypassIoDeviceEvidence(true, "stornvme", "DEVPKEY_Device_Service=stornvme"),
+            queryExitCode: 0,
+            stdout: string.Empty,
+            stderr: string.Empty);
+        Assert.Equal("EnableBypassIO registry value", DriveService.DetermineBypassIoBlocker(explicitlyOff));
+    }
+
     [Theory]
     [InlineData(false, "stornvme", 0, false)]
     [InlineData(true, "nvmedisk", 0, false)]
