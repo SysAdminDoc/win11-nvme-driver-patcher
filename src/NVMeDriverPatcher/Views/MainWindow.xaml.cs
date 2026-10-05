@@ -423,7 +423,7 @@ public partial class MainWindow : Window
         MainContentSecondaryRow.Height = GridLength.Auto;
 
         WorkspaceSurface.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
-        FooterActionsPanel.Margin = compact ? new Thickness(0, 12, 0, 0) : new Thickness(0);
+        SettingsAboutCard.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0, 10, 0, 0);
         SettingsAuditCard.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
         ActivityRailSpacerColumn.Width = compact ? new GridLength(8) : new GridLength(10);
         ActivityRailColumn.Width = compact ? new GridLength(300) : new GridLength(320);
@@ -501,9 +501,6 @@ public partial class MainWindow : Window
         if (IsLoaded)
             UpdateAdaptiveLayout();
     }
-
-    private void GitHub_Click(object sender, RoutedEventArgs e) => _vm.OpenGitHubCommand.Execute(null);
-    private void Docs_Click(object sender, RoutedEventArgs e) => _vm.OpenDocsCommand.Execute(null);
 
     private void LogOutput_TextChanged(object sender, TextChangedEventArgs e)
     {
