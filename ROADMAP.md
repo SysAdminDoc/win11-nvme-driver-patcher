@@ -90,16 +90,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: M
 
-- [ ] P3 — Workspace tab-header badges can never render (`TabBadgeBorder` defaults Collapsed with no trigger)
-  Category: visual
-  Where: `Themes/DarkTheme.xaml:582-590` (style); consumers `Views/MainWindow.xaml:1288-1293, 1441-1446, 1523-1528`; feeding logic `ViewModels/MainViewModel.Workspace.cs:288-325`
-  Problem: The Benchmark/Telemetry/Recovery header badges and `UpdateWorkspaceBadges` (run counts, "No NVMe", "N missing") are invisible — no setter/trigger ever shows the style.
-  Evidence: Style and all usages read; no visibility trigger anywhere.
-  Fix: Bind visibility to non-empty badge text (`StrToVis` converter exists), or delete the badge XAML + `UpdateWorkspaceBadges` if de-clutter was intended.
-  Acceptance: Either badges render when text is set, or the dead style/logic is gone.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — GUI dead-code cluster from the redesign
   Category: maintainability
   Where: `Themes/DarkTheme.xaml:1078-1109` (`WorkspaceTabControl` unused); `Views/MainWindow.xaml.cs:213, 215` (`Minimize_Click`/`Close_Click` unreferenced); `MainWindow.xaml:289` (`MaximizeRestoreButton` permanently Collapsed while `UpdateWindowPresentation` still updates it); `UpdateAdaptiveLayout` (xaml.cs:422) unconditionally collapses `MainContentSplitter`; `Commands.cs:767-768` (`ToggleSettingsCommand`/`SettingsPanelVisible` unused); `App.xaml:12-13` (`SettingsToggle`, `StrToColor` converters unused)

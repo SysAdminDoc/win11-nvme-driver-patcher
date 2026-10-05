@@ -579,22 +579,6 @@
 
     <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}"/>
 
-    <Style x:Key="TabBadgeBorder" TargetType="Border">
-        <Setter Property="Visibility" Value="Collapsed"/>
-        <Setter Property="Margin" Value="8,0,0,0"/>
-        <Setter Property="Padding" Value="6,2"/>
-        <Setter Property="VerticalAlignment" Value="Center"/>
-        <Setter Property="Background" Value="{DynamicResource SurfaceInset}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="4"/>
-    </Style>
-
-    <Style x:Key="TabBadgeText" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="10"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="VerticalAlignment" Value="Center"/>
-    </Style>
-
     <Style x:Key="DarkCheckBox" TargetType="CheckBox">
         <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
         <Setter Property="FontSize" Value="12.5"/>

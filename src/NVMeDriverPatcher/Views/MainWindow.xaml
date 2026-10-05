@@ -793,15 +793,8 @@
                                             SelectionChanged="WorkspaceTabs_SelectionChanged">
 <TabItem Style="{StaticResource WorkspaceTabItem}">
                                         <TabItem.Header>
-                                            <StackPanel Orientation="Horizontal"
-                                                        DataContext="{Binding DataContext, ElementName=WorkspaceTabs}">
+                                            <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="Benchmark"/>
-                                                <Border Style="{StaticResource TabBadgeBorder}"
-                                                        BorderBrush="{Binding BenchmarkTabBadgeColor, Converter={StaticResource StrToBrush}}">
-                                                    <TextBlock Text="{Binding BenchmarkTabBadgeText}"
-                                                               Foreground="{Binding BenchmarkTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                               Style="{StaticResource TabBadgeText}"/>
-                                                </Border>
                                             </StackPanel>
                                         </TabItem.Header>
                                         <Grid>
@@ -956,15 +949,8 @@
 
                                     <TabItem Style="{StaticResource WorkspaceTabItem}">
                                         <TabItem.Header>
-                                            <StackPanel Orientation="Horizontal"
-                                                        DataContext="{Binding DataContext, ElementName=WorkspaceTabs}">
+                                            <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="Telemetry"/>
-                                                <Border Style="{StaticResource TabBadgeBorder}"
-                                                        BorderBrush="{Binding TelemetryTabBadgeColor, Converter={StaticResource StrToBrush}}">
-                                                    <TextBlock Text="{Binding TelemetryTabBadgeText}"
-                                                               Foreground="{Binding TelemetryTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                               Style="{StaticResource TabBadgeText}"/>
-                                                </Border>
                                             </StackPanel>
                                         </TabItem.Header>
                                         <Grid>
@@ -1038,15 +1024,8 @@
 
                                     <TabItem Style="{StaticResource WorkspaceTabItem}">
                                         <TabItem.Header>
-                                            <StackPanel Orientation="Horizontal"
-                                                        DataContext="{Binding DataContext, ElementName=WorkspaceTabs}">
+                                            <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="Recovery"/>
-                                                <Border Style="{StaticResource TabBadgeBorder}"
-                                                        BorderBrush="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}">
-                                                    <TextBlock Text="{Binding RecoveryTabBadgeText}"
-                                                               Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                               Style="{StaticResource TabBadgeText}"/>
-                                                </Border>
                                             </StackPanel>
                                         </TabItem.Header>
                                         <Grid>
