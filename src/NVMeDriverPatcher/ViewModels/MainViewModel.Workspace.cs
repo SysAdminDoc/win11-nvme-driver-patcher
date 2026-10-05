@@ -73,19 +73,16 @@ public partial class MainViewModel
             if (!databaseState.IsAvailable)
             {
                 HasBenchmarkHistory = false;
-                BenchmarkRunCount = 0;
                 BenchmarkHistoryText = $"Benchmark history unavailable: {databaseState.Summary} {databaseState.RecoveryAction}";
             }
             else if (benchmarks.Count == 0)
             {
                 HasBenchmarkHistory = false;
-                BenchmarkRunCount = 0;
                 BenchmarkHistoryText = NoBenchmarkHistoryText;
             }
             else
             {
                 HasBenchmarkHistory = true;
-                BenchmarkRunCount = benchmarks.Count;
                 var latestBenchmark = benchmarks[0];
                 BenchmarkHistoryText = $"{benchmarks.Count} benchmark {Pluralize(benchmarks.Count, "run")} saved. Latest: {latestBenchmark.Label} on {latestBenchmark.Timestamp:g}.";
             }
@@ -93,7 +90,6 @@ public partial class MainViewModel
         catch
         {
             HasBenchmarkHistory = false;
-            BenchmarkRunCount = 0;
             BenchmarkHistoryText = "Benchmark history could not be loaded.";
         }
 
@@ -283,33 +279,6 @@ public partial class MainViewModel
         {
             ActivityTabBadgeText = "Idle";
             ActivityTabBadgeColor = "TextDim";
-        }
-
-        if (BenchmarkRunCount > 0)
-        {
-            BenchmarkTabBadgeText = $"{BenchmarkRunCount} {Pluralize(BenchmarkRunCount, "run")}";
-            BenchmarkTabBadgeColor = "Accent";
-        }
-        else
-        {
-            BenchmarkTabBadgeText = "New";
-            BenchmarkTabBadgeColor = "TextDim";
-        }
-
-        if (NvmeDriveCount > 0)
-        {
-            TelemetryTabBadgeText = $"{NvmeDriveCount} {Pluralize(NvmeDriveCount, "drive")}";
-            TelemetryTabBadgeColor = "Accent";
-        }
-        else if (HasDriveData && TotalDriveCount > 0)
-        {
-            TelemetryTabBadgeText = "No NVMe";
-            TelemetryTabBadgeColor = "Yellow";
-        }
-        else
-        {
-            TelemetryTabBadgeText = "Waiting";
-            TelemetryTabBadgeColor = "TextDim";
         }
 
         RecoveryMissingAssetCount = new[] { HasRecoveryKit, HasVerificationScript, HasDiagnosticsReport }.Count(ready => !ready);

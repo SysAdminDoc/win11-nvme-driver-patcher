@@ -71,13 +71,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _latestActivityText = NoActivityYetText;
     [ObservableProperty] private string _activityTabBadgeText = "Idle";
     [ObservableProperty] private string _activityTabBadgeColor = "TextDim";
-    [ObservableProperty] private string _benchmarkTabBadgeText = "New";
-    [ObservableProperty] private string _benchmarkTabBadgeColor = "TextDim";
-    [ObservableProperty] private string _telemetryTabBadgeText = "Waiting";
-    [ObservableProperty] private string _telemetryTabBadgeColor = "TextDim";
     [ObservableProperty] private string _recoveryTabBadgeText = "3 missing";
     [ObservableProperty] private string _recoveryTabBadgeColor = "Yellow";
-    [ObservableProperty] private int _benchmarkRunCount;
     [ObservableProperty] private int _recoveryMissingAssetCount = 3;
     [ObservableProperty] private string _statusSummaryText = "Checking build support, storage layout, and rollback safety.";
     [ObservableProperty] private string _buildSummaryText = "Windows build check pending";
@@ -135,7 +130,6 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _criticalCount;
     [ObservableProperty] private int _nvmeDriveCount;
     [ObservableProperty] private int _totalDriveCount;
-    [ObservableProperty] private bool _hasDriveData;
 
     // Settings bindings
     [ObservableProperty] private bool _includeServerKey;
@@ -916,7 +910,6 @@ public partial class MainViewModel : ObservableObject
         CriticalCount = _preflight.Checks.Values.Count(c => c.Critical && c.Status == CheckStatus.Fail);
         TotalDriveCount = _preflight.CachedDrives.Count;
         NvmeDriveCount = _preflight.CachedDrives.Count(d => d.IsNVMe);
-        HasDriveData = TotalDriveCount > 0;
 
         if (_preflight.BuildDetails is { } build)
             BuildSummaryText = $"Win 11 {build.DisplayVersion} | {build.BuildNumber}.{build.UBR}";
@@ -1035,7 +1028,6 @@ public partial class MainViewModel : ObservableObject
         CriticalCount = 0;
         NvmeDriveCount = 0;
         TotalDriveCount = 0;
-        HasDriveData = false;
         HasNextStepPrimaryAction = false;
         NextStepPrimaryActionText = "";
         NextStepPrimaryActionId = "";
