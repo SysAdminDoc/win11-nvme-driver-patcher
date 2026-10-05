@@ -296,7 +296,7 @@ public static class PreflightService
         }
         catch
         {
-            checks["OSRecovery"] = new(CheckStatus.Info, "OS-native recovery evidence unavailable");
+            checks["OSRecovery"] = new(CheckStatus.Info, "Windows didn't report its own recovery features.");
         }
 
         // Pending reboot: applying registry changes while Windows already has a reboot queued

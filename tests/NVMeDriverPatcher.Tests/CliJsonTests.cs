@@ -185,7 +185,9 @@ public sealed class CliJsonTests
         Assert.False(os.GetProperty("restorePointQuerySucceeded").GetBoolean());
         Assert.True(os.GetProperty("quickMachineRecoveryEnabled").GetBoolean());
         Assert.False(os.GetProperty("quickMachineRecoveryAutoRemediationEnabled").GetBoolean());
-        Assert.Contains("OS-native recovery advisory", os.GetProperty("summary").GetString());
+        Assert.Equal(evidence.Summary, os.GetProperty("summary").GetString());
+        Assert.Equal(evidence.PointInTimeRestoreSummary, os.GetProperty("pointInTimeRestoreSummary").GetString());
+        Assert.Equal(evidence.QuickMachineRecoverySummary, os.GetProperty("quickMachineRecoverySummary").GetString());
 
         var probes = Parse("preflight", CliJson.BuildCriticalProbes(new CriticalProbeReport(), evidence))
             .GetProperty("data");

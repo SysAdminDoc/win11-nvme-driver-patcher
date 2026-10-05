@@ -64,11 +64,10 @@ public sealed class OsRecoveryEvidenceServiceTests
             QuickMachineRecoveryQuerySucceeded = true,
         };
 
-        Assert.Contains("Point-in-Time Restore: enabled", evidence.Summary);
-        Assert.Contains("newest restore point", evidence.Summary);
-        Assert.Contains("Quick Machine Recovery: disabled", evidence.Summary);
-        Assert.Contains("auto-remediation enabled", evidence.Summary);
-        Assert.Contains("OS-native recovery advisory", evidence.Summary);
+        Assert.Equal(
+            "Point-in-Time Restore is on. The newest restore point is 2 hours old. " +
+            "Quick Machine Recovery is off. Its automatic remediation is on.",
+            evidence.Summary);
     }
 
     [Fact]
@@ -76,8 +75,65 @@ public sealed class OsRecoveryEvidenceServiceTests
     {
         var evidence = new OsRecoveryEvidence();
 
-        Assert.Contains("not exposed", evidence.PointInTimeRestoreSummary);
-        Assert.Contains("not exposed", evidence.QuickMachineRecoverySummary);
-        Assert.Contains("OS-native recovery advisory", evidence.Summary);
+        Assert.Equal("This Windows build doesn't offer Point-in-Time Restore.", evidence.PointInTimeRestoreSummary);
+        Assert.Equal("This Windows build doesn't offer Quick Machine Recovery.", evidence.QuickMachineRecoverySummary);
+        Assert.Equal($"{evidence.PointInTimeRestoreSummary} {evidence.QuickMachineRecoverySummary}", evidence.Summary);
+    }
+
+    [Fact]
+    public void Summary_ReadsAsPlainSentencesInEveryState()
+    {
+        // It used to read "OS-native recovery advisory. Point-in-Time Restore: enabled; ...".
+        var failures = new List<string>();
+        foreach (bool? pitr in new bool?[] { true, false, null })
+        foreach (bool querySucceeded in new[] { true, false })
+        foreach (var hoursAgo in new double?[] { null, -1, 0.2, 1, 5, 24, 72 })
+        foreach (bool? qmr in new bool?[] { true, false, null })
+        foreach (bool? auto in new bool?[] { true, false, null })
+        foreach (bool qmrQuery in new[] { true, false })
+        {
+            var summary = new OsRecoveryEvidence
+            {
+                PointInTimeRestoreSupported = true,
+                PointInTimeRestoreEnabled = pitr,
+                RestorePointQuerySucceeded = querySucceeded,
+                NewestRestorePointUtc = hoursAgo is { } h ? DateTimeOffset.UtcNow.AddHours(-h) : null,
+                QuickMachineRecoverySupported = true,
+                QuickMachineRecoveryEnabled = qmr,
+                QuickMachineRecoveryAutoRemediationEnabled = auto,
+                QuickMachineRecoveryQuerySucceeded = qmrQuery,
+            }.Summary;
+
+            if (summary.Contains(';') || summary.Contains(':') || summary.Contains("(s)", StringComparison.Ordinal) ||
+                summary.Contains("advisory", StringComparison.OrdinalIgnoreCase) ||
+                !SentenceRun.IsMatch(summary))
+                failures.Add(summary);
+        }
+
+        Assert.True(failures.Count == 0, string.Join("\n", failures.Distinct()));
+        // Positive control: the old wording must trip the check.
+        Assert.DoesNotMatch(SentenceRun, "OS-native recovery advisory. Point-in-Time Restore: enabled; no restore point observed.");
+    }
+
+    // Two or more sentences, each capitalized and ending in a period.
+    private static readonly System.Text.RegularExpressions.Regex SentenceRun =
+        new(@"^[A-Z][^.;:]*[a-z]\.( [A-Z][^.;:]*[a-z]\.)+$");
+
+    [Theory]
+    [InlineData(0.5, "30 minutes old")]
+    [InlineData(1.01, "1 hour old")]
+    [InlineData(25, "1 day old")]
+    [InlineData(72.5, "3 days old")]
+    public void RestorePointAge_IsPluralizedForPeople(double hoursAgo, string expected)
+    {
+        var evidence = new OsRecoveryEvidence
+        {
+            PointInTimeRestoreSupported = true,
+            PointInTimeRestoreEnabled = true,
+            RestorePointQuerySucceeded = true,
+            NewestRestorePointUtc = DateTimeOffset.UtcNow.AddHours(-hoursAgo),
+        };
+
+        Assert.Contains($"The newest restore point is {expected}.", evidence.PointInTimeRestoreSummary, StringComparison.Ordinal);
     }
 }

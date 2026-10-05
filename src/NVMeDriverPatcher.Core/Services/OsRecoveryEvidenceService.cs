@@ -26,21 +26,22 @@ public sealed class OsRecoveryEvidence
         get
         {
             if (!PointInTimeRestoreSupported)
-                return "Point-in-Time Restore is not exposed on this Windows build.";
+                return "This Windows build doesn't offer Point-in-Time Restore.";
 
             var state = PointInTimeRestoreEnabled switch
             {
-                true => "enabled",
-                false => "disabled by an explicit OS policy",
-                _ => "available; current enablement is not directly exposed"
+                true => "Point-in-Time Restore is on.",
+                false => "Point-in-Time Restore is turned off by policy.",
+                _ => "Point-in-Time Restore is available, but Windows doesn't say whether it's on."
             };
 
+            // The exact timestamp stays in the JSON and diagnostics fields; the sentence gives the age.
             var point = !RestorePointQuerySucceeded
-                ? "newest restore-point age unavailable (SystemRestore query failed)"
+                ? "Windows didn't return its restore point list, so the newest point's age is unknown."
                 : NewestRestorePointUtc is { } newest
-                    ? $"newest restore point {FormatAge(newest)} ({newest:O})"
-                    : "no restore point observed";
-            return $"Point-in-Time Restore: {state}; {point}.";
+                    ? $"The newest restore point {FormatAge(newest)}."
+                    : "There are no restore points yet.";
+            return $"{state} {point}";
         }
     }
 
@@ -49,36 +50,38 @@ public sealed class OsRecoveryEvidence
         get
         {
             if (!QuickMachineRecoverySupported)
-                return "Quick Machine Recovery is not exposed on this Windows build.";
+                return "This Windows build doesn't offer Quick Machine Recovery.";
             if (!QuickMachineRecoveryQuerySucceeded)
-                return "Quick Machine Recovery state is not exposed by reagentc or current policy.";
+                return "Neither reagentc nor policy reports whether Quick Machine Recovery is on.";
 
             var state = QuickMachineRecoveryEnabled switch
             {
-                true => "enabled",
-                false => "disabled",
-                _ => "state not reported"
+                true => "Quick Machine Recovery is on.",
+                false => "Quick Machine Recovery is off.",
+                _ => "Windows doesn't report whether Quick Machine Recovery is on."
             };
             var auto = QuickMachineRecoveryAutoRemediationEnabled switch
             {
-                true => "auto-remediation enabled",
-                false => "auto-remediation disabled",
-                _ => "auto-remediation state not reported"
+                true => "Its automatic remediation is on.",
+                false => "Its automatic remediation is off.",
+                _ => "Its automatic remediation setting isn't reported."
             };
-            return $"Quick Machine Recovery: {state}; {auto}.";
+            return $"{state} {auto}";
         }
     }
 
-    public string Summary => $"OS-native recovery advisory. {PointInTimeRestoreSummary} {QuickMachineRecoverySummary}";
+    public string Summary => $"{PointInTimeRestoreSummary} {QuickMachineRecoverySummary}";
 
     private static string FormatAge(DateTimeOffset timestamp)
     {
         var age = DateTimeOffset.UtcNow - timestamp.ToUniversalTime();
-        if (age < TimeSpan.Zero) return "captured in the future";
-        if (age.TotalDays >= 1) return $"{(int)age.TotalDays} day(s) ago";
-        if (age.TotalHours >= 1) return $"{(int)age.TotalHours} hour(s) ago";
-        return $"{Math.Max(0, (int)age.TotalMinutes)} minute(s) ago";
+        if (age < TimeSpan.Zero) return "has a timestamp in the future";
+        if (age.TotalDays >= 1) return $"is {Count((int)age.TotalDays, "day")} old";
+        if (age.TotalHours >= 1) return $"is {Count((int)age.TotalHours, "hour")} old";
+        return $"is {Count(Math.Max(0, (int)age.TotalMinutes), "minute")} old";
     }
+
+    private static string Count(int value, string unit) => value == 1 ? $"1 {unit}" : $"{value} {unit}s";
 }
 
 public static class OsRecoveryEvidenceService
