@@ -587,7 +587,7 @@ public partial class MainViewModel
                 }
             }
             if (proof.OsRecovery is not null)
-                Log($"[ADVISORY] {proof.OsRecovery.Summary}", "INFO");
+                Log($"Windows' own recovery features don't count toward readiness. {proof.OsRecovery.Summary}", "INFO");
 
             Log("========================================");
             Log("Applying fallback (native FeatureStore first)");

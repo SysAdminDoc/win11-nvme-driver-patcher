@@ -231,7 +231,7 @@ public sealed class DiagnosticsServiceTests : IDisposable
 
         Assert.NotNull(reportPath);
         var report = File.ReadAllText(reportPath!);
-        Assert.Contains("OS-NATIVE RECOVERY ADVISORY", report, StringComparison.Ordinal);
+        Assert.Contains("WINDOWS RECOVERY FEATURES (NOT COUNTED TOWARD READINESS)", report, StringComparison.Ordinal);
         Assert.Contains("PiTR supported: Yes", report, StringComparison.Ordinal);
         Assert.Contains("PiTR enabled flag: Yes", report, StringComparison.Ordinal);
         Assert.Contains("QMR enabled: No", report, StringComparison.Ordinal);

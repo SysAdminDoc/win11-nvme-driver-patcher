@@ -602,11 +602,11 @@ public static class DiagnosticsService
         sb.AppendLine($"Directory Join: {bitLockerProof.DirectoryJoin.Kind}");
         sb.AppendLine($"Detail: {bitLockerProof.Detail}");
 
-        sb.AppendLine().AppendLine("OS-NATIVE RECOVERY ADVISORY").AppendLine("--------------------------");
+        sb.AppendLine().AppendLine("WINDOWS RECOVERY FEATURES (NOT COUNTED TOWARD READINESS)").AppendLine("--------------------------------------------------------");
         var osRecovery = preflight?.OsRecoveryEvidence;
         if (osRecovery is null)
         {
-            sb.AppendLine("No OS-native recovery evidence snapshot was supplied by preflight.");
+            sb.AppendLine("Preflight didn't supply a snapshot of Windows' own recovery features.");
         }
         else
         {
