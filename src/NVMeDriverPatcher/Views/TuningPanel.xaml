@@ -6,7 +6,7 @@
         <StackPanel Margin="0,0,4,0">
             <StackPanel>
                 <TextBlock Text="StorNVMe Tuning" Style="{StaticResource SectionEyebrow}"/>
-                <TextBlock Text="Tune queue and power behavior only when this machine needs control beyond the default patch path."
+                <TextBlock Text="Most machines don't need this. The patch works without any tuning."
                            Margin="0,4,0,0"
                            Style="{StaticResource BodyCopy}"/>
             </StackPanel>
@@ -21,7 +21,7 @@
 
                     <StackPanel>
                         <TextBlock Text="Presets" Style="{StaticResource SectionEyebrow}"/>
-                        <TextBlock Text="Start with an intent, then move to custom values only when evidence supports it."
+                        <TextBlock Text="Pick a starting point. Switch to custom values only when a benchmark backs it up."
                                    Margin="0,5,0,0"
                                    Style="{StaticResource BodyCopy}"/>
 
@@ -82,7 +82,7 @@
             <Border Margin="0,10,0,0" Style="{StaticResource InsetCard}">
                 <StackPanel>
                     <TextBlock Text="Custom tuning" Style="{StaticResource SectionEyebrow}"/>
-                    <TextBlock Text="Each override writes to StorNVMe registry parameters, so change one dimension at a time."
+                    <TextBlock Text="Each value is written to the StorNVMe registry parameters."
                                Margin="0,5,0,0"
                                Style="{StaticResource BodyCopy}"/>
 
@@ -324,7 +324,7 @@
                             BorderBrush="{DynamicResource Border}"
                             BorderThickness="1"
                             CornerRadius="8">
-                        <TextBlock Text="Queue count 0 means automatic queue allocation, and timeout values of 0 disable that power-saving path. Benchmark after each reboot so the change earns its keep."
+                        <TextBlock Text="A queue count of 0 lets Windows choose. A timeout of 0 turns that power-saving step off. Run a benchmark after each restart to see whether the change helped."
                                    Foreground="{DynamicResource Yellow}"
                                    FontSize="12"
                                    TextWrapping="Wrap"/>
@@ -335,7 +335,7 @@
             <Border Margin="0,10,0,0" Style="{StaticResource InsetCard}">
                 <StackPanel>
                     <TextBlock Text="Apply plan" Style="{StaticResource SectionEyebrow}"/>
-                    <TextBlock Text="Review the active baseline, pending write, and reboot impact before committing registry changes."
+                    <TextBlock Text="What's stored now, and what Apply would write."
                                Margin="0,5,0,0"
                                Style="{StaticResource BodyCopy}"/>
 
@@ -401,7 +401,7 @@
                         </StackPanel>
                     </Border>
 
-                    <TextBlock Text="Changes take effect after a reboot. Performance favors throughput, Balanced stays closest to Windows defaults, and Power Save is better suited to battery-sensitive systems."
+                    <TextBlock Text="Changes take effect after a restart."
                                Margin="0,8,0,0"
                                Foreground="{DynamicResource TextDim}"
                                FontSize="11.5"

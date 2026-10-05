@@ -219,13 +219,13 @@
                                            FontSize="12.5">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="Driver state, readiness, and a machine-specific performance baseline."/>
+                                            <Setter Property="Text" Value="Where the driver stands now and what to do next."/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="1"><Setter Property="Text" Value="Inspect NVMe devices, active drivers, health, and DirectStorage readiness."/></DataTrigger>
-                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="2"><Setter Property="Text" Value="Keep offline rollback assets and post-reboot verification close at hand."/></DataTrigger>
-                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="3"><Setter Property="Text" Value="Tune supported storage policies with explicit risk and recovery context."/></DataTrigger>
-                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="4"><Setter Property="Text" Value="Capture evidence, inspect activity, and export support-ready diagnostics."/></DataTrigger>
-                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="5"><Setter Property="Text" Value="Configure appearance, storage paths, automation, and update behavior."/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="2"><Setter Property="Text" Value="Rollback files and post-reboot checks, ready before you restart."/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="3"><Setter Property="Text" Value="Optional StorNVMe queue and power settings. Change one at a time."/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="4"><Setter Property="Text" Value="Read-only checks. Nothing here changes the system."/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=WorkspaceTabs}" Value="5"><Setter Property="Text" Value="Patch profile, theme, logging and restart timing."/></DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </TextBlock.Style>
@@ -508,10 +508,10 @@
                                             BorderBrush="{DynamicResource Yellow}"
                                             BorderThickness="1"
                                             CornerRadius="10"
-                                            AutomationProperties.Name="Mutation actions disabled"
+                                            AutomationProperties.Name="Patch actions turned off"
                                             Visibility="{Binding BuildPolicyBlocked, Converter={StaticResource BoolVis}}">
                                         <StackPanel>
-                                            <TextBlock Text="Mutation actions are disabled on this build"
+                                            <TextBlock Text="{Binding MutationBlockedTitle}"
                                                        Foreground="{DynamicResource TextPrimary}"
                                                        FontSize="12.5"
                                                        FontWeight="SemiBold"/>
@@ -550,6 +550,7 @@
                                                 Margin="0,0,8,0"
                                                 Style="{StaticResource SecondaryButton}"
                                                 AutomationProperties.Name="Create recovery kit"
+                                                ToolTip="Export a recovery kit so rollback stays available even if Windows won&apos;t boot."
                                                 Command="{Binding ExportRecoveryKitCommand}"
                                                 IsEnabled="{Binding ButtonsEnabled}"/>
                                         <!-- Conditional affordances. Each was previously bound
@@ -774,13 +775,6 @@
                                     <ColumnDefinition x:Name="ActivityRailColumn" Width="320"/>
                                 </Grid.ColumnDefinitions>
 
-                                <StackPanel Visibility="Collapsed">
-                                    <TextBlock Text="Validation" Style="{StaticResource SectionEyebrow}"/>
-                                    <TextBlock Text="Activity shows what happened. Benchmarks and telemetry help validate the result. Recovery keeps rollback nearby."
-                                               Margin="0,8,0,0"
-                                               Style="{StaticResource BodyCopy}"/>
-                                </StackPanel>
-
                                 <TabControl x:Name="WorkspaceTabs"
                                             Grid.Row="0"
                                             Grid.Column="0"
@@ -934,6 +928,7 @@
                                                             HorizontalAlignment="Center"
                                                             Style="{StaticResource ActionButton}"
                                                             AutomationProperties.Name="Run first benchmark"
+                                                            ToolTip="Run a DiskSpd benchmark and save the result for later comparison."
                                                             Command="{Binding RunBenchmarkCommand}"/>
                                                 </StackPanel>
                                             </Border>
@@ -1040,10 +1035,7 @@
                                                 <WrapPanel>
                                                     <StackPanel MaxWidth="430"
                                                                 Margin="0,0,14,8">
-                                                        <TextBlock Text="Keep rollback files and support exports close before you restart or hand off the machine."
-                                                                   Style="{StaticResource BodyCopy}"/>
                                                         <TextBlock Text="{Binding RecoveryWorkspaceSummaryText}"
-                                                                   Margin="0,6,0,0"
                                                                    Foreground="{DynamicResource TextPrimary}"
                                                                    FontSize="13"
                                                                    FontWeight="SemiBold"
@@ -1396,11 +1388,6 @@
                                                 <RowDefinition Height="*"/>
                                             </Grid.RowDefinitions>
 
-                                            <Border Style="{StaticResource InsetCard}" Visibility="Collapsed">
-                                                <TextBlock Text="Advanced StorNVMe tuning sits outside the default patch path. Use it only when you need deeper control."
-                                                           Style="{StaticResource BodyCopy}"/>
-                                            </Border>
-
                                             <views:TuningPanel x:Name="TuningPanelControl"
                                                                Grid.Row="1"
                                                                Margin="0"/>
@@ -1428,7 +1415,7 @@
 
                                                     <StackPanel VerticalAlignment="Center">
                                                         <TextBlock Text="Read-only diagnostics" Style="{StaticResource SectionEyebrow}"/>
-                                                        <TextBlock Text="Probe watchdog health, reliability history, minidumps, and planned registry writes without changing the system."
+                                                        <TextBlock Text="Run a check to fill in its row below."
                                                                    Margin="0,4,0,0"
                                                                    Style="{StaticResource BodyCopy}"/>
                                                     </StackPanel>
@@ -1440,21 +1427,25 @@
                                                                 Command="{Binding RefreshWatchdogStatusCommand}"
                                                                 Style="{StaticResource SecondaryButton}"
                                                                 AutomationProperties.Name="Refresh watchdog status"
+                                                                ToolTip="Check the event log for storage errors since the patch, and whether the watchdog task is running."
                                                                 Margin="0,0,8,0"/>
                                                         <Button Content="Reliability"
                                                                 Command="{Binding RefreshReliabilityCommand}"
                                                                 Style="{StaticResource SecondaryButton}"
                                                                 AutomationProperties.Name="Refresh reliability correlation"
+                                                                ToolTip="Compare Reliability Monitor records from before and after the patch."
                                                                 Margin="0,0,8,0"/>
                                                         <Button Content="Minidumps"
                                                                 Command="{Binding TriageMinidumpsCommand}"
                                                                 Style="{StaticResource SecondaryButton}"
                                                                 AutomationProperties.Name="Triage minidumps"
+                                                                ToolTip="Scan crash dumps written since the patch for storage driver faults."
                                                                 Margin="0,0,8,0"/>
                                                         <Button Content="Dry Run"
                                                                 Command="{Binding PreviewDryRunCommand}"
                                                                 Style="{StaticResource SecondaryButton}"
-                                                                AutomationProperties.Name="Preview dry-run plan"/>
+                                                                AutomationProperties.Name="Preview dry-run plan"
+                                                                ToolTip="List every registry value Apply would write. Nothing is changed."/>
                                                     </WrapPanel>
                                                 </Grid>
                                             </Border>
@@ -1470,6 +1461,8 @@
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
                                                     </Grid.RowDefinitions>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="118"/>
@@ -1480,9 +1473,8 @@
                                                     <TextBlock Grid.Column="1"
                                                                Text="{Binding WatchdogVerdictText}"
                                                                TextWrapping="Wrap"
-                                                               Foreground="{DynamicResource TextPrimary}"
-                                                               FontSize="12.5"
-                                                               FontWeight="SemiBold"/>
+                                                               Foreground="{DynamicResource TextSecondary}"
+                                                               FontSize="12.5"/>
 
                                                     <Border Grid.Row="1"
                                                             Grid.ColumnSpan="2"
@@ -1507,33 +1499,41 @@
                                                     <TextBlock Grid.Row="4"
                                                                Text="Minidumps"
                                                                Style="{StaticResource SectionEyebrow}"/>
-                                                    <StackPanel Grid.Row="4"
-                                                                Grid.Column="1"
-                                                                Margin="0">
-                                                        <TextBlock Text="{Binding MinidumpSummaryText}"
-                                                                   TextWrapping="Wrap"
-                                                                   Foreground="{DynamicResource TextSecondary}"
-                                                                   FontSize="12.5"/>
+                                                    <TextBlock Grid.Row="4"
+                                                               Grid.Column="1"
+                                                               Text="{Binding MinidumpSummaryText}"
+                                                               TextWrapping="Wrap"
+                                                               Foreground="{DynamicResource TextSecondary}"
+                                                               FontSize="12.5"/>
 
-                                                        <Expander Margin="0,10,0,0"
-                                                                  IsExpanded="True"
-                                                                  Style="{StaticResource DarkExpander}">
-                                                            <Expander.Header>
-                                                                <TextBlock Text="Dry-run preview"
-                                                                           FontWeight="SemiBold"/>
-                                                            </Expander.Header>
-                                                            <TextBox Text="{Binding DryRunPreviewText, Mode=OneWay}"
-                                                                     IsReadOnly="True"
-                                                                     TextWrapping="Wrap"
-                                                                     AcceptsReturn="True"
-                                                                     VerticalScrollBarVisibility="Auto"
-                                                                     AutomationProperties.Name="Dry-run preview output"
-                                                                     FontFamily="Cascadia Code, Consolas, monospace"
-                                                                     FontSize="11.5"
-                                                                     MinHeight="120"
-                                                                     MaxHeight="240"/>
-                                                        </Expander>
-                                                    </StackPanel>
+                                                    <Border Grid.Row="5"
+                                                            Grid.ColumnSpan="2"
+                                                            Margin="0,8"
+                                                            Height="1"
+                                                            Background="{DynamicResource Border}"/>
+                                                    <TextBlock Grid.Row="6"
+                                                               Margin="0,8,0,0"
+                                                               Text="Dry run"
+                                                               Style="{StaticResource SectionEyebrow}"/>
+                                                    <Expander Grid.Row="6"
+                                                              Grid.Column="1"
+                                                              IsExpanded="True"
+                                                              Style="{StaticResource DarkExpander}">
+                                                        <Expander.Header>
+                                                            <TextBlock Text="Planned registry writes"
+                                                                       FontWeight="SemiBold"/>
+                                                        </Expander.Header>
+                                                        <TextBox Text="{Binding DryRunPreviewText, Mode=OneWay}"
+                                                                 IsReadOnly="True"
+                                                                 TextWrapping="Wrap"
+                                                                 AcceptsReturn="True"
+                                                                 VerticalScrollBarVisibility="Auto"
+                                                                 AutomationProperties.Name="Dry-run preview output"
+                                                                 FontFamily="Cascadia Code, Consolas, monospace"
+                                                                 FontSize="11.5"
+                                                                 MinHeight="120"
+                                                                 MaxHeight="240"/>
+                                                    </Expander>
                                                 </Grid>
                                             </Border>
                                         </Grid>
@@ -1563,7 +1563,7 @@
                                                     VerticalAlignment="Top">
                                                 <StackPanel>
                                                     <TextBlock Text="Patch profile" Style="{StaticResource SectionEyebrow}"/>
-                                                    <TextBlock Text="{Binding OptionsSummaryText}"
+                                                    <TextBlock Text="Choose what Apply writes. Safe suits most machines."
                                                                Margin="0,4,0,0"
                                                                Style="{StaticResource BodyCopy}"/>
 
@@ -1587,6 +1587,11 @@
                                                                Foreground="{DynamicResource TextMuted}"
                                                                FontSize="11.5"
                                                                TextWrapping="Wrap"/>
+                                                    <CheckBox Content="Also write the Server 2025 key"
+                                                              Margin="0,8,0,0"
+                                                              Style="{StaticResource DarkCheckBox}"
+                                                              ToolTip="Also write feature flag 1176759950, the key Microsoft published for Windows Server 2025."
+                                                              IsChecked="{Binding IncludeServerKey}"/>
 
                                                     <Border Margin="0,8,0,0"
                                                             Padding="10,8"
@@ -1609,7 +1614,7 @@
                                                     VerticalAlignment="Top">
                                                 <StackPanel>
                                                     <TextBlock Text="Audit and alerts" Style="{StaticResource SectionEyebrow}"/>
-                                                    <TextBlock Text="{Binding PreferenceSummaryText}"
+                                                    <TextBlock Text="Changes here save as you make them."
                                                                Margin="0,4,0,0"
                                                                Style="{StaticResource BodyCopy}"/>
 
@@ -1652,18 +1657,18 @@
                                                         <StackPanel Grid.Column="0">
                                                             <CheckBox Content="Auto-save activity log"
                                                                       Style="{StaticResource DarkCheckBox}"
+                                                                      ToolTip="Save this session&apos;s log to the data folder when the app closes."
                                                                       IsChecked="{Binding AutoSaveLog}"/>
                                                             <CheckBox Content="Toast notifications"
                                                                       Style="{StaticResource DarkCheckBox}"
+                                                                      ToolTip="Show a Windows notification when an action finishes or needs attention."
                                                                       IsChecked="{Binding EnableToasts}"/>
                                                         </StackPanel>
                                                         <StackPanel Grid.Column="2">
-                                                            <CheckBox Content="Windows Event Log"
+                                                        <CheckBox Content="Windows Event Log"
                                                                       Style="{StaticResource DarkCheckBox}"
+                                                                      ToolTip="Also record patch actions in the Windows Application event log."
                                                                       IsChecked="{Binding WriteEventLog}"/>
-                                                            <CheckBox Content="Server 2025 key"
-                                                                      Style="{StaticResource DarkCheckBox}"
-                                                                      IsChecked="{Binding IncludeServerKey}"/>
                                                         </StackPanel>
                                                     </Grid>
 
@@ -1685,7 +1690,7 @@
                                                                  Text="{Binding RestartDelayText, UpdateSourceTrigger=LostFocus}"
                                                                  VerticalContentAlignment="Center"/>
                                                         <TextBlock Grid.Column="2"
-                                                                   Text="seconds"
+                                                                   Text="seconds (5 to 300)"
                                                                    VerticalAlignment="Center"
                                                                    Foreground="{DynamicResource TextDim}"/>
                                                     </Grid>
@@ -1889,6 +1894,7 @@
                                                         Grid.Column="0"
                                                         MinWidth="0"
                                                         AutomationProperties.Name="Copy activity log"
+                                                        ToolTip="Copy the whole session log to the clipboard."
                                                         Command="{Binding CopyLogCommand}">
                                                     <Button.Style>
                                                         <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
@@ -1904,6 +1910,7 @@
                                                         Grid.Column="2"
                                                         MinWidth="0"
                                                         AutomationProperties.Name="Export activity log"
+                                                        ToolTip="Save the session log as a text file."
                                                         Command="{Binding ExportLogCommand}">
                                                     <Button.Style>
                                                         <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
@@ -1919,6 +1926,7 @@
                                                         Grid.Column="4"
                                                         MinWidth="0"
                                                         AutomationProperties.Name="Clear activity log"
+                                                        ToolTip="Clear this session&apos;s log. Saved exports aren&apos;t touched."
                                                         Click="ClearLog_Click">
                                                     <Button.Style>
                                                         <Style TargetType="Button" BasedOn="{StaticResource WarningSecondaryButton}">

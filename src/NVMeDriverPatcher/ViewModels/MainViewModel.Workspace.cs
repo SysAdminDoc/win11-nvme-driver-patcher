@@ -165,14 +165,14 @@ public partial class MainViewModel
 
         RecoveryWorkspaceSummaryText = (HasRecoveryKit, HasVerificationScript, HasDiagnosticsReport) switch
         {
-            (true, true, true) => "Rollback, verification, and diagnostics assets are all in place. This machine has a strong paper trail if you need to confirm or reverse the change.",
-            (true, true, false) => "Rollback and verification assets are ready. Export diagnostics too if you want a complete support bundle for this machine.",
-            (true, false, true) => "Rollback and diagnostics are ready, but the verification script is still missing. Generate it before the next reboot so confirmation stays simple.",
-            (false, true, true) => "Verification and diagnostics are ready, but the offline recovery kit is still missing. Export one to removable media before you rely on the patch long term.",
-            (true, false, false) => "Rollback materials are ready, but verification and diagnostics are still missing. Generate both before a risky reboot or remote handoff.",
-            (false, true, false) => "A verification script exists, but recovery and diagnostics are still incomplete. Export a full recovery kit so rollback does not depend on memory.",
-            (false, false, true) => "Diagnostics are available, but rollback and verification assets are still missing. Generate them so troubleshooting stays actionable.",
-            _ => "Generate rollback and verification assets so the system can be reversed or confirmed without guesswork."
+            (true, true, true) => "Recovery kit, verification script and diagnostics are all in place. You can confirm or undo the change from here.",
+            (true, true, false) => "The recovery kit and verification script are ready. Export diagnostics too if you want a complete support bundle.",
+            (true, false, true) => "The recovery kit and diagnostics are ready. Generate the verification script before the next restart.",
+            (false, true, true) => "Verification and diagnostics are ready, but there's no recovery kit yet. Export one to a USB drive before you rely on the patch.",
+            (true, false, false) => "The recovery kit is ready. Generate the verification script and diagnostics before you restart or hand the machine off.",
+            (false, true, false) => "There's a verification script, but no recovery kit or diagnostics yet. Export a recovery kit so rollback doesn't depend on memory.",
+            (false, false, true) => "Diagnostics are saved, but there's no recovery kit or verification script yet. Create both before you apply.",
+            _ => "Create a recovery kit and a verification script before you apply, so the change is easy to undo or confirm."
         };
 
         var sharedStatus = RegistryService.GetPatchStatus();
