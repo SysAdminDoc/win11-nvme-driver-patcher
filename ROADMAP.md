@@ -110,16 +110,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: S
 
-- [ ] P3 — "Rollback readiness" chip background hardcoded yellow while its text turns green when Ready
-  Category: visual
-  Where: `Views/MainWindow.xaml:1371-1373` (chip `Background=YellowBg`, text binds `RecoveryTabBadgeColor`); pattern to copy at `:1686-1712`
-  Problem: Green "Ready" text on a yellow warning chip; every other Ready/Missing chip in the Recovery tab swaps background via DataTrigger.
-  Evidence: XAML read.
-  Fix: Same DataTrigger background swap as the sibling chips.
-  Acceptance: Ready state renders the green chip treatment in all three themes.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — GUI synchronous I/O on the UI thread per refresh/tab switch
   Category: perf
   Where: `ViewModels/MainViewModel.Workspace.cs:12-187` (`UpdateOperationalHistory`: directory enumeration + three SQLite reads + registry read, run on tab switch, after every command, and inside the preflight render `Dispatcher.Invoke`); `MainViewModel.cs:565, 898` (`BenchmarkService.GetHistory` read twice per preflight)
