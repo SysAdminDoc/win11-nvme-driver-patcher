@@ -65,10 +65,10 @@ Flip via `apply --safe` / `apply --full` or the GUI's Install Mode radio.
    into winre.wim. `winre-inject --apply` backs up winre.wim, logs SHA-256 before/after,
    mounts under the app working dir, commits or discards, and runs DISM cleanup on failure.
    After applying, boot into WinRE once and confirm the system volume is accessible.
-6. OS-native recovery advisory. Preflight and `recovery-proof` report Point-in-Time Restore
-   availability plus the newest restore-point age when SystemRestore exposes it, and read
-   Quick Machine Recovery / automatic-remediation state from `reagentc`. These are advisory
-   signals only; the offline Recovery Kit, registry backup, and proof gate remain primary.
+6. Windows recovery features. Preflight and `recovery-proof` report Point-in-Time Restore
+   availability plus the newest restore point's age when SystemRestore exposes it, and read
+   Quick Machine Recovery and automatic remediation state from `reagentc`. They don't count
+   toward readiness. The offline Recovery Kit, registry backup and proof gate come first.
 
 If removal reports registry-override ownership residue, do not take ownership of a live
 registry key. From WinRE Command Prompt, back up the offline SYSTEM hive, then use the

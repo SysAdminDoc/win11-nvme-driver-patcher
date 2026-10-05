@@ -107,7 +107,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _verificationScriptStatusText = NoVerificationScriptText;
     [ObservableProperty] private string _diagnosticsReportStatusText = NoDiagnosticsReportText;
     [ObservableProperty] private string _recoveryWorkspaceSummaryText = "Create a recovery kit and a verification script before you apply, so the change is easy to undo or confirm.";
-    [ObservableProperty] private string _osRecoverySummaryText = "OS-native Point-in-Time Restore and Quick Machine Recovery evidence will appear after the readiness scan.";
+    [ObservableProperty] private string _osRecoverySummaryText = "Windows' Point-in-Time Restore and Quick Machine Recovery status shows up after the readiness scan.";
     [ObservableProperty] private bool _hasRecoveryKit;
     [ObservableProperty] private bool _hasVerificationScript;
     [ObservableProperty] private bool _hasDiagnosticsReport;

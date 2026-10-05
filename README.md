@@ -141,7 +141,7 @@ components above, but removal must delete them too. The Recovery Kit and `remove
 - **Laptop/power warning**: detects laptops and warns about APST battery regression (~15% impact)
 - **Rollback on partial failure**: restores pre-existing values from the durable baseline instead of assuming every touched value was absent
 - **Registry backup** export + system restore point creation before any changes
-- **OS-native recovery advisory**: preflight reports whether the Windows build exposes Point-in-Time Restore, the newest restore-point age when queryable, and Quick Machine Recovery/remediation state. These are informational signals; the offline Recovery Kit and the existing recovery gate remain the primary rollback path.
+- **Windows recovery features**: preflight reports whether the Windows build offers Point-in-Time Restore, how old the newest restore point is when Windows says, and the Quick Machine Recovery and remediation state. They're there for reference and don't count toward readiness. The offline Recovery Kit and the recovery gate are still the main way back.
 - **Third-party driver detection** (Samsung, WD, Intel RST, AMD, SK Hynix, Crucial, Phison)
 - **Custom INF / TESTSIGNING warning**: flags test-signed native NVMe driver-store workarounds that the registry rollback cannot remove
 - **Recovery Kit generation**: creates .reg + .bat files for offline WinRE recovery (auto-detects WinRE, loads offline registry hive)
@@ -150,7 +150,7 @@ components above, but removal must delete them too. The Recovery Kit and `remove
 - **Automated verification**: 1,000+ discovered test cases cover mutation safety, recovery, packaging, CLI, accessibility, and update integrity; release validation derives the live count from the test project
 - **Built-in DiskSpd benchmark**: high-QD (t4/o16 ≈ QD64) plus desktop QD1 4K random read/write profiles with before/after comparison (auto-downloads [Microsoft DiskSpd](https://github.com/microsoft/diskspd))
 - **Up to 27 preflight checks** run on a background thread without freezing the GUI. Some only show up when they apply, like a pending reboot or a laptop on Modern Standby
-- **OS-native recovery evidence**: the readiness summary, CLI JSON, GUI recovery tab, diagnostics report, and support bundle carry the PiTR/QMR advisory snapshot without turning unavailable OS evidence into a new hard block
+- **Windows recovery status in every report**: the readiness summary, CLI JSON, GUI recovery tab, diagnostics report and support bundle all carry the Point-in-Time Restore and Quick Machine Recovery snapshot, and missing data from Windows never becomes a new hard block
 - **NVMe health badges**: temperature, wear %, firmware, power-on hours, media errors (hover for SMART details)
 - **Per-drive NATIVE/LEGACY badges**: shows whether each NVMe drive migrated to `nvmedisk.sys` or remains on `stornvme.sys`
 - **Post-reboot drive migration verification**: per-drive confirmation of which drives moved to "Storage disks"
@@ -241,11 +241,11 @@ NVMeDriverPatcher.Cli persistence-guard --on --max=2       # Restore a patch Win
 NVMeDriverPatcher.Cli recovery-kit                         # Generate WinRE recovery kit
 NVMeDriverPatcher.Cli verify-payload --input=<dir-or-zip>  # Verify the complete generated payload
 NVMeDriverPatcher.Cli winpe-freshness [--input=<tree>]     # Media integrity/freshness (exit: 0 fresh, 1 stale/missing, 2 unknown)
-NVMeDriverPatcher.Cli recovery-proof [--json]              # Prove recovery infrastructure + OS-native recovery advisory
+NVMeDriverPatcher.Cli recovery-proof [--json]              # Prove recovery infrastructure + Windows recovery features
 NVMeDriverPatcher.Cli upgrade-safeboot                     # Add KB5079391 SafeBoot entries
 
 # Diagnostics
-NVMeDriverPatcher.Cli preflight [--json]                   # Typed critical probes + OS-native recovery advisory
+NVMeDriverPatcher.Cli preflight [--json]                   # Typed critical probes + Windows recovery features
 NVMeDriverPatcher.Cli watchdog                             # Stability verdict (exit: 0/1/2)
 NVMeDriverPatcher.Cli watchdog-service                     # Real-time service state
 NVMeDriverPatcher.Cli reliability                          # Reliability Monitor correlation
@@ -401,11 +401,7 @@ The tool can generate a **WinRE-compatible Recovery Kit**: a folder containing:
 
 A recovery kit is **automatically generated** after each successful patch installation. You can also create one manually via the **RECOVERY KIT** button or `.\NVMe_Driver_Patcher.ps1 -ExportRecoveryKit`.
 
-The readiness scan also reports advisory evidence from Windows itself: Point-in-Time Restore
-availability and the age of its newest restore point where the OS exposes that data, plus Quick
-Machine Recovery and automatic-remediation state from `reagentc`. These signals are informational
-only and never replace the Recovery Kit, the registry backup, or the existing pre-apply recovery
-proof gate.
+The readiness scan also reports what Windows itself offers for recovery. That's Point-in-Time Restore and the age of its newest restore point where Windows exposes it, plus the Quick Machine Recovery and automatic remediation state from `reagentc`. It's for reference only and never stands in for the Recovery Kit, the registry backup or the pre-apply recovery proof gate.
 
 **Copy this folder to a USB drive** before rebooting to have an offline recovery option if the system won't boot. Run `NVMeDriverPatcher.Cli verify-payload --input=<copied-folder>` after copying when a Windows support station is available; the recovery batch also fails closed on missing, extra, truncated, or modified required files.
 

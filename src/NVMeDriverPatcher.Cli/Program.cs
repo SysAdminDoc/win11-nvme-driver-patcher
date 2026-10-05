@@ -1352,7 +1352,7 @@ class Program
         foreach (var item in proof.Items)
             Console.WriteLine($"  [{(item.Passed ? "OK" : "!!")}] {item.Label}: {item.Detail}");
         if (proof.OsRecovery is not null)
-            Console.WriteLine($"  [ADVISORY] {proof.OsRecovery.Summary}");
+            Console.WriteLine($"  [INFO] Windows' own recovery features don't count toward readiness. {proof.OsRecovery.Summary}");
         if (!proof.AllPassed && !force)
         {
             Console.Error.WriteLine("Recovery infrastructure is incomplete. Fix the items above or use --force to override.");
@@ -1737,7 +1737,7 @@ class Program
         foreach (var item in proof.Items)
             Console.WriteLine($"  [{(item.Passed ? "OK" : "!!")}] {item.Label}: {item.Detail}");
         if (proof.OsRecovery is not null)
-            Console.WriteLine($"  [ADVISORY] {proof.OsRecovery.Summary}");
+            Console.WriteLine($"  [INFO] Windows' own recovery features don't count toward readiness. {proof.OsRecovery.Summary}");
         Console.WriteLine();
         Console.WriteLine(proof.AllPassed ? "Ready to apply." : "Fix the items above before applying.");
         return proof.AllPassed ? 0 : 1;
