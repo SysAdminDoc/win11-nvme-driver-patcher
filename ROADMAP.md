@@ -180,13 +180,13 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: S
 
-- [ ] P3 — CLI: config-migration exception swallowed bare; `--threshold=<garbage>` silently falls back to 15
+- [ ] P3 — Config downgrade warning from `ConfigMigrationService.Migrate` is never shown
   Category: reliability
-  Where: `src/NVMeDriverPatcher.Cli/Program.cs:64-70` (bare `catch { }` around `ConfigMigrationService.Migrate`), `:152-155` (failed `int.TryParse` keeps default silently)
-  Problem: A throwing migration disappears (contradicts the never-fail-silently rule); `compare-benchmarks --threshold=5%` runs at the default 15 with no warning, potentially masking a regression the user tightened the gate for.
-  Evidence: Both read.
-  Fix: Log the migration exception (warning + event log); on unparseable `--threshold`, exit 3 naming the bad value.
-  Acceptance: Bad threshold exits 3; migration failure appears in output/event log.
+  Where: `src/NVMeDriverPatcher.Cli/Program.cs` (the `migrationSummary` returned by `ConfigMigrationService.Migrate` is assigned and never used); `src/NVMeDriverPatcher.Core/Services/ConfigMigrationService.cs:21-28`; the GUI never calls `Migrate` at all
+  Problem: When config.json carries a schema newer than this build (a downgrade, or an older CLI run against a newer GUI's config), `Migrate` leaves the file alone and returns a summary written so callers can warn. Nothing prints or logs it, so the user never learns that settings this build doesn't understand are being ignored.
+  Evidence: Found while fixing the swallowed migration exception; the summary is the only output of the downgrade branch.
+  Fix: When `config.ConfigVersion > ConfigMigrationService.CurrentSchemaVersion`, write the summary as a `[WARNING]` on stderr in the CLI and surface it in the GUI activity log (plus the event log once it's initialized).
+  Acceptance: A config.json with `ConfigVersion` above the current schema produces one visible warning per run in the CLI and the GUI; a current or older config produces none.
   Confidence: Verified
   Effort: S
 
