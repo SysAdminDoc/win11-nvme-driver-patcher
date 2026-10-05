@@ -85,7 +85,7 @@ class Program
             {
                 var (changed, migrationSummary) = ConfigMigrationService.Migrate(config);
                 if (changed && !ConfigService.Save(config))
-                    Console.Error.WriteLine("[WARNING] Config migration could not be saved — it will be re-attempted next run.");
+                    Console.Error.WriteLine("[WARNING] Config migration could not be saved. It will be re-attempted next run.");
             }
             catch (Exception ex)
             {
@@ -442,7 +442,7 @@ class Program
         Console.WriteLine($"  Enabled:              {(config.PersistenceGuardEnabled ? "yes" : "no")}");
         Console.WriteLine($"  Re-apply budget:      {config.PersistenceGuardConsecutiveReapplies}/{config.PersistenceGuardMaxReapplies} used");
         Console.WriteLine();
-        Console.WriteLine("  Restores a patch that Windows removed without an uninstall — usually a boot-recovery");
+        Console.WriteLine("  Restores a patch that Windows removed without an uninstall. Usually a boot-recovery");
         Console.WriteLine("  promotion of a pre-patch control set. Runs on the boot task, after the watchdog's");
         Console.WriteLine("  auto-revert and the fallback reset, so a deliberate revert always wins.");
         return 0;
@@ -455,7 +455,7 @@ class Program
         Console.WriteLine("=================");
         Console.WriteLine(report.Summary);
         foreach (var f in report.Findings)
-            Console.WriteLine($"  [{f.Severity}] {f.Name} — {f.Detail}");
+            Console.WriteLine($"  [{f.Severity}] {f.Name}: {f.Detail}");
         return report.HasBlocker ? 1 : 0;
     }
 
@@ -932,7 +932,7 @@ class Program
         // Preview never mutates, so it is always allowed — but state the disposition honestly so a
         // user previewing a build with no known path isn't misled into thinking apply would work.
         var policy = BuildActionPolicyService.EvaluateCurrent(config.WorkingDir);
-        Console.WriteLine($"Build policy: {(policy.MutationAllowed ? "apply allowed" : "verify/rollback only")} — {policy.Reason}");
+        Console.WriteLine($"Build policy: {(policy.MutationAllowed ? "apply allowed" : "verify/rollback only")}: {policy.Reason}");
         var preflight = PreflightService.RunAll();
         var report = DryRunService.PlanInstall(config, preflight);
         Console.WriteLine();
@@ -946,7 +946,7 @@ class Program
         Console.WriteLine("Real-time Watchdog Service");
         Console.WriteLine("==========================");
         Console.WriteLine($"Service: {WatchdogServiceStateService.ServiceName}");
-        Console.WriteLine($"State:   {state} — {WatchdogServiceStateService.Describe(state)}");
+        Console.WriteLine($"State:   {state}: {WatchdogServiceStateService.Describe(state)}");
         if (state == WatchdogServiceState.NotInstalled)
         {
             Console.WriteLine();
@@ -1056,7 +1056,7 @@ class Program
         {
             var meta = string.IsNullOrEmpty(e.Confidence) ? "" :
                 $" ({e.Confidence}{(string.IsNullOrEmpty(e.LastReviewed) ? "" : $", reviewed {e.LastReviewed}")})";
-            Console.WriteLine($"  [{e.Level}] {e.Controller} / {e.Firmware} — {e.Note}{meta}");
+            Console.WriteLine($"  [{e.Level}] {e.Controller} / {e.Firmware}: {e.Note}{meta}");
             if (!string.IsNullOrEmpty(e.SourceUrl))
                 Console.WriteLine($"      source: {e.SourceUrl}");
         }
@@ -1069,7 +1069,7 @@ class Program
             foreach (var a in db.CveAdvisories)
             {
                 bool applies = isServer ? a.AffectsServer : a.AffectsClient;
-                Console.WriteLine($"  [{(applies ? "APPLIES TO THIS OS" : "not applicable here")}] {a.Cve} ({a.Severity}) — fixed by {a.FixedBy}");
+                Console.WriteLine($"  [{(applies ? "APPLIES TO THIS OS" : "not applicable here")}] {a.Cve} ({a.Severity}), fixed by {a.FixedBy}");
                 Console.WriteLine($"      {a.Description}");
             }
         }
@@ -1108,7 +1108,7 @@ class Program
         var result = await WinPERecoveryBuilderService.BuildAsync(options, msg => Console.WriteLine(msg));
         Console.WriteLine(result.Summary);
         foreach (var controller in result.Controllers)
-            Console.WriteLine($"  [{controller.Coverage}] {controller.FriendlyName} — {controller.InfName} {controller.DriverVersion} — {controller.Detail}");
+            Console.WriteLine($"  [{controller.Coverage}] {controller.FriendlyName} ({controller.InfName} {controller.DriverVersion}): {controller.Detail}");
         foreach (var w in result.Warnings) Console.WriteLine($"  [WARN] {w}");
         if (result.Success && !string.IsNullOrWhiteSpace(result.MediaRoot))
         {
@@ -1150,7 +1150,7 @@ class Program
         Console.WriteLine($"Compat report saved to: {path}");
         if (string.IsNullOrWhiteSpace(endpoint))
         {
-            Console.WriteLine("(No --endpoint=<url> supplied — payload kept local. Review, then resubmit with --endpoint= to share.)");
+            Console.WriteLine("(No --endpoint=<url> supplied, payload kept local. Review, then resubmit with --endpoint= to share.)");
             return 0;
         }
         if (!config.CompatTelemetryEnabled)
@@ -1231,7 +1231,7 @@ class Program
                 preflight.NativeNVMeStatus.IsActive, status.Count, evidence);
             Console.WriteLine($"Enablement source: {source switch
             {
-                EnablementSource.Official => "untracked — official Windows rollout OR a forced 'driver method' install (no patch evidence)",
+                EnablementSource.Official => "untracked: official Windows rollout OR a forced 'driver method' install (no patch evidence)",
                 EnablementSource.RegistryPatch => "this tool's registry patch",
                 EnablementSource.FallbackFlags => "ViVeTool/FeatureStore fallback flags",
                 _ => "none (driver not bound)"
@@ -1258,7 +1258,7 @@ class Program
                     Console.WriteLine();
                     Console.WriteLine("NOTE: The ViVeTool/FeatureStore fallback flags are ENABLED but the driver did not bind.");
                     Console.WriteLine("      On builds 26200.8524+ stornvme no longer exposes the compatible ID nvmedisk.inf");
-                    Console.WriteLine("      matches — there is currently NO working enablement path on this build.");
+                    Console.WriteLine("      matches. There is currently NO working enablement path on this build.");
                     Console.WriteLine("      The flags are harmless; remove the patch or wait for Microsoft's official rollout.");
                 }
                 else if (status.Count > 0)
@@ -1414,7 +1414,7 @@ class Program
                 else if (restart == PatchService.RestartInitiation.Unconfirmed)
                 {
                     Console.Error.WriteLine(
-                        $"[WARNING] Restart status UNCONFIRMED — verify the machine reboots; if not, run 'shutdown /r /t {config.RestartDelay}' manually.");
+                        $"[WARNING] Restart status UNCONFIRMED. Verify the machine reboots; if not, run 'shutdown /r /t {config.RestartDelay}' manually.");
                 }
             }
             else
@@ -1449,7 +1449,7 @@ class Program
         {
             // Watchdog is deliberately LEFT ARMED on a partial removal.
             Console.Error.WriteLine();
-            Console.Error.WriteLine($"Removal INCOMPLETE — {result.Residue.Count} component(s) still present:");
+            Console.Error.WriteLine($"Removal INCOMPLETE: {result.Residue.Count} component(s) still present:");
             foreach (var r in result.Residue)
                 Console.Error.WriteLine($"  - {r}");
             Console.Error.WriteLine("Re-run 'remove' as Administrator; if residue persists, use the Recovery Kit or restore the pre-removal backup.");
@@ -1469,7 +1469,7 @@ class Program
         var rc = RemoveCommand(config, noRestart);
         if (rc != 0)
         {
-            Console.Error.WriteLine("Removal did not complete cleanly — leaving the pending marker so you can retry.");
+            Console.Error.WriteLine("Removal did not complete cleanly. Leaving the pending marker so you can retry.");
             return rc;
         }
 
@@ -1499,7 +1499,7 @@ class Program
         var marker = FirmwareUpdateWorkflowService.ReadMarker(config);
         var (profile, hadMarker) = FirmwareUpdateWorkflowService.ResolveReEnableProfile(marker, config);
         if (!hadMarker)
-            Console.WriteLine("No firmware-update marker found — re-applying the current configured profile.");
+            Console.WriteLine("No firmware-update marker found. Re-applying the current configured profile.");
 
         config.PatchProfile = profile;
         Console.WriteLine($"Re-enabling Native NVMe ({profile} profile) after the firmware update...");
@@ -1545,7 +1545,7 @@ class Program
         Console.WriteLine($"  Mount dir   : {plan.MountDir}");
         foreach (var warning in plan.Warnings)
             Console.WriteLine($"  ! {warning}");
-        Console.WriteLine($"Readiness: {(readiness.Passed ? "OK" : "BLOCKED")} - {readiness.Detail}");
+        Console.WriteLine($"Readiness: {(readiness.Passed ? "OK" : "BLOCKED")} ({readiness.Detail})");
         if (!readiness.Passed)
             return 1;
 
@@ -1619,9 +1619,9 @@ class Program
         var proof = RecoveryProofGateService.Evaluate(config);
         if (!proof.AllPassed)
         {
-            Console.Error.WriteLine("Recovery proof FAILED — FeatureStore overrides cannot be reset from WinRE/Safe Mode.");
+            Console.Error.WriteLine("Recovery proof FAILED. FeatureStore overrides cannot be reset from WinRE/Safe Mode.");
             foreach (var item in proof.Items.Where(i => !i.Passed))
-                Console.Error.WriteLine($"  FAIL: {item.Label} — {item.Detail}");
+                Console.Error.WriteLine($"  FAIL: {item.Label}: {item.Detail}");
             Console.Error.WriteLine();
             Console.Error.WriteLine("Fix the above or use --force to override (not recommended).");
             if (!force)
@@ -1769,7 +1769,7 @@ class Program
         Console.Error.WriteLine(report.Summary);
         foreach (var item in report.Items.Where(item => item.BlocksMutation))
         {
-            Console.Error.WriteLine($"  {item.Id}: {item.Verdict} [{item.ReasonCode}] — {item.Detail}");
+            Console.Error.WriteLine($"  {item.Id}: {item.Verdict} [{item.ReasonCode}]: {item.Detail}");
             if (!string.IsNullOrWhiteSpace(item.NativeError))
                 Console.Error.WriteLine("    Native: " + item.NativeError);
         }

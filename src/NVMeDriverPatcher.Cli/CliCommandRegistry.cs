@@ -143,7 +143,7 @@ public static class CliCommandRegistry
         new("re-enable-after-update", ["reenable-after-update"], CommandGroup.Lifecycle,
             "Re-apply the remembered profile after a firmware update (pairs with disable-for-update)"),
         new("dry-run", ["preview"], CommandGroup.Lifecycle,
-            "Show exactly what apply would change — no registry writes"),
+            "Show exactly what apply would change, with no registry writes"),
         new("verify", [], CommandGroup.Lifecycle,
             "Generate post-reboot verification script"),
         new("persistence-guard", ["guard"], CommandGroup.Lifecycle,
@@ -356,7 +356,7 @@ public static class CliCommandRegistry
         sb.AppendLine("Global options:");
         sb.AppendLine("  --force, -f                Skip overridable safety checks (VeraCrypt remains blocked)");
         sb.AppendLine("  --no-restart               Don't prompt for restart after apply/remove");
-        sb.AppendLine("  --safe                     Safe Mode: write primary flag only (735209102) — recommended");
+        sb.AppendLine("  --safe                     Safe Mode: write primary flag only (735209102), recommended");
         sb.AppendLine("  --full                     Full Mode: write all three flags (higher perf, higher risk; DISM reports store corruption while 156965516 is set)");
         sb.AppendLine("  --include-server-key       Force the optional Server 2025 key on for this run");
         sb.AppendLine("  --no-server-key            Force the optional Server 2025 key off for this run");
