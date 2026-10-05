@@ -78,6 +78,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   and says when a write replaces a value Windows put there. Its summary no longer ends in "..".
 
 ### Changed
+- Reworded app, tray, CLI and offline-doc text that used dashes as punctuation into plain
+  sentences, colons and parentheses, so messages read cleanly and survive copying into a plain
+  text file.
 - Removed the workspace tab badges, which could never appear. The same status already shows in
   the Overview chips and the activity rail.
 - Re-reviewed the bundled Windows build rules and feature-ID catalog against current sources on
