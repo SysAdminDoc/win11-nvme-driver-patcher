@@ -426,11 +426,12 @@ public static class DriveService
         return result;
     }
 
-    private static string DetermineBypassIoBlocker(BypassIoVolumeInfo volume)
+    internal static string DetermineBypassIoBlocker(BypassIoVolumeInfo volume)
     {
         if (string.Equals(volume.DeviceService, "nvmedisk", StringComparison.OrdinalIgnoreCase))
             return "nvmedisk.sys";
-        if (!volume.RegistryValuePresent || !volume.RegistryEnabled)
+        // An absent value is storport's default (BypassIO allowed); only an explicit off blocks.
+        if (volume.RegistryValuePresent && !volume.RegistryEnabled)
             return "EnableBypassIO registry value";
         if (string.Equals(volume.Status, "Query failed", StringComparison.OrdinalIgnoreCase))
             return "fsutil bypassio query";

@@ -240,6 +240,16 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Likely (layout verified; runtime failure inferred from SQLitePCLRaw native loading)
   Effort: S
 
+- [ ] P3 — BypassIO verdict uses one storage driver for every volume
+  Category: correctness
+  Where: `src/NVMeDriverPatcher.Core/Services/BypassIoInspectorService.cs` (`Inspect` reads `ReadDeviceServiceEvidence()` once; `SelectStorageService` picks the highest-priority service present anywhere on the machine, nvmedisk > stornvme > storahci > ...)
+  Problem: Every fixed volume inherits that one machine-wide service. A SATA (storahci) or USB data volume on a PC whose boot drive is on stornvme reports "Enabled", so `BuildGamingImpactSummary` lists it as a BypassIO volume, and a mixed nvmedisk/stornvme machine reports every volume as nvmedisk. The system-drive verdict (`DriveService.GetBypassIOStatus`) is right only when the system drive's controller happens to be the top-priority service.
+  Evidence: Code read on 2026-10-05; `BuildVolumeInfo` takes the single `BypassIoDeviceEvidence` for all letters.
+  Fix: Map each volume to its own controller: volume letter to disk number (`MSFT_Partition.DiskNumber`, already queried that way in `BenchmarkService`), disk to its PnP device, then walk `CM_Get_Parent` to the storage controller and read that node's `DEVPKEY_Device_Service`. Pass the per-volume service into `BuildVolumeInfo`; fall back to "Unknown" (not the machine-wide pick) when the walk fails. Keep the registry and fsutil evidence as they are.
+  Acceptance: Unit test with a two-volume fixture (C: on stornvme, D: on storahci) reports C: Enabled and D: Disabled with stack storahci.sys; the gaming-impact summary names only C:. A live run on a mixed NVMe+SATA machine matches Device Manager.
+  Confidence: Verified (mechanism); hardware confirmation pending
+  Effort: M
+
 ### Unaudited — needs a pass
 
 - [ ] P3 — Areas this audit did not cover
