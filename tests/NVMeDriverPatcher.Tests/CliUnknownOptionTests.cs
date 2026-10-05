@@ -61,4 +61,36 @@ public sealed class CliUnknownOptionTests
     {
         Assert.Null(CliCommandRegistry.SuggestOption("--wildly-unrelated-token"));
     }
+
+    // compare-benchmarks --threshold used to fall back to 15 on anything int.TryParse rejected,
+    // including the "--threshold=N%" form its own help text documents. A caller who tightened
+    // the regression gate to 5% got the default 15% with no warning.
+
+    [Theory]
+    [InlineData("15", 15)]
+    [InlineData("5%", 5)]
+    [InlineData("0", 0)]
+    [InlineData("100%", 100)]
+    public void Threshold_AcceptsWholePercentagesWithOrWithoutPercentSign(string value, int expected)
+    {
+        Assert.True(CliCommandRegistry.TryParseThresholdPercent(value, out var percent));
+        Assert.Equal(expected, percent);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("%")]
+    [InlineData("5%%")]
+    [InlineData("-5")]
+    [InlineData("+5")]
+    [InlineData(" 5")]
+    [InlineData("7.5")]
+    [InlineData("1,000")]
+    [InlineData("101")]
+    [InlineData("99999999999")]
+    public void Threshold_RejectsAnythingElse(string value)
+    {
+        Assert.False(CliCommandRegistry.TryParseThresholdPercent(value, out _));
+    }
 }

@@ -59,6 +59,43 @@ public static class CliCommandRegistry
         return null;
     }
 
+    public const int DefaultThresholdPercent = 15;
+
+    /// <summary>
+    /// Parses a --threshold= value: a whole-number percentage from 0 to 100, optionally followed
+    /// by '%' (the help documents "--threshold=N%"). Anything else is rejected rather than read as
+    /// the default, so a typo can't quietly loosen the benchmark regression gate.
+    /// </summary>
+    public static bool TryParseThresholdPercent(string? value, out int percent)
+    {
+        percent = 0;
+        if (string.IsNullOrEmpty(value)) return false;
+        var digits = value.EndsWith('%') ? value[..^1] : value;
+        if (!int.TryParse(digits, System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsed) ||
+            parsed > 100)
+            return false;
+        percent = parsed;
+        return true;
+    }
+
+    /// <summary>
+    /// Reads the --threshold= option. Returns null with the parsed percentage (the default when
+    /// the option is absent), or a usage error naming the value that couldn't be parsed.
+    /// </summary>
+    public static string? ReadThresholdOption(IEnumerable<string?> args, out int percent)
+    {
+        percent = DefaultThresholdPercent;
+        const string prefix = "--threshold=";
+        var option = args.FirstOrDefault(a => a is not null && a.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        if (option is null) return null;
+
+        var raw = option[prefix.Length..];
+        if (TryParseThresholdPercent(raw, out percent)) return null;
+        percent = DefaultThresholdPercent;
+        return $"--threshold expects a whole-number percentage from 0 to 100, like --threshold=15 or --threshold=15%, but got '{raw}'.";
+    }
+
     /// <summary>Closest known option to <paramref name="unknown"/>, for a "did you mean" hint.</summary>
     public static string? SuggestOption(string unknown)
     {

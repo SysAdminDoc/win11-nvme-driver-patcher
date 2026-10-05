@@ -39,6 +39,14 @@ class Program
                 Console.Error.WriteLine("Run 'NVMeDriverPatcher.Cli help' for the full option list.");
                 return 3;
             }
+            // A malformed --threshold is a usage error like an unknown option. Falling back to the
+            // default would run compare-benchmarks against a looser gate than the caller asked for.
+            var thresholdError = CliCommandRegistry.ReadThresholdOption(args, out var thresholdArg);
+            if (thresholdError is not null)
+            {
+                Console.Error.WriteLine("Error: " + thresholdError);
+                return 3;
+            }
 
 
             // Payload verification is read-only and must not initialize shared app state. Keep it
@@ -71,14 +79,20 @@ class Program
             }
 
             var config = ConfigService.Load();
-            // v4.5: config schema migration before anything else touches it.
+            // v4.5: config schema migration before anything else touches it. A failure is not
+            // fatal (the loaded settings still work), but it must never disappear silently.
+            string? migrationFailure = null;
             try
             {
                 var (changed, migrationSummary) = ConfigMigrationService.Migrate(config);
                 if (changed && !ConfigService.Save(config))
                     Console.Error.WriteLine("[WARNING] Config migration could not be saved — it will be re-attempted next run.");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                migrationFailure = $"Config migration failed ({ex.GetType().Name}: {ex.Message}). Continuing with the settings as loaded.";
+                Console.Error.WriteLine("[WARNING] " + migrationFailure);
+            }
             // GPO overlay takes precedence over shared config.json so a pinned fleet policy
             // isn't quietly overridden by a local run of the CLI.
             var policyWatchdogSave = GpoPolicyService.ApplyTo(config, GpoPolicyService.Read());
@@ -87,6 +101,8 @@ class Program
             LogRotationService.RotateAll(config);
             EventLogRegistrationService.EnsureRegistered();
             EventLogService.Initialize(config.WriteEventLog);
+            if (migrationFailure is not null)
+                EventLogService.Write(migrationFailure, System.Diagnostics.EventLogEntryType.Warning, 3010);
 
             // Recover any previous process that terminated after publishing Prepared/Applied but
             // before the reboot checkpoint became durable. RebootPending operations are left intact
@@ -160,10 +176,6 @@ class Program
             string? centralStoreArg = args.Select(a => (a ?? string.Empty))
                                  .FirstOrDefault(a => a.StartsWith("--central-store=", StringComparison.OrdinalIgnoreCase))?
                                  .Substring("--central-store=".Length);
-            int thresholdArg = 15;
-            var threshStr = args.Select(a => (a ?? string.Empty))
-                                 .FirstOrDefault(a => a.StartsWith("--threshold=", StringComparison.OrdinalIgnoreCase));
-            if (!string.IsNullOrEmpty(threshStr) && int.TryParse(threshStr.Substring("--threshold=".Length), out var t)) thresholdArg = t;
 
             return command switch
             {
