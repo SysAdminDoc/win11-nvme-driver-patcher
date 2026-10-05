@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 
 namespace NVMeDriverPatcher.Tests;
 
@@ -142,8 +143,12 @@ public sealed class BuildRulesFreshnessScriptTests
     [Fact]
     public void ShippedRuleset_PassesTheGateOnItsOwnReviewDate()
     {
-        var shipped = Path.Combine(RepoRoot(), "src", "NVMeDriverPatcher.Core", "windows_build_rules.json");
-        var result = RunAgainst(shipped, asOf: ReviewDate);
+        var core = Path.Combine(RepoRoot(), "src", "NVMeDriverPatcher.Core");
+        var shipped = Path.Combine(core, "windows_build_rules.json");
+        // The review date comes from the shipped files, so a routine refresh isn't read as a future date.
+        var asOf = new[] { shipped, Path.Combine(core, "feature_ids.json") }
+            .Select(UpdatedDate).Max(StringComparer.Ordinal)!;
+        var result = RunAgainst(shipped, asOf);
 
         Assert.Equal(0, result.ExitCode);
     }
@@ -188,6 +193,9 @@ public sealed class BuildRulesFreshnessScriptTests
             try { File.Delete(featurePath); } catch { /* best effort */ }
         }
     }
+
+    private static string UpdatedDate(string path) =>
+        JsonDocument.Parse(File.ReadAllText(path)).RootElement.GetProperty("updated").GetString()!;
 
     private static ScriptResult RunAgainst(string rulesPath, string asOf, string? featureIdsPath = null)
     {

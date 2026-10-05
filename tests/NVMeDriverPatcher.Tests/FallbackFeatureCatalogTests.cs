@@ -26,7 +26,8 @@ public sealed class FallbackFeatureCatalogTests
         Assert.Contains(55369237, set.Ids);
         Assert.Contains(48433719, set.Ids);
         Assert.DoesNotContain(49453572, set.Ids);
-        // 60786016 reportedly no longer exists on these builds — never apply it there.
+        // The 26200+ set is 55369237 + 48433719. A lone 26200.8116 report of 60786016 binding
+        // isn't enough to widen it, so 60786016 stays out until it's verified on a device.
         Assert.DoesNotContain(60786016, set.Ids);
     }
 
