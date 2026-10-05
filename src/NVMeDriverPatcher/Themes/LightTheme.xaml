@@ -17,9 +17,9 @@
     <SolidColorBrush x:Key="TextPrimary" Color="#FF0B1220"/>
     <SolidColorBrush x:Key="TextSecondary" Color="#FF1E2A3B"/>
     <SolidColorBrush x:Key="TextMuted" Color="#FF4A5668"/>
-    <SolidColorBrush x:Key="TextDim" Color="#FF6B7788"/>
+    <SolidColorBrush x:Key="TextDim" Color="#FF5E6877"/>
     <SolidColorBrush x:Key="TextDimmer" Color="#FF8E99AA"/>
-    <SolidColorBrush x:Key="Accent" Color="#FF2563EB"/>
+    <SolidColorBrush x:Key="Accent" Color="#FF1A5BEA"/>
     <SolidColorBrush x:Key="AccentHover" Color="#FF1D4ED8"/>
     <SolidColorBrush x:Key="AccentForeground" Color="#FFFFFFFF"/>
     <SolidColorBrush x:Key="ActionButtonBackground" Color="#FF2563EB"/>
@@ -29,7 +29,7 @@
     <SolidColorBrush x:Key="AccentSoft" Color="#FFE0ECFE"/>
     <SolidColorBrush x:Key="Green" Color="#FF047857"/>
     <SolidColorBrush x:Key="GreenBg" Color="#FFD1FAE5"/>
-    <SolidColorBrush x:Key="Yellow" Color="#FFB45309"/>
+    <SolidColorBrush x:Key="Yellow" Color="#FFA84D08"/>
     <SolidColorBrush x:Key="YellowBg" Color="#FFFEF3C7"/>
     <SolidColorBrush x:Key="Red" Color="#FFB91C1C"/>
     <SolidColorBrush x:Key="RedBg" Color="#FFFEE2E2"/>

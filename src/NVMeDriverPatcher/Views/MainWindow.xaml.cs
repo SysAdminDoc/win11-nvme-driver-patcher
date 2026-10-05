@@ -224,6 +224,7 @@ public partial class MainWindow : Window
 
     private void ThemeService_ThemeChanged(object? sender, EventArgs e)
     {
+        _vm.RefreshThemeBrushes();
         _vm.RefreshThemeModeSummary();
         UpdateThemeToggleButton();
         SyncThemeModeSelector();
