@@ -141,6 +141,36 @@ public sealed class AccessibilitySmokeTests
                         origin.Y + button.ActualHeight <= settingsAuditCard.ActualHeight + 0.1,
                         $"{automationName} is clipped by its card.");
                 }
+
+                // The GitHub and docs links used to sit in a footer that was always collapsed.
+                Assert.Null(window.FindName("FooterActionsPanel"));
+                var settingsAboutCard = Assert.IsType<Border>(window.FindName("SettingsAboutCard"));
+                Assert.Equal(2, Grid.GetRow(settingsAboutCard));
+                Assert.Equal(3, Grid.GetColumnSpan(settingsAboutCard));
+                Assert.Equal(16, settingsAboutCard.Margin.Top);
+                Assert.Equal(Visibility.Visible, settingsAboutCard.Visibility);
+                Assert.False(string.IsNullOrEmpty(vm.VersionText));
+                Assert.Contains(vm.VersionText, FindControls<TextBlock>(settingsAboutCard)
+                    .SelectMany(text => text.Inlines.OfType<System.Windows.Documents.Run>())
+                    .Select(run => run.Text));
+                foreach (var (automationName, command) in new[]
+                {
+                    ("Open the project on GitHub", vm.OpenGitHubCommand),
+                    ("Open Microsoft's native NVMe announcement", vm.OpenDocsCommand)
+                })
+                {
+                    var button = Assert.Single(
+                        FindControls<Button>(settingsAboutCard),
+                        candidate => AutomationProperties.GetName(candidate) == automationName);
+                    Assert.Same(command, button.Command);
+                    Assert.True(button.ActualWidth > 0 && button.ActualHeight > 0, $"{automationName} has no size.");
+                    var origin = button.TranslatePoint(new Point(0, 0), settingsAboutCard);
+                    Assert.True(
+                        origin.X >= -0.1 && origin.Y >= -0.1 &&
+                        origin.X + button.ActualWidth <= settingsAboutCard.ActualWidth + 0.1 &&
+                        origin.Y + button.ActualHeight <= settingsAboutCard.ActualHeight + 0.1,
+                        $"{automationName} is clipped by its card.");
+                }
             }
             finally
             {

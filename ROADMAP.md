@@ -10,16 +10,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
-- [ ] P3 — Collapsed footer with GitHub and Docs links is never shown
-  Category: ui
-  Where: `MainWindow.xaml` `FooterActionsPanel`, `MainWindow.xaml.cs` compact-layout handler
-  Problem: The footer that holds the GitHub and Docs links is collapsed in every state, so there's no way to reach the docs or the project page from the GUI. Its separator dot is also the only place the `TextDimmer` token (below 4.5:1 on every theme) is used outside disabled controls.
-  Evidence: 2026-10-05 polish pass screenshots in all three themes; `FooterActionsPanel` is only touched by the compact-layout margin code.
-  Fix: Move the two links into Settings (an About row with the version) and delete the footer markup and its code-behind margin handling.
-  Acceptance: Docs and GitHub links are reachable from Settings, the footer is gone, and `TextDimmer` is only used for disabled states.
-  Confidence: Confirmed
-  Effort: S
-
 - [ ] P3 — OS recovery summary reads like a log line
   Category: copy
   Where: `OsRecoveryEvidenceService.Summary`, `PointInTimeRestoreSummary`, `QuickMachineRecoverySummary`

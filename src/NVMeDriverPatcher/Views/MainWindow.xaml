@@ -181,7 +181,6 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <Border x:Name="TitleBarRegion"
@@ -1549,6 +1548,7 @@
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
                                                 <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
                                             </Grid.RowDefinitions>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition/>
@@ -1709,6 +1709,42 @@
                                                                 Command="{Binding UseRecommendedSetupCommand}"/>
                                                     </WrapPanel>
                                                 </StackPanel>
+                                            </Border>
+
+                                            <Border x:Name="SettingsAboutCard"
+                                                    Grid.Row="2"
+                                                    Grid.Column="0"
+                                                    Grid.ColumnSpan="3"
+                                                    Margin="0,10,0,0"
+                                                    Style="{StaticResource InsetCard}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel VerticalAlignment="Center">
+                                                        <TextBlock Text="About" Style="{StaticResource SectionEyebrow}"/>
+                                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource BodyCopy}">
+                                                            <Run Text="NVMe Driver Patcher"/>
+                                                            <Run Text="{Binding VersionText, Mode=OneWay}"/>
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                    <WrapPanel Grid.Column="1"
+                                                               Margin="12,0,0,0"
+                                                               VerticalAlignment="Center">
+                                                        <Button Content="GitHub"
+                                                                Margin="0,0,8,0"
+                                                                Style="{StaticResource SecondaryButton}"
+                                                                AutomationProperties.Name="Open the project on GitHub"
+                                                                ToolTip="Open the project page for releases, issues, and source code."
+                                                                Command="{Binding OpenGitHubCommand}"/>
+                                                        <Button Content="Microsoft docs"
+                                                                Style="{StaticResource SecondaryButton}"
+                                                                AutomationProperties.Name="Open Microsoft&apos;s native NVMe announcement"
+                                                                ToolTip="Open Microsoft&apos;s announcement of the native NVMe driver."
+                                                                Command="{Binding OpenDocsCommand}"/>
+                                                    </WrapPanel>
+                                                </Grid>
                                             </Border>
                                         </Grid>
                                     </TabItem>
@@ -2038,53 +2074,6 @@
                             </Grid>
                         </Border>
                     </Grid>
-
-                    <Border Grid.Row="3" Margin="24,12,24,14" Visibility="Collapsed">
-                        <Grid>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Foreground="{DynamicResource TextDim}"
-                                           FontSize="{StaticResource FontSizeMeta}"
-                                           Text="Verify, back up, apply, reboot, confirm."/>
-                                <WrapPanel Margin="0,8,0,0"
-                                           Visibility="{Binding ProgressVisible, Converter={StaticResource BoolVis}}">
-                                    <TextBlock Text="{Binding ProgressText}"
-                                               Margin="0,0,12,8"
-                                               Foreground="{DynamicResource TextSecondary}"
-                                               FontSize="{StaticResource FontSizeMeta}"
-                                               VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"
-                                               MaxWidth="420"/>
-                                    <ProgressBar Width="180"
-                                                 Height="6"
-                                                 Margin="0,4,0,8"
-                                                 VerticalAlignment="Center"
-                                                 Value="{Binding ProgressValue}"
-                                                 Foreground="{DynamicResource Accent}"
-                                                 AutomationProperties.Name="Footer operation progress"
-                                                 AutomationProperties.LiveSetting="Polite"
-                                                 Template="{StaticResource RoundProgress}"/>
-                                </WrapPanel>
-                            </StackPanel>
-
-                            <WrapPanel x:Name="FooterActionsPanel"
-                                       Orientation="Horizontal"
-                                       HorizontalAlignment="Right"
-                                       ItemHeight="34">
-                                <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource TextDim}">
-                                    <Hyperlink Foreground="{DynamicResource TextMuted}" TextDecorations="None" Click="GitHub_Click">GitHub</Hyperlink>
-                                </TextBlock>
-                                <TextBlock Margin="8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextDimmer}" Text="•"/>
-                                <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource TextDim}">
-                                    <Hyperlink Foreground="{DynamicResource TextMuted}" TextDecorations="None" Click="Docs_Click">Microsoft docs</Hyperlink>
-                                </TextBlock>
-                                <Button Content="Open Data"
-                                        Margin="16,0,0,0"
-                                        Style="{StaticResource SecondaryButton}"
-                                        AutomationProperties.Name="Open data folder"
-                                        Command="{Binding OpenDataFolderCommand}"/>
-                            </WrapPanel>
-                        </Grid>
-                    </Border>
                 </Grid>
 
                 <Border Grid.ColumnSpan="2"
