@@ -120,13 +120,13 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Likely (not profiled)
   Effort: M
 
-- [ ] P3 — Microcopy: "Safe Boot" vs "SafeBoot" inconsistency; ThemedDialog has no accessible window title
-  Category: a11y
-  Where: mixed usage at `ViewModels/MainViewModel.cs:25`, Commands dialogs, vs `Views/MainWindow.xaml:406, 421`; `Views/ThemedDialog.xaml.cs` (never sets `Window.Title`)
-  Problem: Three spellings of the same concept in user-facing text; empty accessible title on modal dialogs (mitigated by ShowInTaskbar=False but still announced empty by screen readers).
-  Evidence: String greps; dialog code read.
-  Fix: Standardize on "Safe Boot" in prose, `SafeBoot\Minimal` only for literal registry paths; set `Title` from the dialog header text.
-  Acceptance: Grep finds no prose "SafeBoot"; Narrator announces the dialog title.
+- [ ] P3 — Core and CLI prose still writes "SafeBoot" as one word
+  Category: docs
+  Where: `src/NVMeDriverPatcher.Core/Services/PreflightService.cs:124` (shown in the GUI readiness list), `RecoveryProofGateService.cs:170-177` (label "SafeBoot entries", logged by the GUI fallback gate), `RecoverySafetyGateService.cs:71`, `DryRunService.cs:86-96, 184-185`, `PatchService.cs:85-106` (component names), `MutationLedgerService.cs:214, 556, 604-608`, `CriticalEnvironmentProbeService.cs:293-306`; `src/NVMeDriverPatcher.Cli/CliCommandRegistry.cs:131, 210`, `Program.cs:342`; README prose at `:118, :132, :242`
+  Problem: The GUI and `SafeBootUpgradeService` now say "Safe Boot" in prose and keep `SafeBoot\Minimal` for literal registry paths, but these Core and CLI strings still glue the word together, and some of them surface in the GUI next to the corrected text.
+  Evidence: `MicrocopyTests.UserFacingText_SpellsSafeBootAsTwoWords` scans only `src/NVMeDriverPatcher` plus `SafeBootUpgradeService.cs`; the listed strings are outside it.
+  Fix: Rewrite each to "Safe Boot" (or to the literal `SafeBoot\...` path where it names a key), update the tests that assert the old labels (`RecoveryProofGateServiceTests.cs:117`, `RecoverySafetyGateServiceTests.cs:18-24`, `SafeBootRemovalAccessTests`), then widen the scan to `NVMeDriverPatcher.Core` and `NVMeDriverPatcher.Cli`.
+  Acceptance: The widened scan passes; CLI help and README match the GUI spelling.
   Confidence: Verified
   Effort: S
 

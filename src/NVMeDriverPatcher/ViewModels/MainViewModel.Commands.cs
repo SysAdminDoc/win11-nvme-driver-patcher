@@ -466,28 +466,28 @@ public partial class MainViewModel
     [RelayCommand]
     private void UpgradeSafeBootEntries()
     {
-        if (!EnsureRecoverySafetyAllowsMutation("SafeBoot upgrade"))
+        if (!EnsureRecoverySafetyAllowsMutation("Safe Boot upgrade"))
             return;
 
         try
         {
-            Log("Upgrading SafeBoot entries (KB5079391 service-name fix)...");
+            Log("Upgrading Safe Boot entries (KB5079391 service-name fix)...");
             var (success, message) = SafeBootUpgradeService.UpgradeEntries(msg => Log(msg));
             if (success)
             {
                 ShowSafeBootUpgradeBadge = false;
                 Log($"[SUCCESS] {message}", "SUCCESS");
-                ToastService.Show("SafeBoot Entries Upgraded", message, ToastType.Success, Config.EnableToasts);
+                ToastService.Show("Safe Boot Entries Upgraded", message, ToastType.Success, Config.EnableToasts);
             }
             else
             {
                 Log($"[ERROR] {message}", "ERROR");
-                InfoDialog?.Invoke("SafeBoot Upgrade Failed", message, DialogIcon.Error);
+                InfoDialog?.Invoke("Safe Boot Upgrade Failed", message, DialogIcon.Error);
             }
         }
         catch (Exception ex)
         {
-            Log($"[ERROR] SafeBoot upgrade failed: {ex.Message}", "ERROR");
+            Log($"[ERROR] Safe Boot upgrade failed: {ex.Message}", "ERROR");
         }
     }
 
@@ -600,7 +600,7 @@ public partial class MainViewModel
                 Log("[ERROR] Fallback checkpoint could not be saved — exact rollback attempted and restart refused.", "ERROR");
                 InfoDialog?.Invoke("Checkpoint Not Saved",
                     restored.Success
-                        ? "The fallback was written, but its reboot checkpoint could not be saved durably. The exact pre-patch registry, SafeBoot, and FeatureStore state was restored. No restart is needed."
+                        ? "The fallback was written, but its reboot checkpoint could not be saved durably. The exact pre-patch registry, Safe Boot, and FeatureStore state was restored. No restart is needed."
                         : "The fallback was written, its reboot checkpoint could not be saved, and exact automatic rollback was incomplete. Do NOT restart. Use the recovery kit and review the Activity log.",
                     DialogIcon.Error);
                 return;

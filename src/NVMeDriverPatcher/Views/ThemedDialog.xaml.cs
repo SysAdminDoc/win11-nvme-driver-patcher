@@ -35,8 +35,20 @@ public partial class ThemedDialog : Window
         DialogButtons buttons = DialogButtons.OK, DialogIcon icon = DialogIcon.Information,
         Window? owner = null)
     {
+        var dlg = Create(message, title, buttons, icon);
+        if (owner is not null) dlg.Owner = owner;
+        dlg.ShowDialog();
+        return dlg.Result;
+    }
+
+    // Everything Show does short of showing the modal window, so the layout is testable.
+    internal static ThemedDialog Create(string message, string title, DialogButtons buttons, DialogIcon icon)
+    {
         var dlg = new ThemedDialog();
         dlg.DlgTitle.Text = string.IsNullOrWhiteSpace(title) ? "NVMe Driver Patcher" : title;
+        // The window is borderless, so its caption never shows, but screen readers announce the
+        // dialog by its window title. Left empty, Narrator announced every dialog as blank.
+        dlg.Title = dlg.DlgTitle.Text;
 
         if (buttons == DialogButtons.YesNo)
         {
@@ -94,10 +106,7 @@ public partial class ThemedDialog : Window
         System.Windows.Controls.Canvas.SetLeft(iconPath, 0);
         System.Windows.Controls.Canvas.SetTop(iconPath, 0);
         dlg.IconCanvas.Children.Add(iconPath);
-
-        if (owner is not null) dlg.Owner = owner;
-        dlg.ShowDialog();
-        return dlg.Result;
+        return dlg;
     }
 
     private void SetMessage(string message, Brush accentBrush)
