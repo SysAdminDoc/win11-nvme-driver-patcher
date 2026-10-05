@@ -20,8 +20,35 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   post-reboot verification, which could have called a patch that never bound "Confirmed". It
   now needs a drive under Storage disks or an `nvmedisk.inf` device binding. The legacy
   PowerShell status script and the verification script it writes got the same fix.
+- Apply no longer gets locked to verify/rollback, and the bundled data files no longer show as
+  stale, on Windows set to a Thai, Saudi Arabian or Persian calendar. Review dates were being
+  read through the current culture's calendar.
+- Asking for a once-a-day watchdog sweep now registers a daily task. It used to fail with "The
+  /MO value is invalid" because schtasks caps minute schedules at 1439.
+- `fallback -f` now works the same as `fallback --force`.
+- `compare-benchmarks` accepts `--threshold=5%` the way its help describes, and stops with a
+  clear error on a value it can't read instead of quietly using 15%. A config migration failure
+  is now reported instead of swallowed.
+- NVMe Identify no longer reports an empty or failed controller response as a success. It now
+  checks the protocol status the driver returns, and the request uses the IOCTL code and
+  command fields from the Windows SDK header.
+- A Group Policy that only sets the persistence guard now counts as an applied policy.
+- Activity log: the clear prompt says "1 activity entry" or "2 activity entries" (no more
+  "entrys"), minidump warnings count toward the warning badge, Copy Selection no longer crashes
+  when another app is holding the clipboard, and a burst of log lines refreshes the view once
+  instead of redrawing it line by line.
+- The Rollback readiness chip turns green when recovery is ready, instead of green text on a
+  yellow chip.
+- Safe Boot is spelled the same way across the app, and screen readers now announce each
+  dialog by its title.
+- Legacy PowerShell script: the removal prompt no longer promises a BitLocker suspension it
+  doesn't perform, system tools launch from their Windows folders instead of by bare name, the
+  recovery kit `.reg` and `.bat` files use Windows line endings, and BypassIO shows as unknown
+  rather than unsupported on non-English Windows.
 
 ### Changed
+- Removed the workspace tab badges, which could never appear. The same status already shows in
+  the Overview chips and the activity rail.
 - Re-reviewed the bundled Windows build rules and feature-ID catalog against current sources on
   2026-10-05. The 26200.8524 rule now says what its evidence covers (one Insider build) rather
   than implying every later retail 25H2 build, the 25H2 note no longer claims 60786016 is gone,
@@ -38,6 +65,10 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   Important, matching Microsoft's rating.
 
 ### Docs
+- CLI help now describes what `register-tasks`, `tail` and `watchdog --auto-revert` actually do,
+  and lists every command that supports `--json` (twelve, not five).
+- The README gives the real number of preflight checks (up to 27, not 11), and the docs
+  validator now checks that number against the code.
 - The README's manual WinRE removal steps now clear only the SafeBoot default value (`/ve`), the
   same way the Recovery Kit has since #13. They used to delete the whole `{75416E63-...}` key,
   which on current builds also belongs to Windows (24H2 26100.9550 creates it with its own
