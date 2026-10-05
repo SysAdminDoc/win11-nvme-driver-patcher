@@ -1,4 +1,6 @@
 using System.IO;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text.Json;
 using Microsoft.Win32;
 using NVMeDriverPatcher.Models;
@@ -15,6 +17,10 @@ public sealed record SafeBootKeySnapshot
     public string Path { get; init; } = string.Empty;
     public bool Existed { get; init; }
     public bool AccessDenied { get; init; }
+
+    /// <summary>The key exists, is readable, and TrustedInstaller owns it. 24H2 26100.9550 ships the
+    /// GUID keys this way with "NvmeDisk" as the default value, and even SYSTEM can't write them.</summary>
+    public bool WindowsOwned { get; init; }
     public IReadOnlyList<SafeBootValueSnapshot> Values { get; init; } = Array.Empty<SafeBootValueSnapshot>();
 
     /// <summary>The default (unnamed) value's string data, or null when absent.</summary>
@@ -36,7 +42,10 @@ public enum SafeBootKeyDisposition
     /// <summary>Key exists with named values we did not write (OS-owned — issue #13).</summary>
     ForeignValuesPresent,
     /// <summary>The key cannot be read/written (ACL denies this process — issue #13).</summary>
-    AccessDenied
+    AccessDenied,
+    /// <summary>Windows created the key, owns it through TrustedInstaller and write-protects it.
+    /// It already registers the driver for Safe Mode, so apply leaves it alone.</summary>
+    WindowsOwned
 }
 
 public sealed record SafeBootRestorePlan(bool DeleteEntireKey, bool DeleteAppDefaultValue, string? RestorePriorDefault);
@@ -55,6 +64,7 @@ public sealed class SafeBootJournalEntry
     public string ExpectedDefault { get; set; } = string.Empty;
     public bool Existed { get; set; }
     public bool AccessDenied { get; set; }
+    public bool WindowsOwned { get; set; }
     public List<SafeBootValueSnapshot> Values { get; set; } = new();
 
     public SafeBootKeySnapshot ToSnapshot() => new()
@@ -62,6 +72,7 @@ public sealed class SafeBootJournalEntry
         Path = Path,
         Existed = Existed,
         AccessDenied = AccessDenied,
+        WindowsOwned = WindowsOwned,
         Values = Values
     };
 }
@@ -101,6 +112,7 @@ public static class SafeBootStateService
     {
         if (snapshot.AccessDenied) return SafeBootKeyDisposition.AccessDenied;
         if (!snapshot.Existed) return SafeBootKeyDisposition.WritableAbsent;
+        if (snapshot.WindowsOwned) return SafeBootKeyDisposition.WindowsOwned;
         if (snapshot.HasForeignNamedValues) return SafeBootKeyDisposition.ForeignValuesPresent;
 
         var def = snapshot.DefaultValue;
@@ -168,6 +180,7 @@ public static class SafeBootStateService
                 ExpectedDefault = expected,
                 Existed = snap.Existed,
                 AccessDenied = snap.AccessDenied,
+                WindowsOwned = snap.WindowsOwned,
                 Values = snap.Values.ToList()
             });
         }
@@ -181,6 +194,14 @@ public static class SafeBootStateService
         var failures = new List<string>();
         foreach (var entry in journal.Entries)
         {
+            if (entry.WindowsOwned)
+            {
+                // Apply never writes a Windows-owned key, so there's nothing to undo, and the
+                // write would be refused anyway.
+                log?.Invoke($"  [SafeBoot] Left {entry.Path} as is: Windows owns and write-protects it");
+                continue;
+            }
+
             try
             {
                 var plan = PlanRestore(entry.ToSnapshot());
@@ -190,6 +211,13 @@ public static class SafeBootStateService
                      : plan.DeleteAppDefaultValue ? "removed app default value, kept pre-existing key/values"
                      : $"restored prior default '{plan.RestorePriorDefault}'"));
             }
+            catch (Exception ex) when (IsRefusedButUnchanged(registry, entry, ex))
+            {
+                // Journals written before ownership was recorded still list Windows-owned keys.
+                // A refused write to a key that already matches its baseline restored nothing
+                // because nothing had changed.
+                log?.Invoke($"  [SafeBoot] Left {entry.Path} as is: write-protected and already at its pre-apply state");
+            }
             catch (Exception ex)
             {
                 failures.Add($"{entry.Path} ({ex.GetType().Name})");
@@ -197,6 +225,42 @@ public static class SafeBootStateService
             }
         }
         return failures;
+    }
+
+    private static bool IsRefusedButUnchanged(ISafeBootRegistry registry, SafeBootJournalEntry entry, Exception ex)
+    {
+        if (ex is not (UnauthorizedAccessException or System.Security.SecurityException)) return false;
+        try { return SnapshotsMatch(entry.ToSnapshot(), registry.Read(entry.Path)); }
+        catch { return false; }
+    }
+
+    /// <summary>Same existence, readability and values, in any value order. Ownership isn't
+    /// compared: older journals never recorded it.</summary>
+    internal static bool SnapshotsMatch(SafeBootKeySnapshot left, SafeBootKeySnapshot right)
+    {
+        if (left.Existed != right.Existed || left.AccessDenied != right.AccessDenied)
+            return false;
+        var l = left.Values.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+        var r = right.Values.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+        return l.SequenceEqual(r);
+    }
+
+    // NT SERVICE\TrustedInstaller. A SID, so the check doesn't depend on the display language.
+    internal const string TrustedInstallerSid = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
+
+    /// <summary>True when TrustedInstaller owns the key. Reading the owner needs only the read
+    /// access the key was opened with, so this works without elevation and writes nothing.</summary>
+    internal static bool IsTrustedInstallerOwned(RegistryKey key)
+    {
+        try
+        {
+            var owner = key.GetAccessControl(AccessControlSections.Owner).GetOwner(typeof(SecurityIdentifier));
+            return string.Equals(owner?.Value, TrustedInstallerSid, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public static string JournalPath(string workingDir) =>
@@ -328,7 +392,13 @@ public sealed class RealSafeBootRegistry : ISafeBootRegistry
                 var raw = key.GetValue(name);
                 values.Add(new SafeBootValueSnapshot(name, (int)kind, raw?.ToString()));
             }
-            return new SafeBootKeySnapshot { Path = path, Existed = true, Values = values };
+            return new SafeBootKeySnapshot
+            {
+                Path = path,
+                Existed = true,
+                WindowsOwned = SafeBootStateService.IsTrustedInstallerOwned(key),
+                Values = values
+            };
         }
         catch (System.Security.SecurityException)
         {

@@ -122,6 +122,8 @@ Since v4.6.1 the patch also writes two **service-name** SafeBoot entries for KB5
 components above, but removal must delete them too. The Recovery Kit and `remove` both do.
 `NVMeDriverPatcher.Cli upgrade-safeboot` adds them to a machine patched before v4.6.1.
 
+Some builds ship the two GUID SafeBoot keys themselves. On 24H2 26100.9550 and 25H2 26200 they're owned by TrustedInstaller with `NvmeDisk` as the value, and not even SYSTEM can write them. Windows already registers the driver for Safe Mode there, so the patch leaves those keys as they are and counts them as done. Preflight and `dry-run` say when that's the case, and `remove` leaves them alone too.
+
 > **Important:** The SafeBoot keys are critical. Without them, your system cannot boot into Safe Mode after enabling Native NVMe. Many manual guides omit these keys; this tool includes them automatically.
 
 ## Features

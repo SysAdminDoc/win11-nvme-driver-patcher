@@ -138,6 +138,25 @@ public static class PatchService
         return mirrors;
     }
 
+    /// <summary>
+    /// Pure: splits off SafeBoot writes whose key Windows owns and write-protects. 24H2 26100.9550
+    /// ships the GUID keys that way with "NvmeDisk" as the default value. Windows already registers
+    /// the driver for Safe Mode there and refuses the write even to SYSTEM, so apply leaves those
+    /// keys alone and counts them as done instead of failing partway through the batch.
+    /// </summary>
+    internal static (IReadOnlyList<DurableRegistryMutation> Writes, IReadOnlyList<DurableRegistryMutation> LeftToWindows)
+        SplitWindowsOwnedSafeBootWrites(IReadOnlyList<DurableRegistryMutation> mutations, Func<string, bool> isWindowsOwned)
+    {
+        var writes = new List<DurableRegistryMutation>();
+        var leftToWindows = new List<DurableRegistryMutation>();
+        foreach (var mutation in mutations)
+        {
+            bool safeBoot = mutation.Path.Contains(@"\Control\SafeBoot\", StringComparison.OrdinalIgnoreCase);
+            (safeBoot && isWindowsOwned(mutation.Path) ? leftToWindows : writes).Add(mutation);
+        }
+        return (writes, leftToWindows);
+    }
+
     public static PatchOperationResult Install(
         AppConfig config,
         NativeNVMeStatus? nativeStatus,
@@ -305,12 +324,18 @@ public static class PatchService
             mutationMayHaveLanded = true;
             // Use the ledger's mirror set, not the freshly enumerated one: when an earlier clean
             // baseline is reused, that baseline is what bounds the restorable write surface.
-            var registryBatch = DurableRegistryCommitService.CommitAll(
+            var safeBootRegistry = new RealSafeBootRegistry();
+            var (writes, leftToWindows) = SplitWindowsOwnedSafeBootWrites(
                 BuildRequiredRegistryMutations(
                     profile, includeServer, ledgerPreparation.Ledger.MirroredControlSets),
+                path => safeBootRegistry.Read(path).WindowsOwned);
+            foreach (var left in leftToWindows)
+                log?.Invoke($"  [KEPT] {left.Label}: Windows owns and write-protects this key and already registers the driver for Safe Mode in it");
+            var registryBatch = DurableRegistryCommitService.CommitAll(
+                writes,
                 registryPlatform,
                 log);
-            successCount = registryBatch.CountedCommitted;
+            successCount = registryBatch.CountedCommitted + leftToWindows.Count(mutation => mutation.CountsTowardPatchTotal);
             if (!registryBatch.Success)
                 throw new IOException(registryBatch.Summary);
 

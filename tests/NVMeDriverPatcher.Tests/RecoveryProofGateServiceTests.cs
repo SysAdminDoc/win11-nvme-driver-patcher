@@ -109,6 +109,22 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
         Assert.Contains("Recovery kit", report.Summary);
     }
 
+    [Theory]
+    [InlineData(true, true, false, true, "both present")]
+    [InlineData(true, false, false, false, "Run upgrade-safeboot")]
+    // 26100.9550: Windows' GUID keys exist but they aren't this tool's, so the gate passes and
+    // says so instead of claiming there are no entries.
+    [InlineData(false, false, true, true, "Windows' own GUID entries are in place and stay as they are")]
+    [InlineData(false, false, false, true, "No SafeBoot entries from this tool yet")]
+    public void SafeBootEntries_DescribeWhatIsActuallyThere(
+        bool guidEntriesPresent, bool serviceEntriesComplete, bool windowsOwnsGuidKeys, bool passed, string detail)
+    {
+        var item = RecoveryProofGateService.ClassifySafeBootEntries(guidEntriesPresent, serviceEntriesComplete, windowsOwnsGuidKeys);
+
+        Assert.Equal(passed, item.Passed);
+        Assert.Contains(detail, item.Detail, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void EvaluateSafeBootEntries_DoesNotThrow()
     {
