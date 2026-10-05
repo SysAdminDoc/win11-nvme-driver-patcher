@@ -79,6 +79,34 @@ public sealed class ApstBatteryEstimateTests
     }
 
     [Fact]
+    public void ApplyIdentifyPowerStates_WithNoRegistryStates_ListsTheControllersTable()
+    {
+        // stornvme normally has no PowerState{i}_* values, which left the inspector empty even
+        // though Identify returned the drive's power table.
+        var report = new ApstInspectionReport();
+
+        ApstInspectorService.ApplyIdentifyPowerStates(report,
+        [
+            new NvmePowerStateDescriptor { Index = 4, MaxPowerWatts = 0.005, EntryLatencyUs = 5000, ExitLatencyUs = 45000, NonOperational = true },
+            new NvmePowerStateDescriptor { Index = 0, MaxPowerWatts = 3.25 },
+            new NvmePowerStateDescriptor { Index = 2, MaxPowerWatts = 0 },   // unreported power: skipped
+            new NvmePowerStateDescriptor { Index = 0, MaxPowerWatts = 9.9 }  // duplicate index: first wins
+        ]);
+
+        Assert.Equal([0, 4], report.States.Select(s => s.PowerStateNumber));
+        Assert.Equal(3.25, report.States[0].MaxPowerWatts);
+        Assert.Equal(false, report.States[0].NonOperational);
+        Assert.Equal(5000, report.States[1].EntryLatencyUs);
+        Assert.Equal(45000, report.States[1].ExitLatencyUs);
+        Assert.Equal(true, report.States[1].NonOperational);
+        Assert.Null(report.States[1].IdleTimeMicroseconds);
+
+        var estimate = ApstInspectorService.EstimateBatteryImpact(report);
+        Assert.Equal(3.25, estimate.ActivePowerWatts);
+        Assert.Equal(0.005, estimate.LowestIdlePowerWatts);
+    }
+
+    [Fact]
     public void EstimateBatteryImpact_NoLowPowerTransitions_IsNotHonored()
     {
         var report = new ApstInspectionReport

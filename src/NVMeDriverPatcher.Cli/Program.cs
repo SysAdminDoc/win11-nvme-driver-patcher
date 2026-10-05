@@ -575,7 +575,7 @@ class Program
         var report = ApstInspectorService.Inspect();
         Console.WriteLine(report.Summary);
         foreach (var s in report.States)
-            Console.WriteLine($"  PS{s.PowerStateNumber}  idle={s.IdleTimeMicroseconds}us  entry={s.EntryLatencyUs}us  exit={s.ExitLatencyUs}us  nonOp={s.NonOperational}");
+            Console.WriteLine($"  PS{s.PowerStateNumber}  max={(s.MaxPowerWatts is double watts ? $"{watts:0.####}W" : "n/a")}  idle={(s.IdleTimeMicroseconds is int idle ? $"{idle}us" : "n/a")}  entry={s.EntryLatencyUs}us  exit={s.ExitLatencyUs}us  nonOp={s.NonOperational}");
         if (report.BatteryEstimate is { } est)
         {
             Console.WriteLine();
