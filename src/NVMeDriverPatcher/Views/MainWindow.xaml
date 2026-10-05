@@ -1803,26 +1803,20 @@
                                                                    LineHeight="17"
                                                                    TextWrapping="Wrap"/>
                                                         <WrapPanel Margin="0,10,0,0">
-                                                            <TextBlock Foreground="{DynamicResource TextPrimary}"
+                                                            <TextBlock Text="{Binding LogEntryCountText}"
+                                                                       Foreground="{DynamicResource TextPrimary}"
                                                                        FontSize="11.5"
-                                                                       FontWeight="SemiBold">
-                                                                <Run Text="{Binding LogEntryCount, Mode=OneWay}"/>
-                                                                <Run Text=" events"/>
-                                                            </TextBlock>
-                                                            <TextBlock Margin="12,0,0,0"
+                                                                       FontWeight="SemiBold"/>
+                                                            <TextBlock Text="{Binding LogWarningCountText}"
+                                                                       Margin="12,0,0,0"
                                                                        Foreground="{DynamicResource Yellow}"
                                                                        FontSize="11.5"
-                                                                       FontWeight="SemiBold">
-                                                                <Run Text="{Binding LogWarningCount, Mode=OneWay}"/>
-                                                                <Run Text=" advisories"/>
-                                                            </TextBlock>
-                                                            <TextBlock Margin="12,0,0,0"
+                                                                       FontWeight="SemiBold"/>
+                                                            <TextBlock Text="{Binding LogErrorCountText}"
+                                                                       Margin="12,0,0,0"
                                                                        Foreground="{DynamicResource Red}"
                                                                        FontSize="11.5"
-                                                                       FontWeight="SemiBold">
-                                                                <Run Text="{Binding LogErrorCount, Mode=OneWay}"/>
-                                                                <Run Text=" issues"/>
-                                                            </TextBlock>
+                                                                       FontWeight="SemiBold"/>
                                                         </WrapPanel>
                                                     </StackPanel>
                                                 </Grid>
@@ -1861,11 +1855,8 @@
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="Technical log"/>
                                                 <TextBlock Margin="6,0,0,0"
-                                                           Foreground="{DynamicResource TextDim}">
-                                                    <Run Text="·"/>
-                                                    <Run Text="{Binding LogEntryCount, Mode=OneWay}"/>
-                                                    <Run Text=" entries"/>
-                                                </TextBlock>
+                                                           Foreground="{DynamicResource TextDim}"
+                                                           Text="{Binding LogEntryCountText, StringFormat='· {0}'}"/>
                                             </StackPanel>
                                         </ToggleButton>
 

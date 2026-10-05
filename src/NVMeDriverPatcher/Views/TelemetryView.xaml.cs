@@ -169,7 +169,7 @@ public partial class TelemetryView : UserControl
         WearValue.Text = health.Wear;
         PohValue.Text = health.PowerOnHours;
         ErrorsValue.Text = health.MediaErrors.ToString();
-        PohValue.Foreground = ResolveBrush("Accent");
+        PohValue.Foreground = ResolveBrush(ExtractNumericValue(health.PowerOnHours) is null ? "TextMuted" : "Accent");
 
         var tooltip = string.IsNullOrWhiteSpace(health.SmartTooltip) ? null : health.SmartTooltip;
         TempValue.ToolTip = tooltip;
@@ -177,14 +177,8 @@ public partial class TelemetryView : UserControl
         PohValue.ToolTip = tooltip;
         ErrorsValue.ToolTip = tooltip;
 
-        // Color temp gauge
-        int temp = ExtractNumericValue(health.Temperature);
-        TempValue.Foreground = ResolveBrush(
-            temp >= 70 ? "Red" : temp >= 50 ? "Yellow" : "Green");
-
-        int lifeRemaining = ExtractNumericValue(health.Wear);
-        WearValue.Foreground = ResolveBrush(
-            lifeRemaining <= 20 ? "Red" : lifeRemaining <= 50 ? "Yellow" : "Green");
+        TempValue.Foreground = ResolveBrush(TemperatureBrushKey(health.Temperature));
+        WearValue.Foreground = ResolveBrush(LifeRemainingBrushKey(health.Wear));
 
         // Color errors gauge
         ErrorsValue.Foreground = health.MediaErrors > 0
@@ -199,10 +193,13 @@ public partial class TelemetryView : UserControl
         if (data.Count == 0)
         {
             TempChart.Series = [];
+            // The empty chart canvas paints past the placeholder's rounded corners, so hide it.
+            TempChart.Visibility = System.Windows.Visibility.Hidden;
             TempHistoryPlaceholder.Visibility = System.Windows.Visibility.Visible;
             return;
         }
 
+        TempChart.Visibility = System.Windows.Visibility.Visible;
         TempHistoryPlaceholder.Visibility = System.Windows.Visibility.Collapsed;
 
         TempChart.Series = new ISeries[]
@@ -225,10 +222,12 @@ public partial class TelemetryView : UserControl
         if (data.Count == 0)
         {
             WearChart.Series = [];
+            WearChart.Visibility = System.Windows.Visibility.Hidden;
             WearHistoryPlaceholder.Visibility = System.Windows.Visibility.Visible;
             return;
         }
 
+        WearChart.Visibility = System.Windows.Visibility.Visible;
         WearHistoryPlaceholder.Visibility = System.Windows.Visibility.Collapsed;
 
         WearChart.Series = new ISeries[]
@@ -356,7 +355,7 @@ public partial class TelemetryView : UserControl
     {
         TempValue.Foreground = ResolveBrush("TextSecondary");
         WearValue.Foreground = ResolveBrush("TextSecondary");
-        PohValue.Foreground = ResolveBrush("Accent");
+        PohValue.Foreground = ResolveBrush("TextSecondary");
         ErrorsValue.Foreground = ResolveBrush("TextSecondary");
     }
 
@@ -389,12 +388,20 @@ public partial class TelemetryView : UserControl
         return new SKColor(color.R, color.G, color.B, alpha ?? color.A);
     }
 
-    private static int ExtractNumericValue(string? value)
+    // A reading with no digits ("N/A" on the Windows fallback path) used to parse as 0, which
+    // painted a missing temperature green and missing life remaining red, as if the drive were worn out.
+    internal static string TemperatureBrushKey(string? value) =>
+        ExtractNumericValue(value) is not int temp ? "TextMuted" : temp >= 70 ? "Red" : temp >= 50 ? "Yellow" : "Green";
+
+    internal static string LifeRemainingBrushKey(string? value) =>
+        ExtractNumericValue(value) is not int life ? "TextMuted" : life <= 20 ? "Red" : life <= 50 ? "Yellow" : "Green";
+
+    private static int? ExtractNumericValue(string? value)
     {
-        if (string.IsNullOrEmpty(value)) return 0;
+        if (string.IsNullOrEmpty(value)) return null;
         return int.TryParse(RxDigitsOnly.Replace(value, ""), out int numericValue)
             ? numericValue
-            : 0;
+            : null;
     }
 
     private static string BuildTrendHeadline(
