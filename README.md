@@ -95,9 +95,9 @@ Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the 
 
 | Component | Purpose |
 |-----------|---------|
-| Registry override `735209102` | NativeNVMeStackForGeClient - Primary driver enable |
-| Registry override `1853569164` | UxAccOptimization - Extended functionality |
-| Registry override `156965516` | Standalone_Future - Performance optimizations |
+| Registry override `735209102` | NativeNVMeStackForGeClient (primary driver enable) |
+| Registry override `1853569164` | UxAccOptimization (extended functionality) |
+| Registry override `156965516` | Standalone_Future (performance optimizations) |
 | SafeBoot Minimal Key | Prevents INACCESSIBLE_BOOT_DEVICE BSOD in Safe Mode |
 | SafeBoot Network Key | Safe Mode with Networking support |
 
