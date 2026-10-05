@@ -16,29 +16,32 @@ public class CompatChecksumResult
 // a "this user is running a custom compat table" breadcrumb.
 public static class CompatChecksumService
 {
-    public static CompatChecksumResult Verify(string? workingDirCompatPath, string shippedCompatPath)
+    /// <param name="embeddedFileName">When set and no loose shipped copy exists (a bare single-file
+    /// download), the copy embedded in Core stands in as the shipped default.</param>
+    public static CompatChecksumResult Verify(
+        string? workingDirCompatPath,
+        string shippedCompatPath,
+        string? embeddedFileName = null)
     {
         var result = new CompatChecksumResult();
         try
         {
-            var pathToHash = !string.IsNullOrEmpty(workingDirCompatPath) && File.Exists(workingDirCompatPath)
-                ? workingDirCompatPath
-                : shippedCompatPath;
-            if (!File.Exists(pathToHash))
+            bool localExists = !string.IsNullOrEmpty(workingDirCompatPath) && File.Exists(workingDirCompatPath);
+            bool shippedExists = File.Exists(shippedCompatPath);
+            string? embeddedSha = !shippedExists && !string.IsNullOrEmpty(embeddedFileName)
+                ? BundledDataFileService.EmbeddedSha256(embeddedFileName)
+                : null;
+            if (!localExists && !shippedExists && embeddedSha is null)
             {
                 result.Summary = "No compat.json present.";
                 return result;
             }
-            result.Sha256 = HashFile(pathToHash);
-            if (File.Exists(shippedCompatPath))
-            {
-                result.ShippedSha256 = HashFile(shippedCompatPath);
-                result.ShippedDefault = string.Equals(result.Sha256, result.ShippedSha256, StringComparison.OrdinalIgnoreCase);
-            }
-            else
-            {
-                result.ShippedDefault = false;
-            }
+            result.Sha256 = localExists
+                ? HashFile(workingDirCompatPath!)
+                : shippedExists ? HashFile(shippedCompatPath) : embeddedSha!;
+            result.ShippedSha256 = shippedExists ? HashFile(shippedCompatPath) : embeddedSha ?? string.Empty;
+            result.ShippedDefault = !string.IsNullOrEmpty(result.ShippedSha256) &&
+                string.Equals(result.Sha256, result.ShippedSha256, StringComparison.OrdinalIgnoreCase);
             result.Summary = result.ShippedDefault
                 ? "compat.json matches the shipped default."
                 : "compat.json has been customized locally.";

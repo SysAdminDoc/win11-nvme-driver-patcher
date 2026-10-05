@@ -2,7 +2,8 @@
 <!--
   WiX v4 authoring for the NVMe Driver Patcher MSI. Produces a single-file, per-machine
   installer that drops the main GUI exe, the CLI exe, the Tray exe, and the shipped
-  compat.json into C:\Program Files\NVMe Driver Patcher\. Registers the Event Log source,
+  data files (compat.json, windows_build_rules.json, feature_ids.json) into
+  C:\Program Files\NVMe Driver Patcher\. Registers the Event Log source,
   creates the SchedulerService boot-time verifier task, and authors an ADMX-aware policy
   store registration.
 
@@ -121,6 +122,9 @@
       </Component>
       <Component Id="BuildRulesJson" Guid="*">
         <File Source="$(var.PublishDir)\windows_build_rules.json" KeyPath="yes" />
+      </Component>
+      <Component Id="FeatureIdsJson" Guid="*">
+        <File Source="$(var.PublishDir)\feature_ids.json" KeyPath="yes" />
       </Component>
       <Component Id="IconFile" Guid="*">
         <File Source="$(var.PublishDir)\icon.ico" KeyPath="yes" />

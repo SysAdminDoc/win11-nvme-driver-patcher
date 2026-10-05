@@ -230,6 +230,16 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Likely (environment-dependent precondition; mechanism verified)
   Effort: S
 
+- [ ] P3 — Bare CLI exe download ships without its native SQLite library
+  Category: packaging
+  Where: `src/NVMeDriverPatcher.Cli/NVMeDriverPatcher.Cli.csproj` (no `IncludeNativeLibrariesForSelfExtract`; the GUI csproj sets it), `packaging/release-artifacts.json` (`cli` uploads `publish/cli/NVMeDriverPatcher.Cli.exe` alone)
+  Problem: A local `dotnet publish -r win-x64 -p:PublishSingleFile=true` of the CLI leaves `e_sqlite3.dll` loose beside `NVMeDriverPatcher.Cli.exe`. The release uploads the exe by itself, so a direct CLI download has no SQLite native library and every command that touches `DataService` (snapshots, benchmark history) hits `DllNotFoundException` or a swallowed save failure. The MSI is unaffected because it ships the GUI publish folder. The data JSON files had the same gap and are now embedded in Core.
+  Evidence: Publish layout probe on 2026-10-05 listed `e_sqlite3.dll` beside the CLI exe.
+  Fix: Set `IncludeNativeLibrariesForSelfExtract=true` in the CLI csproj (and the Tray and Watchdog ones if they ever load SQLite), then re-run the publish probe and confirm only the exe, pdbs and `admx` remain. Check `SqliteVersionTests` still pins the native asset.
+  Acceptance: A CLI exe copied alone into an empty folder completes a DataService read and write without a missing-DLL error.
+  Confidence: Likely (layout verified; runtime failure inferred from SQLitePCLRaw native loading)
+  Effort: S
+
 ### Unaudited — needs a pass
 
 - [ ] P3 — Areas this audit did not cover

@@ -56,6 +56,20 @@ public static class DataFileProvenanceService
         var sourceKind = string.Equals(activePath, localPath, StringComparison.OrdinalIgnoreCase)
             ? "local override"
             : "bundled default";
+        bool shippedExists = !string.IsNullOrWhiteSpace(shippedPath) && File.Exists(shippedPath);
+
+        // With neither an override nor a loose copy beside the exe (a bare single-file download),
+        // the loaders read the copy embedded in Core. Report that copy rather than "missing".
+        string? embeddedText = null;
+        if (string.IsNullOrWhiteSpace(activePath) || !File.Exists(activePath))
+        {
+            embeddedText = BundledDataFileService.ReadEmbeddedText(fileName);
+            if (embeddedText is not null)
+            {
+                activePath = BundledDataFileService.EmbeddedDisplayPath(fileName);
+                sourceKind = BundledDataFileService.EmbeddedSourceKind;
+            }
+        }
 
         var result = new DataFileProvenance
         {
@@ -63,7 +77,7 @@ public static class DataFileProvenanceService
             FileName = fileName,
             ActivePath = activePath,
             SourceKind = sourceKind,
-            Exists = !string.IsNullOrWhiteSpace(activePath) && File.Exists(activePath),
+            Exists = embeddedText is not null || (!string.IsNullOrWhiteSpace(activePath) && File.Exists(activePath)),
             StaleAfterDays = staleAfterDays
         };
 
@@ -75,13 +89,18 @@ public static class DataFileProvenanceService
 
         try
         {
-            result.Sha256 = HashFile(activePath);
-            if (!string.IsNullOrWhiteSpace(shippedPath) && File.Exists(shippedPath))
-                result.ShippedSha256 = HashFile(shippedPath);
+            result.Sha256 = embeddedText is not null
+                ? BundledDataFileService.EmbeddedSha256(fileName) ?? string.Empty
+                : HashFile(activePath);
+            // The shipped reference is the loose copy when it exists, otherwise the embedded
+            // copy, so an override on a bare-exe install still reads as customized.
+            result.ShippedSha256 = shippedExists
+                ? HashFile(shippedPath)
+                : BundledDataFileService.EmbeddedSha256(fileName) ?? string.Empty;
             result.IsCustomized = !string.IsNullOrWhiteSpace(result.ShippedSha256) &&
                 !string.Equals(result.Sha256, result.ShippedSha256, StringComparison.OrdinalIgnoreCase);
 
-            using var doc = JsonDocument.Parse(File.ReadAllText(activePath));
+            using var doc = JsonDocument.Parse(embeddedText ?? File.ReadAllText(activePath));
             var root = doc.RootElement;
             if (root.TryGetProperty("schemaVersion", out var schema) && schema.ValueKind == JsonValueKind.Number)
                 result.SchemaVersion = schema.GetInt32();

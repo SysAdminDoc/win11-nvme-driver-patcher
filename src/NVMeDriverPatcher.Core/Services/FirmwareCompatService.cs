@@ -114,32 +114,35 @@ public static class FirmwareCompatService
 
     public static FirmwareCompatDatabase LoadDatabase(string? workingDir = null)
     {
+        string? appDir = null;
+        try { appDir = AppContext.BaseDirectory; } catch { }
+        return LoadDatabase(workingDir, appDir);
+    }
+
+    internal static FirmwareCompatDatabase LoadDatabase(string? workingDir, string? appDir)
+    {
         // Resolve order:
         //   1. %ProgramData%\NVMePatcher\compat.json (admin-editable, takes precedence)
         //   2. <app exe dir>\compat.json (shipped default)
-        //   3. Empty DB with a "loaded fallback" note so callers can render an honest UI.
+        //   3. The copy embedded in Core (a bare single-file download has no loose copy)
+        //   4. Empty DB with a "loaded fallback" note so callers can render an honest UI.
         var candidates = new List<string>();
         var workDir = workingDir ?? AppConfig.GetWorkingDir();
         if (!string.IsNullOrEmpty(workDir)) candidates.Add(Path.Combine(workDir, BundledCompatFile));
-        try
-        {
-            var appDir = AppContext.BaseDirectory;
-            if (!string.IsNullOrEmpty(appDir)) candidates.Add(Path.Combine(appDir, BundledCompatFile));
-        }
-        catch { }
+        if (!string.IsNullOrEmpty(appDir)) candidates.Add(Path.Combine(appDir, BundledCompatFile));
 
         foreach (var path in candidates)
         {
             try
             {
                 if (!File.Exists(path)) continue;
-                var json = File.ReadAllText(path);
-                if (string.IsNullOrWhiteSpace(json)) continue;
-                var db = JsonSerializer.Deserialize<FirmwareCompatDatabase>(json, JsonOptions);
-                if (db is not null && db.Entries.Count > 0) return db;
+                if (TryParse(File.ReadAllText(path), out var db)) return db;
             }
             catch { /* try next candidate */ }
         }
+
+        if (TryParse(BundledDataFileService.ReadEmbeddedText(BundledCompatFile), out var embedded))
+            return embedded;
 
         return new FirmwareCompatDatabase
         {
@@ -147,6 +150,23 @@ public static class FirmwareCompatService
             Updated = DateTime.UtcNow.ToString("yyyy-MM-dd"),
             Entries = new List<FirmwareCompatEntry>()
         };
+    }
+
+    private static bool TryParse(string? json, out FirmwareCompatDatabase db)
+    {
+        db = new FirmwareCompatDatabase();
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<FirmwareCompatDatabase>(json, JsonOptions);
+            if (parsed is null || parsed.Entries.Count == 0) return false;
+            db = parsed;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>

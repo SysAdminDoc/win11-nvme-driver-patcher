@@ -19,6 +19,13 @@
     <None Include="feature_ids.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- Single-file publish leaves the loose copies above beside the exe, so the bare exe that
+         winget, Scoop, Chocolatey and a direct download deliver arrives without them. The
+         embedded copies are the last resort after the admin override and the loose file
+         (BundledDataFileService). -->
+    <EmbeddedResource Include="compat.json" LogicalName="NVMeDriverPatcher.compat.json" />
+    <EmbeddedResource Include="windows_build_rules.json" LogicalName="NVMeDriverPatcher.windows_build_rules.json" />
+    <EmbeddedResource Include="feature_ids.json" LogicalName="NVMeDriverPatcher.feature_ids.json" />
     <EmbeddedResource Include="vivetool_trusted_releases.json" LogicalName="NVMeDriverPatcher.vivetool_trusted_releases.json" />
     <!-- Ship the ADMX/ADML templates beside every executable that references Core so
          `policy-install` works from GUI, CLI, and portable publish folders. -->
