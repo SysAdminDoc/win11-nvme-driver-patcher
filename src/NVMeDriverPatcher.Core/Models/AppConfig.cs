@@ -132,6 +132,31 @@ public class AppConfig
         !string.IsNullOrEmpty(name) &&
         OwnedOverrideValueNames.Contains(name, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// NVMe override values that third-party scripts write and this tool doesn't. They aren't
+    /// owned, so removal leaves them alone; preflight and the ownership report name them so the
+    /// user knows where they came from. 3244671118 is FR33THY "Ultimate" (NVME Faster Driver), and
+    /// with 1853569164 + 156965516 it is the set reported binding nvmedisk on 24H2 26100.8457+.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> KnownThirdPartyOverrideIDs { get; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["3244671118"] = "set by third-party NVMe scripts such as FR33THY Ultimate"
+        };
+
+    public static string DescribeForeignOverrideValue(string? name) =>
+        string.IsNullOrEmpty(name) ? "(Default)"
+        : KnownThirdPartyOverrideIDs.TryGetValue(name, out var source) ? $"{name} ({source})"
+        : name;
+
+    /// <summary>
+    /// True when a SafeBoot GUID key's default value is the "Storage Disks" text this tool writes.
+    /// Case-insensitive because community scripts write "Storage disks" and Windows doesn't care.
+    /// Windows' own entry on current builds says "NvmeDisk" (issue #13) and never matches.
+    /// </summary>
+    public static bool IsPatchSafeBootDefault(string? value) =>
+        string.Equals(value?.Trim(), SafeBootValue, StringComparison.OrdinalIgnoreCase);
+
     public static readonly Dictionary<string, string> FeatureNames = new()
     {
         ["735209102"] = "NativeNVMeStackForGeClient (Primary enable)",

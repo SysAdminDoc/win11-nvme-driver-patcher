@@ -341,13 +341,6 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
 
 ### P2
 
-- [ ] P2 — Detect and repair damage left by third-party debloat scripts
-  Why: FR33THY "Ultimate" (631★) applies a 5th override value `3244671118` this tool does not know, and its revert runs `reg delete HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft /f`, destroying the entire policy subtree. Users arrive with orphaned SafeBoot entries and a wiped Policies tree, and the tool currently reads that as an ordinary clean state.
-  Evidence: https://github.com/FR33THYFR33THY/Ultimate/blob/main/8%20Advanced/19%20NVME%20Faster%20Driver.ps1; repo-wide grep for `3244671118` returns 0 files. Related to the blocked "debloat tools break feature-management prerequisites" item in Roadmap_Blocked.md, but this is registry-state detection and needs no VM repro.
-  Touches: `Services/PreflightService.cs`, `Services/RegistryService.cs` (classify), `Services/PatchService.cs` residue probe, `Models/AppConfig.cs` (known-foreign IDs).
-  Acceptance: Preflight names a foreign override value or a SafeBoot entry with no matching override as third-party residue, with a remediation hint; a fixture test covers the wiped-`Policies\Microsoft` shape.
-  Complexity: M
-
 - [ ] P2 — Telemetry receiver: pin wrangler, migrate off the unsafe rate-limit binding, refresh compatibility date
   Why: `packaging/telemetry-receiver/package.json` declares no dependencies and there is no lockfile, so builds float to whatever `npx` resolves; the worker still uses `[[unsafe.bindings]]` for rate limiting although `[[ratelimits]]` has been stable since wrangler 4.36.0; `compatibility_date` is 2026-04-19. (Narrower and independent of the "telemetry-receiver needs a dedicated pass" scope note above.)
   Evidence: `packaging/telemetry-receiver/package.json`, `wrangler.toml`; https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/.

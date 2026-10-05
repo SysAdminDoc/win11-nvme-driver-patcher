@@ -47,7 +47,7 @@ public static class RegistryService
             // SafeBoot Minimal
             using (var safeMin = hklm.OpenSubKey(AppConfig.SafeBootMinimalPath))
             {
-                if (safeMin is not null && safeMin.GetValue("") as string == AppConfig.SafeBootValue)
+                if (safeMin is not null && AppConfig.IsPatchSafeBootDefault(safeMin.GetValue("") as string))
                 {
                     count++;
                     keys.Add("SafeBootMinimal");
@@ -58,7 +58,7 @@ public static class RegistryService
             // SafeBoot Network
             using (var safeNet = hklm.OpenSubKey(AppConfig.SafeBootNetworkPath))
             {
-                if (safeNet is not null && safeNet.GetValue("") as string == AppConfig.SafeBootValue)
+                if (safeNet is not null && AppConfig.IsPatchSafeBootDefault(safeNet.GetValue("") as string))
                 {
                     count++;
                     keys.Add("SafeBootNetwork");

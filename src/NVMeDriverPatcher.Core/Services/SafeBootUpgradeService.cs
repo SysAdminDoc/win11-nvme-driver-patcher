@@ -29,9 +29,9 @@ public static class SafeBootUpgradeService
         {
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
             using (var k = hklm.OpenSubKey(AppConfig.SafeBootMinimalPath))
-                guidMin = k?.GetValue("") as string == AppConfig.SafeBootValue;
+                guidMin = AppConfig.IsPatchSafeBootDefault(k?.GetValue("") as string);
             using (var k = hklm.OpenSubKey(AppConfig.SafeBootNetworkPath))
-                guidNet = k?.GetValue("") as string == AppConfig.SafeBootValue;
+                guidNet = AppConfig.IsPatchSafeBootDefault(k?.GetValue("") as string);
             using (var k = hklm.OpenSubKey(AppConfig.SafeBootMinimalServicePath))
                 svcMin = k?.GetValue("") as string == AppConfig.SafeBootServiceValue;
             using (var k = hklm.OpenSubKey(AppConfig.SafeBootNetworkServicePath))

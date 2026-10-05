@@ -424,6 +424,11 @@ Advanced hardening: `NVMeDriverPatcher.Cli.exe winre-inject` previews the DISM p
 - Check Device Manager > Disk drives > Properties > Driver
 - If using Samsung/WD proprietary drivers, this patch won't help
 
+### Switching from another NVMe script
+Readiness flags what other NVMe scripts leave behind under **ThirdPartyResidue** in the activity log. Override `3244671118` comes from scripts such as FR33THY Ultimate. This tool doesn't write it, so Remove leaves it alone, and you can delete it yourself if you want it gone.
+
+SafeBoot entries with no NVMe override behind them mean something removed the overrides and left the entries. They do nothing on their own, and Remove clears them. If the whole `HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft` key is gone as well, a script's revert deleted it. Run `gpupdate /force` if Group Policy puts Known Issue Rollback settings there.
+
 ### System won't boot after patch
 
 **Option 1: Use the Recovery Kit (recommended)**
