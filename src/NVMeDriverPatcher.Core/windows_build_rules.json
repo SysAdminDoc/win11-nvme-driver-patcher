@@ -91,8 +91,8 @@
       "minUbr": 0,
       "maxUbr": 999999,
       "expectedPath": "none-known",
-      "summary": "No primary Microsoft client matrix or sufficiently precise public evidence establishes a working enablement path for this 24H2 build/UBR. Do not extrapolate from 26100.8106; verify, monitor, or roll back only until an exact rule is sourced.",
-      "sourceUrl": "https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353",
+      "summary": "No Microsoft client matrix covers 24H2, and no exact rule is sourced for this build/UBR. Forum reports have overrides 3244671118 + 1853569164 + 156965516 binding nvmedisk on 26100.8457 and 26100.9550. A test install of 26100.9550 confirmed the bind and showed the costs: Windows deletes the 735209102 override at boot, binding needed all three values, and 156965516 makes DISM /ScanHealth report component store corruption while it's set (SFC stays clean, and the report clears once the value is removed). Verify, monitor, or roll back only; don't extrapolate from 26100.8106.",
+      "sourceUrl": "https://forums.mydigitallife.net/threads/discussion-windows-11-26x00-native-nvme-driver-discussion.89933/page-11",
       "confidence": "conservative-default",
       "lastReviewed": "2026-10-05"
     },

@@ -101,6 +101,8 @@ Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the 
 | SafeBoot Minimal Key | Prevents INACCESSIBLE_BOOT_DEVICE BSOD in Safe Mode |
 | SafeBoot Network Key | Safe Mode with Networking support |
 
+The Safe profile (the default) writes `735209102` and the two SafeBoot keys. The Full profile adds `1853569164` and `156965516`, and while `156965516` is set, `DISM /ScanHealth` reports component store corruption on 24H2 (see [Troubleshooting](#dism-scanhealth-reports-component-store-corruption)).
+
 Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be included via checkbox. **Recommended**: without it, the new I/O scheduler may not activate and results can be inconsistent.
 
 The three registry override IDs above are the historical payload the tool still writes; Windows
@@ -467,6 +469,12 @@ reg unload HKLM\OFFLINE
 
 **Option 3: Wait for auto-recovery**
 Windows automatically disables the native NVMe driver after 2-3 consecutive failed boots and reverts to the legacy stack.
+
+### DISM /ScanHealth reports component store corruption
+
+This comes from feature override `156965516` (Standalone_Future), which the Full profile writes and which the community 24H2 override sets also use. On a test install of 24H2 26100.9550, setting it made `DISM /Online /Cleanup-Image /ScanHealth` report 192 corrupt payloads ("The component store is repairable") whether or not the native driver was bound. Every flagged file was a reverse-delta copy in WinSxS (the `\r\` folders servicing keeps for rolling a file back), not a live system file, and `sfc /verifyonly` stayed clean the whole time. Removing the value and restarting made the next scan come back clean.
+
+If you need a clean DISM result, for example before a feature update or when someone asks you to run it for support, remove the patch (or switch to the Safe profile), restart, and scan again. The Safe profile's `735209102` alone didn't trigger the report.
 
 ### Custom/test-signed native NVMe workaround detected
 Some community workarounds force `nvmedisk.sys` with a custom OEM INF and BCD TESTSIGNING. This tool warns on that evidence but will not automate or remove the route because it changes driver-store state outside the registry/FeatureStore rollback model. Capture evidence with `pnputil /enum-drivers /files`, then revert through Device Manager or remove the confirmed package with `pnputil /delete-driver <oem#.inf> /uninstall` only after you know which INF owns the binding.

@@ -357,7 +357,7 @@ public static class CliCommandRegistry
         sb.AppendLine("  --force, -f                Skip overridable safety checks (VeraCrypt remains blocked)");
         sb.AppendLine("  --no-restart               Don't prompt for restart after apply/remove");
         sb.AppendLine("  --safe                     Safe Mode: write primary flag only (735209102) — recommended");
-        sb.AppendLine("  --full                     Full Mode: write all three flags (higher perf, higher risk)");
+        sb.AppendLine("  --full                     Full Mode: write all three flags (higher perf, higher risk; DISM reports store corruption while 156965516 is set)");
         sb.AppendLine("  --include-server-key       Force the optional Server 2025 key on for this run");
         sb.AppendLine("  --no-server-key            Force the optional Server 2025 key off for this run");
         sb.AppendLine("  --dry-run, --preview       Preview changes without applying them (works with 'apply')");

@@ -63,6 +63,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   a `5B2QGXA8` firmware that doesn't exist. Intel 670p/665p and the `EIFM72.1` Phison row drop from
   Bad to Caution and say their original reports couldn't be confirmed. CVE-2026-34332 is listed as
   Important, matching Microsoft's rating.
+- The Full profile's description, confirmation prompt, CLI `--full` help and offline docs now say
+  that while feature override `156965516` is set, `DISM /ScanHealth` reports component store
+  corruption on 24H2 (#19). On a 26100.9550 test install that value alone made DISM flag 192
+  reverse-delta payloads in WinSxS, `sfc` stayed clean, and the report went away once the value
+  was removed and Windows restarted. The Safe profile doesn't write it. The README has a new
+  Troubleshooting entry for it, and the 24H2 build rule now records what that test install
+  showed.
 
 ### Docs
 - CLI help now describes what `register-tasks`, `tail` and `watchdog --auto-revert` actually do,

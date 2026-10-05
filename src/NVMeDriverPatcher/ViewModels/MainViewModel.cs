@@ -22,8 +22,8 @@ public partial class MainViewModel : ObservableObject
     private const string NoRecoveryKitText = "No recovery kit is ready yet. Generate one before a risky reboot or remote handoff.";
     private const string NoVerificationScriptText = "No verification script is ready yet. Generate one so post-reboot checks stay predictable.";
     private const string NoDiagnosticsReportText = "No diagnostics report is saved yet. Export one when you need a support-ready snapshot.";
-    private const string SafeProfileHelpText = "Safe profile writes only feature flag 735209102, plus the Safe Boot entries used for rollback — enough to swap the driver, with no community boot-crash reports against it. This is what you want on a daily-driver machine.";
-    private const string FullProfileHelpText = "Full profile adds 1853569164 (UxAccOptimization) and 156965516 (Standalone_Future). Higher peak performance on some drives; community boot-crash reports cluster on these two flags. Try Safe profile first — you can always opt in later.";
+    private const string SafeProfileHelpText = "Safe profile writes only feature flag 735209102, plus the Safe Boot entries used for rollback. That's enough to swap the driver, with no community boot-crash reports against it. This is what you want on a daily-driver machine.";
+    private const string FullProfileHelpText = "Full profile adds 1853569164 (UxAccOptimization) and 156965516 (Standalone_Future). Higher peak performance on some drives, but community boot-crash reports cluster on these two flags, and while 156965516 is set DISM /ScanHealth reports component store corruption on 24H2 (SFC stays clean, and it clears once the patch is removed). Try Safe profile first; you can always opt in later.";
 
     public AppConfig Config { get; }
 
@@ -1276,8 +1276,8 @@ public partial class MainViewModel : ObservableObject
             // Educational opener — set expectations before the list of disclaimers so users
             // understand WHAT they're turning on, not just what might break.
             var profileLine = Config.PatchProfile == PatchProfile.Safe
-                ? "Mode: SAFE — writes only the primary feature flag (735209102). Extended flags stay off because they correlate with community BSOD reports."
-                : "Mode: FULL — writes the primary flag plus two extended flags. This can improve peak performance on some drives, but carries higher crash risk; community reports also describe rare power-loss data corruption under the extended flags (unconfirmed, single-source).";
+                ? "Mode: SAFE. Writes only the primary feature flag (735209102). Extended flags stay off because they correlate with community BSOD reports."
+                : "Mode: FULL. Writes the primary flag plus two extended flags. This can improve peak performance on some drives, but carries higher crash risk. While 156965516 is set, DISM /ScanHealth reports component store corruption (seen on 24H2 26100.9550); SFC stays clean and the report clears once the patch is removed. Community reports also describe rare power-loss data corruption under the extended flags (unconfirmed, single-source).";
             notes.Insert(0, profileLine);
 
             // BypassIO / DirectStorage — elevated from an afterthought to a first-class
