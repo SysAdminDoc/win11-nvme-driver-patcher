@@ -10,16 +10,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
-- [ ] P3 — GUI font sizes have no scale
-  Category: ui
-  Where: `src/NVMeDriverPatcher/Views/*.xaml`, `Themes/*.xaml`
-  Problem: The XAML uses 18 different font sizes (10 through 27, including 10.5, 11.5, 12.5 and 13.5), set inline on each TextBlock. Neighboring labels drift by half a point and there's no token to change them together.
-  Evidence: 2026-10-05 polish pass: `grep FontSize=` counts 32 uses of 11.5, 27 of 12, 18 of 12.5 and 15 of 10.5, plus single uses of 13.5, 15 and 27.
-  Fix: Define a type ramp in the shared theme dictionary (caption, label, body, subtitle, title, display) as `sys:Double` resources or text styles, move inline sizes onto it, and add a test that fails on an inline size outside the ramp.
-  Acceptance: Every FontSize in Views resolves to a ramp token, and a test enforces it.
-  Confidence: Confirmed
-  Effort: M
-
 - [ ] P3 — Collapsed footer with GitHub and Docs links is never shown
   Category: ui
   Where: `MainWindow.xaml` `FooterActionsPanel`, `MainWindow.xaml.cs` compact-layout handler

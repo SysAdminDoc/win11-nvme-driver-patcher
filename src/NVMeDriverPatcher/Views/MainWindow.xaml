@@ -65,19 +65,19 @@
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"
                                                Foreground="{DynamicResource TextPrimary}"
-                                               FontSize="12"
+                                               FontSize="{StaticResource FontSizeBody}"
                                                FontWeight="Bold"/>
                                 </Grid>
                             </Border>
                             <StackPanel Grid.Column="1" Margin="10,1,0,0" VerticalAlignment="Center">
                                 <TextBlock Text="NVMe Control"
                                            Foreground="{DynamicResource TextPrimary}"
-                                           FontSize="14"
+                                           FontSize="{StaticResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold"/>
                                 <TextBlock Text="DRIVER CONSOLE"
                                            Margin="0,2,0,0"
                                            Foreground="{DynamicResource TextDim}"
-                                           FontSize="10"
+                                           FontSize="{StaticResource FontSizeCaption}"
                                            FontWeight="SemiBold"/>
                             </StackPanel>
                         </Grid>
@@ -150,18 +150,18 @@
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"
                                                FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                               FontSize="13"
+                                               FontSize="{StaticResource FontSizeBodyLarge}"
                                                Foreground="{DynamicResource Green}"/>
                                 </Border>
                                 <StackPanel Grid.Column="1" Margin="9,0,0,0" VerticalAlignment="Center">
                                     <TextBlock Text="Administrator"
                                                Foreground="{DynamicResource TextSecondary}"
-                                               FontSize="11.5"
+                                               FontSize="{StaticResource FontSizeMeta}"
                                                FontWeight="SemiBold"/>
                                     <TextBlock Text="{Binding VersionText}"
                                                Margin="0,2,0,0"
                                                Foreground="{DynamicResource TextDim}"
-                                               FontSize="10"/>
+                                               FontSize="{StaticResource FontSizeCaption}"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -198,7 +198,7 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel>
-                                <TextBlock FontSize="22"
+                                <TextBlock FontSize="{StaticResource FontSizeMetric}"
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource TextPrimary}">
                                     <TextBlock.Style>
@@ -216,7 +216,7 @@
                                 </TextBlock>
                                 <TextBlock Margin="0,5,0,0"
                                            Foreground="{DynamicResource TextMuted}"
-                                           FontSize="12.5">
+                                           FontSize="{StaticResource FontSizeBody}">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Text" Value="Where the driver stands now and what to do next."/>
@@ -243,10 +243,10 @@
                                         <TextBlock Text="&#xEA18;"
                                                    Margin="0,0,6,0"
                                                    FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                                   FontSize="11"
+                                                   FontSize="{StaticResource FontSizeMeta}"
                                                    Foreground="{DynamicResource Green}"/>
                                         <TextBlock Text="ADMINISTRATOR"
-                                                   FontSize="10"
+                                                   FontSize="{StaticResource FontSizeCaption}"
                                                    FontWeight="SemiBold"
                                                    Foreground="{DynamicResource Green}"/>
                                     </StackPanel>
@@ -274,14 +274,14 @@
                                         Visibility="{Binding UpdateAvailable, Converter={StaticResource BoolVis}}"
                                         Command="{Binding OpenUpdateUrlCommand}"
                                         ToolTip="{Binding UpdateTooltip}">
-                                    <TextBlock Text="{Binding UpdateVersionText}" FontSize="11" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding UpdateVersionText}" FontSize="{StaticResource FontSizeMeta}" FontWeight="SemiBold"/>
                                 </Button>
 
                                 <Button x:Name="ThemeToggleButton"
                                         Content="&#x2600;"
                                         Style="{StaticResource WindowChromeButton}"
                                         FontFamily="Segoe UI Symbol"
-                                        FontSize="14"
+                                        FontSize="{StaticResource FontSizeBodyLarge}"
                                         AutomationProperties.Name="Toggle theme"
                                         Click="ThemeToggle_Click"/>
                                 <Button x:Name="MaximizeRestoreButton"
@@ -361,7 +361,7 @@
                                                            Fill="{Binding StatusColor, Converter={StaticResource StrToBrush}}"/>
                                                 <TextBlock Text="{Binding StatusText}"
                                                            Foreground="{Binding StatusColor, Converter={StaticResource StrToBrush}}"
-                                                           FontSize="10.5"
+                                                           FontSize="{StaticResource FontSizeCaption}"
                                                            FontWeight="SemiBold"/>
                                             </StackPanel>
                                         </Border>
@@ -369,7 +369,7 @@
                                     <TextBlock Text="{Binding StatusText}"
                                                Margin="0,8,0,0"
                                                Foreground="{DynamicResource TextPrimary}"
-                                               FontSize="27"
+                                               FontSize="{StaticResource FontSizeDisplay}"
                                                FontWeight="SemiBold"
                                                TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Text="{Binding StatusSummaryText}"
@@ -377,7 +377,7 @@
                                                 MaxWidth="720"
                                                 HorizontalAlignment="Left"
                                                 Foreground="{DynamicResource TextMuted}"
-                                               FontSize="13"
+                                               FontSize="{StaticResource FontSizeBodyLarge}"
                                                 LineHeight="19"
                                                 TextWrapping="Wrap"/>
 
@@ -486,12 +486,12 @@
                                             <StackPanel Grid.Column="1" Margin="10,0,0,0">
                                                 <TextBlock Text="{Binding NextStepTitle}"
                                                            Foreground="{DynamicResource TextSecondary}"
-                                                           FontSize="12"
+                                                           FontSize="{StaticResource FontSizeBody}"
                                                            FontWeight="SemiBold"/>
                                                 <TextBlock Text="{Binding NextStepDescription}"
                                                            Margin="0,3,0,0"
                                                            Foreground="{DynamicResource TextDim}"
-                                                           FontSize="11.5"
+                                                           FontSize="{StaticResource FontSizeMeta}"
                                                            TextWrapping="Wrap"/>
                                             </StackPanel>
                                         </Grid>
@@ -513,17 +513,17 @@
                                         <StackPanel>
                                             <TextBlock Text="{Binding MutationBlockedTitle}"
                                                        Foreground="{DynamicResource TextPrimary}"
-                                                       FontSize="12.5"
+                                                       FontSize="{StaticResource FontSizeBody}"
                                                        FontWeight="SemiBold"/>
                                             <TextBlock Text="{Binding MutationBlockedReason}"
                                                        Margin="0,4,0,0"
                                                        Foreground="{DynamicResource TextMuted}"
-                                                       FontSize="11.5"
+                                                       FontSize="{StaticResource FontSizeMeta}"
                                                        TextWrapping="Wrap"/>
                                             <TextBlock Text="{Binding MutationBlockedGuidance}"
                                                        Margin="0,4,0,0"
                                                        Foreground="{DynamicResource TextDim}"
-                                                       FontSize="11.5"
+                                                       FontSize="{StaticResource FontSizeMeta}"
                                                        TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Border>
@@ -616,7 +616,7 @@
                                                            HorizontalAlignment="Center"
                                                            VerticalAlignment="Center"
                                                            FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                                           FontSize="17"
+                                                           FontSize="{StaticResource FontSizeTitle}"
                                                            Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"/>
                                             </Border>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -624,7 +624,7 @@
                                                 <TextBlock Text="{Binding RecoveryTabBadgeText}"
                                                            Margin="0,4,0,0"
                                                            Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"
-                                                           FontSize="18"
+                                                           FontSize="{StaticResource FontSizeTitle}"
                                                            FontWeight="SemiBold"/>
                                             </StackPanel>
                                         </Grid>
@@ -633,7 +633,7 @@
                                                    Margin="0,13,0,0"
                                                    MaxHeight="52"
                                                    Foreground="{DynamicResource TextMuted}"
-                                                   FontSize="11.5"
+                                                   FontSize="{StaticResource FontSizeMeta}"
                                                    LineHeight="17"
                                                    TextWrapping="Wrap"
                                                    TextTrimming="CharacterEllipsis"
@@ -656,13 +656,13 @@
                                             <StackPanel Grid.Column="1">
                                                 <TextBlock Text="Post-reboot verification"
                                                            Foreground="{DynamicResource TextSecondary}"
-                                                           FontSize="11.5"
+                                                           FontSize="{StaticResource FontSizeMeta}"
                                                            FontWeight="SemiBold"/>
                                                 <TextBlock Text="{Binding VerificationScriptStatusText}"
                                                            Margin="0,3,0,0"
                                                            MaxHeight="34"
                                                            Foreground="{DynamicResource TextDim}"
-                                                           FontSize="10.5"
+                                                           FontSize="{StaticResource FontSizeCaption}"
                                                            TextWrapping="Wrap"
                                                            TextTrimming="CharacterEllipsis"
                                                            ToolTip="{Binding VerificationScriptStatusText}"/>
@@ -681,7 +681,7 @@
                                         </Border>
                                         <StackPanel Grid.Column="1">
                                             <TextBlock Text="WINDOWS BUILD" Style="{StaticResource SectionEyebrow}"/>
-                                            <TextBlock Text="{Binding BuildSummaryText}" Margin="0,5,0,0" Foreground="{DynamicResource TextPrimary}" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding BuildSummaryText}" Margin="0,5,0,0" Foreground="{DynamicResource TextPrimary}" FontSize="{StaticResource FontSizeBody}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -693,7 +693,7 @@
                                         </Border>
                                         <StackPanel Grid.Column="1">
                                             <TextBlock Text="NVME DRIVES" Style="{StaticResource SectionEyebrow}"/>
-                                            <TextBlock Text="{Binding DriveInventorySummaryText}" Margin="0,5,0,0" Foreground="{DynamicResource TextPrimary}" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding DriveInventorySummaryText}" Margin="0,5,0,0" Foreground="{DynamicResource TextPrimary}" FontSize="{StaticResource FontSizeBody}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -705,7 +705,7 @@
                                         </Border>
                                         <StackPanel Grid.Column="1">
                                             <TextBlock Text="DRIVER PATH" Style="{StaticResource SectionEyebrow}"/>
-                                            <TextBlock Text="{Binding DriverLabelText}" Margin="0,5,0,0" Foreground="{DynamicResource TextPrimary}" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding DriverLabelText}" Margin="0,5,0,0" Foreground="{DynamicResource TextPrimary}" FontSize="{StaticResource FontSizeBody}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -727,7 +727,7 @@
                                         </Border>
                                         <StackPanel Grid.Column="1">
                                             <TextBlock Text="RECOVERY" Style="{StaticResource SectionEyebrow}"/>
-                                            <TextBlock Text="{Binding RecoveryTabBadgeText}" Margin="0,5,0,0" Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding RecoveryTabBadgeText}" Margin="0,5,0,0" Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}" FontSize="{StaticResource FontSizeBody}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -832,21 +832,21 @@
                                                             <Border Padding="6,8" Background="{DynamicResource BgMedium}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="6">
                                                                 <StackPanel>
                                                                     <TextBlock Text="WINDOWS" Style="{StaticResource SectionEyebrow}"/>
-                                                                    <TextBlock Text="Storage stack" Margin="0,4,0,0" Foreground="{DynamicResource TextSecondary}" FontSize="11.5" FontWeight="SemiBold"/>
+                                                                    <TextBlock Text="Storage stack" Margin="0,4,0,0" Foreground="{DynamicResource TextSecondary}" FontSize="{StaticResource FontSizeMeta}" FontWeight="SemiBold"/>
                                                                 </StackPanel>
                                                             </Border>
                                                             <TextBlock Grid.Column="1" Text="&#xE76C;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource TextDim}"/>
                                                             <Border Grid.Column="2" Padding="6,8" Background="{DynamicResource BgMedium}" BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="6">
                                                                 <StackPanel>
                                                                     <TextBlock Text="CONTROLLER" Style="{StaticResource SectionEyebrow}"/>
-                                                                    <TextBlock Text="stornvme.sys" Margin="0,4,0,0" Foreground="{DynamicResource TextPrimary}" FontFamily="Cascadia Code, Consolas" FontSize="10" FontWeight="SemiBold"/>
+                                                                    <TextBlock Text="stornvme.sys" Margin="0,4,0,0" Foreground="{DynamicResource TextPrimary}" FontFamily="Cascadia Code, Consolas" FontSize="{StaticResource FontSizeCaption}" FontWeight="SemiBold"/>
                                                                 </StackPanel>
                                                             </Border>
                                                             <TextBlock Grid.Column="3" Text="&#xE76C;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource TextDim}"/>
                                                             <Border Grid.Column="4" Padding="6,8" Background="{DynamicResource BgMedium}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="6">
                                                                 <StackPanel>
                                                                     <TextBlock Text="DISK" Style="{StaticResource SectionEyebrow}"/>
-                                                                    <TextBlock Text="nvmedisk.sys" Margin="0,4,0,0" Foreground="{DynamicResource TextSecondary}" FontFamily="Cascadia Code, Consolas" FontSize="10" FontWeight="SemiBold"/>
+                                                                    <TextBlock Text="nvmedisk.sys" Margin="0,4,0,0" Foreground="{DynamicResource TextSecondary}" FontFamily="Cascadia Code, Consolas" FontSize="{StaticResource FontSizeCaption}" FontWeight="SemiBold"/>
                                                                 </StackPanel>
                                                             </Border>
                                                         </Grid>
@@ -854,7 +854,7 @@
                                                                    Text="Machine-wide driver change · restart required after apply or rollback"
                                                                    Margin="0,10,0,0"
                                                                    Foreground="{DynamicResource TextDim}"
-                                                                   FontSize="10.5"/>
+                                                                   FontSize="{StaticResource FontSizeCaption}"/>
                                                     </Grid>
                                                 </Border>
 
@@ -877,23 +877,23 @@
                                                                         </Style.Triggers>
                                                                     </Style>
                                                                 </Border.Style>
-                                                                <TextBlock Text="{Binding RecoveryTabBadgeText}" Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}" FontSize="10.5" FontWeight="SemiBold"/>
+                                                                <TextBlock Text="{Binding RecoveryTabBadgeText}" Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}" FontSize="{StaticResource FontSizeCaption}" FontWeight="SemiBold"/>
                                                             </Border>
                                                         </Grid>
                                                         <Grid Margin="0,13,0,0">
                                                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                                             <Rectangle Width="7" Height="7" Margin="0,3,9,0" VerticalAlignment="Top" Fill="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"/>
                                                             <StackPanel Grid.Column="1">
-                                                                <TextBlock Text="Recovery kit" Foreground="{DynamicResource TextSecondary}" FontSize="11.5" FontWeight="SemiBold"/>
-                                                                <TextBlock Text="{Binding RecoveryKitStatusText}" Margin="0,3,0,0" MaxHeight="30" Foreground="{DynamicResource TextDim}" FontSize="10.5" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
+                                                                <TextBlock Text="Recovery kit" Foreground="{DynamicResource TextSecondary}" FontSize="{StaticResource FontSizeMeta}" FontWeight="SemiBold"/>
+                                                                <TextBlock Text="{Binding RecoveryKitStatusText}" Margin="0,3,0,0" MaxHeight="30" Foreground="{DynamicResource TextDim}" FontSize="{StaticResource FontSizeCaption}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
                                                             </StackPanel>
                                                         </Grid>
                                                         <Grid Margin="0,10,0,0">
                                                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                                             <Rectangle Width="7" Height="7" Margin="0,3,9,0" VerticalAlignment="Top" Fill="{DynamicResource Accent}"/>
                                                             <StackPanel Grid.Column="1">
-                                                                <TextBlock Text="Post-reboot verification" Foreground="{DynamicResource TextSecondary}" FontSize="11.5" FontWeight="SemiBold"/>
-                                                                <TextBlock Text="{Binding VerificationScriptStatusText}" Margin="0,3,0,0" MaxHeight="30" Foreground="{DynamicResource TextDim}" FontSize="10.5" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
+                                                                <TextBlock Text="Post-reboot verification" Foreground="{DynamicResource TextSecondary}" FontSize="{StaticResource FontSizeMeta}" FontWeight="SemiBold"/>
+                                                                <TextBlock Text="{Binding VerificationScriptStatusText}" Margin="0,3,0,0" MaxHeight="30" Foreground="{DynamicResource TextDim}" FontSize="{StaticResource FontSizeCaption}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
                                                             </StackPanel>
                                                         </Grid>
                                                     </StackPanel>
@@ -1037,13 +1037,13 @@
                                                                 Margin="0,0,14,8">
                                                         <TextBlock Text="{Binding RecoveryWorkspaceSummaryText}"
                                                                    Foreground="{DynamicResource TextPrimary}"
-                                                                   FontSize="13"
+                                                                   FontSize="{StaticResource FontSizeBodyLarge}"
                                                                    FontWeight="SemiBold"
                                                                    TextWrapping="Wrap"/>
                                                         <TextBlock Text="{Binding OsRecoverySummaryText}"
                                                                    Margin="0,6,0,0"
                                                                    Foreground="{DynamicResource TextSecondary}"
-                                                                   FontSize="11.5"
+                                                                   FontSize="{StaticResource FontSizeMeta}"
                                                                    TextWrapping="Wrap"/>
                                                     </StackPanel>
 
@@ -1084,12 +1084,12 @@
                                                             <TextBlock Text="{Binding PreparationStageStateText}"
                                                                        Margin="0,4,0,0"
                                                                        Foreground="{Binding PreparationStageColor, Converter={StaticResource StrToBrush}}"
-                                                                       FontSize="14"
+                                                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                                                        FontWeight="SemiBold"
                                                                        TextWrapping="Wrap"/>
                                                             <TextBlock Text="{Binding PreparationStageDetailText}"
                                                                        Margin="0,3,0,0"
-                                                                       FontSize="11.5"
+                                                                       FontSize="{StaticResource FontSizeMeta}"
                                                                        Foreground="{DynamicResource TextMuted}"
                                                                        TextWrapping="Wrap"/>
                                                         </StackPanel>
@@ -1111,12 +1111,12 @@
                                                             <TextBlock Text="{Binding RestartStageStateText}"
                                                                        Margin="0,4,0,0"
                                                                        Foreground="{Binding RestartStageColor, Converter={StaticResource StrToBrush}}"
-                                                                       FontSize="14"
+                                                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                                                        FontWeight="SemiBold"
                                                                        TextWrapping="Wrap"/>
                                                             <TextBlock Text="{Binding RestartStageDetailText}"
                                                                        Margin="0,3,0,0"
-                                                                       FontSize="11.5"
+                                                                       FontSize="{StaticResource FontSizeMeta}"
                                                                        Foreground="{DynamicResource TextMuted}"
                                                                        TextWrapping="Wrap"/>
                                                         </StackPanel>
@@ -1138,12 +1138,12 @@
                                                             <TextBlock Text="{Binding ValidationStageStateText}"
                                                                        Margin="0,4,0,0"
                                                                        Foreground="{Binding ValidationStageColor, Converter={StaticResource StrToBrush}}"
-                                                                       FontSize="14"
+                                                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                                                        FontWeight="SemiBold"
                                                                        TextWrapping="Wrap"/>
                                                             <TextBlock Text="{Binding ValidationStageDetailText}"
                                                                        Margin="0,3,0,0"
-                                                                       FontSize="11.5"
+                                                                       FontSize="{StaticResource FontSizeMeta}"
                                                                        Foreground="{DynamicResource TextMuted}"
                                                                        TextWrapping="Wrap"/>
                                                         </StackPanel>
@@ -1174,7 +1174,7 @@
                                                         <TextBlock Text="{Binding RecoveryKitStatusText}"
                                                                    Margin="0,3,0,0"
                                                                    Foreground="{DynamicResource TextSecondary}"
-                                                                   FontSize="12"
+                                                                   FontSize="{StaticResource FontSizeBody}"
                                                                    TextWrapping="Wrap"/>
                                                     </StackPanel>
                                                     <Border Grid.Column="1"
@@ -1234,7 +1234,7 @@
                                                         <TextBlock Text="{Binding VerificationScriptStatusText}"
                                                                    Margin="0,3,0,0"
                                                                    Foreground="{DynamicResource TextSecondary}"
-                                                                   FontSize="12"
+                                                                   FontSize="{StaticResource FontSizeBody}"
                                                                    TextWrapping="Wrap"/>
                                                     </StackPanel>
                                                     <Border Grid.Row="2"
@@ -1295,7 +1295,7 @@
                                                         <TextBlock Text="{Binding DiagnosticsReportStatusText}"
                                                                    Margin="0,3,0,0"
                                                                    Foreground="{DynamicResource TextSecondary}"
-                                                                   FontSize="12"
+                                                                   FontSize="{StaticResource FontSizeBody}"
                                                                    TextWrapping="Wrap"/>
                                                     </StackPanel>
                                                     <Border Grid.Row="4"
@@ -1364,12 +1364,12 @@
                                                 <StackPanel>
                                                     <TextBlock Text="Keep one off-device copy"
                                                                Foreground="{DynamicResource Yellow}"
-                                                               FontSize="11.5"
+                                                               FontSize="{StaticResource FontSizeMeta}"
                                                                FontWeight="SemiBold"/>
                                                     <TextBlock Text="Before a restart or handoff, place the recovery kit somewhere outside this machine."
                                                                Margin="0,6,0,0"
                                                                Foreground="{DynamicResource TextSecondary}"
-                                                               FontSize="12"
+                                                               FontSize="{StaticResource FontSizeBody}"
                                                                TextWrapping="Wrap"/>
                                                 </StackPanel>
                                             </Border>
@@ -1474,7 +1474,7 @@
                                                                Text="{Binding WatchdogVerdictText}"
                                                                TextWrapping="Wrap"
                                                                Foreground="{DynamicResource TextSecondary}"
-                                                               FontSize="12.5"/>
+                                                               FontSize="{StaticResource FontSizeBody}"/>
 
                                                     <Border Grid.Row="1"
                                                             Grid.ColumnSpan="2"
@@ -1489,7 +1489,7 @@
                                                                Text="{Binding ReliabilitySummaryText}"
                                                                TextWrapping="Wrap"
                                                                Foreground="{DynamicResource TextSecondary}"
-                                                               FontSize="12.5"/>
+                                                               FontSize="{StaticResource FontSizeBody}"/>
 
                                                     <Border Grid.Row="3"
                                                             Grid.ColumnSpan="2"
@@ -1504,7 +1504,7 @@
                                                                Text="{Binding MinidumpSummaryText}"
                                                                TextWrapping="Wrap"
                                                                Foreground="{DynamicResource TextSecondary}"
-                                                               FontSize="12.5"/>
+                                                               FontSize="{StaticResource FontSizeBody}"/>
 
                                                     <Border Grid.Row="5"
                                                             Grid.ColumnSpan="2"
@@ -1530,7 +1530,7 @@
                                                                  VerticalScrollBarVisibility="Auto"
                                                                  AutomationProperties.Name="Dry-run preview output"
                                                                  FontFamily="Cascadia Code, Consolas, monospace"
-                                                                 FontSize="11.5"
+                                                                 FontSize="{StaticResource FontSizeMeta}"
                                                                  MinHeight="120"
                                                                  MaxHeight="240"/>
                                                     </Expander>
@@ -1570,7 +1570,7 @@
                                                     <TextBlock Text="Install mode"
                                                                Margin="0,9,0,2"
                                                                Foreground="{DynamicResource TextPrimary}"
-                                                               FontSize="12.5"
+                                                               FontSize="{StaticResource FontSizeBody}"
                                                                FontWeight="SemiBold"/>
                                                     <RadioButton Content="Safe profile (recommended)"
                                                                  Style="{StaticResource DarkRadioButton}"
@@ -1585,7 +1585,7 @@
                                                     <TextBlock Text="{Binding PatchProfileHelpText}"
                                                                Margin="0,6,0,0"
                                                                Foreground="{DynamicResource TextMuted}"
-                                                               FontSize="11.5"
+                                                               FontSize="{StaticResource FontSizeMeta}"
                                                                TextWrapping="Wrap"/>
                                                     <CheckBox Content="Also write the Server 2025 key"
                                                               Margin="0,8,0,0"
@@ -1601,7 +1601,7 @@
                                                             CornerRadius="8">
                                                         <TextBlock Text="DirectStorage and BypassIO may fall back on nvmedisk.sys. Keep removal available on gaming systems."
                                                                    Foreground="{DynamicResource Yellow}"
-                                                                   FontSize="12"
+                                                                   FontSize="{StaticResource FontSizeBody}"
                                                                    TextWrapping="Wrap"/>
                                                     </Border>
                                                 </StackPanel>
@@ -1645,7 +1645,7 @@
                                                     <TextBlock Text="{Binding ThemeModeSummaryText}"
                                                                Margin="0,6,0,0"
                                                                Foreground="{DynamicResource TextDim}"
-                                                               FontSize="11.5"
+                                                               FontSize="{StaticResource FontSizeMeta}"
                                                                TextWrapping="Wrap"/>
 
                                                     <Grid Margin="0,8,0,0">
@@ -1756,13 +1756,13 @@
                                                 <TextBlock Text="Activity"
                                                            Margin="0,4,0,0"
                                                            Foreground="{DynamicResource TextPrimary}"
-                                                           FontSize="17"
+                                                           FontSize="{StaticResource FontSizeTitle}"
                                                            FontWeight="SemiBold"/>
                                                 <TextBlock x:Name="LogRetentionCaption"
                                                            Text="{Binding LogRetentionText}"
                                                            Margin="0,4,0,0"
                                                            Foreground="{DynamicResource TextDim}"
-                                                           FontSize="10.5"
+                                                           FontSize="{StaticResource FontSizeCaption}"
                                                            LineHeight="14"
                                                            MaxHeight="16"
                                                            TextTrimming="CharacterEllipsis"
@@ -1804,23 +1804,23 @@
                                                         <TextBlock Text="{Binding ActivitySummaryText}"
                                                                    Margin="0,5,0,0"
                                                                    Foreground="{DynamicResource TextSecondary}"
-                                                                   FontSize="12"
+                                                                   FontSize="{StaticResource FontSizeBody}"
                                                                    LineHeight="17"
                                                                    TextWrapping="Wrap"/>
                                                         <WrapPanel Margin="0,10,0,0">
                                                             <TextBlock Text="{Binding LogEntryCountText}"
                                                                        Foreground="{DynamicResource TextPrimary}"
-                                                                       FontSize="11.5"
+                                                                       FontSize="{StaticResource FontSizeMeta}"
                                                                        FontWeight="SemiBold"/>
                                                             <TextBlock Text="{Binding LogWarningCountText}"
                                                                        Margin="12,0,0,0"
                                                                        Foreground="{DynamicResource Yellow}"
-                                                                       FontSize="11.5"
+                                                                       FontSize="{StaticResource FontSizeMeta}"
                                                                        FontWeight="SemiBold"/>
                                                             <TextBlock Text="{Binding LogErrorCountText}"
                                                                        Margin="12,0,0,0"
                                                                        Foreground="{DynamicResource Red}"
-                                                                       FontSize="11.5"
+                                                                       FontSize="{StaticResource FontSizeMeta}"
                                                                        FontWeight="SemiBold"/>
                                                         </WrapPanel>
                                                     </StackPanel>
@@ -1841,7 +1841,7 @@
                                                                Margin="0,5,0,0"
                                                                MaxHeight="38"
                                                                Foreground="{DynamicResource TextMuted}"
-                                                               FontSize="11.5"
+                                                               FontSize="{StaticResource FontSizeMeta}"
                                                                LineHeight="17"
                                                                TextTrimming="CharacterEllipsis"
                                                                TextWrapping="Wrap"/>
@@ -1966,7 +1966,7 @@
                                                              CaretBrush="Transparent"
                                                              AutomationProperties.Name="Persistent activity log output"
                                                              FontFamily="Cascadia Code,Consolas,Courier New"
-                                                             FontSize="10.5"
+                                                             FontSize="{StaticResource FontSizeCaption}"
                                                              Foreground="{DynamicResource TextSecondary}"
                                                              IsReadOnly="True"
                                                              IsTabStop="True"
@@ -2002,13 +2002,13 @@
                                                                 MaxWidth="260">
                                                         <TextBlock Text="No activity yet"
                                                                    Foreground="{DynamicResource TextPrimary}"
-                                                                   FontSize="14"
+                                                                   FontSize="{StaticResource FontSizeBodyLarge}"
                                                                    FontWeight="SemiBold"
                                                                    TextAlignment="Center"/>
                                                         <TextBlock Text="Checks and driver actions will appear here as they run."
                                                                    Margin="0,6,0,0"
                                                                    Foreground="{DynamicResource TextDim}"
-                                                                   FontSize="11.5"
+                                                                   FontSize="{StaticResource FontSizeMeta}"
                                                                    TextAlignment="Center"
                                                                    TextWrapping="Wrap"/>
                                                         </StackPanel>
@@ -2029,7 +2029,7 @@
                                             <TextBlock Text="{Binding ProgressText}"
                                                        Margin="0,6,0,0"
                                                        Foreground="{DynamicResource TextDim}"
-                                                       FontSize="10.5"
+                                                       FontSize="{StaticResource FontSizeCaption}"
                                                        TextTrimming="CharacterEllipsis"
                                                        AutomationProperties.LiveSetting="Polite"/>
                                         </StackPanel>
@@ -2043,14 +2043,14 @@
                         <Grid>
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Foreground="{DynamicResource TextDim}"
-                                           FontSize="11"
+                                           FontSize="{StaticResource FontSizeMeta}"
                                            Text="Verify, back up, apply, reboot, confirm."/>
                                 <WrapPanel Margin="0,8,0,0"
                                            Visibility="{Binding ProgressVisible, Converter={StaticResource BoolVis}}">
                                     <TextBlock Text="{Binding ProgressText}"
                                                Margin="0,0,12,8"
                                                Foreground="{DynamicResource TextSecondary}"
-                                               FontSize="11"
+                                               FontSize="{StaticResource FontSizeMeta}"
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis"
                                                MaxWidth="420"/>
@@ -2107,7 +2107,7 @@
                             <StackPanel>
                                 <TextBlock Text="Checking readiness"
                                            Foreground="{DynamicResource TextPrimary}"
-                                           FontSize="22"
+                                           FontSize="{StaticResource FontSizeMetric}"
                                            FontWeight="SemiBold"/>
                                 <TextBlock Text="Verifying Windows build, storage path, NVMe inventory, and rollback safety."
                                            Margin="0,10,0,0"
@@ -2138,7 +2138,7 @@
                                 <TextBlock Text="This can take a few seconds while Windows storage and WMI data settle."
                                            Margin="0,16,0,0"
                                            Foreground="{DynamicResource TextDim}"
-                                           FontSize="12"
+                                           FontSize="{StaticResource FontSizeBody}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>

@@ -41,7 +41,7 @@
                             AutomationProperties.LiveSetting="Polite">
                         <TextBlock x:Name="TelemetryStatusText"
                                    Foreground="{DynamicResource TextDim}"
-                                   FontSize="12"
+                                   FontSize="{StaticResource FontSizeBody}"
                                    FontWeight="SemiBold"
                                    TextWrapping="Wrap"
                                    VerticalAlignment="Center"
@@ -75,13 +75,13 @@
                         <StackPanel Grid.Column="1">
                             <TextBlock x:Name="TelemetrySourceValue"
                                        Foreground="{DynamicResource Accent}"
-                                       FontSize="14"
+                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold"
                                        TextWrapping="Wrap"/>
                             <TextBlock x:Name="TelemetrySourceDetail"
                                        Margin="0,2,0,0"
                                        Foreground="{DynamicResource TextSecondary}"
-                                       FontSize="11.5"
+                                       FontSize="{StaticResource FontSizeMeta}"
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
@@ -97,13 +97,13 @@
                                     Grid.Column="1">
                             <TextBlock x:Name="TelemetryHistoryValue"
                                        Foreground="{DynamicResource TextPrimary}"
-                                       FontSize="14"
+                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold"
                                        TextWrapping="Wrap"/>
                             <TextBlock x:Name="TelemetryHistoryDetail"
                                        Margin="0,2,0,0"
                                        Foreground="{DynamicResource TextSecondary}"
-                                       FontSize="11.5"
+                                       FontSize="{StaticResource FontSizeMeta}"
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
@@ -119,13 +119,13 @@
                                     Grid.Column="1">
                             <TextBlock x:Name="TelemetryTrendValue"
                                        Foreground="{DynamicResource TextPrimary}"
-                                       FontSize="14"
+                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold"
                                        TextWrapping="Wrap"/>
                             <TextBlock x:Name="TelemetryTrendDetail"
                                        Margin="0,2,0,0"
                                        Foreground="{DynamicResource TextSecondary}"
-                                       FontSize="11.5"
+                                       FontSize="{StaticResource FontSizeMeta}"
                                        TextWrapping="Wrap"/>
                         </StackPanel>
                     </Grid>
@@ -152,12 +152,12 @@
                                        Text="-"
                                        Margin="0,4,0,0"
                                        Foreground="{DynamicResource Green}"
-                                       FontSize="20"
+                                       FontSize="{StaticResource FontSizeMetric}"
                                        FontWeight="SemiBold"/>
                             <TextBlock Text="Thermal"
                                        Margin="0,1,0,0"
                                        Foreground="{DynamicResource TextDim}"
-                                       FontSize="10.5"/>
+                                       FontSize="{StaticResource FontSizeCaption}"/>
                         </StackPanel>
 
                         <StackPanel Grid.Row="0" Grid.Column="2">
@@ -166,12 +166,12 @@
                                        Text="-"
                                        Margin="0,4,0,0"
                                        Foreground="{DynamicResource Green}"
-                                       FontSize="20"
+                                       FontSize="{StaticResource FontSizeMetric}"
                                        FontWeight="SemiBold"/>
                             <TextBlock Text="Remaining"
                                        Margin="0,1,0,0"
                                        Foreground="{DynamicResource TextDim}"
-                                       FontSize="10.5"/>
+                                       FontSize="{StaticResource FontSizeCaption}"/>
                         </StackPanel>
 
                         <Border Grid.Row="1"
@@ -186,12 +186,12 @@
                                        Text="-"
                                        Margin="0,4,0,0"
                                        Foreground="{DynamicResource Accent}"
-                                       FontSize="20"
+                                       FontSize="{StaticResource FontSizeMetric}"
                                        FontWeight="SemiBold"/>
                             <TextBlock Text="Hours"
                                        Margin="0,1,0,0"
                                        Foreground="{DynamicResource TextDim}"
-                                       FontSize="10.5"/>
+                                       FontSize="{StaticResource FontSizeCaption}"/>
                         </StackPanel>
 
                         <StackPanel Grid.Row="2" Grid.Column="2">
@@ -200,12 +200,12 @@
                                        Text="-"
                                        Margin="0,4,0,0"
                                        Foreground="{DynamicResource TextSecondary}"
-                                       FontSize="20"
+                                       FontSize="{StaticResource FontSizeMetric}"
                                        FontWeight="SemiBold"/>
                             <TextBlock Text="Media"
                                        Margin="0,1,0,0"
                                        Foreground="{DynamicResource TextDim}"
-                                       FontSize="10.5"/>
+                                       FontSize="{StaticResource FontSizeCaption}"/>
                         </StackPanel>
                     </Grid>
                 </Grid>
