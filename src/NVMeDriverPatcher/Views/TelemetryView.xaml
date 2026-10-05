@@ -5,14 +5,7 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" PanningMode="VerticalFirst">
         <StackPanel Margin="0,0,4,0">
-            <StackPanel>
-                <TextBlock Text="Telemetry" Style="{StaticResource SectionEyebrow}"/>
-                <TextBlock Text="Inspect the selected NVMe drive and compare a fresh snapshot against recent local history."
-                           Margin="0,4,0,0"
-                           Style="{StaticResource BodyCopy}"/>
-            </StackPanel>
-
-            <Border Margin="0,10,0,0" Style="{StaticResource InsetCard}">
+            <Border Style="{StaticResource InsetCard}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="280"/>

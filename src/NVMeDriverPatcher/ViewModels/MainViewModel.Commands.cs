@@ -1049,7 +1049,7 @@ public partial class MainViewModel
         {
             var report = DryRunService.PlanInstall(Config, _preflight);
             DryRunPreviewText = DryRunService.RenderMarkdown(report);
-            Log($"Dry-run: {report.Summary}");
+            Log(report.Summary);
         }
         catch (Exception ex)
         {

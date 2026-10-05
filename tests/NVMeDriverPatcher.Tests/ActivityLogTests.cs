@@ -26,6 +26,29 @@ public sealed class ActivityLogTests
         Assert.DoesNotContain("entrys", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
+    // The rail glued a bound count to a literal Run (" events"), rendering "4  events" and "1 events",
+    // and called the same warnings "advisories" in one place and "warnings" in the next.
+    [Theory]
+    [InlineData(1, 1, 1, "1 entry", "1 warning", "1 error")]
+    [InlineData(4, 0, 2, "4 entries", "0 warnings", "2 errors")]
+    public void ActivityCounts_ReadAsPluralizedWords(int entries, int warnings, int errors,
+        string entryText, string warningText, string errorText)
+    {
+        WpfTestHost.Run(() =>
+        {
+            var vm = new MainViewModel
+            {
+                LogEntryCount = entries,
+                LogWarningCount = warnings,
+                LogErrorCount = errors
+            };
+
+            Assert.Equal(entryText, vm.LogEntryCountText);
+            Assert.Equal(warningText, vm.LogWarningCountText);
+            Assert.Equal(errorText, vm.LogErrorCountText);
+        });
+    }
+
     // Levels AppendLogEntry understands. INFO and DEBUG are deliberately uncounted; anything
     // else (the old "WARN") is silently dropped from the badge counters.
     private static readonly HashSet<string> RecognizedLevels =

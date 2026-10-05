@@ -62,12 +62,12 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _progressVisible;
     [ObservableProperty] private bool _settingsPanelVisible;
     [ObservableProperty] private bool _isLoading = true;
-    [ObservableProperty] private int _logEntryCount;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(LogEntryCountText))] private int _logEntryCount;
     [ObservableProperty] private int _logSuccessCount;
-    [ObservableProperty] private int _logWarningCount;
-    [ObservableProperty] private int _logErrorCount;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(LogWarningCountText))] private int _logWarningCount;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(LogErrorCountText))] private int _logErrorCount;
     [ObservableProperty] private string _activitySummaryText = "Activity entries will appear here as checks and actions run.";
-    [ObservableProperty] private string _logRetentionText = "Local log | Auto-save on close | Event Log on";
+    [ObservableProperty] private string _logRetentionText = "Saved on close · Event Log on";
     [ObservableProperty] private string _latestActivityText = NoActivityYetText;
     [ObservableProperty] private string _activityTabBadgeText = "Idle";
     [ObservableProperty] private string _activityTabBadgeColor = "TextDim";

@@ -231,6 +231,12 @@ public partial class MainViewModel
         ConfigService.IsUsableAbsolutePath(path)
         && string.Equals(Path.GetExtension(path), ".txt", StringComparison.OrdinalIgnoreCase)
         && File.Exists(path);
+    // The activity rail used to glue a bound number to a literal Run (" events"), which rendered
+    // "4  events" with a doubled space and "1 events" for a single entry.
+    public string LogEntryCountText => $"{LogEntryCount} {Pluralize(LogEntryCount, "entry", "entries")}";
+    public string LogWarningCountText => $"{LogWarningCount} {Pluralize(LogWarningCount, "warning")}";
+    public string LogErrorCountText => $"{LogErrorCount} {Pluralize(LogErrorCount, "error")}";
+
     private void UpdateActivitySummary()
     {
         if (LogEntryCount == 0)
@@ -239,22 +245,19 @@ public partial class MainViewModel
         }
         else if (LogErrorCount > 0)
         {
-            ActivitySummaryText = $"{LogEntryCount} session {Pluralize(LogEntryCount, "entry", "entries")} captured with {LogErrorCount} {Pluralize(LogErrorCount, "error")} and {LogWarningCount} {Pluralize(LogWarningCount, "warning")}.";
+            ActivitySummaryText = $"{LogEntryCountText} this session, including {LogErrorCountText} and {LogWarningCountText}.";
         }
         else if (LogWarningCount > 0)
         {
-            ActivitySummaryText = $"{LogEntryCount} session {Pluralize(LogEntryCount, "entry", "entries")} captured with advisory signals but no hard errors.";
+            ActivitySummaryText = $"{LogEntryCountText} this session, with warnings but no errors.";
         }
         else
         {
-            ActivitySummaryText = $"{LogEntryCount} session {Pluralize(LogEntryCount, "entry", "entries")} captured so far with a clean audit trail.";
+            ActivitySummaryText = $"{LogEntryCountText} this session, no warnings or errors.";
         }
 
-        var retentionParts = new List<string> { "Local log" };
-        retentionParts.Add(AutoSaveLog ? "Auto-save on close" : "Manual export only");
-        retentionParts.Add(WriteEventLog ? "Event Log on" : "Event Log off");
-
-        LogRetentionText = string.Join(" | ", retentionParts);
+        // Short enough to fit the activity rail without trimming.
+        LogRetentionText = $"{(AutoSaveLog ? "Saved on close" : "Manual export only")} · {(WriteEventLog ? "Event Log on" : "Event Log off")}";
         UpdateWorkspaceBadges();
     }
 
@@ -262,12 +265,12 @@ public partial class MainViewModel
     {
         if (LogErrorCount > 0)
         {
-            ActivityTabBadgeText = $"{LogErrorCount} {Pluralize(LogErrorCount, "issue")}";
+            ActivityTabBadgeText = LogErrorCountText;
             ActivityTabBadgeColor = "Red";
         }
         else if (LogWarningCount > 0)
         {
-            ActivityTabBadgeText = $"{LogWarningCount} {Pluralize(LogWarningCount, "warning")}";
+            ActivityTabBadgeText = LogWarningCountText;
             ActivityTabBadgeColor = "Yellow";
         }
         else if (LogEntryCount > 0)
