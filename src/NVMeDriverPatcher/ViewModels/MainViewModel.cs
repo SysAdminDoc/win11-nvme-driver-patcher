@@ -375,7 +375,7 @@ public partial class MainViewModel : ObservableObject
                 case VerificationOutcome.OverrideBlocked:
                     Log("[WARNING] " + pendingVerification.Summary, "WARNING");
                     Log(pendingVerification.Detail, "WARNING");
-                    EventLogService.Write(pendingVerification.Summary + " — " + pendingVerification.Detail,
+                    EventLogService.Write(pendingVerification.Summary + ": " + pendingVerification.Detail,
                         System.Diagnostics.EventLogEntryType.Warning, 2101);
                     ToastService.Show("Patch Inactive",
                         "Registry keys are set but Windows is still on the legacy driver. See the Activity log.",
@@ -388,7 +388,7 @@ public partial class MainViewModel : ObservableObject
                 case VerificationOutcome.FlagsEnabledNotBound:
                     Log("[WARNING] " + pendingVerification.Summary, "WARNING");
                     Log(pendingVerification.Detail, "WARNING");
-                    EventLogService.Write(pendingVerification.Summary + " — " + pendingVerification.Detail,
+                    EventLogService.Write(pendingVerification.Summary + ": " + pendingVerification.Detail,
                         System.Diagnostics.EventLogEntryType.Warning, 2102);
                     ToastService.Show("Driver Cannot Bind on This Build",
                         "The fallback flags are enabled but nvmedisk cannot bind on this Windows build. See the Activity log.",
@@ -408,7 +408,7 @@ public partial class MainViewModel : ObservableObject
                     pendingVerification = null;
                     break;
                 case VerificationOutcome.AwaitingRestart:
-                    Log("Patch is applied — restart to complete activation.", "INFO");
+                    Log("Patch is applied. Restart to complete activation.", "INFO");
                     pendingVerification = null;
                     break;
                 case VerificationOutcome.StalePending:
@@ -641,7 +641,7 @@ public partial class MainViewModel : ObservableObject
                         "is still loading the legacy stornvme.sys driver.\n\n" +
                         "On Windows builds 26200.8524 and later, stornvme no longer exposes the compatible " +
                         "ID that nvmedisk.inf matches, so the native driver cannot bind by any supported " +
-                        "means — the flags are honored but the driver loads with zero devices " +
+                        "means. The flags are honored but the driver loads with zero devices " +
                         "(thebookisclosed/ViVe issue #164).\n\n" +
                         "There is currently no working enablement path on this build. The enabled flags are " +
                         "harmless; you can leave them, or remove the patch and wait for Microsoft's official " +
@@ -833,12 +833,12 @@ public partial class MainViewModel : ObservableObject
 
         SafeBootFlags.Add(new RegistryFlagVM
         {
-            Id = "SafeBoot", Name = "Minimal — boot protection",
+            Id = "SafeBoot", Name = "Minimal: boot protection",
             IsSet = status.Keys.Contains("SafeBootMinimal")
         });
         SafeBootFlags.Add(new RegistryFlagVM
         {
-            Id = "SafeBoot/Net", Name = "Network — Safe Mode with Networking",
+            Id = "SafeBoot/Net", Name = "Network: Safe Mode with Networking",
             IsSet = status.Keys.Contains("SafeBootNetwork")
         });
     }
@@ -863,9 +863,9 @@ public partial class MainViewModel : ObservableObject
             ApplyButtonText = "Apply Patch";
             RemoveEnabled = false;
             ShowViVeToolFallbackBadge = false;
-            StatusSummaryText = "Native NVMe is officially enabled on your system by Windows — no patch needed. " +
+            StatusSummaryText = "Native NVMe is officially enabled on your system by Windows. No patch needed. " +
                                 "Use this tool to verify, tune, benchmark, and (if necessary) roll back the driver.";
-            Log("Native NVMe is enabled by Windows itself (no patch evidence) — apply is unnecessary on this system.", "INFO");
+            Log("Native NVMe is enabled by Windows itself (no patch evidence). Apply is unnecessary on this system.", "INFO");
         }
         else if (status.Applied)
         {
@@ -1271,7 +1271,7 @@ public partial class MainViewModel : ObservableObject
 
         if (title == "Apply Patch")
         {
-            warnings.Add("Global scope — the registry/feature change affects Windows driver selection for every eligible NVMe drive/controller. Legacy drive_scope.json exclusions were never enforced; no drive can be kept independently on stornvme.sys.");
+            warnings.Add("Global scope: the registry/feature change affects Windows driver selection for every eligible NVMe drive/controller. Legacy drive_scope.json exclusions were never enforced; no drive can be kept independently on stornvme.sys.");
 
             // Educational opener — set expectations before the list of disclaimers so users
             // understand WHAT they're turning on, not just what might break.
@@ -1293,17 +1293,17 @@ public partial class MainViewModel : ObservableObject
 
             var ssdTools = _preflight.IncompatibleSoftware.Where(s => s.Message.Contains("SCSI pass-through")).ToList();
             if (ssdTools.Count > 0)
-                warnings.Add($"SSD vendor tools — {string.Join(", ", ssdTools.Select(s => s.Name))} may stop detecting the drive through nvmedisk.sys. Run firmware updates before patching.");
+                warnings.Add($"SSD vendor tools: {string.Join(", ", ssdTools.Select(s => s.Name))} may stop detecting the drive through nvmedisk.sys. Run firmware updates before patching.");
 
             if (_preflight.BuildDetails is { Is24H2OrLater: false })
-                warnings.Add($"Older Windows build — {_preflight.BuildDetails.DisplayVersion}. This patch is designed for Windows 11 24H2 or later.");
+                warnings.Add($"Older Windows build: {_preflight.BuildDetails.DisplayVersion}. This patch is designed for Windows 11 24H2 or later.");
 
             if (_preflight.IsLaptop)
-                warnings.Add("Laptop power — nvmedisk.sys disables APST. Expect shorter battery life and higher idle SSD temperatures.");
+                warnings.Add("Laptop power: nvmedisk.sys disables APST. Expect shorter battery life and higher idle SSD temperatures.");
 
             // Microsoft's Feb/Mar 2026 block — let the user know the patch may silently
             // no-op on the latest Insider builds, and that we'll tell them post-reboot.
-            notes.Add("Compatibility — some post-February 2026 Insider builds block the registry override. The app will verify after restart and offer a fallback if Windows stays on stornvme.sys.");
+            notes.Add("Compatibility: some post-February 2026 Insider builds block the registry override. The app will verify after restart and offer a fallback if Windows stays on stornvme.sys.");
 
             // Recovery proof gate (AR-2026-009): surface every recovery-infrastructure
             // check in the confirmation dialog so users see what's ready and what isn't.
@@ -1313,19 +1313,19 @@ public partial class MainViewModel : ObservableObject
                 foreach (var item in proof.Items)
                 {
                     if (item.Passed)
-                        notes.Add($"Recovery — {item.Label}: {item.Detail}");
+                        notes.Add($"Recovery: {item.Label}: {item.Detail}");
                     else
-                        warnings.Add($"Recovery — {item.Label}: {item.Detail}");
+                        warnings.Add($"Recovery: {item.Label}: {item.Detail}");
                 }
                 if (proof.OsRecovery is not null)
-                    notes.Add($"Recovery — {proof.OsRecovery.Summary}");
+                    notes.Add($"Recovery: {proof.OsRecovery.Summary}");
             }
             catch
             {
-                notes.Add("Recovery readiness check could not run — proceed with caution.");
+                notes.Add("Recovery readiness check could not run. Proceed with caution.");
             }
 
-            notes.Add("Rollback — the app creates a registry backup, restore point, and recovery kit before applying changes. Removal stays available from the main screen.");
+            notes.Add("Rollback: the app creates a registry backup, restore point, and recovery kit before applying changes. Removal stays available from the main screen.");
         }
 
         string header, body;
@@ -1334,8 +1334,8 @@ public partial class MainViewModel : ObservableObject
             header = "Enable Microsoft's native NVMe driver?";
             body =
                 "This stages a switch from stornvme.sys to nvmedisk.sys, the newer Microsoft driver stack used by Windows Server 2025. " +
-                "On modern NVMe drives, the expected upside is stronger random I/O and lower CPU use under heavy load — but the headline gains (up to ~80% IOPS) appear only in deep-queue synthetic benchmarks. " +
-                "Typical desktop use runs at queue depth 1–2, where the difference is single-digit percent; sequential transfers are mostly unchanged.\n\n" +
+                "On modern NVMe drives, the expected upside is stronger random I/O and lower CPU use under heavy load, but the headline gains (up to ~80% IOPS) appear only in deep-queue synthetic benchmarks. " +
+                "Typical desktop use runs at queue depth 1 to 2, where the difference is single-digit percent; sequential transfers are mostly unchanged.\n\n" +
                 "Nothing changes live until Windows restarts.";
         }
         else

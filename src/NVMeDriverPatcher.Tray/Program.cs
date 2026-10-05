@@ -95,7 +95,7 @@ internal static class Program
             var watchdog = EventLogWatchdogService.EvaluateReadOnly(_config);
 
             string statusLine = $"Patch: {(status.Applied ? "Applied" : status.Partial ? "Partial" : "Not applied")} " +
-                                $"({status.Count}/{status.Total}) — {verification.Outcome}";
+                                $"({status.Count}/{status.Total}): {verification.Outcome}";
             string watchdogLine = $"Watchdog: {watchdog.Verdict} ({watchdog.TotalEvents} events)";
 
             if (_statusItem is not null) _statusItem.Text = statusLine;
@@ -107,7 +107,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            if (_icon is not null) _icon.Text = Trim64("NVMe Driver Patcher — " + ex.Message);
+            if (_icon is not null) _icon.Text = Trim64("NVMe Driver Patcher: " + ex.Message);
         }
     }
 

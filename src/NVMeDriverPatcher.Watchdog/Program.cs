@@ -235,7 +235,7 @@ internal sealed class WatchdogWorker : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Could not subscribe to event log — falling back to poll-only operation.");
+            _logger.LogError(ex, "Could not subscribe to event log. Falling back to poll-only operation.");
         }
 
         return RunFlushLoop(stoppingToken);

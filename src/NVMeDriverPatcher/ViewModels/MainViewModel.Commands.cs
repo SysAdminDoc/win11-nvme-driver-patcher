@@ -27,7 +27,7 @@ public partial class MainViewModel
         {
             // A prior Apply is still running. The UI button is normally disabled, but this
             // guards against a rapid double-click landing before the binding updates.
-            Log("Apply Patch is already running — waiting for the current run to finish.", "WARNING");
+            Log("Apply Patch is already running. Waiting for the current run to finish.", "WARNING");
             return;
         }
 
@@ -62,7 +62,7 @@ public partial class MainViewModel
                     "The storage-driver change is blocked because a boot-critical condition failed or could not be verified. " +
                     "Refresh preflight after resolving it; expert mode cannot bypass this gate.\n\n" +
                     string.Join("\n", blocked.Select(probe =>
-                        $"• {probe.Label}: {probe.Verdict} [{probe.ReasonCode}] — {probe.Detail}")),
+                        $"• {probe.Label}: {probe.Verdict} [{probe.ReasonCode}]: {probe.Detail}")),
                     DialogIcon.Error);
                 return;
             }
@@ -74,7 +74,7 @@ public partial class MainViewModel
             {
                 Log($"[ERROR] BLOCKED by build policy: {MutationBlockedReason}", "ERROR");
                 InfoDialog?.Invoke("Unsupported Windows Build",
-                    $"{MutationBlockedReason}\n\nThis is verify / monitor / rollback territory — applying the patch on this build would not bind the native driver. No override is offered in the GUI.",
+                    $"{MutationBlockedReason}\n\nThis is verify / monitor / rollback territory. Applying the patch on this build would not bind the native driver. No override is offered in the GUI.",
                     DialogIcon.Warning);
                 return;
             }
@@ -218,7 +218,7 @@ public partial class MainViewModel
     {
         if (!TryAcquireInFlight(ref _removeInFlight))
         {
-            Log("Remove Patch is already running — waiting for the current run to finish.", "WARNING");
+            Log("Remove Patch is already running. Waiting for the current run to finish.", "WARNING");
             return;
         }
         try
@@ -290,7 +290,7 @@ public partial class MainViewModel
                     $"{result.Residue.Count} component(s) still present. See the activity log.",
                     ToastType.Error, Config.EnableToasts);
                 InfoDialog?.Invoke("Removal Incomplete",
-                    "The patch was only partially removed — these components are still present:\n\n" +
+                    "The patch was only partially removed. These components are still present:\n\n" +
                     string.Join("\n", result.Residue.Select(r => "• " + r)) +
                     "\n\nRe-run Remove Patch as Administrator. If they persist, restore the pre-removal registry " +
                     "backup or run the Recovery Kit from WinRE. Do NOT assume the system is back to its pre-patch state.",
@@ -559,7 +559,7 @@ public partial class MainViewModel
                     "FeatureStore fallback is blocked because a boot-critical condition failed or could not be verified. " +
                     "This gate cannot be overridden.\n\n" +
                     string.Join("\n", blocked.Select(probe =>
-                        $"• {probe.Label}: {probe.Verdict} [{probe.ReasonCode}] — {probe.Detail}")),
+                        $"• {probe.Label}: {probe.Verdict} [{probe.ReasonCode}]: {probe.Detail}")),
                     DialogIcon.Error);
                 return;
             }
@@ -569,7 +569,7 @@ public partial class MainViewModel
             {
                 Log($"Recovery proof: {proof.Summary}", "WARNING");
                 foreach (var item in proof.Items.Where(i => !i.Passed))
-                    Log($"  FAIL: {item.Label} — {item.Detail}", "WARNING");
+                    Log($"  FAIL: {item.Label}: {item.Detail}", "WARNING");
 
                 var gateMsg =
                     "Recovery proof failed before applying FeatureStore fallback.\n\n" +
@@ -582,7 +582,7 @@ public partial class MainViewModel
                     "\n\nProceed anyway?";
                 if (ConfirmDialog?.Invoke("Recovery Not Ready", gateMsg) != true)
                 {
-                    Log("Fallback apply cancelled — recovery proof not satisfied.", "WARNING");
+                    Log("Fallback apply cancelled. Recovery proof not satisfied.", "WARNING");
                     return;
                 }
             }
@@ -625,7 +625,7 @@ public partial class MainViewModel
                 if (!watchdogRollback.Success)
                     Log("[ERROR] Watchdog rollback checkpoint failed: " + watchdogRollback.Summary, "ERROR");
                 ConfigService.Save(Config);
-                Log("[ERROR] Fallback checkpoint could not be saved — exact rollback attempted and restart refused.", "ERROR");
+                Log("[ERROR] Fallback checkpoint could not be saved. Exact rollback attempted and restart refused.", "ERROR");
                 InfoDialog?.Invoke("Checkpoint Not Saved",
                     restored.Success
                         ? "The fallback was written, but its reboot checkpoint could not be saved durably. The exact pre-patch registry, Safe Boot, and FeatureStore state was restored. No restart is needed."
@@ -1034,7 +1034,7 @@ public partial class MainViewModel
             MinidumpSummaryText = report.Summary;
             Log($"Minidump triage: {report.Summary}");
             foreach (var d in report.Dumps.Where(d => d.MentionsNVMeStack))
-                Log($"  [NVMe] {d.CreatedUtc:u} — {Path.GetFileName(d.FilePath)}: {d.Notes}", "WARNING");
+                Log($"  [NVMe] {d.CreatedUtc:u}, {Path.GetFileName(d.FilePath)}: {d.Notes}", "WARNING");
         }
         catch (Exception ex)
         {
