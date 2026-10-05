@@ -349,4 +349,54 @@ public sealed class CliJsonTests
         Assert.True(first.GetProperty("isEnabled").GetBoolean());
         Assert.True(data.GetProperty("configurations")[2].GetProperty("isCandidate").GetBoolean());
     }
+
+    [Fact]
+    public void Benchmark_UsesTheVersionedEnvelopeWithStableFieldNames()
+    {
+        var result = new BenchmarkResult
+        {
+            Label = "Post-Patch",
+            Timestamp = "2026-10-05 09:00:00",
+            Read = new BenchmarkMetrics { IOPS = 812345, ThroughputMBs = 3173.2, AvgLatencyMs = 0.079 },
+            Write = new BenchmarkMetrics { IOPS = 701234 },
+            Desktop = new BenchmarkProfileResult { Read = new BenchmarkMetrics { IOPS = 21000 } },
+        };
+
+        var root = Parse("benchmark", result);
+        Assert.Equal(CliJson.SchemaVersion, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal("benchmark", root.GetProperty("command").GetString());
+
+        var data = root.GetProperty("data");
+        Assert.Equal("Post-Patch", data.GetProperty("label").GetString());
+        Assert.Equal(812345, data.GetProperty("read").GetProperty("iops").GetDouble());
+        Assert.Equal(3173.2, data.GetProperty("read").GetProperty("throughputMBs").GetDouble());
+        Assert.Equal(0.079, data.GetProperty("read").GetProperty("avgLatencyMs").GetDouble());
+        Assert.Equal(701234, data.GetProperty("write").GetProperty("iops").GetDouble());
+        Assert.Equal("desktop-qd1", data.GetProperty("desktop").GetProperty("profileId").GetString());
+        Assert.Equal(21000, data.GetProperty("desktop").GetProperty("read").GetProperty("iops").GetDouble());
+    }
+
+    [Fact]
+    public void BenchmarkCommand_WritesItsJsonThroughTheEnvelope()
+    {
+        // `benchmark --json` printed a bare PascalCase object with no schemaVersion or command,
+        // so automation that reads every other command's envelope broke on this one.
+        var program = ReadRepoFile("src", "NVMeDriverPatcher.Cli", "Program.cs");
+        var start = program.IndexOf("static int BenchmarkCommand(", StringComparison.Ordinal);
+        var end = program.IndexOf("static int CompareBenchmarksCommand(", Math.Max(start, 0), StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "BenchmarkCommand not found in the CLI");
+
+        var body = program[start..end];
+        Assert.Contains("CliJson.Serialize(\"benchmark\", result)", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("JsonSerializer.Serialize", body, StringComparison.Ordinal);
+    }
+
+    private static string ReadRepoFile(params string[] relative)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "NVMeDriverPatcher.sln")))
+            dir = dir.Parent;
+        Assert.NotNull(dir);
+        return File.ReadAllText(Path.Combine(new[] { dir!.FullName }.Concat(relative).ToArray()));
+    }
 }
