@@ -187,19 +187,28 @@ public static class CriticalEnvironmentProbeService
                     ["Win32_SystemDriver query completed; blocking driver count=0"], observedAtUtc);
             }
 
-            var evidence = matches
-                .Select(driver => $"{driver.Name} (state={driver.State}, start={driver.StartMode})")
-                .ToArray();
-            if (matches.All(driver =>
-                    driver.State.Equals("Stopped", StringComparison.OrdinalIgnoreCase) &&
-                    driver.StartMode.Equals("Disabled", StringComparison.OrdinalIgnoreCase)))
+            var evidence = matches.Select(Describe).ToArray();
+            // A driver only puts an NVMe drive behind an Intel controller when it is loaded or set
+            // to load at boot. Windows 11 ships iaStorAVC in the box as a demand-start service on
+            // every PC, so a Stopped Manual/Disabled entry is not RST evidence (issue #18). Any
+            // other state, including pending or unreadable ones, still blocks.
+            var active = matches.Where(driver => !IsDormant(driver)).ToList();
+            if (active.Count == 0)
             {
-                return Result(id, label, CriticalProbeVerdict.Pass, CriticalProbeReasonCode.ConfirmedDisabled,
-                    "Intel RST/VMD driver services are installed but authoritatively stopped and disabled.",
+                if (matches.All(driver => driver.StartMode.Equals("Disabled", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return Result(id, label, CriticalProbeVerdict.Pass, CriticalProbeReasonCode.ConfirmedDisabled,
+                        "Intel RST/VMD driver services are installed but authoritatively stopped and disabled.",
+                        evidence, observedAtUtc);
+                }
+                return Result(id, label, CriticalProbeVerdict.Pass, CriticalProbeReasonCode.DeviceAbsent,
+                    $"Intel RST/VMD driver services ({string.Join(", ", matches.Select(driver => driver.Name))}) " +
+                    "are installed but not loaded and not set to start at boot, so no Intel RST or VMD controller is using them.",
                     evidence, observedAtUtc);
             }
             return Result(id, label, CriticalProbeVerdict.Fail, CriticalProbeReasonCode.ConfirmedPresent,
-                "Intel RST/VMD driver evidence is present; boot-safe nvmedisk.sys enablement is not proved.",
+                $"Intel RST/VMD driver {string.Join(", ", active.Select(Describe))} is loaded or set to start at boot; " +
+                "boot-safe nvmedisk.sys enablement is not proved.",
                 evidence, observedAtUtc);
         }
         catch (Exception ex)
@@ -207,6 +216,14 @@ public static class CriticalEnvironmentProbeService
             return Unknown(id, label, ex, observedAtUtc);
         }
     }
+
+    private static string Describe(StorageDriverProbeSnapshot driver) =>
+        $"{driver.Name} (state={driver.State}, start={driver.StartMode})";
+
+    private static bool IsDormant(StorageDriverProbeSnapshot driver) =>
+        driver.State.Equals("Stopped", StringComparison.OrdinalIgnoreCase) &&
+        (driver.StartMode.Equals("Manual", StringComparison.OrdinalIgnoreCase) ||
+         driver.StartMode.Equals("Disabled", StringComparison.OrdinalIgnoreCase));
 
     private static CriticalProbeResult ProbeBitLocker(
         ICriticalEnvironmentProbePlatform platform,
