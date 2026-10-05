@@ -17,7 +17,8 @@ public class PolicyOverlay
     public bool AnyApplied =>
         PatchProfile is not null || IncludeServerKey is not null || SkipWarnings is not null ||
         WatchdogAutoRevert is not null || WatchdogWindowHours is not null ||
-        CompatTelemetryEnabled is not null;
+        CompatTelemetryEnabled is not null || PersistenceGuardEnabled is not null ||
+        PersistenceGuardMaxReapplies is not null;
 }
 
 // Reads the Group Policy values written by the shipped ADMX template at

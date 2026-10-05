@@ -190,16 +190,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: S
 
-- [ ] P3 — `GpoPolicyService.HasAnyPolicy` omits the two PersistenceGuard policies
-  Category: correctness
-  Where: `src/NVMeDriverPatcher.Core/Services/GpoPolicyService.cs:18-20` (list), `:48-51, 70-71` (read+applied)
-  Problem: A GPO configuring only the persistence-guard policies reads as "no policy". Latent (no current caller found), but the asymmetry will bite the first consumer.
-  Evidence: List vs read/apply members compared.
-  Fix: Add both keys to `HasAnyPolicy`; add a completeness test asserting every key read in `ReadOverlay` appears in `HasAnyPolicy`.
-  Acceptance: Completeness test fails if a future policy is added to one list only.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — CHANGELOG versions 5.4.0/5.5.0 have no git tags; 5.3.0 was released with no CHANGELOG entry; stray malformed tag `v.3.0.0`
   Category: docs
   Where: `CHANGELOG.md:35, 54` (5.5.0/5.4.0 entries); git tags (`v5.2.0` → `v5.6.0` jump, `v.3.0.0` typo tag); commit 95bbf11 "chore: release v5.3.0" with no `[5.3.0]` section
