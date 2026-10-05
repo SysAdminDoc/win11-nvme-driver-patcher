@@ -1,4 +1,3 @@
-using System.Text.Json;
 using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 
@@ -674,7 +673,7 @@ class Program
         BenchmarkService.SaveResults(config.WorkingDir, result);
         if (json)
         {
-            Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine(CliJson.Serialize("benchmark", result));
             return 0;
         }
 

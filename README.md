@@ -261,7 +261,7 @@ NVMeDriverPatcher.Cli diagnostics                          # Export diagnostics 
 # Storage & Performance
 NVMeDriverPatcher.Cli etw                                  # 60s ETW trace + native NvmeDisk provider verdict when applicable
 NVMeDriverPatcher.Cli firmware                             # Compat.json entries
-NVMeDriverPatcher.Cli benchmark                            # High-QD + desktop QD1 DiskSpd benchmark
+NVMeDriverPatcher.Cli benchmark [--json]                   # High-QD + desktop QD1 DiskSpd benchmark
 NVMeDriverPatcher.Cli compare-benchmarks --threshold=15    # Before/after benchmark diff
 
 # Fleet & Admin
