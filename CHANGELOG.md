@@ -5,6 +5,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- The three toggles in Settings under Audit and alerts no longer clip at window widths below about 1300 px. They sat in two half-width columns, so "Auto-save activity log" and "Windows Event Log" were cut off. They're now one column.
 - `--json` output stays pure JSON when the CLI finishes recovering an interrupted change at startup. Those recovery messages used to land on stdout ahead of the envelope, and one of them carries a registry GUID in braces, which broke scripts that parse the output. They go to stderr now.
 - The sample telemetry receiver config now binds its KV store. The `kv_namespaces` line sat under `[vars]`, which TOML reads as part of that table, so a Worker deployed from it got a variable named `kv_namespaces`, no `COMPAT` binding, and every submission failed. It's a `[[kv_namespaces]]` table now, and `npm run check` lists the bindings so you can see it before deploying.
 - SafeBoot entries spelled "Storage disks" now count as patch entries. Community scripts write that spelling, and Windows doesn't care about case, but status only matched "Storage Disks" exactly. A machine with those entries left over read as Not applied with Remove greyed out, even though Remove already knew how to clear them. The SafeBoot upgrade check had the same blind spot.

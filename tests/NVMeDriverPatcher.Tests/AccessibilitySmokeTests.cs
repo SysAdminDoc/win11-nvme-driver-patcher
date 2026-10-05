@@ -95,6 +95,29 @@ public sealed class AccessibilitySmokeTests
                 if (!string.IsNullOrWhiteSpace(snapshotDirectory))
                     SaveWorkspaceSnapshots(window, root, workspace, updateAdaptiveLayout, snapshotDirectory);
 
+                // Wide layout at 1240 px: the audit card's toggles sat in two half-width columns and
+                // clipped to "Windows Event Lo" and "Toast notification".
+                workspace.SelectedIndex = 5;
+                root.Measure(new Size(1240, 800));
+                root.Arrange(new Rect(0, 0, 1240, 800));
+                root.UpdateLayout();
+                var wideAuditCard = Assert.IsType<Border>(window.FindName("SettingsAuditCard"));
+                Assert.Equal(2, Grid.GetColumn(wideAuditCard));
+                var toggles = FindControls<CheckBox>(wideAuditCard)
+                    .Concat(FindControls<CheckBox>(Assert.IsType<Border>(window.FindName("SettingsProfileCard"))))
+                    .ToList();
+                Assert.Equal(4, toggles.Count);
+                var clipped = toggles
+                    .Select(toggle => (Label: toggle.Content as string, Arranged: toggle.ActualWidth, Natural: NaturalWidth(toggle)))
+                    .Where(toggle => toggle.Natural > toggle.Arranged + 0.5)
+                    .Select(toggle => $"{toggle.Label}: needs {toggle.Natural:0.#}, has {toggle.Arranged:0.#}")
+                    .ToList();
+                Assert.True(clipped.Count == 0, "Settings toggles are clipped:\n" + string.Join("\n", clipped));
+                workspace.SelectedIndex = 0;
+                root.Measure(new Size(1360, 980));
+                root.Arrange(new Rect(0, 0, 1360, 980));
+                root.UpdateLayout();
+
                 updateAdaptiveLayout.Invoke(window, null);
                 var activityRail = Assert.IsType<Border>(window.FindName("ActivityRail"));
                 Assert.Equal(1, Grid.GetRow(activityRail));
@@ -300,6 +323,12 @@ public sealed class AccessibilitySmokeTests
         {
             try { dialog.Close(); } catch { }
         }
+    }
+
+    private static double NaturalWidth(FrameworkElement element)
+    {
+        element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        return element.DesiredSize.Width;
     }
 
     private static IReadOnlyList<T> FindControls<T>(DependencyObject root)
