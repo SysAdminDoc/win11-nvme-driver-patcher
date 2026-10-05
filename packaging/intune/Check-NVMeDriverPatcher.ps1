@@ -54,8 +54,16 @@ if (-not $cli) {
     exit 1
 }
 
-$raw = (& $cli status --json) | Out-String
-$start = $raw.IndexOf('{')
+try {
+    $raw = (& $cli status --json) | Out-String
+} catch {
+    Write-Output "Couldn't run the CLI: $($_.Exception.Message)"
+    exit 1
+}
+# The JSON envelope starts on a line of its own. Anything printed ahead of it isn't part of it, and
+# a log line can carry a registry GUID in braces, so don't just take the first brace.
+$open = [regex]::Match($raw, '(?m)^\{')
+$start = if ($open.Success) { $open.Index } else { -1 }
 $end = $raw.LastIndexOf('}')
 if ($start -lt 0 -or $end -le $start) {
     Write-Output "Couldn't read status from the CLI: $($raw.Trim())"
