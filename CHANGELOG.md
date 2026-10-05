@@ -124,6 +124,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - Diagnostics shows its four checks as matching rows, dry run included, and each row says what its check looks for before you run it.
 - New tooltips on Create Recovery Kit, Run first benchmark, the four Diagnostics buttons, the Settings checkboxes and the activity log buttons.
 - The recovery card on Overview starts at the top instead of floating halfway down with empty space above it, and the activity rail's subtitle ("Saved on close · Event Log on") fits without being cut off.
+- The Windows recovery line on the Recovery page now reads as plain sentences, for example "Point-in-Time Restore is on. The newest restore point is 2 days old. Quick Machine Recovery is off. Its automatic remediation is on." It used to start with "OS-native recovery advisory" and run the states together with semicolons. The CLI, the JSON `summary` fields and the diagnostics report use the same wording, and restore point ages say "1 day" and "3 days" instead of "day(s)". The exact restore point time is still in the JSON and the diagnostics report.
 
 ### Docs
 - CLI help now describes what `register-tasks`, `tail` and `watchdog --auto-revert` actually do,

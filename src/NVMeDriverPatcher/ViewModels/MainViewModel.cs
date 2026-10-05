@@ -454,7 +454,7 @@ public partial class MainViewModel : ObservableObject
             Application.Current?.Dispatcher.Invoke(() =>
             {
             OsRecoverySummaryText = _preflight.OsRecoveryEvidence?.Summary
-                ?? "OS-native recovery evidence was not available during the readiness scan.";
+                ?? "Windows didn't report its own recovery features during the readiness scan.";
 
             // Map checks to UI
             ReadinessChecks.Clear();

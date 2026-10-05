@@ -88,8 +88,8 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
         report.Items.Add(new() { Label = "Recovery kit", Passed = true, Detail = "fresh" });
 
         Assert.True(report.AllPassed);
-        Assert.Contains("Advisory", report.Summary);
-        Assert.Contains("not exposed", report.Summary);
+        Assert.Contains("don't count toward readiness", report.Summary);
+        Assert.Contains("doesn't offer Point-in-Time Restore", report.Summary);
     }
 
     [Fact]

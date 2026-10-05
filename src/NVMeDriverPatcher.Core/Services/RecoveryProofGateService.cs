@@ -29,7 +29,7 @@ public sealed class RecoveryProofReport
                     : $"Recovery readiness: {PassedCount}/{TotalCount}, not ready: {string.Join(", ", Items.Where(i => !i.Passed).Select(i => i.Label))}.";
             return OsRecovery is null
                 ? readiness
-                : $"{readiness} Advisory: {OsRecovery.Summary}";
+                : $"{readiness} Windows' own recovery features don't count toward readiness. {OsRecovery.Summary}";
         }
     }
 }

@@ -10,16 +10,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
-- [ ] P3 — OS recovery summary reads like a log line
-  Category: copy
-  Where: `OsRecoveryEvidenceService.Summary`, `PointInTimeRestoreSummary`, `QuickMachineRecoverySummary`
-  Problem: The Recovery page shows "OS-native recovery advisory. Point-in-Time Restore: {state}; {point}. Quick Machine Recovery: {state}; {auto}." The other Recovery copy now reads as plain sentences, and this one still uses semicolons and an "advisory" prefix.
-  Evidence: 2026-10-05 polish pass. The string is shared by the GUI, the CLI, the JSON report and tests, so it was left alone in the GUI copy pass.
-  Fix: Give the GUI its own sentence built from the state fields, or reword the Core summary and update the CLI and JSON consumers and their tests together.
-  Acceptance: The Recovery page states both features in plain sentences, and CLI and JSON output stay consistent with whatever the GUI shows.
-  Confidence: Confirmed
-  Effort: S
-
 - [ ] P3 — Preflight passes SafeBoot GUID keys that Windows write-protects
   Category: correctness
   Where: `CriticalEnvironmentProbeService.ProbeSafeBoot`, `SafeBootStateService.Classify`, `RealSafeBootRegistry.Read`

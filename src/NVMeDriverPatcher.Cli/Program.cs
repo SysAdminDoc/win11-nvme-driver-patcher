@@ -1754,7 +1754,7 @@ class Program
         }
 
         Console.WriteLine(report.Summary);
-        Console.WriteLine($"OS-native recovery advisory: {osRecovery.Summary}");
+        Console.WriteLine($"Windows recovery features (not counted above): {osRecovery.Summary}");
         foreach (var item in report.Items)
         {
             Console.WriteLine($"  [{item.Verdict}] {item.Label} [{item.ReasonCode}]: {item.Detail}");
