@@ -49,7 +49,7 @@
                         <TextBlock x:Name="DlgEyebrow" Text="Confirmation" Style="{StaticResource SectionEyebrow}"/>
                         <TextBlock x:Name="DlgTitle"
                                    Margin="0,5,0,0"
-                                   FontSize="20"
+                                   FontSize="{StaticResource FontSizeMetric}"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource TextPrimary}"/>
                     </StackPanel>
@@ -90,7 +90,7 @@
                     <FlowDocument x:Name="DlgMessageDocument"
                                   PagePadding="0"
                                   FontFamily="Segoe UI Variable Text, Segoe UI"
-                                  FontSize="13.5"
+                                  FontSize="{StaticResource FontSizeBodyLarge}"
                                   Foreground="{DynamicResource TextSecondary}"
                                   TextAlignment="Left"/>
                 </FlowDocumentScrollViewer>

@@ -21,7 +21,7 @@
                 <TextBlock x:Name="BenchmarkContextText"
                            Margin="0,6,0,0"
                            Foreground="{DynamicResource TextDim}"
-                           FontSize="11"
+                           FontSize="{StaticResource FontSizeMeta}"
                            TextWrapping="Wrap"/>
             </StackPanel>
 
@@ -41,7 +41,7 @@
                     <TextBlock x:Name="RunCountValue"
                                Margin="0,4,0,0"
                                Foreground="{DynamicResource TextPrimary}"
-                               FontSize="18"
+                               FontSize="{StaticResource FontSizeTitle}"
                                FontWeight="SemiBold"/>
                 </StackPanel>
             </WrapPanel>
@@ -61,18 +61,18 @@
                         <TextBlock x:Name="ReadIopsValue"
                                    Text="-"
                                    Foreground="{DynamicResource Accent}"
-                                   FontSize="21"
+                                   FontSize="{StaticResource FontSizeMetric}"
                                    FontWeight="SemiBold"/>
                         <TextBlock Text=" IOPS"
                                    Margin="6,0,0,4"
                                    VerticalAlignment="Bottom"
                                    Foreground="{DynamicResource TextDim}"
-                                   FontSize="12"/>
+                                   FontSize="{StaticResource FontSizeBody}"/>
                     </WrapPanel>
                     <TextBlock x:Name="ReadDelta"
                                Margin="0,4,0,0"
                                Foreground="{DynamicResource TextMuted}"
-                               FontSize="12"
+                               FontSize="{StaticResource FontSizeBody}"
                                TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
@@ -84,18 +84,18 @@
                         <TextBlock x:Name="WriteIopsValue"
                                    Text="-"
                                    Foreground="{DynamicResource Yellow}"
-                                   FontSize="21"
+                                   FontSize="{StaticResource FontSizeMetric}"
                                    FontWeight="SemiBold"/>
                         <TextBlock Text=" IOPS"
                                    Margin="6,0,0,4"
                                    VerticalAlignment="Bottom"
                                    Foreground="{DynamicResource TextDim}"
-                                   FontSize="12"/>
+                                   FontSize="{StaticResource FontSizeBody}"/>
                     </WrapPanel>
                     <TextBlock x:Name="WriteDelta"
                                Margin="0,4,0,0"
                                Foreground="{DynamicResource TextMuted}"
-                               FontSize="12"
+                               FontSize="{StaticResource FontSizeBody}"
                                TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
@@ -115,18 +115,18 @@
                         <TextBlock x:Name="DesktopReadIopsValue"
                                    Text="-"
                                    Foreground="{DynamicResource Accent}"
-                                   FontSize="21"
+                                   FontSize="{StaticResource FontSizeMetric}"
                                    FontWeight="SemiBold"/>
                         <TextBlock Text=" IOPS"
                                    Margin="6,0,0,4"
                                    VerticalAlignment="Bottom"
                                    Foreground="{DynamicResource TextDim}"
-                                   FontSize="12"/>
+                                   FontSize="{StaticResource FontSizeBody}"/>
                     </WrapPanel>
                     <TextBlock x:Name="DesktopReadDelta"
                                Margin="0,4,0,0"
                                Foreground="{DynamicResource TextMuted}"
-                               FontSize="12"
+                               FontSize="{StaticResource FontSizeBody}"
                                TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
@@ -138,18 +138,18 @@
                         <TextBlock x:Name="DesktopWriteIopsValue"
                                    Text="-"
                                    Foreground="{DynamicResource Yellow}"
-                                   FontSize="21"
+                                   FontSize="{StaticResource FontSizeMetric}"
                                    FontWeight="SemiBold"/>
                         <TextBlock Text=" IOPS"
                                    Margin="6,0,0,4"
                                    VerticalAlignment="Bottom"
                                    Foreground="{DynamicResource TextDim}"
-                                   FontSize="12"/>
+                                   FontSize="{StaticResource FontSizeBody}"/>
                     </WrapPanel>
                     <TextBlock x:Name="DesktopWriteDelta"
                                Margin="0,4,0,0"
                                Foreground="{DynamicResource TextMuted}"
-                               FontSize="12"
+                               FontSize="{StaticResource FontSizeBody}"
                                TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
@@ -161,7 +161,7 @@
                 <TextBlock x:Name="BenchmarkSummaryText"
                            Margin="0,5,0,0"
                            Foreground="{DynamicResource TextSecondary}"
-                           FontSize="12"
+                           FontSize="{StaticResource FontSizeBody}"
                            TextWrapping="Wrap"/>
             </StackPanel>
         </Border>

@@ -143,7 +143,7 @@ public partial class ThemedDialog : Window
                 {
                     Margin = new Thickness(0, 0, 0, 10),
                     Foreground = primaryBrush,
-                    FontSize = 15,
+                    FontSize = TypeRamp("FontSizeSubtitle"),
                     FontWeight = FontWeights.SemiBold,
                     LineHeight = 22
                 });
@@ -164,7 +164,7 @@ public partial class ThemedDialog : Window
                 {
                     Margin = new Thickness(0, 12, 0, 6),
                     Foreground = accentBrush,
-                    FontSize = 12,
+                    FontSize = TypeRamp("FontSizeBody"),
                     FontWeight = FontWeights.SemiBold,
                     LineHeight = 17
                 });
@@ -188,7 +188,7 @@ public partial class ThemedDialog : Window
                 {
                     Margin = new Thickness(0, 0, 0, 6),
                     Foreground = secondaryBrush,
-                    FontSize = 13.25,
+                    FontSize = TypeRamp("FontSizeBodyLarge"),
                     LineHeight = 20
                 }));
                 return;
@@ -200,7 +200,7 @@ public partial class ThemedDialog : Window
             {
                 Margin = new Thickness(0, isDecisionLine ? 12 : 0, 0, isDecisionLine ? 0 : 10),
                 Foreground = isDecisionLine ? primaryBrush : secondaryBrush,
-                FontSize = isDecisionLine ? 13.5 : 13.25,
+                FontSize = TypeRamp("FontSizeBodyLarge"),
                 FontWeight = isDecisionLine ? FontWeights.SemiBold : FontWeights.Normal,
                 LineHeight = isDecisionLine ? 20 : 21
             });
@@ -269,6 +269,9 @@ public partial class ThemedDialog : Window
     {
         return BrushResources.Resolve(element, key);
     }
+
+    // Font sizes come from the theme's type ramp, same as the XAML.
+    private double TypeRamp(string key) => (double)FindResource(key);
 
     private void BtnOK_Click(object sender, RoutedEventArgs e) { Result = "OK"; Close(); }
     private void BtnYes_Click(object sender, RoutedEventArgs e) { Result = "Yes"; Close(); }

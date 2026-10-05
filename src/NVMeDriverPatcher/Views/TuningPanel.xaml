@@ -64,7 +64,7 @@
                             <TextBlock x:Name="ProfileTitleText"
                                        Margin="0,4,0,0"
                                        Foreground="{DynamicResource Accent}"
-                                       FontSize="15"
+                                       FontSize="{StaticResource FontSizeSubtitle}"
                                        FontWeight="SemiBold"/>
                             <TextBlock x:Name="ProfileDescriptionText"
                                        Margin="0,4,0,0"
@@ -72,7 +72,7 @@
                             <TextBlock x:Name="ProfileImpactText"
                                        Margin="0,5,0,0"
                                        Foreground="{DynamicResource TextDim}"
-                                       FontSize="11"
+                                       FontSize="{StaticResource FontSizeMeta}"
                                        TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
@@ -108,7 +108,7 @@
                                 <TextBlock Text="Higher values increase outstanding I/O and usually favor throughput-heavy desktops."
                                            Margin="0,4,0,0"
                                            Foreground="{DynamicResource TextDim}"
-                                           FontSize="11.5"
+                                           FontSize="{StaticResource FontSizeMeta}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                             <Slider x:Name="SliderQueueDepth"
@@ -127,7 +127,7 @@
                                        HorizontalAlignment="Right"
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource Accent}"
-                                       FontSize="13"
+                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold"/>
                         </Grid>
 
@@ -145,7 +145,7 @@
                                 <TextBlock Text="Larger reads favor throughput while smaller splits can improve latency balance."
                                            Margin="0,4,0,0"
                                            Foreground="{DynamicResource TextDim}"
-                                           FontSize="11.5"
+                                           FontSize="{StaticResource FontSizeMeta}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                             <Slider x:Name="SliderReadSplit"
@@ -164,7 +164,7 @@
                                        HorizontalAlignment="Right"
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource Accent}"
-                                       FontSize="13"
+                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold"/>
                         </Grid>
 
@@ -182,7 +182,7 @@
                                 <TextBlock Text="Use larger write batches for burst throughput and smaller ones for tighter control."
                                            Margin="0,4,0,0"
                                            Foreground="{DynamicResource TextDim}"
-                                           FontSize="11.5"
+                                           FontSize="{StaticResource FontSizeMeta}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                             <Slider x:Name="SliderWriteSplit"
@@ -201,7 +201,7 @@
                                        HorizontalAlignment="Right"
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource Accent}"
-                                       FontSize="13"
+                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold"/>
                         </Grid>
 
@@ -219,7 +219,7 @@
                                 <TextBlock Text="0 keeps Windows automatic queue allocation. Override it only when you have a clear reason to cap or expand parallelism."
                                            Margin="0,4,0,0"
                                            Foreground="{DynamicResource TextDim}"
-                                           FontSize="11.5"
+                                           FontSize="{StaticResource FontSizeMeta}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                             <Slider x:Name="SliderQueueCount"
@@ -238,7 +238,7 @@
                                        HorizontalAlignment="Right"
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource Accent}"
-                                       FontSize="13"
+                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold"/>
                         </Grid>
 
@@ -256,7 +256,7 @@
                                 <TextBlock Text="0 disables idle power-down. Lower values favor faster power saving, while higher values stay more performance-biased."
                                            Margin="0,4,0,0"
                                            Foreground="{DynamicResource TextDim}"
-                                           FontSize="11.5"
+                                           FontSize="{StaticResource FontSizeMeta}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                             <Slider x:Name="SliderIdlePowerTimeout"
@@ -275,7 +275,7 @@
                                        HorizontalAlignment="Right"
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource Accent}"
-                                       FontSize="13"
+                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold"/>
                         </Grid>
 
@@ -293,7 +293,7 @@
                                 <TextBlock Text="0 keeps deeper standby disabled. Higher values can save more power, but they may add wake latency on some controllers."
                                            Margin="0,4,0,0"
                                            Foreground="{DynamicResource TextDim}"
-                                           FontSize="11.5"
+                                           FontSize="{StaticResource FontSizeMeta}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                             <Slider x:Name="SliderStandbyPowerTimeout"
@@ -312,7 +312,7 @@
                                        HorizontalAlignment="Right"
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource Accent}"
-                                       FontSize="13"
+                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold"/>
                         </Grid>
                         </StackPanel>
@@ -326,7 +326,7 @@
                             CornerRadius="8">
                         <TextBlock Text="A queue count of 0 lets Windows choose. A timeout of 0 turns that power-saving step off. Run a benchmark after each restart to see whether the change helped."
                                    Foreground="{DynamicResource Yellow}"
-                                   FontSize="12"
+                                   FontSize="{StaticResource FontSizeBody}"
                                    TextWrapping="Wrap"/>
                     </Border>
                 </StackPanel>
@@ -352,7 +352,7 @@
                                 <TextBlock x:Name="CurrentConfigText"
                                            Margin="0,5,0,0"
                                            Foreground="{DynamicResource TextSecondary}"
-                                           FontSize="12"
+                                           FontSize="{StaticResource FontSizeBody}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
@@ -363,7 +363,7 @@
                                 <TextBlock x:Name="PendingConfigText"
                                            Margin="0,5,0,0"
                                            Foreground="{DynamicResource TextSecondary}"
-                                           FontSize="12"
+                                           FontSize="{StaticResource FontSizeBody}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
@@ -395,7 +395,7 @@
                             <TextBlock x:Name="TuningStatus"
                                        Margin="0,5,0,0"
                                        Foreground="{DynamicResource TextDim}"
-                                       FontSize="13"
+                                       FontSize="{StaticResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold"
                                        TextWrapping="Wrap"/>
                         </StackPanel>
@@ -404,7 +404,7 @@
                     <TextBlock Text="Changes take effect after a restart."
                                Margin="0,8,0,0"
                                Foreground="{DynamicResource TextDim}"
-                               FontSize="11.5"
+                               FontSize="{StaticResource FontSizeMeta}"
                                TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>

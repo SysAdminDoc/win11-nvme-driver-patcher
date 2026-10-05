@@ -88,6 +88,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - On a Windows build with no known way to turn on the native driver, Overview no longer says the system "can proceed" and asks you to review the tradeoffs right above a notice that Apply is off. It now says there's no known way yet and suggests making a recovery kit in the meantime. When Apply is off because of an unfinished recovery instead, the notice says so rather than blaming the Windows build.
 
 ### Changed
+- Text sizes in the app now come from one type ramp of eight steps (10.5, 11.5, 12.5, 13.5, 16, 18, 21 and 27) instead of 18 sizes set one label at a time. Sizes that sat between steps moved to the nearest one, so most body text and labels grew by half a point and neighboring labels no longer drift apart. A test fails on any font size set outside the ramp.
 - The telemetry receiver pins wrangler 4.143.0 as a devDependency with a committed lockfile instead of whatever a global install or `npx` picked up. Its `.npmrc` holds new npm releases back for a week. Both rate limiters moved from `[[unsafe.bindings]]` to the stable `[[ratelimits]]` binding, and `compatibility_date` moved up to 2026-09-26. The README's deploy steps use the pinned copy and wrangler 4's `kv namespace create`.
 - Reworded app, tray, CLI and offline-doc text that used dashes as punctuation into plain
   sentences, colons and parentheses, so messages read cleanly and survive copying into a plain
