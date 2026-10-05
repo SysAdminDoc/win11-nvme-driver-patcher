@@ -49,7 +49,7 @@ public static class CleanDataService
         if (!Directory.Exists(dir))
         {
             result.Success = true;
-            result.Summary = $"Nothing to clean — {dir} does not exist.";
+            result.Summary = $"Nothing to clean. {dir} does not exist.";
             return result;
         }
 

@@ -120,7 +120,7 @@ public sealed class PreflightServiceTests
         Assert.NotNull(check);
         Assert.Equal(CheckStatus.Warning, check!.Status);
         Assert.Contains(expectedSource, check.Message);
-        Assert.Contains("restart Windows first", check.Message);
+        Assert.Contains("Restart Windows first", check.Message);
         Assert.False(check.Critical); // warning, never a blocker
     }
 

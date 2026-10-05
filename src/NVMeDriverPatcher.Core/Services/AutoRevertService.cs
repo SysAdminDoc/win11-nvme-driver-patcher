@@ -40,13 +40,13 @@ public static class AutoRevertService
             var window = MaintenanceWindowService.Load(config);
             if (window.Enabled && !MaintenanceWindowService.IsInWindow(window))
             {
-                outcome.Summary = $"Auto-revert deferred — outside maintenance window ({MaintenanceWindowService.Summarize(window)}).";
+                outcome.Summary = $"Auto-revert deferred. Outside maintenance window ({MaintenanceWindowService.Summarize(window)}).";
                 return outcome;
             }
 
-            log?.Invoke("[AUTO-REVERT] Watchdog verdict Unstable — initiating automatic patch removal.");
+            log?.Invoke("[AUTO-REVERT] Watchdog verdict Unstable. Initiating automatic patch removal.");
             EventLogService.Write(
-                $"NVMe Driver Patcher auto-revert triggered — {report.TotalEvents} storage-stack events in watchdog window.",
+                $"NVMe Driver Patcher auto-revert triggered: {report.TotalEvents} storage-stack events in watchdog window.",
                 System.Diagnostics.EventLogEntryType.Warning, 3010);
 
             outcome.Executed = true;

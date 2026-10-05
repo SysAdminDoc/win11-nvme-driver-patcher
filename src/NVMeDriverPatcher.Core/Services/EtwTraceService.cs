@@ -96,7 +96,7 @@ public static class EtwTraceService
         if (!IsWprAvailable())
         {
             result.Success = false;
-            result.Summary = "wpr.exe not available on this SKU — skipping ETW capture.";
+            result.Summary = "wpr.exe not available on this SKU. Skipping ETW capture.";
             return result;
         }
 

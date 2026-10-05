@@ -55,7 +55,7 @@ Flip via `apply --safe` / `apply --full` or the GUI's Install Mode radio.
    full reg load / reg delete / reg unload sequence.
 3. Auto-disable. Windows disables the native driver after 2-3 consecutive failed boots.
 4. Driver method (force-loaded). If nvmedisk.sys was forced via Device Manager or PnPUtil
-    (no registry keys / fallback flags — `status` shows enablement source 'untracked'), the
+    (no registry keys / fallback flags, `status` shows enablement source 'untracked'), the
    .reg/.bat will NOT revert it. Capture evidence first with
    `pnputil /enum-drivers /files`, then revert in Device Manager: Disk drives > your NVMe >
    Update driver > Browse > Let me pick > select the Standard NVM Express Controller /
@@ -170,7 +170,7 @@ packaging/telemetry-receiver/ (Cloudflare Worker).
 Starting with Insider build 26300.8155, Windows 11 has a built-in 'Feature flags' page
 under Settings > Windows Update > Windows Insider Program. If you are on build 26300 or
 newer, check there FIRST: Microsoft may expose native NVMe as an official, supported toggle.
-An official toggle is always preferable to this tool's overrides — on these builds the
+An official toggle is always preferable to this tool's overrides. On these builds the
 registry and ViVeTool routes do not bind the driver anyway (the GenNvmeDisk compatible ID
 was removed). If a native NVMe flag appears on that page, use it and treat this tool as a
 verify/monitor/rollback helper rather than the enabler.

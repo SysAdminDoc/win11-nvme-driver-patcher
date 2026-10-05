@@ -181,7 +181,7 @@ public static class BenchmarkService
                         "DiskSpd executable did not match the pinned known-good SHA-256 (v2.2). Refusing to run an unverified benchmark binary.");
 
                 if (!VerifiedDownloader.VerifyAuthenticode(found))
-                    log?.Invoke("[INFO] DiskSpd Authenticode check unavailable (signtool not found) — proceeding on the verified pinned hash.");
+                    log?.Invoke("[INFO] DiskSpd Authenticode check unavailable (signtool not found). Proceeding on the verified pinned hash.");
 
                 File.Copy(found, diskSpdExe, overwrite: true);
                 log?.Invoke("DiskSpd downloaded successfully");

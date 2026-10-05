@@ -247,7 +247,7 @@ FILES:
 
         var sb = new System.Text.StringBuilder();
         sb.Append("Windows Registry Editor Version 5.00\r\n\r\n");
-        sb.Append("; NVMe Driver Patcher - RECOVERY KIT\r\n");
+        sb.Append("; NVMe Driver Patcher: RECOVERY KIT\r\n");
         sb.Append($"; Generated: {timestamp}\r\n;\r\n");
         sb.Append("; FROM WINDOWS: Double-click this file and confirm.\r\n");
         sb.Append("; FROM WinRE:   Run Remove_NVMe_Patch.bat so the offline SYSTEM hive is loaded.\r\n\r\n");
@@ -280,7 +280,7 @@ FILES:
 
         sb.Append("; NOTE: this .reg covers CurrentControlSet plus the control set that was current when the\r\n");
         sb.Append($"; kit was generated ({controlSetNum}). On systems with additional control sets (after failed\r\n");
-        sb.Append("; boots), Remove_NVMe_Patch.bat is the canonical removal path — it sweeps ControlSet001-009.");
+        sb.Append("; boots), Remove_NVMe_Patch.bat is the canonical removal path. It sweeps ControlSet001-009.");
         return sb.ToString();
     }
 

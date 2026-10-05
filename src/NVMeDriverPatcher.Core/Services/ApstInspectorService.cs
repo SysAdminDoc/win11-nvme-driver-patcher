@@ -75,7 +75,7 @@ public static class ApstInspectorService
             ApplyIdentifyPowerStates(report, QueryIdentifyPowerStates());
             report.Summary = report.ApstEnabled
                 ? $"APST enabled with idle timeout {report.ApstIdleTimeout?.ToString() ?? "default"}. {report.States.Count} power-state entries."
-                : "APST disabled — drives stay at active power state (higher battery drain on laptops).";
+                : "APST disabled. Drives stay at active power state (higher battery drain on laptops).";
             report.BatteryEstimate = EstimateBatteryImpact(report);
         }
         catch (Exception ex)
@@ -148,7 +148,7 @@ public static class ApstInspectorService
 
         if (!est.IsLaptop)
         {
-            est.Impact = "Desktop system — APST has no battery impact.";
+            est.Impact = "Desktop system. APST has no battery impact.";
             est.Recommendation = "No action needed.";
         }
         else if (est.ApstHonored)
@@ -161,7 +161,7 @@ public static class ApstInspectorService
         }
         else
         {
-            est.Impact = "APST is already disabled or blocked — no additional battery regression from patching.";
+            est.Impact = "APST is already disabled or blocked. No additional battery regression from patching.";
             est.Recommendation = "No additional impact from the native NVMe patch.";
         }
 

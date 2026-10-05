@@ -94,9 +94,9 @@ public static class WinReDriverInjectionService
         });
 
         if (imageMissing)
-            plan.Warnings.Add($"WinRE image not found at '{winReImagePath}' — run reagentc /info to locate it (it may need reagentc /enable first).");
+            plan.Warnings.Add($"WinRE image not found at '{winReImagePath}'. Run reagentc /info to locate it (it may need reagentc /enable first).");
         if (driverInfMissing)
-            plan.Warnings.Add($"Driver INF not found at '{driverInfPath}' — stornvme.inf ships in %WINDIR%\\INF on a healthy install.");
+            plan.Warnings.Add($"Driver INF not found at '{driverInfPath}' (stornvme.inf ships in %WINDIR%\\INF on a healthy install).");
 
         plan.Warnings.Add("BLAST RADIUS: this mutates the recovery boot image. Back up the WinRE .wim first (copy it elsewhere).");
         plan.Warnings.Add("If a mount is interrupted, run 'Dism /Cleanup-Mountpoints' before retrying.");
@@ -108,7 +108,7 @@ public static class WinReDriverInjectionService
     public static string RenderPlan(WinReInjectionPlan plan)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("WinRE stornvme injection — PLANNED DISM operations (preview only, nothing mutated):");
+        sb.AppendLine("WinRE stornvme injection: PLANNED DISM operations (preview only, nothing mutated):");
         sb.AppendLine($"  WinRE image : {plan.WinReImagePath}");
         sb.AppendLine($"  Driver INF  : {plan.DriverInfPath}");
         sb.AppendLine($"  Mount dir   : {plan.MountDir}");
@@ -122,7 +122,7 @@ public static class WinReDriverInjectionService
         sb.AppendLine();
         sb.AppendLine(plan.IsExecutable
             ? "Plan is runnable. Review the warnings, then run the commands above from an elevated prompt."
-            : "Plan is NOT runnable as-is — resolve the warnings below first.");
+            : "Plan is NOT runnable as-is. Resolve the warnings below first.");
         foreach (var w in plan.Warnings)
             sb.AppendLine($"  ! {w}");
         return sb.ToString().TrimEnd();

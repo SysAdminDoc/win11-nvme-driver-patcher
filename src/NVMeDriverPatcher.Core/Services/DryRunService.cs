@@ -93,14 +93,14 @@ public static class DryRunService
             // Replay what the UI would show but without the live UI-only bits.
             foreach (var probe in preflight.CriticalProbes.Items.Where(item => item.BlocksMutation))
                 report.PreflightBlockers.Add(
-                    $"{probe.Label}: {probe.Verdict} [{probe.ReasonCode}] — {probe.Detail}");
+                    $"{probe.Label}: {probe.Verdict} [{probe.ReasonCode}]: {probe.Detail}");
             if (preflight.VeraCryptDetected &&
                 preflight.CriticalProbes.Items.All(item => item.Id != "VeraCrypt"))
-                report.PreflightBlockers.Add("VeraCrypt system encryption present — patch is blocked.");
+                report.PreflightBlockers.Add("VeraCrypt system encryption present. Patch is blocked.");
             if (preflight.BitLockerEnabled) report.PreflightWarnings.Add("BitLocker will be suspended for one reboot cycle.");
-            if (preflight.IsLaptop) report.PreflightWarnings.Add("Laptop detected — APST power-management regression (~15% battery).");
+            if (preflight.IsLaptop) report.PreflightWarnings.Add("Laptop detected. APST power-management regression (~15% battery).");
             foreach (var sw in preflight.IncompatibleSoftware)
-                report.PreflightWarnings.Add($"Incompatible software: {sw.Name} [{sw.Severity}] — {sw.Message}");
+                report.PreflightWarnings.Add($"Incompatible software: {sw.Name} [{sw.Severity}]: {sw.Message}");
         }
 
         report.Summary = BuildSummary(report);
@@ -214,7 +214,7 @@ public static class DryRunService
     public static string RenderMarkdown(DryRunReport report)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# NVMe Driver Patcher — Dry Run");
+        sb.AppendLine("# NVMe Driver Patcher: Dry Run");
         sb.AppendLine();
         sb.AppendLine(report.Summary);
         sb.AppendLine();

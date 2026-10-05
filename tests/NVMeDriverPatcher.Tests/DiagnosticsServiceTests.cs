@@ -56,7 +56,7 @@ public sealed class DiagnosticsServiceTests : IDisposable
     {
         var reportPath = Path.Combine(_tempRoot, "diagnostics.txt");
         File.WriteAllText(reportPath, """
-            NVMe Driver Patcher - System Diagnostics Report
+            NVMe Driver Patcher: System Diagnostics Report
             Computer Name: DESKTOP-ALICE
             User: alice
             OS: Windows 11 Pro

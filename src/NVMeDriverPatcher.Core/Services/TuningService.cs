@@ -131,13 +131,13 @@ public static class TuningService
                     }
                     else
                     {
-                        log?.Invoke($"  [FAIL] {name} - verification mismatch");
+                        log?.Invoke($"  [FAIL] {name}: verification mismatch");
                         failed++;
                     }
                 }
                 catch (Exception ex)
                 {
-                    log?.Invoke($"  [FAIL] {name} - {ex.Message}");
+                    log?.Invoke($"  [FAIL] {name}: {ex.Message}");
                     failed++;
                 }
             }

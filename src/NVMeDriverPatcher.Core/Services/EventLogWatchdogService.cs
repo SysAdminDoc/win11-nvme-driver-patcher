@@ -113,7 +113,7 @@ public static class EventLogWatchdogService
         ("disk", 51, "Paging I/O error on disk"),
         ("disk", 153, "I/O completed with reset"),
         ("Microsoft-Windows-Kernel-Power", 41, "Unexpected shutdown (kernel power)"),
-        ("BugCheck", 1001, "Bug check (BSOD) — correlation only")
+        ("BugCheck", 1001, "Bug check (BSOD), correlation only")
     };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -257,7 +257,7 @@ public static class EventLogWatchdogService
         if (string.IsNullOrWhiteSpace(state.PatchAppliedAt))
         {
             report.Verdict = WatchdogVerdict.Idle;
-            report.Summary = "Watchdog idle — no patch window active.";
+            report.Summary = "Watchdog idle. No patch window active.";
             return report;
         }
 
@@ -360,10 +360,10 @@ public static class EventLogWatchdogService
     {
         var summary = report.Verdict switch
         {
-            WatchdogVerdict.Unavailable => "Watchdog evidence is unavailable — do not interpret missing counts as healthy.",
-            WatchdogVerdict.Unstable => $"Storage instability detected ({report.TotalEvents} events) — auto-revert eligible.",
+            WatchdogVerdict.Unavailable => "Watchdog evidence is unavailable. Do not interpret missing counts as healthy.",
+            WatchdogVerdict.Unstable => $"Storage instability detected ({report.TotalEvents} events). Auto-revert eligible.",
             WatchdogVerdict.Warning => $"Elevated storage events ({report.TotalEvents}) in post-patch window.",
-            WatchdogVerdict.Healthy => $"Stable — {report.TotalEvents} storage events in watchdog window.",
+            WatchdogVerdict.Healthy => $"Stable: {report.TotalEvents} storage events in watchdog window.",
             WatchdogVerdict.Completed => $"Watchdog window completed with {report.TotalEvents} events. Patch considered stable.",
             _ => "Watchdog idle."
         };
@@ -382,14 +382,14 @@ public static class EventLogWatchdogService
         sb.AppendLine();
         foreach (var c in report.Counts.Where(c => c.Count > 0))
         {
-            sb.AppendLine($"  [{c.Count}] {c.Source}/{c.Id} — {c.Description} (last: {c.LatestOccurrence:u})");
+            sb.AppendLine($"  [{c.Count}] {c.Source}/{c.Id}: {c.Description} (last: {c.LatestOccurrence:u})");
         }
         if (HasStorportCommandTimeout(report))
         {
             sb.AppendLine();
             sb.AppendLine($"Guidance: {CommandTimeoutGuidance}");
         }
-        if (report.TotalEvents == 0) sb.AppendLine("  (no matching events — looking good)");
+        if (report.TotalEvents == 0) sb.AppendLine("  (no matching events, looking good)");
         return sb.ToString();
     }
 

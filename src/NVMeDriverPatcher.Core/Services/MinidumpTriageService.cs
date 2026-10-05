@@ -168,6 +168,6 @@ public static class MinidumpTriageService
             return $"No new crash dumps since patch. {report.TotalFound} older dump(s) on disk.";
         if (report.NVMeRelated == 0)
             return $"{report.NewerThanPatch} new crash dump(s) since patch, none reference the NVMe stack.";
-        return $"{report.NVMeRelated}/{report.NewerThanPatch} post-patch crash dump(s) reference the NVMe stack — investigate.";
+        return $"{report.NVMeRelated}/{report.NewerThanPatch} post-patch crash dump(s) reference the NVMe stack. Investigate.";
     }
 }

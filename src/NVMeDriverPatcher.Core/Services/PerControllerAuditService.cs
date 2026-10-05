@@ -78,7 +78,7 @@ public class PerControllerAuditReport
     {
         var native = Controllers.Where(c => c.IsNative).ToList();
         if (native.Count == 0)
-            return "No nvmedisk.sys-bound controllers — no forced-driver evidence to capture.";
+            return "No nvmedisk.sys-bound controllers. No forced-driver evidence to capture.";
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("nvmedisk.sys is bound on the controllers below. A Microsoft INF/provider with");

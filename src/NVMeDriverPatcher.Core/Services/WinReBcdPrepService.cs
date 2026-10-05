@@ -108,7 +108,7 @@ public static class WinReBcdPrepService
 
         info.Summary = info.WinReEnabled
             ? $"WinRE enabled at {info.WinReLocation ?? "(unknown location)"}. Fallback path is viable."
-            : "WinRE not currently enabled — recovery-from-WinRE path will NOT work until reagentc /enable is run.";
+            : "WinRE not currently enabled. Recovery-from-WinRE path will NOT work until reagentc /enable is run.";
         return info;
     }
 

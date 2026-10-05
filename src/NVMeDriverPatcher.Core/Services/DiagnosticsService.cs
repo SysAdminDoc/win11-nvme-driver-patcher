@@ -470,7 +470,7 @@ public static class DiagnosticsService
 
         var sb = new StringBuilder(4096);
         sb.AppendLine("================================================================================");
-        sb.AppendLine("NVMe Driver Patcher - System Diagnostics Report");
+        sb.AppendLine("NVMe Driver Patcher: System Diagnostics Report");
         sb.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine($"Version: {AppConfig.AppVersion}");
         sb.AppendLine("================================================================================");
@@ -646,7 +646,7 @@ public static class DiagnosticsService
         sb.AppendLine($"Mutation Ready: {(criticalProbes.AllPassed ? "Yes" : "No")}");
         foreach (var probe in criticalProbes.Items)
         {
-            sb.AppendLine($"  [{probe.Verdict}] {probe.Id}: {probe.ReasonCode} — {probe.Detail}");
+            sb.AppendLine($"  [{probe.Verdict}] {probe.Id}: {probe.ReasonCode}: {probe.Detail}");
             sb.AppendLine($"    Observed UTC: {probe.ObservedAtUtc:O}");
             if (!string.IsNullOrWhiteSpace(probe.NativeError))
                 sb.AppendLine($"    Native Error: {probe.NativeError}");

@@ -348,7 +348,7 @@ public static class FeatureStoreWriterService
         {
             Success = false,
             Summary = "Write call returned success but verification shows ID(s) not enabled in BOTH stores: " +
-                      detail + ". A Boot-store gap would surface only after reboot — use the secondary ViVeTool fallback and report this.",
+                      detail + ". A Boot-store gap would surface only after reboot. Use the secondary ViVeTool fallback and report this.",
             AppliedIds = fullyEnabled,
             IdStatuses = statuses,
         };
@@ -438,7 +438,7 @@ public static class FeatureStoreWriterService
         }
 
         if (enabled.Length == 0)
-            return new FeatureStoreWriteResult { Success = true, Summary = "No FeatureStore fallback IDs are enabled — nothing to undo." };
+            return new FeatureStoreWriteResult { Success = true, Summary = "No FeatureStore fallback IDs are enabled. Nothing to undo." };
 
         return ResetOverridesCore(enabled);
     }

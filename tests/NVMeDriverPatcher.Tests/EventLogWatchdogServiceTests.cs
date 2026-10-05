@@ -51,7 +51,7 @@ public sealed class EventLogWatchdogServiceTests
     {
         var report = new WatchdogReport { Verdict = WatchdogVerdict.Unstable, TotalEvents = 7 };
         var s = EventLogWatchdogService.BuildSummary(report, StateWith(3, 6));
-        Assert.Contains("auto-revert eligible", s);
+        Assert.Contains("Auto-revert eligible", s);
     }
 
     [Fact]

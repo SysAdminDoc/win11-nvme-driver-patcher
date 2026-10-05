@@ -137,13 +137,13 @@ public sealed record FeatureRouteAssessment(
         get
         {
             if (!BranchKnown)
-                return $"{FeatureName}: UNKNOWN — no curated feature branch is available.";
+                return $"{FeatureName}: UNKNOWN. No curated feature branch is available.";
 
             if (!FeatureKnown)
-                return $"{FeatureName}: UNKNOWN — the feature is absent from curated branch '{Branch}'.";
+                return $"{FeatureName}: UNKNOWN. The feature is absent from curated branch '{Branch}'.";
 
             if (IsAlwaysDisabled)
-                return $"{FeatureName} ({FeatureId}): ALWAYS DISABLED on curated branch '{Branch}' — no override route is known.";
+                return $"{FeatureName} ({FeatureId}): ALWAYS DISABLED on curated branch '{Branch}'. No override route is known.";
 
             return $"{FeatureName} ({FeatureId}): {DefaultState} on curated branch '{Branch}'.";
         }

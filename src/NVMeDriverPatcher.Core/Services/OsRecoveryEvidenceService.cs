@@ -69,7 +69,7 @@ public sealed class OsRecoveryEvidence
         }
     }
 
-    public string Summary => $"OS-native recovery advisory — {PointInTimeRestoreSummary} {QuickMachineRecoverySummary}";
+    public string Summary => $"OS-native recovery advisory. {PointInTimeRestoreSummary} {QuickMachineRecoverySummary}";
 
     private static string FormatAge(DateTimeOffset timestamp)
     {

@@ -188,6 +188,6 @@ public static class WindowsBuildRulesService
 
     public static string Describe(WindowsBuildRule? rule) =>
         rule is null
-            ? "No rule matches this Windows build — behavior unknown. Proceed conservatively and share diagnostics."
+            ? "No rule matches this Windows build. Behavior unknown. Proceed conservatively and share diagnostics."
             : $"[{rule.Id}] {rule.Summary} (expected path: {rule.ExpectedPath}; {rule.Confidence}, reviewed {rule.LastReviewed})";
 }

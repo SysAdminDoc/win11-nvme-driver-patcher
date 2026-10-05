@@ -85,9 +85,9 @@ public static partial class HotSwapService
                 : "BLOCKED: Drive is not eligible for hot-swap (not NVMe or missing PNP ID).");
 
         log?.Invoke("========================================");
-        log?.Invoke($"VERIFIED HOT-SWAP: Drive {drive.Number} - {drive.Name}");
+        log?.Invoke($"VERIFIED HOT-SWAP: Drive {drive.Number} ({drive.Name})");
         log?.Invoke("========================================");
-        log?.Invoke("[WARNING] HIGH RISK OPERATION - Ensure no files are open on this drive");
+        log?.Invoke("[WARNING] HIGH RISK OPERATION: Ensure no files are open on this drive");
 
         var volumesToRestore = new List<MountedVolume>();
         var controllerChangeAttempted = false;

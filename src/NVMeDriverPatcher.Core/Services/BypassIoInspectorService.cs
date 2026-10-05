@@ -60,7 +60,7 @@ public static class BypassIoInspectorService
             .ToList();
 
         if (enabledVolumes.Count == 0)
-            return "Gaming impact: none - BypassIO is already off on all volumes.";
+            return "Gaming impact: none. BypassIO is already off on all volumes.";
 
         var volumeList = string.Join(", ", enabledVolumes);
         return $"Gaming impact: BypassIO is active on {enabledVolumes.Count} volume(s) ({volumeList}). " +

@@ -159,7 +159,7 @@ public static class WinPERecoveryBuilderService
             if (!File.Exists(copypeCmd))
             {
                 result.Success = false;
-                result.Summary = $"copype.cmd missing — expected at {copypeCmd}";
+                result.Summary = $"copype.cmd missing. Expected at {copypeCmd}";
                 return result;
             }
 
@@ -299,7 +299,7 @@ public static class WinPERecoveryBuilderService
         content.AppendLine("wpeinit");
         content.AppendLine();
         content.AppendLine("echo ====================================================");
-        content.AppendLine("echo  NVMe Driver Patcher - WinPE Recovery");
+        content.AppendLine("echo  NVMe Driver Patcher: WinPE Recovery");
         content.AppendLine("echo ====================================================");
         content.AppendLine("echo.");
         content.AppendLine("echo The Recovery Kit is on this boot media (folder NVMe_Recovery_Kit).");

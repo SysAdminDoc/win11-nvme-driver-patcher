@@ -23,7 +23,7 @@ public static class ConfigMigrationService
         {
             notes.Add(
                 $"Config schema v{config.ConfigVersion} is newer than this build (v{CurrentSchemaVersion}). " +
-                "Leaving settings untouched — downgrading would discard fields this build doesn't recognize.");
+                "Leaving settings untouched. Downgrading would discard fields this build doesn't recognize.");
             return (false, string.Join(" ", notes));
         }
 
