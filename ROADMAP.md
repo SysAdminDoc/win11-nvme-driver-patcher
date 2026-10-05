@@ -180,14 +180,14 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: S
 
-- [ ] P3 — Legacy script: `.reg` written with `-NoNewline`; removal dialog promises a BitLocker suspension that no longer exists; fsutil parsing is English-only; bare-name tool launches while elevated; Refresh runs preflight synchronously on the UI thread
-  Category: reliability
-  Where: `NVMe_Driver_Patcher.ps1:1763` (kit `.reg` ends without trailing CRLF — regedit can drop the final SafeBoot Network delete line; `Export-RegistryBackup:2790` is safe); `:2983` (dialog: "BitLocker ... Will be automatically suspended for one reboot" — no `Suspend-BitLocker`/`manage-bde` anywhere in the file); `:986-1006` + generated verify script `:1649-1655` (matches English `fsutil bypassio` strings — Supported always false on non-English Windows); `:325, 983, 2916, 3702` + generated `:1647` (bare `powershell.exe`/`fsutil`/`shutdown.exe`/`explorer.exe` from an always-elevated script — outside both bare-name gates); `:3716-3776` (`BtnRefresh` runs `Invoke-PreflightChecks` + DISM/CIM/fsutil inline — 5-20 s window freeze the v3.4.6 background-runspace work eliminated for startup)
-  Problem: Five self-contained legacy-artifact defects, grouped because they share one file and one implementation session.
-  Evidence: Each line read directly; `Suspend-BitLocker` absence grep-verified.
-  Fix: Append a trailing blank line to the kit `.reg`; delete the stale BitLocker sentence from the removal dialog; note the localization limit in fsutil-derived output (or parse `fsutil` exit codes instead of strings); absolute-path the four tool launches (`$env:SystemRoot\System32\...`); route BtnRefresh through the existing background-runspace preflight.
-  Acceptance: Generated `.reg` ends with CRLF; dialog text matches actual behavior; tool launches absolute; Refresh keeps the window responsive.
-  Confidence: Verified (except `.reg` regedit behavior: Needs-repro)
+- [ ] P3 — Legacy script: Refresh runs preflight synchronously on the UI thread
+  Category: perf
+  Where: `NVMe_Driver_Patcher.ps1` `BtnRefresh` click handler (calls `Invoke-PreflightChecks`, `Get-NVMeHealthData` and `Get-StorageDiskMigration` inline, then repaints the check dots and labels); the background runspace and `DispatcherTimer` poll exist only in the SECTION 19 `Add_ContentRendered` startup handler, which carries its own copy of the same check-to-dot/label mapping
+  Problem: Clicking Refresh freezes the window for the 5-20 s the DISM/CIM/fsutil probes take, the freeze the v3.4.6 background runspace removed from startup.
+  Evidence: Handler read; every probe runs on the dispatcher thread.
+  Fix: Extract the startup runspace launch, poll and result marshaling into one function (for example `Start-BackgroundPreflight` with a completion script block) and call it from both ContentRendered and BtnRefresh, sharing one repaint helper. Keep `$funcNames` complete; `LegacyScriptArtifactTests.BackgroundPreflightRunspace_CarriesEveryScriptFunctionItsFunctionsCall` gates it.
+  Acceptance: Refresh keeps the window responsive; `Validate-LegacyPowerShellBoundary.ps1` and the legacy script tests pass.
+  Confidence: Verified
   Effort: M
 
 - [ ] P3 — `Validate-LegacyPowerShellBoundary.ps1` enumerates what it guards; `-Status` writes HKLM via `CreateEventSource` unnoticed
