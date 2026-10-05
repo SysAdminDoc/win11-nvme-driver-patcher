@@ -49,6 +49,37 @@ public sealed class DataFileProvenanceServiceTests : IDisposable
         Assert.Equal("2000-01-02", result.NewestLastReviewed);
     }
 
+    /// <summary>
+    /// Review dates are a fixed data format. Read through a non-Gregorian current calendar
+    /// (Buddhist era on th-TH, Um Al-Qura on ar-SA) "2026-06-11" becomes a date centuries away
+    /// or fails to parse, so every bundled data file reported STALE on those systems.
+    /// </summary>
+    [Theory]
+    [InlineData("th-TH")]
+    [InlineData("ar-SA")]
+    [InlineData("fa-IR")]
+    [InlineData("")]
+    public void Inspect_FreshnessIsIdenticalUnderEveryCulture(string culture)
+    {
+        var shippedDir = Path.Combine(_dir, "app-culture-" + (culture.Length == 0 ? "invariant" : culture));
+        Directory.CreateDirectory(shippedDir);
+        File.WriteAllText(Path.Combine(shippedDir, "compat.json"), Payload("2026-06-10", "2026-06-11", "culture"));
+
+        var original = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo(culture);
+            var result = DataFileProvenanceService.Inspect("Firmware compatibility DB", "compat.json", null, shippedDir, staleAfterDays: 30, nowUtc: new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc));
+
+            Assert.Equal("2026-06-11", result.NewestLastReviewed);
+            Assert.False(result.IsStale, result.Summary);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = original;
+        }
+    }
+
     [Fact]
     public void DescribeForPreflight_UsesWarningTextForStaleFiles()
     {

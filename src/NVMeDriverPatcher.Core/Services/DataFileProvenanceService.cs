@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -155,12 +156,19 @@ public static class DataFileProvenanceService
 
     private static bool IsStale(string date, int staleAfterDays, DateTime nowUtc)
     {
-        if (!DateTime.TryParse(date, out var parsed))
+        if (!TryParseReviewDate(date, out var parsed))
             return true;
 
-        var age = nowUtc.Date - parsed.ToUniversalTime().Date;
+        var age = nowUtc.Date - parsed.Date;
         return age.TotalDays > staleAfterDays;
     }
+
+    // Review dates are a fixed data format, so they are read with the invariant (Gregorian)
+    // calendar. A current-culture parse on th-TH or ar-SA lands centuries away or fails, which
+    // reported every bundled data file as stale on those systems.
+    private static bool TryParseReviewDate(string date, out DateTime utc) =>
+        DateTime.TryParse(date, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out utc);
 
     private static IEnumerable<string> EnumerateDateStrings(JsonElement element, string propertyName)
     {
@@ -190,15 +198,14 @@ public static class DataFileProvenanceService
         DateTime? newest = null;
         foreach (var date in dates)
         {
-            if (!DateTime.TryParse(date, out var parsed))
+            if (!TryParseReviewDate(date, out var utc))
                 continue;
 
-            var utc = parsed.ToUniversalTime();
             if (newest is null || utc > newest.Value)
                 newest = utc;
         }
 
-        return newest?.ToString("yyyy-MM-dd") ?? string.Empty;
+        return newest?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
     }
 
     private static string HashFile(string path)

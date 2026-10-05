@@ -1,3 +1,4 @@
+using System.Globalization;
 using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
@@ -104,10 +105,16 @@ public static class BuildActionPolicyService
     private static bool IsStale(string date, DateTime nowUtc, int staleAfterDays)
     {
         // A rule with no/invalid review date is treated as stale — we will not mutate on the
-        // strength of an undated rule.
-        if (!DateTime.TryParse(date, out var parsed))
+        // strength of an undated rule. The date is a fixed data format, so parse it invariant:
+        // a current-culture parse reads it through that culture's calendar (Um Al-Qura on ar-SA,
+        // Buddhist era on th-TH) and turns a fresh rule stale on those systems alone.
+        if (!DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
             return true;
-        return (nowUtc.ToUniversalTime().Date - parsed.ToUniversalTime().Date).TotalDays > staleAfterDays;
+        // nowUtc is UTC by contract; only a Local value needs converting. Calling ToUniversalTime
+        // on an Unspecified value would shift it by the machine's offset and can move the day.
+        var today = (nowUtc.Kind == DateTimeKind.Local ? nowUtc.ToUniversalTime() : nowUtc).Date;
+        return (today - parsed.Date).TotalDays > staleAfterDays;
     }
 
     private static string DisplayDate(string? date) =>

@@ -60,16 +60,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Likely (documented range; not executed)
   Effort: S
 
-- [ ] P3 — Build-rule staleness date parse is culture-sensitive inside the mutation gate
-  Category: correctness
-  Where: `src/NVMeDriverPatcher.Core/Services/BuildActionPolicyService.cs:104-111` (`DateTime.TryParse(date)` + `ToUniversalTime()` on Unspecified kind)
-  Problem: On non-Gregorian-default locales (ar-SA) "2026-07-14" parses to a different date or fails; direction is fail-closed (apply silently becomes verify/rollback-only) — invisible per-locale behavior change in the SSOT gate.
-  Evidence: Parse read; `ViVeToolService.cs:141` already does it right (`TryParseExact` invariant).
-  Fix: `DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, ...)`.
-  Acceptance: Test parsing the bundled dates under ar-SA CurrentCulture yields identical staleness verdicts to invariant.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — SafeBoot journal restore re-types non-REG_SZ defaults and expands REG_EXPAND_SZ, breaking the byte-for-byte claim
   Category: correctness
   Where: `src/NVMeDriverPatcher.Core/Services/SafeBootStateService.cs:325-330` (`Read` uses `key.GetValue(name)` — expands), `:362-365` (`ApplyRestore` always writes `RegistryValueKind.String`)
