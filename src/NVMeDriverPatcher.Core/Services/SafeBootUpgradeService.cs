@@ -41,7 +41,7 @@ public static class SafeBootUpgradeService
         {
             // Probe failure (hardened SKU, transient registry error) — report "no upgrade
             // needed" rather than nagging on a state we can't actually see.
-            return new SafeBootUpgradeReport { Summary = "SafeBoot state could not be read." };
+            return new SafeBootUpgradeReport { Summary = "Safe Boot state could not be read." };
         }
         return Classify(guidMin, guidNet, svcMin, svcNet);
     }
@@ -62,11 +62,11 @@ public static class SafeBootUpgradeService
         report.Summary = report switch
         {
             { GuidEntriesPresent: false } =>
-                "No patch SafeBoot entries present — nothing to upgrade.",
+                "No patch Safe Boot entries are present, so there's nothing to upgrade.",
             { UpgradeNeeded: false } =>
-                "SafeBoot entries are current (GUID + service-name).",
+                "Safe Boot entries are current (GUID + service-name).",
             _ =>
-                "SafeBoot entries predate the KB5079391 fix: the GUID entries exist but the " +
+                "Safe Boot entries predate the KB5079391 fix. The GUID entries exist but the " +
                 "service-name entries (SafeBoot\\Minimal\\nvmedisk, SafeBoot\\Network\\nvmedisk) " +
                 "are missing. Booting to Safe Mode on 25H2+ could hit INACCESSIBLE_BOOT_DEVICE. " +
                 "Run the one-click upgrade to add them.",
@@ -82,7 +82,7 @@ public static class SafeBootUpgradeService
     {
         var recoverySafety = RecoverySafetyGateService.Snapshot();
         if (!recoverySafety.MutationAllowed)
-            return (false, "SafeBoot upgrade blocked by unresolved startup recovery: " + recoverySafety.Summary);
+            return (false, "Safe Boot upgrade blocked by unresolved startup recovery: " + recoverySafety.Summary);
 
         try
         {
@@ -90,18 +90,18 @@ public static class SafeBootUpgradeService
 
             using (var svcMin = hklm.CreateSubKey(AppConfig.SafeBootMinimalServicePath))
                 svcMin?.SetValue("", AppConfig.SafeBootServiceValue);
-            log?.Invoke("  [OK] SafeBoot Minimal (service name) written");
+            log?.Invoke(@"  [OK] SafeBoot\Minimal\nvmedisk (service name) written");
 
             using (var svcNet = hklm.CreateSubKey(AppConfig.SafeBootNetworkServicePath))
                 svcNet?.SetValue("", AppConfig.SafeBootServiceValue);
-            log?.Invoke("  [OK] SafeBoot Network (service name) written");
+            log?.Invoke(@"  [OK] SafeBoot\Network\nvmedisk (service name) written");
 
             // Verify both landed before claiming success.
             return VerifyUpgrade(Evaluate());
         }
         catch (Exception ex)
         {
-            return (false, $"SafeBoot upgrade failed: {ex.Message}");
+            return (false, $"Safe Boot upgrade failed: {ex.Message}");
         }
     }
 
@@ -114,6 +114,6 @@ public static class SafeBootUpgradeService
     /// </summary>
     internal static (bool Success, string Message) VerifyUpgrade(SafeBootUpgradeReport after) =>
         after.ServiceEntriesComplete
-            ? (true, "SafeBoot service-name entries are in place. Safe Mode on 25H2+ will resolve the storage driver correctly.")
+            ? (true, "Safe Boot service-name entries are in place. Safe Mode on 25H2+ will resolve the storage driver correctly.")
             : (false, "Writes completed but verification reports the service-name entries are not in place.");
 }

@@ -457,7 +457,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Log($"SafeBoot upgrade check skipped: {ex.Message}", "DEBUG");
+            Log($"Safe Boot upgrade check skipped: {ex.Message}", "DEBUG");
         }
 
         try
