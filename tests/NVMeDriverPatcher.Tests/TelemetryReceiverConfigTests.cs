@@ -6,9 +6,9 @@ namespace NVMeDriverPatcher.Tests;
 
 /// <summary>
 /// Pins the receiver's deploy config. The KV binding once sat as a bare <c>kv_namespaces = [...]</c>
-/// line under <c>[vars]</c>, which TOML reads as <c>vars.kv_namespaces</c>, so the Worker got a text
-/// variable instead of KV. The rate limiters were on <c>[[unsafe.bindings]]</c>, and wrangler floated
-/// to whatever npx resolved.
+/// line under <c>[vars]</c>, which TOML reads as <c>vars.kv_namespaces</c>, so the Worker got a
+/// variable by that name and no COMPAT binding. The rate limiters were on
+/// <c>[[unsafe.bindings]]</c>, and wrangler floated to whatever npx resolved.
 /// </summary>
 public sealed class TelemetryReceiverConfigTests
 {
@@ -28,6 +28,13 @@ public sealed class TelemetryReceiverConfigTests
         Assert.Equal(2, lines.Count(line => line == "[[ratelimits]]"));
         Assert.Contains("name = \"RATE_LIMITER\"", lines);
         Assert.Contains("name = \"SUMMARY_RATE_LIMITER\"", lines);
+        for (int i = 0; i < lines.Count; i++)
+        {
+            if (lines[i] != "[[ratelimits]]") continue;
+            var block = lines.Skip(i + 1).TakeWhile(line => !line.StartsWith('[')).ToList();
+            Assert.Contains(block, line => Regex.IsMatch(line, "^namespace_id = \"\\d+\"$"));
+            Assert.Contains(block, line => Regex.IsMatch(line, "^simple = \\{ limit = \\d+, period = (10|60) \\}$"));
+        }
 
         // Everything between [vars] and the next table header lands in vars.
         int vars = lines.IndexOf("[vars]");

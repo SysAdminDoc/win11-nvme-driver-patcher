@@ -14,7 +14,7 @@ account_id = "<account-id>"
 ALLOWED_ORIGINS = ""
 
 # A table of its own: as a bare `kv_namespaces = [...]` line after [vars], TOML read it as
-# vars.kv_namespaces and the Worker got a text variable instead of the KV binding.
+# vars.kv_namespaces, so the Worker got a variable by that name and no COMPAT binding at all.
 [[kv_namespaces]]
 binding = "COMPAT"
 id = "<KV-namespace-id>"
