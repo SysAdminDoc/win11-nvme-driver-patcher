@@ -5,6 +5,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- SafeBoot entries spelled "Storage disks" now count as patch entries. Community scripts write that spelling, and Windows doesn't care about case, but status only matched "Storage Disks" exactly. A machine with those entries left over read as Not applied with Remove greyed out, even though Remove already knew how to clear them. The SafeBoot upgrade check had the same blind spot.
 - The Intel RST/VMD safety check no longer blocks PCs that have no Intel storage controller.
   Windows 11 ships `iaStorAVC` in the box as a demand-start driver on every machine, so a
   Stopped, Manual entry was being read as RST evidence and stopped AMD systems cold (#18). The
@@ -153,6 +154,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   `Invoke-Checked` or extensionless names; release tools are resolved to absolute paths first.
 
 ### Added
+- Readiness now spots what third-party NVMe scripts leave behind. Override `3244671118`, which FR33THY Ultimate writes and this tool doesn't, gets named with a note that Remove leaves it in place. SafeBoot entries left with no NVMe override behind them are called out too, and when the whole `Policies\Microsoft` tree is gone (that script's revert deletes it) the check says how to get Group Policy's Known Issue Rollback settings back. Windows' own `NvmeDisk` SafeBoot entry and Known Issue Rollback values never trip it. The removal ownership report labels `3244671118` the same way.
 - The Intune bundle now carries a remediation pair. `Check-NVMeDriverPatcher.ps1` and `Remediate-NVMeDriverPatcher.ps1` go under Devices > Scripts and remediations and keep the patch applied across a fleet through the installed CLI. The check reads `status --json` and treats a build the policy won't patch as compliant, so those devices stop failing remediation every cycle. The remediation runs an unattended apply without restarting and never forces past the CLI's safety refusals. `status --json` gained `applyAllowed` and `applyBlockedReason` for scripts that need the same answer.
 - Preflight, `recovery-proof`, the GUI recovery workspace, diagnostics, and CLI JSON now carry
   advisory OS-native recovery evidence: Point-in-Time Restore support/newest restore-point age

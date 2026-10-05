@@ -962,7 +962,7 @@ public static class PatchService
             if (foreign.Length > 0)
             {
                 summary += $" {foreign.Length} other value(s) there belong to Windows or another tool and were left alone: " +
-                    string.Join(", ", foreign.Select(name => string.IsNullOrEmpty(name) ? "(Default)" : name)) + ".";
+                    string.Join(", ", foreign.Select(AppConfig.DescribeForeignOverrideValue)) + ".";
             }
 
             return new RegistryOverrideOwnershipReport(
