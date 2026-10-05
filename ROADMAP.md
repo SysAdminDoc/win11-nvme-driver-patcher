@@ -160,16 +160,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: S
 
-- [ ] P3 — `fallback` re-checks force via raw command line and misses the `-f` alias
-  Category: correctness
-  Where: `src/NVMeDriverPatcher.Cli/Program.cs:1544` (`Environment.GetCommandLineArgs()` scan for `--force` only; alias defined at `:96`)
-  Problem: `fallback -f` on a failed recovery proof exits 1 with a message suggesting `--force` — the alias contract breaks in exactly one command.
-  Evidence: Site read.
-  Fix: Use the already-parsed `force` bool instead of re-scanning the command line.
-  Acceptance: `fallback -f` behaves identically to `fallback --force`.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — dll-hosted runs register `dotnet.exe` as the persistent binary for scheduled tasks and the service
   Category: correctness
   Where: `src/NVMeDriverPatcher.Cli/Program.cs:704` (`register-tasks`), `src/NVMeDriverPatcher.Watchdog/Program.cs:71` (`/install`) — both use `Environment.ProcessPath`
