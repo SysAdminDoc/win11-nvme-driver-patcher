@@ -321,7 +321,7 @@ The patch works with any NVMe drive using the Windows inbox `StorNVMe.sys` drive
 | Solidigm | P5316 (enterprise, Server 2025 tested) |
 | Generic/OEM | Any drive using StorNVMe.sys |
 
-Run preflight before enabling the patch. The bundled `compat.json` flags known risky controller/firmware combinations including WD/SanDisk 2TB HMB BSOD firmware, WD SN850X Critical Failure reports, Samsung 990 Pro 2TB `7B2QJXD7`, SK hynix Platinum P41 mixed performance, and Phison E18/E26 power-loss risk.
+Run preflight before enabling the patch. The bundled `compat.json` flags known risky controller/firmware combinations including WD/SanDisk 2TB HMB BSOD firmware, WD SN850X Critical Failure reports, Samsung 990 Pro firmware older than `7B2QJXD7`, SK hynix Platinum P41 mixed performance, and Phison E18/E26 power-loss risk.
 
 **Not compatible (uses vendor driver by default):**
 
