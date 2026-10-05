@@ -200,16 +200,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: S
 
-- [ ] P3 — README "11 async preflight checks" is stale (~26 exist) and outside the docs validator
-  Category: docs
-  Where: `README.md:124`; `src/NVMeDriverPatcher.Core/Services/PreflightService.cs` (~26 distinct check keys); `scripts/Validate-DocumentationFacts.ps1` (validates commands/tests/paths, not this count)
-  Problem: Drifted through at least three releases because no gate covers it.
-  Evidence: Check keys enumerated from the service; README read.
-  Fix: Derive the count in `Validate-DocumentationFacts.ps1` (same pattern as the CLI command count) and update the README number, or reword to avoid a count.
-  Acceptance: Validator fails when the preflight count and README disagree.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — CHANGELOG versions 5.4.0/5.5.0 have no git tags; 5.3.0 was released with no CHANGELOG entry; stray malformed tag `v.3.0.0`
   Category: docs
   Where: `CHANGELOG.md:35, 54` (5.5.0/5.4.0 entries); git tags (`v5.2.0` → `v5.6.0` jump, `v.3.0.0` typo tag); commit 95bbf11 "chore: release v5.3.0" with no `[5.3.0]` section
