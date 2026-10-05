@@ -91,6 +91,53 @@ public sealed class BuildActionPolicyServiceTests
         Assert.True(policy.Stale);
     }
 
+    /// <summary>
+    /// The review date is a fixed "yyyy-MM-dd" data format, not user input. A culture-sensitive
+    /// parse reads it through the current culture's calendar: under ar-SA (Um Al-Qura) or th-TH
+    /// (Buddhist era) "2026-06-10" either fails or lands centuries away, so a fresh rule flips to
+    /// stale and apply silently becomes verify/rollback-only on those systems alone.
+    /// </summary>
+    [Theory]
+    [InlineData("ar-SA")]
+    [InlineData("th-TH")]
+    [InlineData("fa-IR")]
+    [InlineData("ja-JP")]
+    [InlineData("en-US")]
+    [InlineData("")]
+    public void StalenessVerdict_IsIdenticalUnderEveryCulture(string culture)
+    {
+        var fresh = Rule("fresh", "registry-override", "2026-06-10");
+        var old = Rule("old", "registry-override", "2026-01-01");
+        var edge = Rule("edge", "registry-override", "2026-05-21");   // exactly 30 days before Now
+
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
+
+            Assert.False(BuildActionPolicyService.Evaluate(Ruleset(fresh), fresh, Now).Stale);
+            Assert.True(BuildActionPolicyService.Evaluate(Ruleset(fresh), fresh, Now).MutationAllowed);
+            Assert.True(BuildActionPolicyService.Evaluate(Ruleset(old), old, Now).Stale);
+            Assert.False(BuildActionPolicyService.Evaluate(Ruleset(edge), edge, Now, staleAfterDays: 30).Stale);
+            Assert.True(BuildActionPolicyService.Evaluate(Ruleset(edge), edge, Now.AddDays(1), staleAfterDays: 30).Stale);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+    }
+
+    [Theory]
+    [InlineData("06/10/2026")]   // culture-shaped dates are not the data format
+    [InlineData("2026-6-10")]
+    [InlineData("2026-06-10T00:00:00")]
+    [InlineData("not a date")]
+    public void NonIsoReviewDate_IsTreatedAsStale(string reviewed)
+    {
+        var rule = Rule("odd", "registry-override", reviewed);
+        Assert.True(BuildActionPolicyService.Evaluate(Ruleset(rule), rule, Now).Stale);
+    }
+
     // --- Integration against the real bundled windows_build_rules.json ---
 
     [Theory]
