@@ -869,6 +869,8 @@ public static class PatchService
     /// Enumerates every value under the FeatureManagement override key and checks whether the
     /// current token can obtain a writable handle. The check is intentionally non-mutating: an
     /// administrator must not take ownership of a boot-adjacent policy key as part of removal.
+    /// Only this tool's values (<see cref="AppConfig.OwnedOverrideValueNames"/>) are residue; the
+    /// key is shared with Known Issue Rollback and other tools, whose values are listed separately.
     /// </summary>
     internal static RegistryOverrideOwnershipReport InspectRegistryOverrideOwnership(RegistryKey hklm)
     {
@@ -887,16 +889,23 @@ public static class PatchService
                     Summary: $"Registry override ownership: clean — {AppConfig.RegistryPath} is absent.");
             }
 
-            var remaining = overrides.GetValueNames()
+            var allValues = overrides.GetValueNames()
                 .OrderBy(name => name, StringComparer.Ordinal)
                 .ToArray();
+            var remaining = allValues.Where(AppConfig.IsOwnedOverrideValueName).ToArray();
+            var foreign = allValues.Where(name => !AppConfig.IsOwnedOverrideValueName(name)).ToArray();
             string owner = GetRegistryOwner(overrides);
             bool canWrite = CanOpenRegistryKeyWritable(hklm);
             string summary = remaining.Length == 0
-                ? $"Registry override ownership: clean — key is readable and contains no values (owner {owner})."
+                ? $"Registry override ownership: clean — key is readable and contains none of this tool's values (owner {owner})."
                 : canWrite
                     ? $"Registry override residue: {remaining.Length} value(s) remain under {AppConfig.RegistryPath}; owner {owner}; current user can rewrite."
                     : $"Registry override ownership: BLOCKED — {remaining.Length} value(s) remain under {AppConfig.RegistryPath}; owner {owner}; current user cannot rewrite.";
+            if (foreign.Length > 0)
+            {
+                summary += $" {foreign.Length} other value(s) there belong to Windows or another tool and were left alone: " +
+                    string.Join(", ", foreign.Select(name => string.IsNullOrEmpty(name) ? "(Default)" : name)) + ".";
+            }
 
             return new RegistryOverrideOwnershipReport(
                 KeyExists: true,
@@ -904,7 +913,10 @@ public static class PatchService
                 Owner: owner,
                 CurrentUserCanWrite: canWrite,
                 RemainingValueNames: remaining,
-                Summary: summary);
+                Summary: summary)
+            {
+                ForeignValueNames = foreign
+            };
         }
         catch (Exception ex)
         {
