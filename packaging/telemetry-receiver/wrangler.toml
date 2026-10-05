@@ -3,7 +3,7 @@
 
 name = "nvme-driver-patcher-compat"
 main = "cloudflare-worker.js"
-compatibility_date = "2026-04-19"
+compatibility_date = "2026-09-26"
 
 account_id = "<account-id>"
 
@@ -13,9 +13,11 @@ account_id = "<account-id>"
 # before any work happens. Leave empty unless you host a dashboard; the CLI sends no Origin.
 ALLOWED_ORIGINS = ""
 
-kv_namespaces = [
-  { binding = "COMPAT", id = "<KV-namespace-id>" }
-]
+# A table of its own: as a bare `kv_namespaces = [...]` line after [vars], TOML read it as
+# vars.kv_namespaces and the Worker got a text variable instead of the KV binding.
+[[kv_namespaces]]
+binding = "COMPAT"
+id = "<KV-namespace-id>"
 
 # REQUIRED. `SECRET` keys the HMAC that turns a submitter's anonId into a KV key. Without it the
 # Worker refuses to serve rather than hashing with an empty key: an unkeyed digest of a value from
@@ -30,17 +32,15 @@ kv_namespaces = [
 # there is no check-then-write window for concurrent requests to slip through, and no IP-derived
 # value is persisted in the KV namespace. The Worker fails closed when this is absent; the KV
 # counter it replaced was racy and did persist one. `simple` period must be 10 or 60 seconds.
-[[unsafe.bindings]]
+[[ratelimits]]
 name = "RATE_LIMITER"
-type = "ratelimit"
 namespace_id = "1001"
 simple = { limit = 10, period = 60 }
 
 # REQUIRED. /nvme/compat/summary enumerates the KV namespace and recomputes the aggregate, so it
 # gets its own tighter budget instead of sharing the submit budget (it previously had no throttle
 # at all, because the route dispatch ran ahead of the rate-limit check).
-[[unsafe.bindings]]
+[[ratelimits]]
 name = "SUMMARY_RATE_LIMITER"
-type = "ratelimit"
 namespace_id = "1002"
 simple = { limit = 3, period = 60 }

@@ -341,13 +341,6 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
 
 ### P2
 
-- [ ] P2 — Telemetry receiver: pin wrangler, migrate off the unsafe rate-limit binding, refresh compatibility date
-  Why: `packaging/telemetry-receiver/package.json` declares no dependencies and there is no lockfile, so builds float to whatever `npx` resolves; the worker still uses `[[unsafe.bindings]]` for rate limiting although `[[ratelimits]]` has been stable since wrangler 4.36.0; `compatibility_date` is 2026-04-19. (Narrower and independent of the "telemetry-receiver needs a dedicated pass" scope note above.)
-  Evidence: `packaging/telemetry-receiver/package.json`, `wrangler.toml`; https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/.
-  Touches: `packaging/telemetry-receiver/package.json`, `wrangler.toml`, `README.md`, `TelemetryReceiverSummaryTests`.
-  Acceptance: `wrangler` is a pinned devDependency with a committed lockfile; both limiters use `[[ratelimits]]`; `wrangler deploy --dry-run` succeeds.
-  Complexity: S
-
 ### P3
 
 - [ ] P3 — Prove BypassIO support from the bound driver's INF instead of inferring it

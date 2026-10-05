@@ -5,6 +5,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- The sample telemetry receiver config now binds its KV store. The `kv_namespaces` line sat under `[vars]`, which TOML reads as part of that table, so a Worker deployed from it got `COMPAT` as a text variable and every submission failed. It's a `[[kv_namespaces]]` table now, and `npm run check` lists the bindings so you can see it before deploying.
 - SafeBoot entries spelled "Storage disks" now count as patch entries. Community scripts write that spelling, and Windows doesn't care about case, but status only matched "Storage Disks" exactly. A machine with those entries left over read as Not applied with Remove greyed out, even though Remove already knew how to clear them. The SafeBoot upgrade check had the same blind spot.
 - The Intel RST/VMD safety check no longer blocks PCs that have no Intel storage controller.
   Windows 11 ships `iaStorAVC` in the box as a demand-start driver on every machine, so a
@@ -87,6 +88,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - On a Windows build with no known way to turn on the native driver, Overview no longer says the system "can proceed" and asks you to review the tradeoffs right above a notice that Apply is off. It now says there's no known way yet and suggests making a recovery kit in the meantime. When Apply is off because of an unfinished recovery instead, the notice says so rather than blaming the Windows build.
 
 ### Changed
+- The telemetry receiver pins wrangler 4.143.0 as a devDependency with a committed lockfile instead of whatever a global install or `npx` picked up. Its `.npmrc` holds new npm releases back for a week. Both rate limiters moved from `[[unsafe.bindings]]` to the stable `[[ratelimits]]` binding, and `compatibility_date` moved up to 2026-09-26. The README's deploy steps use the pinned copy and wrangler 4's `kv namespace create`.
 - Reworded app, tray, CLI and offline-doc text that used dashes as punctuation into plain
   sentences, colons and parentheses, so messages read cleanly and survive copying into a plain
   text file.

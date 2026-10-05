@@ -3,25 +3,33 @@
 Everything you need to stand up a privacy-respecting receiver for the opt-in compat reports
 that `NVMeDriverPatcher.Cli telemetry --endpoint=<url>` POSTs.
 
-- `cloudflare-worker.js` — the worker code. Validates every submission against the shipped schema,
+- `cloudflare-worker.js`: the worker code. Validates every submission against the shipped schema,
   derives a keyed HMAC of `anonId` using the mandatory `SECRET`, and stores a **normalized
   projection** (never the request body) in Workers KV keyed by `YYYY-MM-DD/<hmac>` with a 1-year
   TTL. Rate limiting covers every route, and a summary aggregation endpoint serves a cached
   aggregate.
-- `wrangler.toml` — deploy config. Fill in `account_id` and the KV namespace ID, and keep both
+- `wrangler.toml`: deploy config. Fill in `account_id` and the KV namespace ID, and keep both
   rate-limit bindings.
+- `package.json` and `package-lock.json`: wrangler pinned to an exact version. `.npmrc` holds
+  any npm release back for seven days and saves exact versions, so moving to a newer wrangler is a
+  deliberate `npm install --save-dev wrangler@<version>` that rewrites the lockfile.
 
 ## Deploy
 
 ```bash
-npm i -g wrangler
-wrangler login
-wrangler kv:namespace create COMPAT
+npm ci                               # installs the pinned wrangler from package-lock.json
+npx wrangler login
+npx wrangler kv namespace create COMPAT
 # Copy the returned ID into wrangler.toml
 
-wrangler secret put SECRET   # paste a long random string -- REQUIRED, see Privacy below
-wrangler deploy
+npx wrangler secret put SECRET       # paste a long random string. REQUIRED, see Privacy below
+npm run check                        # bundles the Worker and lists its bindings without deploying
+npm run deploy
 ```
+
+`npm run check` should list `env.COMPAT` as a KV Namespace and both limiters as Rate Limit
+bindings. If `COMPAT` shows up as an Environment Variable instead, the `[[kv_namespaces]]` table
+has been turned back into a line under `[vars]`.
 
 ## CORS allowlist (browser submissions)
 
@@ -30,7 +38,7 @@ carrying an `Origin` header that is not on the list is refused with `403` before
 and before any KV write.
 
 This distinction matters: omitting `Access-Control-Allow-Origin` only stops an unauthorized site
-*reading* the response — the request still lands. Earlier versions of this worker did exactly that
+*reading* the response. The request still lands. Earlier versions of this worker did exactly that
 and described it as protection, so any website could make its visitors submit telemetry records
 with a simple `POST`. The worker additionally requires `Content-Type: application/json`, which is
 not a CORS-safelisted media type, so a cross-origin request can never be a "simple" POST that skips
@@ -41,11 +49,11 @@ By default the worker allowlists **no** browser origin.
 To allow a web dashboard, set a comma-separated `ALLOWED_ORIGINS` var with exact origins:
 
 ```bash
-wrangler deploy --var ALLOWED_ORIGINS:"https://sysadmindoc.github.io"
+npx wrangler deploy --var ALLOWED_ORIGINS:"https://sysadmindoc.github.io"
 # or add to wrangler.toml [vars]:  ALLOWED_ORIGINS = "https://sysadmindoc.github.io"
 ```
 
-**CLI submissions are unaffected** — `NVMeDriverPatcher.Cli telemetry` is not a browser and sends
+**CLI submissions are unaffected.** `NVMeDriverPatcher.Cli telemetry` is not a browser and sends
 no `Origin` header, so CORS (which is browser-enforced) never applies to it. The client also refuses
 to submit over plaintext HTTP to a remote endpoint; use an `https://` endpoint (loopback `http://`
 is allowed only for local development).
@@ -74,7 +82,7 @@ tighter budget because it is the most expensive endpoint.
 
 A deployment missing either binding **fails closed** (`500`) rather than degrading. The previous
 best-effort KV counter has been removed entirely: it read the counter, then read and durably wrote
-the whole request body, and only afterwards incremented — so concurrent requests all observed the
+the whole request body, and only afterwards incremented, so concurrent requests all observed the
 pre-increment value and the budget was bypassed by parallelism. It also persisted an IP-derived KV
 key, which the privacy section below no longer has to qualify.
 
@@ -105,7 +113,7 @@ The cursor-follow, the page ceiling and the cache are all tested.
 ## Submission payload shape
 
 `POST /nvme/compat` receives exactly what `CompatTelemetryService.CompatReport` serializes.
-The summary endpoint reads `controllers[]` and `verification` from this shape — if you fork the
+The summary endpoint reads `controllers[]` and `verification` from this shape. If you fork the
 worker, keep those field names in sync with the client (a contract test pins them):
 
 ```json
@@ -161,7 +169,7 @@ controller rows but one `totalSubmissions`. `verification` is bucketed per submi
 
 ## Privacy
 
-- **No PII** — the client never sends serials, machine names, drive letters, or user names.
+- **No PII.** The client never sends serials, machine names, drive letters, or user names.
   See `src/NVMeDriverPatcher.Core/Services/CompatTelemetryService.cs` for the exact payload.
 - **No IP-derived value is persisted at all.** Throttling goes through the rate-limiting bindings,
   which keep their counters outside your KV namespace. Earlier versions stored an **unkeyed,
@@ -173,7 +181,7 @@ controller rows but one `totalSubmissions`. `verification` is bucketed per submi
 - **`SECRET` is mandatory.** It previously defaulted to the empty string, so a deployment that
   forgot the secret hashed with an empty key and failed open. The worker now returns `500` instead
   of serving. Rotating `SECRET` makes existing records unreachable from any future submission by
-  the same client — a privacy property, not a bug.
+  the same client. That's a privacy property, not a bug.
 
 ## Opting your users out
 
