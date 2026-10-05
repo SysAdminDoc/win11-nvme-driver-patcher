@@ -1041,13 +1041,18 @@ public static class PatchService
         }
     }
 
-    // Legacy fallback for patches applied before SafeBoot journalling. Deletes the app's subkey
-    // ONLY when it has no OS-owned named values (issue #13): a key Windows populated with a
-    // "NvmeDisk" value must never be blown away by our uninstall.
+    // Legacy fallback for patches applied before SafeBoot journalling. Touches the key ONLY when
+    // its default value is the one this tool writes, and deletes it only when it also has no
+    // OS-owned named values (issue #13). 26200.8737 puts Windows' "NvmeDisk" in a named value;
+    // 24H2 26100.9550 puts it in the default value of a key only TrustedInstaller can write.
     internal static void RemoveOwnedSafeBootKey(RegistryKey hklm, string parentPath, string leaf, string label, ref int removedCount, Action<string>? log)
     {
         bool existed;
         bool hasForeignValues = false;
+        string? defaultValue = null;
+        string ownedDefault = string.Equals(leaf, AppConfig.SafeBootServiceName, StringComparison.OrdinalIgnoreCase)
+            ? AppConfig.SafeBootServiceValue
+            : AppConfig.SafeBootValue;
 
         // Inspection phase. A denial here means Windows ACL-protects the key, so we cannot
         // even look at it — and therefore certainly did not create it.
@@ -1059,7 +1064,10 @@ public static class PatchService
             using var probe = parent.OpenSubKey(leaf);
             existed = probe is not null;
             if (probe is not null)
+            {
                 hasForeignValues = probe.GetValueNames().Any(n => n.Length > 0);
+                defaultValue = probe.GetValue("") as string;
+            }
         }
         catch (Exception ex) when (IsAccessDenied(ex))
         {
@@ -1084,8 +1092,15 @@ public static class PatchService
             return;
         }
 
-        // Mutation phase. A denial here is reported honestly: the key may hold our state and
-        // we could not clear it, so the user needs to know the removal was incomplete.
+        bool ourDefault = string.Equals(defaultValue, ownedDefault, StringComparison.OrdinalIgnoreCase);
+        if (!ourDefault && (defaultValue is not null || hasForeignValues))
+        {
+            log?.Invoke($"  [PRESERVED] {label}: holds Windows' own values, nothing from this tool; left as is");
+            return;
+        }
+
+        // Mutation phase. A denial here is reported honestly: the key holds our value and we
+        // could not clear it, so the user needs to know the removal was incomplete.
         try
         {
             using var parent = hklm.OpenSubKey(parentPath, writable: true);
@@ -1093,15 +1108,26 @@ public static class PatchService
 
             if (hasForeignValues)
             {
-                // OS owns this key — remove only our default value, keep the key + foreign values.
+                // OS owns this key: remove only our default value, keep the key and its values.
                 using var key = parent.OpenSubKey(leaf, writable: true);
-                try { key?.DeleteValue("", throwOnMissingValue: false); } catch { }
-                log?.Invoke($"  [PRESERVED] {label} — OS-owned values kept; removed only the app default value");
+                key?.DeleteValue("", throwOnMissingValue: false);
+                log?.Invoke($"  [PRESERVED] {label}: kept Windows' values, removed only this tool's default value");
                 removedCount++;
                 return;
             }
 
             parent.DeleteSubKeyTree(leaf, throwOnMissingSubKey: false);
+            // DeleteSubKeyTree returns quietly when it can't open the key for writing, so check.
+            using (var still = parent.OpenSubKey(leaf))
+            {
+                if (still is not null)
+                {
+                    log?.Invoke(ourDefault
+                        ? $"  [FAIL] {label}: the key is write-protected, so this tool's value couldn't be removed"
+                        : $"  [PRESERVED] {label}: empty and write-protected by Windows; nothing of this tool's in it");
+                    return;
+                }
+            }
             log?.Invoke($"  [REMOVED] {label}");
             removedCount++;
         }

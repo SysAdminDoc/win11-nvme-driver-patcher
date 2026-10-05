@@ -67,6 +67,15 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   other command, and the README lists the option.
 - The benchmark log no longer shows NaN% or Infinity% when the earlier run has no desktop QD1
   IOPS. It says there's no earlier value to compare instead.
+- Removing the patch from a PC it was never applied to no longer reports "[REMOVED] SafeBoot
+  Minimal" and "Removed 2 components". On 24H2 26100.9550 Windows creates those SafeBoot keys
+  itself, keeps its own `NvmeDisk` text in the default value and locks them, and the old check
+  took any key without named values to be this tool's. Nothing was deleted (Windows refused),
+  but the log said otherwise. Removal now touches a SafeBoot key only when it holds this tool's
+  value, and checks that a delete really happened before it reports one.
+- The dry-run preview now lists all four SafeBoot keys apply writes (it left out the two
+  `nvmedisk` service entries), shows what's in each key today instead of assuming it's empty,
+  and says when a write replaces a value Windows put there. Its summary no longer ends in "..".
 
 ### Changed
 - Removed the workspace tab badges, which could never appear. The same status already shows in
@@ -101,7 +110,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - The README's manual WinRE removal steps now clear only the SafeBoot default value (`/ve`), the
   same way the Recovery Kit has since #13. They used to delete the whole `{75416E63-...}` key,
   which on current builds also belongs to Windows (24H2 26100.9550 creates it with its own
-  `NvmeDisk` value) and takes Windows' Safe Mode disk registration with it.
+  `NvmeDisk` value) and takes Windows' Safe Mode disk registration with it. On 24H2 those two GUID
+  lines answer "Access is denied", because Windows locks its own key there, and the README now
+  says that's expected.
 - The README no longer asks a visitor to paste a fetch-and-run command. The GUI, CLI, MSI, and
   legacy PowerShell downloads are all a link first, then local commands only, and the "Verify the
   download" snippet now reads the combined `SHA256SUMS.txt` instead of the per-asset `.sha256`

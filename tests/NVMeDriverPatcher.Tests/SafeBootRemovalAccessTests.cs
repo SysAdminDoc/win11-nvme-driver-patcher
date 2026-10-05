@@ -115,6 +115,84 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
         Assert.Equal(0, removed);
     }
 
+    [Fact]
+    public void WindowsDefaultValueIsLeftAlone()
+    {
+        // 24H2 26100.9550 keeps Windows' "NvmeDisk" in the default value itself, with no named
+        // values, so "no named values" alone no longer proves the key is ours.
+        using var parent = Registry.CurrentUser.CreateSubKey($@"{_root}\SafeBoot\Minimal", writable: true)!;
+        using (var osOwned = parent.CreateSubKey(Leaf, writable: true)!)
+            osOwned.SetValue("", "NvmeDisk", RegistryValueKind.String);
+
+        var log = new List<string>();
+        var removed = 0;
+
+        PatchService.RemoveOwnedSafeBootKey(
+            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "SafeBoot Minimal", ref removed, log.Add);
+
+        Assert.Contains("[PRESERVED]", Assert.Single(log));
+        Assert.Equal(0, removed);
+        using var kept = parent.OpenSubKey(Leaf);
+        Assert.Equal("NvmeDisk", kept!.GetValue(""));
+    }
+
+    [Fact]
+    public void WriteProtectedWindowsKeyIsNotReportedAsRemoved()
+    {
+        // The exact 26100.9550 shape: readable, writable only by TrustedInstaller, default
+        // "NvmeDisk". The old code logged [REMOVED] after DeleteSubKeyTree quietly did nothing.
+        using var parent = Registry.CurrentUser.CreateSubKey($@"{_root}\SafeBoot\Minimal", writable: true)!;
+        using (var osOwned = parent.CreateSubKey(Leaf, writable: true)!)
+        {
+            osOwned.SetValue("", "NvmeDisk", RegistryValueKind.String);
+            DenyWrites(osOwned);
+        }
+
+        var log = new List<string>();
+        var removed = 0;
+
+        PatchService.RemoveOwnedSafeBootKey(
+            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "SafeBoot Minimal", ref removed, log.Add);
+
+        var line = Assert.Single(log);
+        Assert.Contains("[PRESERVED]", line);
+        Assert.DoesNotContain("[REMOVED]", line);
+        Assert.Equal(0, removed);
+        Assert.Contains(Leaf, parent.GetSubKeyNames());
+    }
+
+    [Fact]
+    public void WriteProtectedKeyHoldingOurValueIsReportedAsFailedNotRemoved()
+    {
+        using var parent = Registry.CurrentUser.CreateSubKey($@"{_root}\SafeBoot\Minimal", writable: true)!;
+        using (var ours = parent.CreateSubKey(Leaf, writable: true)!)
+        {
+            ours.SetValue("", "Storage Disks", RegistryValueKind.String);
+            DenyWrites(ours);
+        }
+
+        var log = new List<string>();
+        var removed = 0;
+
+        PatchService.RemoveOwnedSafeBootKey(
+            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "SafeBoot Minimal", ref removed, log.Add);
+
+        Assert.Contains("[FAIL]", Assert.Single(log));
+        Assert.Equal(0, removed);
+    }
+
+    private static void DenyWrites(RegistryKey key)
+    {
+        var security = key.GetAccessControl();
+        security.AddAccessRule(new RegistryAccessRule(
+            WindowsIdentity.GetCurrent().User!,
+            RegistryRights.SetValue | RegistryRights.CreateSubKey | RegistryRights.Delete,
+            InheritanceFlags.None,
+            PropagationFlags.None,
+            AccessControlType.Deny));
+        key.SetAccessControl(security);
+    }
+
     private static void DenyAllAccess(RegistryKey key)
     {
         var security = key.GetAccessControl();
@@ -135,11 +213,15 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
         {
             using var minimal = Registry.CurrentUser.OpenSubKey($@"{_root}\SafeBoot\Minimal", writable: true);
             using var leaf = minimal?.OpenSubKey(
-                Leaf, RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.TakeOwnership | RegistryRights.ChangePermissions);
+                // The owner keeps READ_CONTROL and WRITE_DAC whatever the DACL says; asking for
+                // TakeOwnership too made a full deny ACE refuse the open and leak the test key.
+                Leaf, RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.ReadPermissions | RegistryRights.ChangePermissions);
             if (leaf is not null)
             {
                 var security = leaf.GetAccessControl(AccessControlSections.Access);
                 security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+                // A deny ACE outranks any allow, so drop ours before granting.
+                security.PurgeAccessRules(WindowsIdentity.GetCurrent().User!);
                 security.AddAccessRule(new RegistryAccessRule(
                     WindowsIdentity.GetCurrent().User!,
                     RegistryRights.FullControl,

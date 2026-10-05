@@ -10,6 +10,45 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
+- [ ] P3 — Preflight passes SafeBoot GUID keys that Windows write-protects
+  Category: correctness
+  Where: `CriticalEnvironmentProbeService.ProbeSafeBoot`, `SafeBootStateService.Classify`, `RealSafeBootRegistry.Read`
+  Problem: AccessDenied is only detected when reading fails. On 24H2 26100.9550 the GUID keys are owned by TrustedInstaller and readable by everyone, with Windows' `NvmeDisk` in the default value, so preflight reports `ConflictingDefault` and passes while apply's write of `Storage Disks` would be refused even as SYSTEM.
+  Evidence: 2026-10-05 VM run on 26100.9550: `reg delete` and a .NET write were refused as SYSTEM; preflight printed `Minimal=ConflictingDefault`, Pass. Apply is build-gated on every build known to ship these keys today, so nothing reaches the write yet.
+  Fix: Probe writability (open with SetValue rights without writing) and classify a refused open as AccessDenied, or treat an existing TrustedInstaller-owned key as already registered and leave it out of the write set and the journal.
+  Acceptance: Preflight on 26100.9550 names the keys as Windows-owned, and a forced apply there doesn't fail partway through on them.
+  Confidence: Confirmed
+  Effort: M
+
+- [ ] P3 — Full profile's 156965516 makes DISM /ScanHealth report store corruption (#19)
+  Category: product
+  Where: `AppConfig.GetFeatureIDsForProfile(PatchProfile.Full)`
+  Problem: On 24H2 26100.9550, override 156965516 alone made DISM flag 192 reverse-delta payloads as corrupt while it was set (SFC clean, cleared on removal). The Full profile writes it, and binding on that build needed 3244671118 + 1853569164 + 156965516 anyway, a set this tool doesn't write.
+  Evidence: VM matrix 2026-10-05 (repo CLAUDE.md, vault log 2026-10). The warning now ships in the GUI, CLI help, docs and README.
+  Fix: Decide whether Full keeps 156965516, makes it a separate opt-in, or drops it. Needs a reading on real hardware of what it does for performance.
+  Acceptance: The Full profile either doesn't write 156965516 or asks for it separately with the DISM caveat attached.
+  Confidence: Confirmed
+  Effort: S
+
+- [ ] P3 — CLI output loses non-ASCII characters when redirected
+  Category: correctness
+  Where: `src/NVMeDriverPatcher.Cli/Program.cs` startup; visible in `dry-run` ("Before → After") and every string with an em dash
+  Problem: The CLI never sets `Console.OutputEncoding`, so redirected output is written in the OEM code page. Run as SYSTEM with stdout redirected on 26100.9550, `dry-run` printed "Before  After" with the arrow gone.
+  Evidence: 2026-10-05 VM run.
+  Fix: Write UTF-8 without BOM when stdout is redirected (check first that it doesn't switch the parent console's code page), or keep CLI text ASCII-only, which the em dash sweep of CLI strings wants anyway.
+  Acceptance: `NVMeDriverPatcher.Cli dry-run > plan.md` produces a UTF-8 file with the arrow intact.
+  Confidence: Confirmed
+  Effort: S
+
+- [ ] P3 — `DryRunService.PlanUninstall` has no caller and previews a whole-key delete
+  Category: cleanup
+  Where: `DryRunService.PlanUninstall`
+  Problem: Nothing calls it. It lists any existing SafeBoot GUID key as `DELETE (subkey)` with `Storage Disks` as its value, the issue #13 pattern that removal no longer follows (journal restore, default-value-only fallback).
+  Fix: Delete it, or rebuild it on `SafeBootStateService.ManagedKeysFor` and `PlanRestore` if an uninstall preview is wanted.
+  Acceptance: No code path previews deleting a Windows-owned SafeBoot key.
+  Confidence: Confirmed
+  Effort: S
+
 - [ ] P3 — NVMe Identify has never been seen working on a real drive; pass-through may be refused for Identify
   Category: correctness
   Where: `src/NVMeDriverPatcher.Core/Services/NvmeIdentifyService.cs` (`Query`); consumers are the CLI `identify` command, `ApstInspectorService` (Identify power states) and `DiagnosticsService`
