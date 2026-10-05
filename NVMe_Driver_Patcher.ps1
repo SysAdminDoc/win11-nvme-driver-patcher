@@ -927,29 +927,19 @@ function Test-NativeNVMeActive {
         $nvmeDiskDriver = Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -eq "nvmedisk" -or $_.PathName -match "nvmedisk" }
 
-        if ($nvmeDiskDriver -and $nvmeDiskDriver.State -eq "Running") {
-            $result.IsActive = $true
-            $result.ActiveDriver = "nvmedisk.sys (Native NVMe)"
-            $result.Details = "Native NVMe driver is running"
-        }
+        # A running nvmedisk service is not proof on its own: 25H2 loads nvmedisk.sys at boot on
+        # every PC even when every drive stays on stornvme. Native NVMe needs a bound drive.
+        $serviceRunning = [bool]($nvmeDiskDriver -and $nvmeDiskDriver.State -eq "Running")
 
         $storageDiskDevices = Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
             Where-Object { $_.ClassGuid -eq "{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" }
 
         if ($storageDiskDevices) {
             $result.IsActive = $true
+            $result.ActiveDriver = "nvmedisk.sys (Native NVMe)"
             $result.DeviceCategory = "Storage disks"
             $result.StorageDisks = @($storageDiskDevices | ForEach-Object { $_.Name })
-            if (-not $result.Details) {
-                $result.Details = "Drives found under Storage disks category"
-            }
-        }
-        else {
-            if (-not $result.IsActive) {
-                $result.DeviceCategory = "Disk drives (legacy)"
-                $result.ActiveDriver = "stornvme.sys / disk.sys (Legacy SCSI)"
-                $result.Details = "Legacy NVMe stack active (pre-patch or reboot required)"
-            }
+            $result.Details = if ($serviceRunning) { "Native NVMe driver is running" } else { "Drives found under Storage disks category" }
         }
 
         $nvmeSignedDrivers = Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue |
@@ -959,7 +949,18 @@ function Test-NativeNVMeActive {
             if ($drv.InfName -eq "nvmedisk.inf") {
                 $result.IsActive = $true
                 $result.ActiveDriver = "nvmedisk.sys v$($drv.DriverVersion)"
+                if (-not $result.Details) { $result.Details = "nvmedisk.inf is bound to an NVMe device" }
                 break
+            }
+        }
+
+        if (-not $result.IsActive) {
+            $result.DeviceCategory = "Disk drives (legacy)"
+            $result.ActiveDriver = "stornvme.sys / disk.sys (Legacy SCSI)"
+            $result.Details = if ($serviceRunning) {
+                "nvmedisk.sys is loaded, but no drive is bound to it; NVMe drives are still on the legacy stornvme stack"
+            } else {
+                "Legacy NVMe stack active (pre-patch or reboot required)"
             }
         }
     }
@@ -1612,15 +1613,19 @@ Write-Host ""
 $nvmeDiskDriver = Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -eq "nvmedisk" -or $_.PathName -match "nvmedisk" }
 
-if ($nvmeDiskDriver -and $nvmeDiskDriver.State -eq "Running") {
-    Write-Host "  [PASS] nvmedisk.sys is RUNNING (Native NVMe active)" -ForegroundColor Green
+$storageDiskDevices = Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
+    Where-Object { $_.ClassGuid -eq "{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" }
+
+# 25H2 loads nvmedisk.sys at boot even when no drive binds to it, so Running alone is not a pass.
+if ($nvmeDiskDriver -and $nvmeDiskDriver.State -eq "Running" -and $storageDiskDevices) {
+    Write-Host "  [PASS] nvmedisk.sys is RUNNING with drives bound (Native NVMe active)" -ForegroundColor Green
+}
+elseif ($nvmeDiskDriver -and $nvmeDiskDriver.State -eq "Running") {
+    Write-Host "  [INFO] nvmedisk.sys is loaded, but no drive is bound to it (legacy stornvme.sys stack)" -ForegroundColor Yellow
 }
 else {
     Write-Host "  [INFO] nvmedisk.sys is NOT running (legacy stornvme.sys stack)" -ForegroundColor Yellow
 }
-
-$storageDiskDevices = Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
-    Where-Object { $_.ClassGuid -eq "{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}" }
 
 if ($storageDiskDevices) {
     Write-Host "  [PASS] NVMe drives found under 'Storage disks' category" -ForegroundColor Green
