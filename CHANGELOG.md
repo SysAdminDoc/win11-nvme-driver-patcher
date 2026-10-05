@@ -18,7 +18,8 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   the app was telling people "Native NVMe is enabled by Windows itself, apply is unnecessary"
   while their SSD sat under Disk drives (found in a #18 support bundle). The same check fed
   post-reboot verification, which could have called a patch that never bound "Confirmed". It
-  now needs a drive under Storage disks or an `nvmedisk.inf` device binding.
+  now needs a drive under Storage disks or an `nvmedisk.inf` device binding. The legacy
+  PowerShell status script and the verification script it writes got the same fix.
 
 ### Docs
 - The README no longer asks a visitor to paste a fetch-and-run command. The GUI, CLI, MSI, and
