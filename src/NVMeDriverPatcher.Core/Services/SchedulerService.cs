@@ -37,13 +37,17 @@ public static class SchedulerService
     internal static string[] BuildWatchdogSweepArgs(string cliPath, int intervalMinutes)
     {
         intervalMinutes = Math.Clamp(intervalMinutes, 5, 1440);
-        return new[]
+        string[] head =
         {
             "/Create", "/F", "/RU", "SYSTEM", "/RL", "HIGHEST",
             "/TN", WatchdogTaskName,
-            "/TR", $"\"{cliPath}\" watchdog",
-            "/SC", "MINUTE", "/MO", intervalMinutes.ToString()
+            "/TR", $"\"{cliPath}\" watchdog"
         };
+        // schtasks /SC MINUTE only accepts /MO 1-1439, so the 24h ceiling has to be expressed as
+        // a daily schedule; "/SC MINUTE /MO 1440" is rejected with "The /MO value is invalid".
+        return intervalMinutes >= 1440
+            ? [.. head, "/SC", "DAILY"]
+            : [.. head, "/SC", "MINUTE", "/MO", intervalMinutes.ToString(System.Globalization.CultureInfo.InvariantCulture)];
     }
 
     internal static string[] BuildUnregisterArgs(string taskName) =>
