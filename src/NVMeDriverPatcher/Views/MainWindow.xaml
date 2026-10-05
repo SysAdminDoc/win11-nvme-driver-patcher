@@ -794,7 +794,7 @@
 <TabItem Style="{StaticResource WorkspaceTabItem}">
                                         <TabItem.Header>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="Benchmark"/>
+                                                <TextBlock Text="Overview"/>
                                             </StackPanel>
                                         </TabItem.Header>
                                         <Grid>
@@ -950,7 +950,7 @@
                                     <TabItem Style="{StaticResource WorkspaceTabItem}">
                                         <TabItem.Header>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="Telemetry"/>
+                                                <TextBlock Text="Drives"/>
                                             </StackPanel>
                                         </TabItem.Header>
                                         <Grid>

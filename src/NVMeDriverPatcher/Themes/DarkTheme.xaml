@@ -1084,7 +1084,7 @@
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
                                       PanningMode="VerticalFirst">
-                            <ContentPresenter ContentSource="SelectedContent"/>
+                            <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent"/>
                         </ScrollViewer>
                     </Grid>
                 </ControlTemplate>
@@ -1098,11 +1098,19 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TabControl">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  PanningMode="VerticalFirst">
-                        <ContentPresenter ContentSource="SelectedContent"/>
-                    </ScrollViewer>
+                    <!-- The sidebar list replaces the tab strip, but UI Automation still walks the tabs:
+                         the TabControl peer lists no tabs without an items host, and a tab's peer reaches
+                         its content only through PART_SelectedContentHost. Without both, screen readers
+                         saw nothing inside any workspace tab. Hidden (not Collapsed) so the host is
+                         measured and generated; zero height and Hidden keep it out of layout and focus. -->
+                    <Grid>
+                        <ItemsPresenter Height="0" VerticalAlignment="Top" Visibility="Hidden"/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      PanningMode="VerticalFirst">
+                            <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent"/>
+                        </ScrollViewer>
+                    </Grid>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
