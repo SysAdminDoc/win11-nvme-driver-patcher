@@ -56,6 +56,15 @@ internal static class WpfTestHost
                         // the test host from exiting after the last test has passed.
                         try { _app?.Shutdown(); } catch { }
                     }
+
+                    // Never let this thread exit while other tests still run. msctf.dll (Text
+                    // Services Framework) keeps WPF's managed sinks for this STA thread, and its
+                    // thread-detach cleanup calls them after the runtime has torn the thread down,
+                    // which kills the host with "Attempt to execute managed code after the .NET
+                    // runtime thread state has been destroyed" (seen in a crash dump, stack
+                    // LdrShutdownThread > msctf > coreclr). It's a background thread, so process exit
+                    // ends it without that cleanup, the same as a real app's UI thread.
+                    Thread.Sleep(Timeout.Infinite);
                 })
                 {
                     IsBackground = true,     // never keeps the test host alive
