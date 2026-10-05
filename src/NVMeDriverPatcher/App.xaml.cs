@@ -168,7 +168,7 @@ public partial class App : Application
         {
             MessageBox.Show(
                 $"An unexpected error occurred and has been logged.\n\n{e.Exception.Message}",
-                "NVMe Driver Patcher - Error",
+                "NVMe Driver Patcher: Error",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         e.Handled = true;
