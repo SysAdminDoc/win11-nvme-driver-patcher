@@ -69,6 +69,93 @@ public sealed class PrivilegedStateSecurityServiceTests
             descriptor, StateDirectoryRole.Watchdog, requireProtectedAcl: true));
     }
 
+    [Fact]
+    public void WatchdogFolderFromBeforeTheTrayGrant_IsTrustedButNoLongerCurrent()
+    {
+        // The template a released build applied: service writers, no Users read. It still passes
+        // the writer check, which is why trust alone kept an existing tree on it forever.
+        var released = Descriptor(
+            "O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;LS)" +
+            $"(A;OICI;0x1301bf;;;{PrivilegedStateSecurityService.WatchdogServiceSid})");
+
+        Assert.True(PrivilegedStateSecurityService.DescriptorAllowsOnlyExpectedWriters(
+            released, StateDirectoryRole.Watchdog, requireProtectedAcl: true));
+        Assert.False(PrivilegedStateSecurityService.DescriptorCarriesTemplateGrants(
+            released, StateDirectoryRole.Watchdog));
+    }
+
+    [Fact]
+    public void WatchdogFolderWithTheTrayGrant_IsCurrent()
+    {
+        var current = Descriptor(
+            "O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;LS)" +
+            $"(A;OICI;0x1301bf;;;{PrivilegedStateSecurityService.WatchdogServiceSid})" +
+            "(A;OICI;0x1200a9;;;BU)");
+
+        Assert.True(PrivilegedStateSecurityService.DescriptorCarriesTemplateGrants(
+            current, StateDirectoryRole.Watchdog));
+    }
+
+    [Theory]
+    [InlineData(StateDirectoryRole.SharedRoot)]
+    [InlineData(StateDirectoryRole.Privileged)]
+    [InlineData(StateDirectoryRole.Watchdog)]
+    public void EveryRoleTemplate_CarriesItsOwnGrants(StateDirectoryRole role)
+    {
+        var sddl = PrivilegedStateSecurityService.BuildSecurity(role, isDirectory: true)
+            .GetSecurityDescriptorSddlForm(AccessControlSections.All);
+
+        Assert.True(PrivilegedStateSecurityService.DescriptorCarriesTemplateGrants(Descriptor(sddl), role));
+    }
+
+    [Fact]
+    public void WatchdogTemplate_AppliedToARealFolder_ReadsBackAsCurrent()
+    {
+        // An entry the kernel stores differently from the template would make every elevated run
+        // re-apply the DACL. Only the DACL is written, so this needs no elevation.
+        var path = Path.Combine(Path.GetTempPath(), $"NVMeDriverPatcherAcl-{Guid.NewGuid():N}");
+        var folder = Directory.CreateDirectory(path);
+        try
+        {
+            var dacl = new DirectorySecurity();
+            dacl.SetSecurityDescriptorSddlForm(
+                PrivilegedStateSecurityService.BuildSecurity(StateDirectoryRole.Watchdog, isDirectory: true)
+                    .GetSecurityDescriptorSddlForm(AccessControlSections.Access),
+                AccessControlSections.Access);
+            folder.SetAccessControl(dacl);
+
+            Assert.True(PrivilegedStateSecurityService.DescriptorCarriesTemplateGrants(
+                folder.GetAccessControl(AccessControlSections.Access), StateDirectoryRole.Watchdog));
+        }
+        finally
+        {
+            var reset = new DirectorySecurity();
+            reset.SetAccessRuleProtection(isProtected: false, preserveInheritance: false);
+            reset.AddAccessRule(new FileSystemAccessRule(
+                WindowsIdentity.GetCurrent().User!, FileSystemRights.FullControl, AccessControlType.Allow));
+            folder.SetAccessControl(reset);
+            folder.Delete();
+        }
+    }
+
+    [Theory]
+    // A trusted tree with a stale template is fine for a caller that can't re-apply it...
+    [InlineData(true, false, false, true)]
+    // ...but an elevated caller repairs it instead of trusting the old template forever.
+    [InlineData(true, true, false, false)]
+    [InlineData(true, true, true, true)]
+    [InlineData(false, true, true, false)]
+    [InlineData(false, false, true, false)]
+    public void RuntimeTree_ElevatedCallerReappliesAStaleTemplate(
+        bool trusted,
+        bool elevated,
+        bool carriesTemplateGrants,
+        bool ready)
+    {
+        Assert.Equal(ready, PrivilegedStateSecurityService.RuntimeTreeIsReady(
+            trusted, elevated, () => carriesTemplateGrants));
+    }
+
     [Theory]
     // Read-only grants to a standard user are fine on every role - that is the point of the fix.
     [InlineData("0x1200a9", StateDirectoryRole.SharedRoot, true)]

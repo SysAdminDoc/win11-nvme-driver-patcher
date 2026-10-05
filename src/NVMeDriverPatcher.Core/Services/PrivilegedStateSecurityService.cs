@@ -181,7 +181,12 @@ public static class PrivilegedStateSecurityService
             var existingPrivileged = Path.Combine(root, AppConfig.PrivilegedStateFolderName);
             var existingWatchdog = Path.Combine(root, AppConfig.WatchdogStateFolderName);
             var scope = RequiredValidationScope(root, callerRole);
-            if (scope.All(entry => TryValidateDirectory(entry.Path, entry.Role, out _)))
+            var trusted = scope.All(entry => TryValidateDirectory(entry.Path, entry.Role, out _));
+            var elevated = IsProcessElevated();
+            if (RuntimeTreeIsReady(
+                    trusted,
+                    elevated,
+                    () => scope.All(entry => DirectoryCarriesTemplateGrants(entry.Path, entry.Role))))
             {
                 return new(
                     true,
@@ -194,7 +199,7 @@ public static class PrivilegedStateSecurityService
             // SeRestorePrivilege (`sc privs` strips the service to SeChangeNotifyPrivilege), so the
             // attempt throws and the caller reads it as untrusted state. The honest answer is that
             // the tree still needs the installer or an elevated run.
-            if (!IsProcessElevated())
+            if (!elevated)
             {
                 return StateDirectorySecurityResult.Failed(
                     root,
@@ -359,6 +364,54 @@ public static class PrivilegedStateSecurityService
         return true;
     }
 
+    /// <summary>
+    /// A trusted tree is used as is, except that an elevated caller also brings it up to the
+    /// current template. Trust only proves there's no unexpected writer, so a folder made by an
+    /// older template stays trusted forever: the watchdog folder from before the tray's Users read
+    /// entry never got that entry, and the standard-user tray couldn't read the verdict it exists
+    /// to show. A non-elevated caller can't re-apply a DACL and doesn't need to, since a missing
+    /// reader weakens nothing.
+    /// </summary>
+    internal static bool RuntimeTreeIsReady(bool trusted, bool elevated, Func<bool> carriesTemplateGrants) =>
+        trusted && (!elevated || carriesTemplateGrants());
+
+    /// <summary>
+    /// True when the directory descriptor still carries every allow entry its role's template
+    /// grants today, matched by SID, inheritance and rights.
+    /// </summary>
+    internal static bool DescriptorCarriesTemplateGrants(FileSystemSecurity security, StateDirectoryRole role)
+    {
+        var present = security.GetAccessRules(true, true, typeof(SecurityIdentifier))
+            .Cast<FileSystemAccessRule>()
+            .Where(rule => rule.AccessControlType == AccessControlType.Allow)
+            .ToList();
+        foreach (FileSystemAccessRule required in BuildSecurity(role, isDirectory: true)
+                     .GetAccessRules(true, false, typeof(SecurityIdentifier)))
+        {
+            var granted = present
+                .Where(rule => rule.IdentityReference.Equals(required.IdentityReference) &&
+                               (rule.InheritanceFlags & required.InheritanceFlags) == required.InheritanceFlags)
+                .Aggregate((FileSystemRights)0, (all, rule) => all | rule.FileSystemRights);
+            if ((granted & required.FileSystemRights) != required.FileSystemRights)
+                return false;
+        }
+        return true;
+    }
+
+    private static bool DirectoryCarriesTemplateGrants(string path, StateDirectoryRole role)
+    {
+        try
+        {
+            return DescriptorCarriesTemplateGrants(
+                new DirectoryInfo(path).GetAccessControl(AccessControlSections.Access), role);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            // Unreadable here means the elevated repair below re-applies the template.
+            return false;
+        }
+    }
+
     internal static bool IsTrustedFileMetadata(FileAttributes attributes, uint hardLinkCount) =>
         (attributes & FileAttributes.ReparsePoint) == 0 && hardLinkCount == 1;
 
@@ -413,7 +466,7 @@ public static class PrivilegedStateSecurityService
     private static void ApplyDirectorySecurity(string path, StateDirectoryRole role) =>
         new DirectoryInfo(path).SetAccessControl((DirectorySecurity)BuildSecurity(role, isDirectory: true));
 
-    private static FileSystemSecurity BuildSecurity(StateDirectoryRole role, bool isDirectory)
+    internal static FileSystemSecurity BuildSecurity(StateDirectoryRole role, bool isDirectory)
     {
         FileSystemSecurity security = isDirectory ? new DirectorySecurity() : new FileSecurity();
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
