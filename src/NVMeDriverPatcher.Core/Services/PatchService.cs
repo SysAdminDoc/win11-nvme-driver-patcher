@@ -370,19 +370,18 @@ public static class PatchService
         {
             // Already logged + event-logged at the throw site. Fall through to finally
             // so the progress bar clears and we still capture an after-snapshot.
-            if (bitLockerStateMayHaveChanged)
-            {
-                // Capture the outcome. Discarding it made a failed protection resume or a
-                // partial registry restore indistinguishable from a clean abort, so
-                // RequiresManualRecoveryWarning never fired for the caller.
-                var aborted = MutationLedgerService.RestoreOriginalState(workingDir, log);
-                result.WasRolledBack = true;
-                result.RollbackFullyReversed = aborted.Success;
-            }
-            else if (!MutationLedgerService.MarkPreparedWithoutMutation(workingDir, result.MutationOperationId, log))
-            {
-                result.RollbackFullyReversed = false;
-            }
+            // Capture the outcome. Discarding it made a failed protection resume or a
+            // partial registry restore indistinguishable from a clean abort, so
+            // RequiresManualRecoveryWarning never fired for the caller.
+            var abortAction = ClassifyPreMutationAbort(bitLockerStateMayHaveChanged, ledgerPreparation.ReusedBaseline);
+            var aborted = CloseApplyBeforeMutation(
+                abortAction,
+                () => MutationLedgerService.RestoreOriginalState(workingDir, log),
+                () => BitLockerRecoveryService.ResumeSystemVolume(log),
+                () => MutationLedgerService.MarkPreparedWithoutMutation(workingDir, result.MutationOperationId, log),
+                log);
+            result.WasRolledBack = abortAction == PreMutationAbortAction.RestoreBaseline;
+            result.RollbackFullyReversed = aborted.Success;
         }
         catch (Exception ex)
         {
@@ -391,11 +390,14 @@ public static class PatchService
             log?.Invoke(mutationMayHaveLanded
                 ? "[WARNING] Installation terminated after mutation began; restoring the exact ledger baseline."
                 : "[INFO] Installation terminated before registry mutation; closing the prepared ledger cleanly.");
-            var recovery = mutationMayHaveLanded || bitLockerStateMayHaveChanged
+            var recovery = mutationMayHaveLanded
                 ? MutationLedgerService.RestoreOriginalState(workingDir, log)
-                : MutationLedgerService.MarkPreparedWithoutMutation(workingDir, result.MutationOperationId, log)
-                    ? MutationRestoreResult.Succeeded
-                    : new MutationRestoreResult(false, new[] { "Prepared ledger could not be finalized." });
+                : CloseApplyBeforeMutation(
+                    ClassifyPreMutationAbort(bitLockerStateMayHaveChanged, ledgerPreparation.ReusedBaseline),
+                    () => MutationLedgerService.RestoreOriginalState(workingDir, log),
+                    () => BitLockerRecoveryService.ResumeSystemVolume(log),
+                    () => MutationLedgerService.MarkPreparedWithoutMutation(workingDir, result.MutationOperationId, log),
+                    log);
             result.WasRolledBack = mutationMayHaveLanded;
             result.RollbackFullyReversed = recovery.Success;
         }
@@ -412,6 +414,62 @@ public static class PatchService
     private sealed class PatchAbortedException : Exception
     {
         public PatchAbortedException(string message) : base(message) { }
+    }
+
+    internal enum PreMutationAbortAction
+    {
+        // BitLocker was untouched and nothing was written: just close the prepared ledger.
+        CloseLedger,
+        // First apply: the fresh baseline is the current state, so restoring it only resumes
+        // BitLocker protection.
+        RestoreBaseline,
+        // Re-apply: the ledger reused the first clean (pre-patch) baseline. Restoring it would
+        // silently revert the patch the machine is already running, so resume BitLocker and
+        // close the ledger instead.
+        ResumeBitLockerAndCloseLedger,
+    }
+
+    internal static PreMutationAbortAction ClassifyPreMutationAbort(
+        bool bitLockerStateMayHaveChanged,
+        bool reusedBaseline) =>
+        !bitLockerStateMayHaveChanged
+            ? PreMutationAbortAction.CloseLedger
+            : reusedBaseline
+                ? PreMutationAbortAction.ResumeBitLockerAndCloseLedger
+                : PreMutationAbortAction.RestoreBaseline;
+
+    /// <summary>Ends an apply that stopped before any registry write landed.</summary>
+    internal static MutationRestoreResult CloseApplyBeforeMutation(
+        PreMutationAbortAction action,
+        Func<MutationRestoreResult> restoreBaseline,
+        Func<BitLockerNativeResult> resumeBitLocker,
+        Func<bool> markPreparedWithoutMutation,
+        Action<string>? log)
+    {
+        if (action == PreMutationAbortAction.RestoreBaseline)
+            return restoreBaseline();
+
+        var failures = new List<string>();
+        if (action == PreMutationAbortAction.ResumeBitLockerAndCloseLedger)
+        {
+            log?.Invoke("[INFO] Nothing was written in this run, so the patch that's already in place stays as it is. Resuming BitLocker protection.");
+            var resumed = resumeBitLocker();
+            if (!resumed.Success)
+            {
+                failures.Add("BitLocker protection resume failed: " + resumed.Summary);
+                log?.Invoke("[WARNING] BitLocker protection couldn't be resumed: " + resumed.Summary +
+                    " Windows turns it back on after the next restart, or resume it now with: manage-bde -protectors -enable %SystemDrive%");
+            }
+        }
+
+        // Close the ledger even when the resume failed. Left Prepared, startup recovery would
+        // restore the reused pre-patch baseline and revert the patch anyway.
+        if (!markPreparedWithoutMutation())
+            failures.Add("Prepared ledger could not be finalized.");
+
+        return failures.Count == 0
+            ? MutationRestoreResult.Succeeded
+            : new MutationRestoreResult(false, failures);
     }
 
     // Best-effort suspension of protected NVMe DATA volumes without auto-unlock. Never aborts the
