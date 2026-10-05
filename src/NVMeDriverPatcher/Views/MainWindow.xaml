@@ -1648,29 +1648,21 @@
                                                                FontSize="{StaticResource FontSizeMeta}"
                                                                TextWrapping="Wrap"/>
 
-                                                    <Grid Margin="0,8,0,0">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition/>
-                                                            <ColumnDefinition Width="10"/>
-                                                            <ColumnDefinition/>
-                                                        </Grid.ColumnDefinitions>
-                                                        <StackPanel Grid.Column="0">
-                                                            <CheckBox Content="Auto-save activity log"
-                                                                      Style="{StaticResource DarkCheckBox}"
-                                                                      ToolTip="Save this session&apos;s log to the data folder when the app closes."
-                                                                      IsChecked="{Binding AutoSaveLog}"/>
-                                                            <CheckBox Content="Toast notifications"
-                                                                      Style="{StaticResource DarkCheckBox}"
-                                                                      ToolTip="Show a Windows notification when an action finishes or needs attention."
-                                                                      IsChecked="{Binding EnableToasts}"/>
-                                                        </StackPanel>
-                                                        <StackPanel Grid.Column="2">
+                                                    <!-- One column: two half-width columns clipped these labels below about 1300 px. -->
+                                                    <StackPanel x:Name="SettingsAuditToggles" Margin="0,8,0,0">
+                                                        <CheckBox Content="Auto-save activity log"
+                                                                  Style="{StaticResource DarkCheckBox}"
+                                                                  ToolTip="Save this session&apos;s log to the data folder when the app closes."
+                                                                  IsChecked="{Binding AutoSaveLog}"/>
+                                                        <CheckBox Content="Toast notifications"
+                                                                  Style="{StaticResource DarkCheckBox}"
+                                                                  ToolTip="Show a Windows notification when an action finishes or needs attention."
+                                                                  IsChecked="{Binding EnableToasts}"/>
                                                         <CheckBox Content="Windows Event Log"
-                                                                      Style="{StaticResource DarkCheckBox}"
-                                                                      ToolTip="Also record patch actions in the Windows Application event log."
-                                                                      IsChecked="{Binding WriteEventLog}"/>
-                                                        </StackPanel>
-                                                    </Grid>
+                                                                  Style="{StaticResource DarkCheckBox}"
+                                                                  ToolTip="Also record patch actions in the Windows Application event log."
+                                                                  IsChecked="{Binding WriteEventLog}"/>
+                                                    </StackPanel>
 
                                                     <Grid Margin="0,10,0,0">
                                                         <Grid.ColumnDefinitions>
