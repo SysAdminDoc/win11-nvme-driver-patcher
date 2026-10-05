@@ -45,6 +45,28 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   doesn't perform, system tools launch from their Windows folders instead of by bare name, the
   recovery kit `.reg` and `.bat` files use Windows line endings, and BypassIO shows as unknown
   rather than unsupported on non-English Windows.
+- The compatibility list, build rules and feature ID catalog are now built into the app. A plain
+  exe download from the releases page used to run without them, and the MSI never installed the
+  feature ID catalog at all, so the app treated an empty catalog as clean. A copy an
+  administrator puts in `%ProgramData%\NVMePatcher\State` still wins.
+- BypassIO status no longer blames an `EnableBypassIO` value that was never set. With no value,
+  Windows uses its default, so only a value that's present and turned off counts as the blocker.
+- Removal no longer reports PARTIAL because Known Issue Rollback or another tool left values in
+  the shared feature overrides key. Only this tool's values are checked. The others are listed
+  for reference and left alone, and the Recovery Kit and docs say the same.
+- Cancelling a re-apply after BitLocker was suspended no longer undoes the patch that's already
+  in place. It turns BitLocker protection back on and stops there, and if that resume fails it
+  tells you the `manage-bde` command to run. A first apply still rolls back to its own baseline.
+- Status and the dry-run preview no longer flag the registry override IDs as a MISMATCH. Those
+  values and the FeatureStore IDs are separate numbering schemes, so the check could never pass.
+  They're now listed side by side. The `hasMismatch` and `matchesKnownFeature` JSON fields are gone.
+- Upgrading from 5.6.0 now gives the tray read access to the watchdog folder, so it can show the
+  watchdog's verdict without admin rights. The app or the installer repairs the folder's access
+  list the next time it runs elevated.
+- `benchmark --json` now uses the same versioned JSON envelope and camelCase field names as every
+  other command, and the README lists the option.
+- The benchmark log no longer shows NaN% or Infinity% when the earlier run has no desktop QD1
+  IOPS. It says there's no earlier value to compare instead.
 
 ### Changed
 - Removed the workspace tab badges, which could never appear. The same status already shows in
