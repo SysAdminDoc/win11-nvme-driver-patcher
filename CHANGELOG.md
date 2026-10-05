@@ -228,8 +228,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   X: hive, so the offline system is untouched and the change evaporates on reboot while the user
   believes the patch was removed. It now directs them to the `.bat`, which loads the offline hive.
 - The CLI rejects unknown options instead of ignoring them. Every option was detected with
-  `args.Any(...)`, so an unrecognised token simply vanished, and `apply --unattended --dryrun`, one
-  missing hyphen, performed a real apply plus an automatic reboot instead of the preview the user
+  `args.Any(...)`, so an unrecognised token simply vanished, and `apply --unattended --dryrun` (one missing hyphen) performed a real apply plus an automatic reboot instead of the preview the user
   asked for. Unknown options now exit 3 with a "did you mean" hint, and the check runs before the
   administrator gate so a typo does not require an elevated shell to diagnose.
 - The machine-wide named mutexes shared by the GUI, CLI, tray, and watchdog service are created with
@@ -241,7 +240,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   to be mid-scan.
 - The watchdog service now exits non-zero when its flush loop gives up, so SCM's restart actions
   actually fire. A faulted `BackgroundService` stops the host gracefully, `RunAsync` does not
-  rethrow, and `Main` returned 0, a clean `SERVICE_STOPPED`, which SCM never treats as a failure
+  rethrow, and `Main` returned 0. That's a clean `SERVICE_STOPPED`, which SCM never treats as a failure
   even with non-crash failure actions enabled. The log line claiming "terminating so SCM recovery
   can restart the service" had never been true, so a transient event-log outage stopped the service
   permanently instead of restarting it.
@@ -271,7 +270,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   command deck but left the old container in the window with `Visibility="Collapsed"`, and it was
   the only place these were bound: **Cancel Benchmark** (so a running DiskSpd benchmark could not be
   stopped, while the activity log told the user to "Click Cancel to stop early"), **Try Fallback**
-  (the persistent re-entry to the FeatureStore fallback, a user who dismissed the one-shot
+  (the persistent re-entry to the FeatureStore fallback, because a user who dismissed the one-shot
   post-reboot dialog had no way back to it except the CLI), **Upgrade Safe Boot Entries** (the
   KB5079391 `INACCESSIBLE_BOOT_DEVICE` remediation, which the app detected and then offered no
   button for), and the **mutation-blocked notice** that explains why Apply is disabled on an
@@ -284,7 +283,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   `ReadAndExecute, Synchronize` ace against them is non-zero and every read-only grant counted as a
   writer. The shared state root exists to grant `Users:ReadAndExecute`, so it failed validation
   permanently: elevated callers silently re-applied owners and DACLs across the tree on every call,
-  and any caller that cannot re-ACL, the LocalService watchdog, the standard-user tray, saw its own
+  and any caller that cannot re-ACL (the LocalService watchdog, the standard-user tray) saw its own
   correct state as untrusted. The mask is now the individual write bits. This is the same
   composite-mask trap already fixed in the PowerShell ACL probe.
 - The system-tray agent can finally show a watchdog verdict. It is unelevated by design, but the
@@ -771,7 +770,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   OS volume's protectors were suspended, so a BitLocker-protected non-system NVMe volume without
   auto-unlock re-locked after reboot unwarned. Preflight now enumerates protected fixed volumes and
   warns for any non-auto-unlock data volume, and apply suspends those volumes for one reboot cycle
-  (best-effort, a data volume re-locking is recoverable with the key, so a failure warns instead of
+  (best-effort, since a data volume re-locking is recoverable with the key, so a failure warns instead of
   aborting like the system-drive path).
 - **Configuration is fail-closed and last-known-good recoverable**: load/save now return typed
   busy/failure status without accessing protected files after mutex timeout. Saves validate and
@@ -1046,7 +1045,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **PowerShell DiskSpd hash verification**: pinned to v2.2 release with SHA-256 check before
   extraction, preventing MITM binary substitution on admin-executed downloads.
 
-### Fixed (correctness / security, engineering audit)
+### Fixed: correctness / security (engineering audit)
 - **PatchService: untracked registry value on verify-read failure**: a written feature flag was not
   added to the rollback list when the verify-read returned an unexpected type, leaving orphaned
   registry values on partial-failure rollback. Now tracked before the write so rollback is always
@@ -1132,8 +1131,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **`winre-inject` previews the WinRE stornvme injection plan** (P2, partial): the recovery kit
   assumes the user can still reach WinRE, but the native stack can wedge it. The new `winre-inject`
   CLI command probes WinRE for its image path, locates `stornvme.inf`, and prints the exact ordered
-  DISM plan (mount → add-driver → unmount/commit) with blast-radius warnings, preview only, it never
-  mounts or mutates the image. New `WinReDriverInjectionService` plan builder + renderer are
+  DISM plan (mount → add-driver → unmount/commit) with blast-radius warnings, preview only. It never mounts or mutates the image. New `WinReDriverInjectionService` plan builder + renderer are
   unit-tested. The actual image mutation + a real-WinRE-boot validation are intentionally left as a
   deliberate operator step (tracked as a remaining roadmap item).
 
@@ -1178,9 +1176,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   `compat.json`, and the opt-in compat telemetry payload (`CompatReport`, shared with the Cloudflare
   Worker receiver) now have packaged JSON Schemas under `packaging/schemas/`, alongside the existing
   config/drive-scope/ watchdog/maintenance schemas. A test fixture validates the actual bundled data
-  files against their schemas in CI (via the test suite) and asserts that intentionally malformed
-  fixtures, unknown `expectedPath`/`level`, missing required fields, additional properties, wrong
-  value types, fail. Validation uses a small built-in subset validator (no new dependency).
+  files against their schemas in CI (via the test suite) and asserts that intentionally malformed fixtures (unknown `expectedPath`/`level`, missing required fields, additional properties, wrong value types) fail. Validation uses a small built-in subset validator (no new dependency).
   Support-bundle diagnostics already carry per-file schema version, source, SHA-256, and
   review-freshness metadata.
 
@@ -1188,7 +1184,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **Restore-point gate no longer trusts RPSessionInterval** (P3): `RecoveryProofGateService` treated
   a non-zero `RPSessionInterval` (a checkpoint-cadence value) as "System Restore enabled", so it
   could promise a restore point on a system where System Protection for the system drive is OFF and
-  `CreateRestorePoint` silently no-ops. It now keys off the authoritative signals, the global
+  `CreateRestorePoint` silently no-ops. It now keys off the authoritative signals: the global
   `DisableSR` flag and whether the system drive actually has shadow-copy storage configured, via a
   pure, unit-tested `ClassifyRestoreCapability`.
 - **SafeBoot upgrade verify gate can no longer report false success** (P3): `UpgradeEntries` returned
@@ -1249,7 +1245,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **PowerShell module ZIP added to the artifact contract** (P2): the release workflow produces and
   uploads `NVMeDriverPatcher.PowerShell-{version}.zip` with a `.sha256` sidecar and SHA256SUMS
   entry, but `packaging/release-artifacts.json` didn't list it, so `Validate-ReleaseAssets.ps1`
-  never checked it, a broken module upload would ship undetected. Added the `powershell-module`
+  never checked it, and a broken module upload would ship undetected. Added the `powershell-module`
   entry (required, checksummed); the validator now enforces presence, sidecar, and SHA256SUMS
   coverage.
 
@@ -1362,7 +1358,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   any Skia/OpenTK/HarfBuzz bump per the dependency-update checklist; a native ABI
   break or broken libpng now fails a test instead of crashing in front of a user.
 - **FeatureStore fallback undo in rollback & recovery** (P1): removal only ever cleaned the
-  registry-override route, a user who enabled native NVMe via the ViVeTool/native FeatureStore
+  registry-override route, so a user who enabled native NVMe via the ViVeTool/native FeatureStore
   fallback would "Remove Patch" yet keep `nvmedisk` bound after reboot because the FeatureStore
   configuration was never touched. `FeatureStoreWriterService.ResetOverrides` /
   `ResetAppliedFallback` now clear the User-priority overrides in both stores (ViVeTool `/reset`
@@ -1522,7 +1518,7 @@ and ships with regression tests. Build is clean (0 warnings, 0 errors) and all t
   promote a downloaded binary into the staging path unless one of two integrity signals validates:
   (a) the release's per-asset `<asset>.sha256` sidecar matches the downloaded bytes, or (b) the
   binary carries a valid Authenticode signature that `signtool verify /pa` accepts. If neither
-  signal is available the download is deleted and staging fails closed, host allowlisting alone is
+  signal is available the download is deleted and staging fails closed. Host allowlisting alone is
   no longer treated as a sufficient defense. The CI release workflow now emits `<asset>.sha256`
   sidecars alongside the combined `SHA256SUMS.txt`.
 - **ViVeTool downloader** learned the same SHA-256 sidecar check (opportunistic, activates
@@ -1532,7 +1528,7 @@ and ships with regression tests. Build is clean (0 warnings, 0 errors) and all t
 
 ### Fixed (critical)
 
-- **`PhysicalDiskTelemetryService`, per-drive reliability counters were identical across every
+- **`PhysicalDiskTelemetryService`: per-drive reliability counters were identical across every
   disk.** The reliability WMI query used `WHERE DeviceId LIKE '%'` + `break` at the first row, so
   every NVMe in the Telemetry tab showed the wear / temperature / error counts of whichever disk
   happened to enumerate first. Now scopes by `DeviceId` with a fallback to `ASSOCIATORS OF
@@ -1540,11 +1536,11 @@ and ships with regression tests. Build is clean (0 warnings, 0 errors) and all t
 
 ### Fixed (high)
 
-- **`PatchService.Install`, BitLocker suspension failure now routes through the shared `finally`
+- **`PatchService.Install`: BitLocker suspension failure now routes through the shared `finally`
   block.** Previously `Install` early-returned and never captured the after-snapshot or cleared the
   progress bar, inconsistent with the sibling VeraCrypt path. A private `PatchAbortedException`
   sentinel threads the abort through the existing cleanup.
-- **`MainViewModel`, ViVeTool fallback dialog was an async-void in disguise.** Moved the
+- **`MainViewModel`: ViVeTool fallback dialog was an async-void in disguise.** Moved the
   post-preflight dialog flow into `HandlePendingVerificationDialogAsync` so exceptions from
   `ApplyViVeToolFallback()` propagate through a real `Task`, get logged to the activity rail, and
   write to the Windows Event Log.
@@ -1552,31 +1548,31 @@ and ships with regression tests. Build is clean (0 warnings, 0 errors) and all t
   deadlocks.** All three spawned processes with redirected stdout+stderr but only drained the pipes
   *after* `WaitForExit`, so a chatty child could block on write forever. Each now drains
   asynchronously before awaiting exit, matching the pattern used elsewhere in the codebase.
-- **`MainWindow.OnContentRendered`, catastrophic preflight failures no longer leave a blank
+- **`MainWindow.OnContentRendered`: catastrophic preflight failures no longer leave a blank
   "Checking…" UI.** Errors are now logged to the activity rail + Windows Event Log, and a themed
   dialog explains what happened and points the user at Refresh.
-- **`EventLogWatchdogService.CountEvents`, unbounded scan loop.** Capped at 10 000 records per
+- **`EventLogWatchdogService.CountEvents`: unbounded scan loop.** Capped at 10 000 records per
   evaluation; the verdict is already locked in well before that on any genuinely unstable system,
   and the cap prevents a chatty event log from stalling the watchdog.
 
 ### Fixed (medium)
 
-- **`ConfigService.Save`, silent swallow on persistent save failure.** Retries up to 5× with 100 ms
+- **`ConfigService.Save`: silent swallow on persistent save failure.** Retries up to 5× with 100 ms
   backoff on transient `IOException` / `UnauthorizedAccessException` (AV scanner, file-explorer
   locks), then writes a Warning to the Windows Event Log when it finally gives up. Stale `.tmp`
   files are cleaned up.
-- **`ConfigMigrationService`, no downgrade detection.** If a user ran an older build against a
+- **`ConfigMigrationService`: no downgrade detection.** If a user ran an older build against a
   `config.json` written by a newer build, the migration silently proceeded. Now detects
   `ConfigVersion > CurrentSchemaVersion`, preserves the file untouched, and surfaces a warning
   summary.
-- **`DiagnosticsService.ExportBundle`, `.tmp` sidecar leak.** Outer `finally` now sweeps
+- **`DiagnosticsService.ExportBundle`: `.tmp` sidecar leak.** Outer `finally` now sweeps
   `<reportPath>.tmp` in addition to `reportPath`; bundle promote uses `File.Move(overwrite:true)`
   atomically.
-- **`ViVeToolService.RunViVeToolAsync`, `Task.Run(() => proc.WaitForExit(30000))` anti-pattern**
+- **`ViVeToolService.RunViVeToolAsync`: `Task.Run(() => proc.WaitForExit(30000))` anti-pattern**
   replaced with `proc.WaitForExitAsync(timeoutCts.Token)` + linked CTS.
-- **`MainViewModel.OnClosing`, `_settingsSaveDebouncer` DispatcherTimer wasn't stopped before the
+- **`MainViewModel.OnClosing`: `_settingsSaveDebouncer` DispatcherTimer wasn't stopped before the
   final synchronous Save**, so a pending tick could fire after close. Now stopped explicitly.
-- **`HtmlDashboardService.SaveTo`, wasn't atomic.** Now uses the `.tmp → flush(true) →
+- **`HtmlDashboardService.SaveTo`: wasn't atomic.** Now uses the `.tmp → flush(true) →
   File.Move(overwrite)` pattern. Also creates the output directory when writing to a custom path.
 - **`EventLogWatchdogService.SaveState`** hardened with the same flush-then-rename
   pattern.
@@ -1594,7 +1590,7 @@ and ships with regression tests. Build is clean (0 warnings, 0 errors) and all t
   directory) surface in the tray tooltip within one interval instead of requiring a
   tray restart.
 
-### Added, tests
+### Added (tests)
 
 - 36 new regression tests covering SHA-256 parsing + restart-command escaping
   (`AutoUpdaterService`), forward-schema preservation (`ConfigMigrationService`), WQL
@@ -1613,7 +1609,7 @@ and ships with regression tests. Build is clean (0 warnings, 0 errors) and all t
 - **DiskSpd downloads use `weak` integrity (size + host allowlist only).** The benchmark workflow
   pulls Microsoft's [diskspd](https://github.com/microsoft/diskspd) archive from
   `github.com/microsoft/diskspd/releases/latest/download/DiskSpd.ZIP`. Microsoft does not publish a
-  `.sha256` sidecar for DiskSpd, and the archive isn't Authenticode- signed as a zip, so our
+  `.sha256` sidecar for DiskSpd, and the archive isn't Authenticode-signed as a zip, so our
   download path enforces size caps + the host allowlist only. Our own `AutoUpdaterService` and the
   `ViVeToolService` fallback both use stronger signals (sidecar + Authenticode fallback for the
   app's own updater; opportunistic sidecar for ViVeTool, activating the moment upstream publishes
@@ -1644,12 +1640,12 @@ Patch fix for SafeBoot regression on Windows 11 24H2/25H2 after KB5079391 (March
 
 ### Changed
 
-- **`RegistryService`, backup and snapshot**: `ExportRegistryBackup` now includes the service-name
+- **`RegistryService`: backup and snapshot**: `ExportRegistryBackup` now includes the service-name
   SafeBoot keys in the `.reg` backup when present. `GetPatchSnapshot` adds `SafeBootMinimalService`
   and `SafeBootNetworkService` to the components map so diagnostic snapshots surface 25H2 compat
   state.
 
-- **`SafeModeVerifyScriptService`, enhanced PS1 report**: the emitted `Verify-NVMeSafeMode.ps1` now
+- **`SafeModeVerifyScriptService`: enhanced PS1 report**: the emitted `Verify-NVMeSafeMode.ps1` now
   independently checks both the GUID key and the service-name key for each scope (Minimal /
   Network). Per-key `[OK]` / `[MISS]` status plus a color-coded `[PASS]` / `[WARN]` / `[FAIL]`
   summary clearly communicates whether the system is safe on the current Windows build.
@@ -1661,7 +1657,7 @@ Quality-of-life release. Diagnostics tab exposed in the GUI, nine new services f
 detection, JSON schemas, issue templates), optional real-time Windows Service, and
 Authenticode-signing hooks in the release workflow.
 
-### Added, GUI
+### Added (GUI)
 
 - **Diagnostics+ tab in MainWindow.xaml**: four new buttons bound to the existing
   `RefreshWatchdogStatusCommand` / `RefreshReliabilityCommand` / `TriageMinidumpsCommand` /
@@ -1669,14 +1665,14 @@ Authenticode-signing hooks in the release workflow.
   with a scrollable Cascadia Code text box for the dry-run Markdown. Finishes the v4.4 loose-end
   "XAML bindings for new commands" that was deferred for two releases.
 
-### Added, Services
+### Added (Services)
 
 - **`AccessibilityService`**: probes HighContrast, Narrator install, ReducedMotion, TextScaleFactor
   from HKCU / HKLM. Gives support bundles visibility when the user is on an accessible-settings
   profile the dark theme should consider.
 - **`MaintenanceWindowService`**: user-definable window (start hour, end hour, active days) with
   overnight-wrap handling. `IsInWindow` is a pure function covered by 5 fixtures.
-  `AutoRevertService` now consults this, eligible verdicts outside the window defer to the next run
+  `AutoRevertService` now consults this, so eligible verdicts outside the window defer to the next run
   so we don't yank the driver mid-workday.
 - **`CleanDataService`**: named-target purge for `%LocalAppData%\NVMePatcher\`. Targets: logs, etl,
   backups, db, bundles, staging. Default purges everything; CLI `clean-data` invokes it. Reports
@@ -1695,16 +1691,15 @@ Authenticode-signing hooks in the release workflow.
   watchdog, vivetool, firmware, gpo, portable, telemetry, uninstall. CLI: `docs [topic]`.
 - **`SystemGuardrailsService.CheckAppLockerOrSrp`**: extends the HVCI / WDAC / VROC /
   NTFS-compression suite with AppLocker EnforcementMode + SRP DefaultLevel detection. Both refuse
-  our ViVeTool download path when enforced, warn early so the user can pre- approve rather than
+  our ViVeTool download path when enforced, so the app warns early and the user can pre-approve rather than
   discovering it mid-reboot.
 
-### Added, Packaging
+### Added (Packaging)
 
 - **`packaging/powershell/`**: PSGallery-ready module (`NVMeDriverPatcher.psd1` + `.psm1` + README).
   Cmdlets: `Get-NvmePatchStatus`, `Invoke-NvmePatchApply`, `Invoke-NvmePatchRemove`,
   `Get-NvmeWatchdogReport`, `Get-NvmeControllerAudit`, `Invoke-NvmeDryRun`,
-  `Export-NvmeDiagnostics`, `Export-NvmeDashboard`. Parses CLI output defensively, a CLI-messaging
-  change degrades fields to null rather than breaking the module.
+  `Export-NvmeDiagnostics`, `Export-NvmeDashboard`. Parses CLI output defensively, so a CLI-messaging change degrades fields to null rather than breaking the module.
 - **`packaging/intune/`**: `Detect-NVMeDriverPatcher.ps1` for Intune Win32 custom detection, plus a
   README covering Intune + SCCM deployment modes with the exact `msiexec` commands and product code.
 - **`packaging/schemas/`**: JSON Schema files for `config.json`, `drive_scope.json`,
@@ -1713,33 +1708,32 @@ Authenticode-signing hooks in the release workflow.
 - **`.github/ISSUE_TEMPLATE/`**: bug_report.yml, feature_request.yml, config.yml. Bug reports ask
   for a support bundle up front; feature requests reference the scope rule.
 
-### Added, Optional Windows Service
+### Added (Optional Windows Service)
 
 - **`NVMeDriverPatcher.Watchdog` new project**: Microsoft.Extensions.Hosting-based Windows Service.
   Subscribes to `System` event log via `EventLogWatcher` (push, not poll) for
   nvmedisk/stornvme/storport/storahci/disk/BugCheck/Kernel-Power providers. Flushes every 5 minutes;
-  shares the same `watchdog.json` the CLI/GUI read. `/install` / `/uninstall` wrap `sc.exe`. Fully
-  opt-in, polling path remains the default for users who'd rather not run a persistent service.
+  shares the same `watchdog.json` the CLI/GUI read. `/install` / `/uninstall` wrap `sc.exe`. Fully opt-in. The polling path remains the default for users who'd rather not run a persistent service.
 - Added to `NVMeDriverPatcher.sln` as `{E5F6A7B8-C9D0-1234-EF01-345678901234}`.
 
-### Added, CI/CD
+### Added (CI/CD)
 
 - **Authenticode signing step in release.yml**: conditionally signs the GUI, CLI, Tray, and MSI when
   `CODE_SIGN_PFX_BASE64` + `CODE_SIGN_PFX_PASSWORD` repository secrets are configured. No-op
   otherwise so the release pipeline keeps working for unsigned builds. Timestamps via
   `timestamp.sectigo.com`. Sha-256 digest.
 
-### Added, CLI (10 new subcommands)
+### Added: CLI (10 new subcommands)
 
-- `docs [topic]` / `help-topic`, offline help.
-- `clean-data`, purge per-user working dir.
-- `dashboard` / `html-report`, generate the HTML diagnostics report.
-- `fw-nudge [model] [firmware]` / `firmware-nudge`, vendor update-tool nudge.
-- `safemode-verify`, emit the Safe-Mode PS verify script.
-- `accessibility` / `a11y`, probe user accessibility flags.
-- `maintenance-window` / `window`, show window config + current in/out state.
+- `docs [topic]` / `help-topic`: offline help.
+- `clean-data`: purge per-user working dir.
+- `dashboard` / `html-report`: generate the HTML diagnostics report.
+- `fw-nudge [model] [firmware]` / `firmware-nudge`: vendor update-tool nudge.
+- `safemode-verify`: emit the Safe-Mode PS verify script.
+- `accessibility` / `a11y`: probe user accessibility flags.
+- `maintenance-window` / `window`: show window config + current in/out state.
 
-### Added, Tests
+### Added (Tests)
 
 - **MaintenanceWindowServiceTests**: 5 fixtures: disabled, same-day inside/outside, overnight wrap,
   inactive day, zero-width window.
@@ -1753,8 +1747,7 @@ Authenticode-signing hooks in the release workflow.
 
 ### Changed
 
-- `AutoRevertService.MaybeRun` now consults `MaintenanceWindowService` before running the uninstall,
-  eligible but outside the window defers silently.
+- `AutoRevertService.MaybeRun` now consults `MaintenanceWindowService` before running the uninstall. An eligible verdict outside the window defers silently.
 - `SystemGuardrailsService.Evaluate` grew a 5th finding (AppLocker / SRP).
 - All csproj `<Version>` strings, winget manifest, WiX, and the README badge bumped to `4.6.0`.
 - `NVMeDriverPatcher.sln` now has 5 projects (GUI, CLI, Tests, Tray, Watchdog).
@@ -1767,17 +1760,17 @@ portable-mode wiring.
 
 ### Added
 
-- **`RecoveryKitFreshnessService`** (closes ROADMAP §1.5), pure function that returns `Missing` /
+- **`RecoveryKitFreshnessService`** (closes ROADMAP §1.5): pure function that returns `Missing` /
   `Fresh` / `Stale` / `Unknown` based on the newest file in `LastRecoveryKitPath`. Staleness
   threshold is 30 days. Used to drive the persistent hero-card CTA and the new `kit-freshness` CLI
-  subcommand. Exit code 1 when nagging is warranted (Stale or Missing), lets scripts gate on it.
-- **`FeatureStoreWriterService`** (ROADMAP §3.1, stub), seats the surface for a future native
+  subcommand. Exit code 1 when nagging is warranted (Stale or Missing), so scripts can gate on it.
+- **`FeatureStoreWriterService`** (ROADMAP §3.1: stub), seats the surface for a future native
   FeatureStore encoder that replaces the ViVeTool download path. Ships today with: `WriteOverrides`
   returning a `not yet implemented` result (stable contract for callers that will use the real
   encoder once it lands); `HasFallbackEvidence` probes the blob for little-endian occurrences of the
   two post-block feature IDs (60786016, 48433719); `ExportBlob` dumps the raw blob + an ASCII hex
   sidecar for support bundles. New CLI: `featurestore`.
-- **`WinReBcdPrepService`** (closes ROADMAP §3.3, probe-only for v4.5.1), wraps `reagentc /info` +
+- **`WinReBcdPrepService`** (closes ROADMAP §3.3, probe-only for v4.5.1): wraps `reagentc /info` +
   `bcdedit /enum <guid> /v` to report WinRE enabled state, location, BCD identifier, and image path.
   `EnableWinRe()` shells `reagentc /enable` for systems with WinRE staged but the entry missing.
   Driver-injection into the WinRE image is still deferred (out of scope for this bump). New CLI:
@@ -1794,7 +1787,7 @@ portable-mode wiring.
   field, and emits a release-ready `SysAdminDoc.NVMeDriverPatcher.yaml` with the version + sha
   pre-filled.
 
-### Tests, cover the v4.4 + v4.5 pure surfaces
+### Tests (cover the v4.4 + v4.5 pure surfaces)
 
 - **`DryRunServiceTests`**: 5 fixtures pinning Safe/Full profile item counts, Server-key inclusion,
   VeraCrypt blocker propagation, Markdown render completeness.
@@ -1824,9 +1817,9 @@ portable-mode wiring.
 
 ### CLI additions
 
-- `winre`, WinRE enabled state, location, image path, BCD identifier.
-- `featurestore` / `feature-store`, fallback-evidence probe + blob export.
-- `kit-freshness` / `recovery-kit-freshness`, freshness report with exit code.
+- `winre`: WinRE enabled state, location, image path, BCD identifier.
+- `featurestore` / `feature-store`: fallback-evidence probe + blob export.
+- `kit-freshness` / `recovery-kit-freshness`: freshness report with exit code.
 
 ### Changed
 
@@ -1838,12 +1831,12 @@ portable-mode wiring.
 
 ## [v4.5.0] - 2026-04-19
 
-Feature release, closes every outstanding ROADMAP item that still fit the scope rule, plus
+Feature release that closes every outstanding ROADMAP item that still fit the scope rule, plus
 the five loose ends from v4.4.0. 18 new services, 21 new CLI subcommands, an MSI (WiX v4)
 scaffold, a Cloudflare Worker reference implementation for the opt-in compat-telemetry
 receiver, and a light-theme resource dictionary.
 
-### Added, Watchdog auto-revert path (v4.4 loose end #1)
+### Added: Watchdog auto-revert path (v4.4 loose end #1)
 
 - **`AutoRevertService`**: runs once on `App.OnStartup` and via the CLI's `watchdog --auto-revert`
   path. Reads `EventLogWatchdogService.Evaluate` + `ShouldAutoRevert`; if Unstable AND the user (or
@@ -1855,14 +1848,14 @@ receiver, and a light-theme resource dictionary.
   `BootVerify` invokes `NVMeDriverPatcher.Cli watchdog --auto-revert` so the consumer runs even when
   the user never launches the GUI. New CLI commands: `register-tasks` / `unregister-tasks`.
 
-### Added, Event Log source registration (v4.4 loose end #5)
+### Added: Event Log source registration (v4.4 loose end #5)
 
 - **`EventLogRegistrationService`**: idempotent call in both `App.OnStartup` and `Program.Main`.
   Creates the `"NVMe Driver Patcher"` source under the `Application` log so `EventLogService.Write`
   stops falling back to the generic source. Silent no-op if not elevated (admin is already a prereq
   but the call is defensive).
 
-### Added, Safety depth
+### Added (Safety depth)
 
 - **`SystemGuardrailsService`**: HVCI / Memory Integrity detection via
   `root\Microsoft\Windows\DeviceGuard\Win32_DeviceGuard.SecurityServicesRunning`, WDAC enforcement
@@ -1874,65 +1867,65 @@ receiver, and a light-theme resource dictionary.
   assignments, and cleans up any staging scratch on every exit. New CLI: `verify-backup
   [--import=<path>]`, defaults to the most recent `Pre_*_Backup_*.reg`.
 
-### Added, Enterprise / deployment
+### Added (Enterprise / deployment)
 
 - **Silent / unattended CLI** (ROADMAP §1.1). New flag `--unattended` on `apply`: implies
   `--skip-warnings`, pairs with existing `--no-restart`. CLI still respects preflight
   blockers unless `--force` is also passed.
-- **`ConfigMigrationService`** (§1.4), runs before `GpoPolicyService.ApplyTo`. Ships a v1→v2 no-op
+- **`ConfigMigrationService`** (§1.4): runs before `GpoPolicyService.ApplyTo`. Ships a v1→v2 no-op
   hook and a v2→v3 hook that stamps `ConfigVersion = 3` so the v4.5 watchdog fields have a precedent
   to migrate from.
-- **`ConfigImportExportService`** (§2.9), `config-export` / `config-import` CLI commands. Bundles
+- **`ConfigImportExportService`** (§2.9): `config-export` / `config-import` CLI commands. Bundles
   AppConfig (user-safe subset), `drive_scope.json`, and `watchdog.json` into a single portable JSON.
-- **`PortableModeService`** (§2.7), `portable-enable` / `portable-disable` CLI commands. Creates
+- **`PortableModeService`** (§2.7): `portable-enable` / `portable-disable` CLI commands. Creates
   `portable.flag` beside the exe; future launches redirect to `Data\` beside the exe instead of
   `%LocalAppData%`. Lets field techs carry the patcher on a USB stick without installer state.
 - **`AutoUpdaterService`**: downloads the latest GitHub release asset (.exe) into a staging dir,
   validates the allowed host list (mirrors `ViVeToolService`), and emits a PowerShell one-liner the
   user runs post-exit to swap the file. New CLI: `update-check`.
 
-### Added, Observability / correlation
+### Added (Observability / correlation)
 
-- **`PerControllerAuditService`** (§2.1), per-controller version of `PatchVerificationService`.
+- **`PerControllerAuditService`** (§2.1): per-controller version of `PatchVerificationService`.
   Enumerates `Win32_PnPSignedDriver WHERE DeviceClass='SCSIAdapter' OR 'DiskDrive'`, filters to
   NVMe-matching drivers, reports which controllers have `nvmedisk` bound vs `stornvme`. New CLI:
   `controllers` / `per-controller`.
-- **`EventLogTailService`** (§2.2), ad-hoc tail of the last N minutes of `System` events filtered to
+- **`EventLogTailService`** (§2.2): ad-hoc tail of the last N minutes of `System` events filtered to
   the NVMe stack providers (nvmedisk, stornvme, storport, storahci, disk, partmgr, volmgr,
   Kernel-Power). Single XPath query so chatty systems don't time out. New CLI: `tail` /
   `events-tail`.
-- **`PhysicalDiskTelemetryService`** (§2.4), `MSFT_PhysicalDisk` + `MSFT_StorageReliabilityCounter`
+- **`PhysicalDiskTelemetryService`** (§2.4): `MSFT_PhysicalDisk` + `MSFT_StorageReliabilityCounter`
   rollup (health, operational status, media type, bus type, temperature, wear, PoH, uncorrected
   read/write errors). Degrades gracefully on minimal SKUs. New CLI: `physical-disks`.
-- **`BypassIoInspectorService`** (§2.5), per-volume `fsutil bypassio state <drive>` wrapper for
+- **`BypassIoInspectorService`** (§2.5): per-volume `fsutil bypassio state <drive>` wrapper for
   every fixed drive. Parses the stack + enabled state; caps output length. New CLI: `bypassio`.
-- **`AutoBenchmarkService`** (§2.6 partial), persistent `baseline.json` with read/write IOPS +
+- **`AutoBenchmarkService`** (§2.6 partial): persistent `baseline.json` with read/write IOPS +
   latency. `Compare` returns a `RegressionVerdict` with per-arm percent deltas and a configurable
   threshold. New CLI: `compare-benchmarks --threshold=<percent>`.
 
-### Added, Tuning surface
+### Added (Tuning surface)
 
-- **`TuningProfile` expansion** (§2.3), added `AsyncEventNotificationEnabled`, `ThermalMgmtEnabled`,
+- **`TuningProfile` expansion** (§2.3): added `AsyncEventNotificationEnabled`, `ThermalMgmtEnabled`,
   `PowerStateTransitionLatency`, `NoLowPowerTransitions`, `ApstIdleTimeout`. Registry key constants
   added alongside.
-- **`ApstInspectorService`** (§3.2), reads `stornvme\Parameters\Device` for APST flags + enumerates
+- **`ApstInspectorService`** (§3.2): reads `stornvme\Parameters\Device` for APST flags + enumerates
   per-state entry/exit latency + idle times. `OverrideIdleTimeout` clamps user input to 250µs to 60s
   and writes the override. New CLI: `apst`.
-- **`TuningProfileIoService`** (§1.2), named-bundle `tuning-export` / `tuning-import` CLI commands
+- **`TuningProfileIoService`** (§1.2): named-bundle `tuning-export` / `tuning-import` CLI commands
   so fleet admins can ship a curated profile across machines.
-- **`NvmeIdentifyService`** (§2.8), raw NVMe Admin Identify Controller via
+- **`NvmeIdentifyService`** (§2.8): raw NVMe Admin Identify Controller via
   `IOCTL_STORAGE_PROTOCOL_COMMAND`. Pulls VID / SSVID / serial / firmware / model from the 4KB
   response payload, fields WMI doesn't expose. Feeds `FirmwareCompatService` with the authoritative
   identity. New CLI: `identify`.
 
-### Added, Integrity
+### Added (Integrity)
 
 - **`CompatChecksumService`**: SHA-256 of the loaded `compat.json` compared against the shipped
   default. Flags user customizations in the support bundle. New CLI: `compat-checksum`.
 
-### Added, Packaging
+### Added (Packaging)
 
-- **`packaging/wix/NVMeDriverPatcher.wxs`** (WiX v4), per-machine MSI installer with three features
+- **`packaging/wix/NVMeDriverPatcher.wxs`** (WiX v4): per-machine MSI installer with three features
   (Main / TrayAgent / AdmxTemplates), `util:EventSource` registration for the `NVMe Driver Patcher`
   source, Start-Menu shortcut, and Programs-and-Features entry with proper upgrade-code handling.
   `packaging/wix/README.md` documents the build steps + signtool invocation.
@@ -1963,7 +1956,7 @@ Feature release. Fourteen new capabilities across stability correlation, enterpr
 deployment, and non-admin ambient status. Scope-rule preserved: every item improves how
 the patch is enabled, disabled, verified, or rolled back.
 
-### Added, Safety & auto-recovery
+### Added (Safety & auto-recovery)
 
 - **`EventLogWatchdogService`**: post-patch stability watchdog. Armed on a successful Install
   (`PatchVerificationService.MarkPending` is paired with `EventLogWatchdogService.Arm`), disarmed on
@@ -1983,7 +1976,7 @@ the patch is enabled, disabled, verified, or rolled back.
   `%LocalAppData%\NVMePatcher\compat.json` (user-editable) → app base directory (shipped default).
   Worst-level wins on ties; exact firmware beats wildcard.
 
-### Added, Deployment control
+### Added (Deployment control)
 
 - **`PerDriveScopeService`**: `drive_scope.json` lets users exclude specific NVMe drives from the
   global swap by serial (from `PNPDeviceID`) or model pattern. Pure decision function; preflight
@@ -2004,7 +1997,7 @@ the patch is enabled, disabled, verified, or rolled back.
   `/standard /driver nvmedisk.sys stornvme.sys disk.sys`; `/reset` backs it out. Narrow by design,
   never enables `/all`. 15s timeout on query, 30s on enable/reset.
 
-### Added, Enterprise & distribution
+### Added (Enterprise & distribution)
 
 - **`packaging/admx/NVMeDriverPatcher.admx` + `en-US/NVMeDriverPatcher.adml`**: machine-scope
   policies at `HKLM\SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher`: PatchProfile (Safe/Full),
@@ -2018,7 +2011,7 @@ the patch is enabled, disabled, verified, or rolled back.
 - **`NVMeDriverPatcher.Tray` (new project)**: non-admin system-tray agent. Named-mutex
   single-instance, 30s poll of `RegistryService.GetPatchStatus` + `PatchVerificationService` +
   `EventLogWatchdogService`. Right-click → "Open Main App (elevated)" shells the main exe via
-  `runas`. Ships no manifest, the whole point is it doesn't prompt UAC.
+  `runas`. Ships no manifest, since the whole point is that it doesn't prompt UAC.
 - **`CompatTelemetryService`**: opt-in crowdsourced compat report. `BuildReport` composes `{anonId
   (Guid cached in anon_id.txt), appVersion, osBuild, cpu (sanitised), controllers[{model, firmware,
   migrated}], profile, verification, watchdog, watchdogEvents, reliabilityDelta,
@@ -2026,12 +2019,12 @@ the patch is enabled, disabled, verified, or rolled back.
   writes `compat_report.json` locally. Never contains serials, machine names, drive letters, or user
   names.
 
-### Added, Housekeeping
+### Added (Housekeeping)
 
 - **`LogRotationService`**: called in `App.OnStartup` and `Program.Main` before any service writes.
   Rotates `crash.log`, `activity.log`, `watchdog.log`, `diagnostics.log` at 5MB with 5 generations
   retained (25MB headroom per-log).
-- **CLI** (`Program.cs`), new subcommands: `dry-run` / `preview`, `watchdog`, `reliability`,
+- **CLI** (`Program.cs`): new subcommands: `dry-run` / `preview`, `watchdog`, `reliability`,
   `minidump` / `triage`, `firmware` / `compat`, `scope`, `etw`, `winpe`, `telemetry`, `verifier-on`
   / `-off` / `-status`. New options: `--dry-run`, `--output=<dir>`, `--endpoint=<url>`. `apply
   --dry-run` shortcuts to the preview path without taking Admin-gated actions.
@@ -2070,7 +2063,7 @@ the patch is enabled, disabled, verified, or rolled back.
 
 ## [v4.3.6] - 2026-04-17
 
-### Fixed, correctness
+### Fixed (correctness)
 
 - **`EventLogService.Write` no longer splits a UTF-16 surrogate pair at the truncation
   boundary.** The prior implementation's `Substring(0, 30000)` could leave a lone high
@@ -2095,7 +2088,7 @@ the patch is enabled, disabled, verified, or rolled back.
 
 Polish pass. Small quality fixes across several services and view code-behinds.
 
-### Fixed, safety & defense-in-depth
+### Fixed (safety & defense-in-depth)
 
 - **`PatchService.InitiateRestart` now passes arguments via `ProcessStartInfo.ArgumentList`**
   instead of the concatenated-string form. `delaySeconds` is already clamped so there's no
@@ -2109,9 +2102,9 @@ Polish pass. Small quality fixes across several services and view code-behinds.
   who hits Cancel during the DiskSpd download now aborts cleanly instead of having to
   wait out the full transfer.
 
-### Fixed, concurrency & correctness
+### Fixed (concurrency & correctness)
 
-- **`BenchmarkComparisonView`, `TelemetryView`, and `TuningPanel` replaced shared
+- **`BenchmarkComparisonView`: `TelemetryView`, and `TuningPanel` replaced shared
   `BrushConverter` usage** with pre-frozen `SolidColorBrush` singletons (constant palette)
   or a locked cache of parsed hex brushes (dynamic fallback). `BrushConverter` is not
   thread-safe; converting the same hex string on every delta paint was also wasteful.
@@ -2120,7 +2113,7 @@ Polish pass. Small quality fixes across several services and view code-behinds.
   (alongside `StateChanged` and `SizeChanged`) on close, closing a small delegate-leak
   pattern where event handlers retained references to the window after it was closed.
 
-### Fixed, UX polish
+### Fixed (UX polish)
 
 - **`TuningProfile.Balanced` / `Performance` / `PowerSave` carry an explicit "do not
   mutate" comment**. These are shared singletons used for read-only UI comparison;
@@ -2134,7 +2127,7 @@ Polish pass. Small quality fixes across several services and view code-behinds.
 
 Closes the three follow-up items listed in the v4.3.3 summary.
 
-### Fixed, safety
+### Fixed (safety)
 
 - **HotSwap detects BitLocker-protected volumes before dismount.** Queries `Win32_EncryptableVolume`
   for each captured volume; any protected volume is logged with a clear "will require BitLocker
@@ -2144,7 +2137,7 @@ Closes the three follow-up items listed in the v4.3.3 summary.
   SKUs) is treated as "no risk detected" so it doesn't break the swap on systems without the
   feature.
 
-### Fixed, concurrency
+### Fixed (concurrency)
 
 - **Re-entrancy guards are now `private static`.** The Interlocked counters guarded the
   six long-running commands per-`MainViewModel` instance; moving them to `static` covers
@@ -2152,7 +2145,7 @@ Closes the three follow-up items listed in the v4.3.3 summary.
   same registry-mutating command. The single-instance mutex in `App.xaml.cs` already
   handles process-level concurrency; these guards handle in-process concurrency.
 
-### Added, UX
+### Added (UX)
 
 - **Cancel Benchmark button.** Long-awaited UX affordance for a 60+ second operation.
   `BenchmarkService.RunBenchmarkAsync` now takes a `CancellationToken`. MainViewModel
@@ -2166,7 +2159,7 @@ Closes the three follow-up items listed in the v4.3.3 summary.
 
 ## [v4.3.3] - 2026-04-17
 
-### Fixed, reliability
+### Fixed (reliability)
 
 - **`HotSwapService.RemountVolumes` retries `mountvol` up to 3 times** with a 1-second
   backoff between attempts. On slow NVMe controllers the first remount can race the
@@ -2179,7 +2172,7 @@ Closes the three follow-up items listed in the v4.3.3 summary.
 
 Follow-up hardening pass on the two items deferred from v4.3.1.
 
-### Fixed, data safety
+### Fixed (data safety)
 
 - **`HotSwapService` now explicitly re-attaches drive letters after dismount.**
   `mountvol /P` removes the mount point and only Windows auto-mount would otherwise bring
@@ -2194,11 +2187,11 @@ Follow-up hardening pass on the two items deferred from v4.3.1.
   deterministically restore. `mountvol` is now invoked via `ProcessStartInfo.ArgumentList`
   with a strict `\\?\Volume{…}\` shape check on the GUID path.
 
-### Fixed, concurrency
+### Fixed (concurrency)
 
 - **Re-entrancy guards on every long-running command** (`ApplyPatch`, `RemovePatch`, `RunBenchmark`,
   `RunBackup`, `ApplyViVeToolFallback`). `ButtonsEnabled = false` was the only prior guard, but it's
-  set AFTER the async method starts, a rapid double-click before the binding re-rendered could race
+  set AFTER the async method starts, so a rapid double-click before the binding re-rendered could race
   two concurrent invocations of the same command. Each command now wraps its body in an
   `Interlocked.CompareExchange`-based `TryAcquireInFlight` / `ReleaseInFlight` pair (same pattern
   `Refresh` has used since the first audit pass). The existing `Refresh` guard was refactored onto
@@ -2208,15 +2201,14 @@ Follow-up hardening pass on the two items deferred from v4.3.1.
 
 ## [v4.3.1] - 2026-04-17
 
-Deep hardening pass. No new features, existing behavior made substantially more robust.
+Deep hardening pass. No new features. Existing behavior is much harder to break.
 
-### Fixed, correctness
+### Fixed (correctness)
 
 - **Safe Mode no longer reports as "Partial"**. `RegistryService.GetPatchStatus()` used to compare
   applied-count against `AppConfig.TotalComponents` (always 5), so a Safe Mode install (3 components
   applied cleanly) was labeled PARTIAL in every readout. The GUI status card, the CLI `status` exit
-  code, and the diagnostics report. It now detects the effective profile, `Safe`, `Full`, `Mixed`,
-  or `None`, and reports `Applied=true` for either clean profile. Mixed (e.g. a prior install left
+  code, and the diagnostics report. It now detects the effective profile (`Safe`, `Full`, `Mixed`, or `None`) and reports `Applied=true` for either clean profile. Mixed (e.g. a prior install left
   an orphaned key) still reports Partial correctly.
 - **SafeBoot keys no longer leak on partial install failure**. The previous code only
   added SafeBoot keys to the rollback list if `SetValue` succeeded. If `CreateSubKey`
@@ -2234,7 +2226,7 @@ Deep hardening pass. No new features, existing behavior made substantially more 
   clock-skew tolerance so an NTP sync between "apply" and "reboot" can't leave the app
   stuck comparing `lastBoot < appliedAt`.
 
-### Fixed, security
+### Fixed (security)
 
 - **ViVeTool download host is now whitelisted**. `browser_download_url` is checked against
   `github.com`, `api.github.com`, `objects.githubusercontent.com`,
@@ -2256,7 +2248,7 @@ Deep hardening pass. No new features, existing behavior made substantially more 
   guards against two simultaneous download/extract pipelines racing on the tools folder
   (triggered by e.g. a double-click on the fallback badge).
 
-### Fixed, UX
+### Fixed (UX)
 
 - **The "Patch Applied But Inactive" dialog now fires AFTER preflight renders**, not
   during it. Before, a modal confirmation popped up over a half-drawn UI and blocked the
@@ -2293,11 +2285,11 @@ of just being described to the user.
 
 ## [v4.2.0] - 2026-04-17
 
-Tier 0 roadmap items, addresses the Microsoft override block (Feb/Mar 2026) and moves the
+Tier 0 roadmap items. This release addresses the Microsoft override block (Feb/Mar 2026) and moves the
 tool from "works great until the next Insider build" to "honest across build changes".
 
 ### Added
-- **Install mode selector, Safe (default) vs Full.** Safe Mode writes only the primary feature flag
+- **Install mode selector: Safe (default) vs Full.** Safe Mode writes only the primary feature flag
   (735209102) plus Safe Boot entries, which is the community-recommended default for 2026. Full Mode
   adds the two extended flags (1853569164, 156965516) that correlate with community BSOD reports.
   Persisted in `config.json` as a readable string.
@@ -2344,13 +2336,13 @@ tool from "works great until the next Insider build" to "honest across build cha
 - Force PS 5.1 for GUI: re-launch from pwsh.exe to powershell.exe
 - Triple dark mode application: HandleCreated + Load + pre-ShowDialog
 
-## Roadmap archive, 2026-08-10, ROADMAP.md
+## Roadmap archive (2026-08-10, ROADMAP.md)
 
 <details>
 <summary>Original roadmap snapshot</summary>
 
 ```markdown
-# NVMe Driver Patcher, Roadmap
+# NVMe Driver Patcher (Roadmap)
 
 Living document, **incomplete work only**. Shipped items are deleted (git history +
 [CHANGELOG.md](CHANGELOG.md) are the record). Blocked items live in
@@ -2368,7 +2360,7 @@ Items waiting on external resources (hardware, VMs, live validation, credentials
 
 ---
 
-## Audit Findings, 2026-08-02
+## Audit Findings (2026-08-02)
 
 Baseline recorded before any analysis: `dotnet build NVMeDriverPatcher.sln` = 8 projects,
 **0 errors, 0 warnings**; `dotnet test NVMeDriverPatcher.sln` = **1088 passed, 0 failed, 0 skipped**;
@@ -2382,7 +2374,7 @@ being written down. **Six suspicions were investigated and discarded as false po
 than logged (see "Checked and found clean" at the end). That list is deliberately included so a
 future pass does not re-raise them.
 
-### Checked and found clean, do not re-raise without new evidence
+### Checked and found clean (do not re-raise without new evidence)
 
 Recorded so a later pass does not spend effort re-deriving these, and does not "fix" working code:
 
