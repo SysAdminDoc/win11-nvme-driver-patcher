@@ -150,16 +150,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: S
 
-- [ ] P3 — CLI help/registry text drift (four instances)
-  Category: docs
-  Where: `src/NVMeDriverPatcher.Cli/CliCommandRegistry.cs:130-131` (`register-tasks` claims "(benchmark regression, firmware nudge)" but registers BootVerify + WatchdogSweep — `SchedulerService.cs:11-47`), `:91-92` (`tail` described "Live event-log tail" but `EventLogTailService.Recent` is a one-shot 60-min/100-record dump), `:79-80` (`watchdog --auto-revert to arm` — the flag executes the evaluation immediately, `Program.cs:173, 373-396`), `:263` (global `--json` list omits `preflight`, `reliability`, `minidump`, `firmware`, `featurestore`, `verify-payload`, which honor it)
-  Problem: Help text is the CLI's contract; all four claims are wrong today.
-  Evidence: Each descriptor cross-checked against the implementation.
-  Fix: Correct the four strings (and re-run `Validate-DocumentationFacts.ps1`, which counts commands from this registry).
-  Acceptance: Descriptions match behavior; docs validator still passes.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — `verify-payload --json` bypasses the versioned `CliEnvelope`; `bypassio --json --history` silently drops the history diff
   Category: correctness
   Where: `src/NVMeDriverPatcher.Cli/Program.cs:248-266` (hand-serialized anonymous object, no `schemaVersion`/`command` wrapper); `:488-493` (returns current snapshot before the `showHistory` branch)

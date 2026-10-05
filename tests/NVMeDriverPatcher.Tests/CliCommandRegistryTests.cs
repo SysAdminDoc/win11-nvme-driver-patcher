@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using NVMeDriverPatcher.Cli;
 
 namespace NVMeDriverPatcher.Tests;
@@ -118,6 +119,95 @@ public sealed class CliCommandRegistryTests
 
         Assert.Contains("    re-enable-after-update" + Environment.NewLine + "                          Re-apply", usage);
         Assert.DoesNotContain("re-enable-after-updateRe-apply", usage);
+    }
+
+    // Help text is the CLI's contract. These summaries used to describe jobs, modes and option
+    // coverage the implementation never had.
+
+    [Fact]
+    public void RegisterTasksSummary_NamesTheTasksSchedulerServiceActuallyRegisters()
+    {
+        var summary = CliCommandRegistry.Find("register-tasks")!.Summary;
+
+        // SchedulerService registers BootVerify (watchdog --auto-revert at start-up) and
+        // WatchdogSweep; there is no benchmark-regression or firmware-nudge job.
+        Assert.DoesNotContain("benchmark", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("firmware", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("boot", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("watchdog sweep", summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TailSummary_DescribesAOneShotDumpNotALiveTail()
+    {
+        // EventLogTailService.Recent prints the last 60 minutes (up to 100 records) and exits.
+        var summary = CliCommandRegistry.Find("tail")!.Summary;
+        Assert.DoesNotMatch(new Regex(@"(?i)\blive\b|\bfollow"), summary);
+        Assert.Contains("last hour", summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void WatchdogSummary_SaysAutoRevertRunsNowRatherThanArming()
+    {
+        // `watchdog --auto-revert` runs AutoRevertService immediately; it doesn't arm anything.
+        var summary = CliCommandRegistry.Find("watchdog")!.Summary;
+        Assert.DoesNotContain("to arm", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("--auto-revert", summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GlobalJsonHelp_NamesEveryCommandThatHonorsJson()
+    {
+        var program = ReadRepoFile("src", "NVMeDriverPatcher.Cli", "Program.cs");
+
+        // Handlers that take the json switch, then the command each call site routes from.
+        var handlers = Regex.Matches(program, @"static int (?<name>\w+)\((?<params>[^)]*)\)")
+            .Where(m => Regex.IsMatch(m.Groups["params"].Value, @"\bbool json\b"))
+            .Select(m => m.Groups["name"].Value)
+            .ToList();
+        Assert.NotEmpty(handlers);
+
+        var lines = program.Split('\n');
+        var jsonCommands = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var handler in handlers)
+        {
+            var call = new Regex(@"\b" + handler + @"\(");
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (!call.IsMatch(lines[i]) || lines[i].Contains("static int ", StringComparison.Ordinal)) continue;
+                for (var j = i; j >= 0; j--)
+                {
+                    var command = Regex.Match(lines[j], "\"(?<cmd>[a-z][a-z0-9-]*)\"");
+                    if (!command.Success) continue;
+                    jsonCommands.Add(command.Groups["cmd"].Value);
+                    break;
+                }
+            }
+        }
+        Assert.Contains("status", jsonCommands);
+        Assert.Contains("verify-payload", jsonCommands);
+
+        var usage = CliCommandRegistry.RenderUsage("test");
+        var start = usage.IndexOf("  --json", StringComparison.Ordinal);
+        var end = usage.IndexOf("Exit codes:", StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "global --json help line not found");
+        var jsonHelp = usage[start..end];
+
+        foreach (var command in jsonCommands)
+            Assert.True(
+                Regex.IsMatch(jsonHelp, @"(?<![\w-])" + Regex.Escape(command) + @"(?![\w-])"),
+                $"'{command}' honors --json but the global --json help doesn't name it:{Environment.NewLine}{jsonHelp}");
+    }
+
+    private static string ReadRepoFile(params string[] relative)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "NVMeDriverPatcher.sln")))
+            dir = dir.Parent;
+        Assert.NotNull(dir);
+        var path = Path.Combine(new[] { dir!.FullName }.Concat(relative).ToArray());
+        Assert.True(File.Exists(path), $"expected repo file missing: {path}");
+        return File.ReadAllText(path);
     }
 
     [Fact]
