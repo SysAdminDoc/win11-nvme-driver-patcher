@@ -447,6 +447,24 @@ public static class PreflightService
             ObservedAtUtc = DateTimeOffset.UtcNow
         };
 
+    /// <summary>
+    /// Next-step text for the GUI when critical checks fail. Names the first blocker so the user
+    /// isn't left hunting for it (issue #18: "Resolve blockers" never said what the blocker was).
+    /// </summary>
+    internal static string DescribeBlockers(IReadOnlyDictionary<string, PreflightCheck> checks)
+    {
+        var blocking = checks.Values
+            .Where(check => check.Critical && check.Status == CheckStatus.Fail)
+            .Select(check => check.Message.Trim().TrimEnd('.'))
+            .ToList();
+        if (blocking.Count == 0)
+            return "Open readiness details, fix the critical items, then refresh checks.";
+        var more = blocking.Count > 1
+            ? $" {blocking.Count - 1} more {(blocking.Count == 2 ? "blocker is" : "blockers are")} listed in readiness details."
+            : string.Empty;
+        return $"{blocking[0]}.{more} Fix it, then refresh checks.";
+    }
+
     internal static PreflightCheck ToPreflightCheck(CriticalProbeResult probe) => probe.Verdict switch
     {
         CriticalProbeVerdict.Pass => new(CheckStatus.Pass, probe.Detail, true),

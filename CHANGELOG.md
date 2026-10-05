@@ -4,6 +4,16 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 
 ## [Unreleased]
 
+### Fixed
+- The Intel RST/VMD safety check no longer blocks PCs that have no Intel storage controller.
+  Windows 11 ships `iaStorAVC` in the box as a demand-start driver on every machine, so a
+  Stopped, Manual entry was being read as RST evidence and stopped AMD systems cold (#18). The
+  check now blocks only when an Intel RST/VMD driver is loaded, set to start at boot, or in a
+  state it can't read, and the message names the exact driver and state it found.
+- "Resolve blockers" now says what the blocker is. The next-step card shows the first failing
+  check's full text (plus a count of any others), and the Compat tile's tooltip carries the
+  complete blocker message the tile itself truncates.
+
 ### Docs
 - The README no longer asks a visitor to paste a fetch-and-run command. The GUI, CLI, MSI, and
   legacy PowerShell downloads are all a link first, then local commands only, and the "Verify the

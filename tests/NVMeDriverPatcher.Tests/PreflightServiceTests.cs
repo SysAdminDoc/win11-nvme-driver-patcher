@@ -26,6 +26,44 @@ public sealed class PreflightServiceTests
         Assert.False(PreflightService.AllCriticalPassed(new() { ["VeraCrypt"] = check }));
     }
 
+    // --- Blocker next-step text (issue #18: "Resolve blockers" never named the blocker) ---
+
+    [Fact]
+    public void DescribeBlockers_NamesTheFirstCriticalFailure()
+    {
+        var checks = new Dictionary<string, PreflightCheck>
+        {
+            ["WindowsVersion"] = new(CheckStatus.Pass, "Win 11 25H2 (Build 26200)", true),
+            ["LaptopPower"] = new(CheckStatus.Warning, "Laptop -- APST broken"),
+            ["Compatibility"] = new(CheckStatus.Fail,
+                "BLOCKED [ConfirmedPresent]: Intel RST/VMD driver iaStorVD (state=Running, start=Boot) is loaded or set to start at boot; boot-safe nvmedisk.sys enablement is not proved.", true)
+        };
+
+        var text = PreflightService.DescribeBlockers(checks);
+
+        Assert.StartsWith("BLOCKED [ConfirmedPresent]: Intel RST/VMD driver iaStorVD", text);
+        Assert.EndsWith("is not proved. Fix it, then refresh checks.", text);
+        Assert.DoesNotContain("APST", text);
+    }
+
+    [Fact]
+    public void DescribeBlockers_CountsTheRestAndFallsBackWhenNoneFail()
+    {
+        var checks = new Dictionary<string, PreflightCheck>
+        {
+            ["VeraCrypt"] = new(CheckStatus.Fail, "BLOCKED [ConfirmedPresent]: VeraCrypt boot evidence is present.", true),
+            ["Compatibility"] = new(CheckStatus.Fail, "BLOCKED [ConfirmedPresent]: Intel RST/VMD driver vmd is loaded.", true),
+            ["SafeBootWritable"] = new(CheckStatus.Fail, "UNKNOWN [AccessDenied]: SafeBoot", true)
+        };
+
+        Assert.Contains("VeraCrypt boot evidence is present. 2 more blockers are listed in readiness details.",
+            PreflightService.DescribeBlockers(checks));
+        checks.Remove("SafeBootWritable");
+        Assert.Contains("1 more blocker is listed", PreflightService.DescribeBlockers(checks));
+        Assert.Equal("Open readiness details, fix the critical items, then refresh checks.",
+            PreflightService.DescribeBlockers(new Dictionary<string, PreflightCheck>()));
+    }
+
     // --- Boot-recovery-risk classification (issue #15) ---
 
     [Fact]

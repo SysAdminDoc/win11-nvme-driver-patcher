@@ -110,6 +110,55 @@ public sealed class CriticalEnvironmentProbeServiceTests
         Assert.Equal(CriticalProbeReasonCode.ConfirmedDisabled, probe.ReasonCode);
     }
 
+    // Issue #18: Windows 11 ships iaStorAVC in the box, registered demand-start and never loaded
+    // on a PC without an Intel RST controller (AMD B650 report). That is not RST evidence.
+    [Fact]
+    public void Evaluate_InboxDemandStartIntelDriverThatIsNotLoaded_Passes()
+    {
+        var platform = new FakePlatform
+        {
+            Drivers =
+            [
+                new StorageDriverProbeSnapshot("iaStorAVC", "Stopped", "Manual"),
+                new StorageDriverProbeSnapshot("iaStorAC", "Stopped", "Disabled")
+            ]
+        };
+
+        var probe = Evaluate(platform).Items.Single(item => item.Id == "IntelStorage");
+
+        Assert.Equal(CriticalProbeVerdict.Pass, probe.Verdict);
+        Assert.Equal(CriticalProbeReasonCode.DeviceAbsent, probe.ReasonCode);
+        Assert.Contains("iaStorAVC", probe.Detail);
+        Assert.Contains(probe.Evidence, line => line.Contains("iaStorAVC (state=Stopped, start=Manual)"));
+    }
+
+    [Theory]
+    [InlineData("Running", "Manual")]
+    [InlineData("Stopped", "Boot")]
+    [InlineData("Stopped", "System")]
+    [InlineData("Stopped", "Auto")]
+    [InlineData("Start Pending", "Manual")]
+    [InlineData("Unknown", "Manual")]
+    [InlineData("Stopped", "Unknown")]
+    public void Evaluate_IntelDriverLoadedBootStartOrIndeterminate_StillBlocks(string state, string startMode)
+    {
+        var platform = new FakePlatform
+        {
+            Drivers =
+            [
+                new StorageDriverProbeSnapshot("iaStorAVC", "Stopped", "Manual"),
+                new StorageDriverProbeSnapshot("iaStorVD", state, startMode)
+            ]
+        };
+
+        var probe = Evaluate(platform).Items.Single(item => item.Id == "IntelStorage");
+
+        Assert.Equal(CriticalProbeVerdict.Fail, probe.Verdict);
+        Assert.Equal(CriticalProbeReasonCode.ConfirmedPresent, probe.ReasonCode);
+        Assert.Contains($"iaStorVD (state={state}, start={startMode})", probe.Detail);
+        Assert.DoesNotContain("iaStorAVC", probe.Detail);
+    }
+
     [Fact]
     public void Evaluate_AccessDenied_DoesNotCollapseToNotDetected()
     {

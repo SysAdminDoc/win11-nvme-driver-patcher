@@ -501,9 +501,15 @@ public partial class MainViewModel : ObservableObject
                 if (_preflight.Checks.TryGetValue(rightMap[i], out var check))
                 {
                     var vm = new PreflightCheckVM { Label = rightLabels[i], Status = check.Status, Message = check.Message };
-                    // Compat tooltip with full software details
-                    if (rightMap[i] == "Compatibility" && _preflight.IncompatibleSoftware.Count > 0)
-                        vm.Tooltip = string.Join("\n", _preflight.IncompatibleSoftware.Select(s => $"[{s.Severity}] {s.Name}: {s.Message}"));
+                    // Compat tooltip: the blocking probe's full text (the tile truncates it), then software details
+                    if (rightMap[i] == "Compatibility")
+                    {
+                        var lines = _preflight.IncompatibleSoftware.Select(s => $"[{s.Severity}] {s.Name}: {s.Message}").ToList();
+                        if (check.Status == CheckStatus.Fail)
+                            lines.Insert(0, check.Message);
+                        if (lines.Count > 0)
+                            vm.Tooltip = string.Join("\n", lines);
+                    }
                     ReadinessChecks.Add(vm);
                     RightChecks.Add(vm);
                 }
@@ -959,7 +965,7 @@ public partial class MainViewModel : ObservableObject
         if (CriticalCount > 0)
         {
             NextStepTitle = "Resolve blockers";
-            NextStepDescription = "Open readiness details, fix the critical items, then refresh checks.";
+            NextStepDescription = PreflightService.DescribeBlockers(_preflight.Checks);
             NextStepColor = "Red";
         }
         else if (_preflight.NativeNVMeStatus?.IsActive == true)
