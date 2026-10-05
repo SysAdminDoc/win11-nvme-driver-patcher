@@ -282,9 +282,9 @@ public static class DryRunService
         }
         if (report.RegistryOverrideAssessment is not null)
         {
-            sb.AppendLine("## Registry Override ID Compatibility");
+            sb.AppendLine("## Registry Override IDs");
             sb.AppendLine();
-            sb.AppendLine("These are the registry feature IDs this profile would write; the payload is unchanged by this comparison.");
+            sb.AppendLine("These are the registry override IDs this profile would write, shown beside this branch's FeatureStore IDs for the same features. The two use separate numbering, so they aren't expected to match, and nothing here changes the payload.");
             foreach (var feature in report.RegistryOverrideAssessment.Features)
                 sb.AppendLine($"- {feature.Detail}");
             sb.AppendLine();

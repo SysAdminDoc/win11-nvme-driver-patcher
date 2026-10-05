@@ -88,7 +88,7 @@ public sealed class DryRunServiceTests
     }
 
     [Fact]
-    public void Preview_ReportsRegistryOverrideIdMismatchForDetectedBranch()
+    public void Preview_ListsRegistryOverrideIdsBesideTheBranchFeatureStoreIds()
     {
         var config = new AppConfig { PatchProfile = PatchProfile.Full };
         var preflight = new PreflightResult
@@ -101,9 +101,9 @@ public sealed class DryRunServiceTests
         var assessment = report.RegistryOverrideAssessment!;
 
         Assert.Equal(3, assessment.Features.Count);
-        Assert.True(assessment.HasMismatch);
-        Assert.Contains("Registry Override ID Compatibility", DryRunService.RenderMarkdown(report));
-        Assert.Contains("MISMATCH", report.Summary);
+        Assert.Contains("Registry Override IDs", DryRunService.RenderMarkdown(report));
+        Assert.DoesNotContain("MISMATCH", report.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("MISMATCH", DryRunService.RenderMarkdown(report), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("55369237", DryRunService.RenderMarkdown(report));
     }
 }

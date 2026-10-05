@@ -48,14 +48,12 @@ public static class CliJson
             Ubr = registryOverride.Ubr,
             Branch = registryOverride.Branch,
             BranchKnown = registryOverride.BranchKnown,
-            HasMismatch = registryOverride.HasMismatch,
             Summary = registryOverride.Summary,
             Features = registryOverride.Features.Select(feature => new RegistryOverrideFeatureJson
             {
                 RegistryId = feature.RegistryId,
                 FeatureName = feature.FeatureName,
                 KnownBranchId = feature.KnownBranchId,
-                MatchesKnownFeature = feature.MatchesKnownFeature,
                 Detail = feature.Detail,
             }).ToList(),
         },
@@ -291,7 +289,6 @@ public sealed class RegistryOverrideJson
     public int Ubr { get; set; }
     public string Branch { get; set; } = string.Empty;
     public bool BranchKnown { get; set; }
-    public bool HasMismatch { get; set; }
     public string Summary { get; set; } = string.Empty;
     public List<RegistryOverrideFeatureJson> Features { get; set; } = new();
 }
@@ -301,7 +298,6 @@ public sealed class RegistryOverrideFeatureJson
     public string RegistryId { get; set; } = string.Empty;
     public string FeatureName { get; set; } = string.Empty;
     public int? KnownBranchId { get; set; }
-    public bool MatchesKnownFeature { get; set; }
     public string Detail { get; set; } = string.Empty;
 }
 
