@@ -42,11 +42,21 @@ public class NvmeIdentifyResult
 // feeds FirmwareCompatService with the authoritative controller identity.
 public static class NvmeIdentifyService
 {
-    private const uint IOCTL_STORAGE_PROTOCOL_COMMAND = 0x2DD4C0;
+    // CTL_CODE(IOCTL_STORAGE_BASE, 0x04F0, METHOD_BUFFERED, FILE_READ_ACCESS | FILE_WRITE_ACCESS)
+    // per winioctl.h. The old 0x2DD4C0 was function 0x530, which no storage driver implements.
+    internal const uint IOCTL_STORAGE_PROTOCOL_COMMAND = 0x2DD3C0;
+    private const uint STORAGE_PROTOCOL_STRUCTURE_VERSION = 1;
     private const uint STORAGE_PROTOCOL_TYPE_NVME = 3;
-    private const uint STORAGE_PROTOCOL_NVME_DATA_TYPE_INQUIRY = 1;
     private const uint NVME_IDENTIFY_CNS_CONTROLLER = 1;
     private const uint STORAGE_PROTOCOL_COMMAND_FLAG_ADAPTER_REQUEST = 0x80000000;
+    // winioctl.h: for ProtocolTypeNvme, CommandSpecific must name the admin or NVM command set.
+    internal const uint STORAGE_PROTOCOL_SPECIFIC_NVME_ADMIN_COMMAND = 0x01;
+    internal const uint STORAGE_PROTOCOL_STATUS_SUCCESS = 0x1;
+
+    internal const int CommandBlockSize = 64;    // STORAGE_PROTOCOL_COMMAND_LENGTH_NVME
+    internal const int IdentifyDataSize = 4096;  // Identify Controller payload is 4KB
+    internal static int HeaderSize => Marshal.SizeOf<STORAGE_PROTOCOL_COMMAND>();
+    internal static int RequestSize => HeaderSize + CommandBlockSize + IdentifyDataSize;
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     private struct STORAGE_PROTOCOL_COMMAND
@@ -113,36 +123,11 @@ public static class NvmeIdentifyService
 
         using (handle)
         {
-            int cmdSize = Marshal.SizeOf<STORAGE_PROTOCOL_COMMAND>();
-            const int dataSize = 4096;   // Identify Controller payload is 4KB
-            const int cdbSize = 64;
-            const int errorInfoSize = 0;
-            int totalSize = cmdSize + cdbSize + dataSize;
-
+            int totalSize = RequestSize;
             IntPtr buffer = Marshal.AllocHGlobal(totalSize);
             try
             {
-                // Zero the buffer before use — stack garbage in an IOCTL payload can return
-                // a nonsense "successful" response on some controllers.
-                for (int i = 0; i < totalSize; i++) Marshal.WriteByte(buffer, i, 0);
-
-                var cmd = new STORAGE_PROTOCOL_COMMAND
-                {
-                    Version = 1,
-                    Length = (uint)cmdSize,
-                    ProtocolType = STORAGE_PROTOCOL_TYPE_NVME,
-                    Flags = STORAGE_PROTOCOL_COMMAND_FLAG_ADAPTER_REQUEST,
-                    CommandLength = cdbSize,
-                    ErrorInfoLength = errorInfoSize,
-                    DataFromDeviceTransferLength = dataSize,
-                    TimeOutValue = 30,
-                    DataFromDeviceBufferOffset = (uint)(cmdSize + cdbSize)
-                };
-                Marshal.StructureToPtr(cmd, buffer, fDeleteOld: false);
-
-                // NVMe Identify Controller opcode = 0x06 at CDB byte 0, CNS = 1 at CDB byte 40.
-                Marshal.WriteByte(buffer, cmdSize + 0, 0x06);
-                Marshal.WriteInt32(buffer, cmdSize + 40, (int)NVME_IDENTIFY_CNS_CONTROLLER);
+                WriteRequest(buffer);
 
                 if (!DeviceIoControl(handle, IOCTL_STORAGE_PROTOCOL_COMMAND,
                         buffer, (uint)totalSize,
@@ -153,49 +138,7 @@ public static class NvmeIdentifyService
                     return result;
                 }
 
-                IntPtr dataPtr = IntPtr.Add(buffer, cmdSize + cdbSize);
-                result.VendorId = ReadHex16(dataPtr, 0);
-                result.SubsystemVendorId = ReadHex16(dataPtr, 2);
-                result.SerialNumber = ReadAscii(dataPtr, 4, 20);
-                result.ModelNumber = ReadAscii(dataPtr, 24, 40);
-                result.FirmwareRevision = ReadAscii(dataPtr, 64, 8);
-
-                result.MaxDataTransferSizePages = Marshal.ReadByte(dataPtr, 77);
-                result.NumberOfNamespaces = Marshal.ReadInt32(dataPtr, 516);
-
-                ushort oacs = ReadUInt16(dataPtr, 256);
-                result.SupportsFormatNvm = (oacs & 0x02) != 0;
-                result.SupportsFirmwareDownload = (oacs & 0x04) != 0;
-                result.SupportsNamespaceMgmt = (oacs & 0x08) != 0;
-
-                result.VolatileWriteCache = (Marshal.ReadByte(dataPtr, 525) & 0x01) != 0;
-
-                int npss = Marshal.ReadByte(dataPtr, 263) + 1;
-                result.NumberOfPowerStates = npss;
-                for (int ps = 0; ps < Math.Min(npss, 32); ps++)
-                {
-                    int psOffset = 2048 + (ps * 32);
-                    ushort mp = ReadUInt16(dataPtr, psOffset);
-                    byte flags = Marshal.ReadByte(dataPtr, psOffset + 3);
-                    bool mpsScale = (flags & 0x01) != 0;
-                    double maxPowerW = mp * (mpsScale ? 0.0001 : 0.01);
-                    uint entryLat = ReadUInt32(dataPtr, psOffset + 4);
-                    uint exitLat = ReadUInt32(dataPtr, psOffset + 8);
-                    byte nops = Marshal.ReadByte(dataPtr, psOffset + 25);
-                    bool nonOp = (nops & 0x02) != 0;
-
-                    result.PowerStates.Add(new NvmePowerStateDescriptor
-                    {
-                        Index = ps,
-                        MaxPowerWatts = maxPowerW,
-                        EntryLatencyUs = entryLat,
-                        ExitLatencyUs = exitLat,
-                        NonOperational = nonOp
-                    });
-                }
-
-                result.Success = true;
-                result.Summary = $"{result.ModelNumber.Trim()} / FW {result.FirmwareRevision.Trim()} / VID {result.VendorId} / {npss} power states";
+                ParseResponse(buffer, result);
             }
             finally
             {
@@ -204,6 +147,120 @@ public static class NvmeIdentifyService
         }
         return result;
     }
+
+    /// <summary>Builds the Identify Controller request in a <see cref="RequestSize"/>-byte buffer.</summary>
+    internal static void WriteRequest(IntPtr buffer)
+    {
+        int cmdSize = HeaderSize;
+        int totalSize = RequestSize;
+
+        // Zero the buffer before use — stack garbage in an IOCTL payload can return
+        // a nonsense "successful" response on some controllers.
+        for (int i = 0; i < totalSize; i++) Marshal.WriteByte(buffer, i, 0);
+
+        var cmd = new STORAGE_PROTOCOL_COMMAND
+        {
+            Version = STORAGE_PROTOCOL_STRUCTURE_VERSION,
+            Length = (uint)cmdSize,
+            ProtocolType = STORAGE_PROTOCOL_TYPE_NVME,
+            Flags = STORAGE_PROTOCOL_COMMAND_FLAG_ADAPTER_REQUEST,
+            CommandLength = CommandBlockSize,
+            ErrorInfoLength = 0,
+            DataFromDeviceTransferLength = IdentifyDataSize,
+            TimeOutValue = 30,
+            DataFromDeviceBufferOffset = (uint)(cmdSize + CommandBlockSize),
+            CommandSpecific = STORAGE_PROTOCOL_SPECIFIC_NVME_ADMIN_COMMAND
+        };
+        Marshal.StructureToPtr(cmd, buffer, fDeleteOld: false);
+
+        // NVMe Identify Controller opcode = 0x06 at CDB byte 0, CNS = 1 at CDB byte 40.
+        Marshal.WriteByte(buffer, cmdSize + 0, 0x06);
+        Marshal.WriteInt32(buffer, cmdSize + 40, (int)NVME_IDENTIFY_CNS_CONTROLLER);
+    }
+
+    /// <summary>
+    /// Reads a completed request buffer into <paramref name="result"/>. DeviceIoControl returning
+    /// TRUE only means the request was delivered: the command's own outcome is the header's
+    /// ReturnStatus (and the NVMe status field in ErrorCode). Ignoring it let a controller that
+    /// failed the command report an empty model, serial and "0x0000" VID as a successful identify.
+    /// </summary>
+    internal static void ParseResponse(IntPtr buffer, NvmeIdentifyResult result)
+    {
+        var header = Marshal.PtrToStructure<STORAGE_PROTOCOL_COMMAND>(buffer);
+        if (header.ReturnStatus != STORAGE_PROTOCOL_STATUS_SUCCESS)
+        {
+            result.Summary = $"NVMe Identify Controller failed: protocol status {DescribeProtocolStatus(header.ReturnStatus)}, NVMe status 0x{header.ErrorCode:X4}";
+            return;
+        }
+
+        // Read the payload where the request put it rather than trusting an offset echoed back.
+        IntPtr dataPtr = IntPtr.Add(buffer, HeaderSize + CommandBlockSize);
+        var serial = ReadAscii(dataPtr, 4, 20);
+        var model = ReadAscii(dataPtr, 24, 40);
+        // Serial and model are mandatory ASCII fields; both empty means no Identify data arrived.
+        if (serial.Length == 0 && model.Length == 0)
+        {
+            result.Summary = "NVMe Identify Controller reported success but returned no controller identity (empty Identify data).";
+            return;
+        }
+
+        result.VendorId = ReadHex16(dataPtr, 0);
+        result.SubsystemVendorId = ReadHex16(dataPtr, 2);
+        result.SerialNumber = serial;
+        result.ModelNumber = model;
+        result.FirmwareRevision = ReadAscii(dataPtr, 64, 8);
+
+        result.MaxDataTransferSizePages = Marshal.ReadByte(dataPtr, 77);
+        result.NumberOfNamespaces = Marshal.ReadInt32(dataPtr, 516);
+
+        ushort oacs = ReadUInt16(dataPtr, 256);
+        result.SupportsFormatNvm = (oacs & 0x02) != 0;
+        result.SupportsFirmwareDownload = (oacs & 0x04) != 0;
+        result.SupportsNamespaceMgmt = (oacs & 0x08) != 0;
+
+        result.VolatileWriteCache = (Marshal.ReadByte(dataPtr, 525) & 0x01) != 0;
+
+        int npss = Marshal.ReadByte(dataPtr, 263) + 1;
+        result.NumberOfPowerStates = npss;
+        for (int ps = 0; ps < Math.Min(npss, 32); ps++)
+        {
+            int psOffset = 2048 + (ps * 32);
+            ushort mp = ReadUInt16(dataPtr, psOffset);
+            byte flags = Marshal.ReadByte(dataPtr, psOffset + 3);
+            bool mpsScale = (flags & 0x01) != 0;
+            double maxPowerW = mp * (mpsScale ? 0.0001 : 0.01);
+            uint entryLat = ReadUInt32(dataPtr, psOffset + 4);
+            uint exitLat = ReadUInt32(dataPtr, psOffset + 8);
+            byte nops = Marshal.ReadByte(dataPtr, psOffset + 25);
+            bool nonOp = (nops & 0x02) != 0;
+
+            result.PowerStates.Add(new NvmePowerStateDescriptor
+            {
+                Index = ps,
+                MaxPowerWatts = maxPowerW,
+                EntryLatencyUs = entryLat,
+                ExitLatencyUs = exitLat,
+                NonOperational = nonOp
+            });
+        }
+
+        result.Success = true;
+        result.Summary = $"{result.ModelNumber.Trim()} / FW {result.FirmwareRevision.Trim()} / VID {result.VendorId} / {npss} power states";
+    }
+
+    private static string DescribeProtocolStatus(uint status) => status switch
+    {
+        0x0 => "Pending (0x0)",
+        0x2 => "Error (0x2)",
+        0x3 => "InvalidRequest (0x3)",
+        0x4 => "NoDevice (0x4)",
+        0x5 => "Busy (0x5)",
+        0x6 => "DataOverrun (0x6)",
+        0x7 => "InsufficientResources (0x7)",
+        0x8 => "ThrottledRequest (0x8)",
+        0xFF => "NotSupported (0xFF)",
+        _ => $"0x{status:X}"
+    };
 
     private static string ReadAscii(IntPtr baseAddr, int offset, int length)
     {
