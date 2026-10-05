@@ -7,6 +7,7 @@ class Program
 {
     static int Main(string[] args)
     {
+        CliConsoleEncoding.UseUtf8WhenRedirected();
         try
         {
             RecoverySafetyGateService.Reset();

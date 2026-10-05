@@ -276,6 +276,8 @@ NVMeDriverPatcher.Cli config-export --export=<path>        # Export config bundl
 NVMeDriverPatcher.Cli config-import --import=<path>        # Import config bundle
 ```
 
+When you redirect the CLI's output to a file or a pipe, it's written as UTF-8 without a BOM, so `NVMeDriverPatcher.Cli dry-run > plan.md` keeps the arrows in the "Before → After" column. Output to the console itself is unchanged, and the CLI never changes your console's code page. Windows PowerShell 5.1 reads a program's output in the console code page, so run `[Console]::OutputEncoding = [Text.Encoding]::UTF8` first if you capture the output there.
+
 **Exit Codes (Silent Mode):**
 
 | Code | Meaning |
