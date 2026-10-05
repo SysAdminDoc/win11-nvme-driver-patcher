@@ -316,42 +316,24 @@ public static class DriveService
 
     public static NativeNVMeStatus TestNativeNVMeActive()
     {
-        var result = new NativeNVMeStatus();
+        bool serviceRunning = false;
+        var storageDiskNames = new List<string>();
+        string? boundInfVersion = null;
         try
         {
             using var driverSearch = new ManagementObjectSearcher("SELECT Name, State FROM Win32_SystemDriver WHERE Name='nvmedisk'");
             foreach (var drv in Enumerate(driverSearch))
             {
                 if (drv["State"]?.ToString() == "Running")
-                {
-                    result.IsActive = true;
-                    result.ActiveDriver = "nvmedisk.sys (Native NVMe)";
-                    result.Details = "Native NVMe driver is running";
-                }
+                    serviceRunning = true;
             }
 
             using var pnpSearch = new ManagementObjectSearcher(
                 $"SELECT Name FROM Win32_PnPEntity WHERE ClassGuid='{AppConfig.SafeBootGuid}'");
-            var storageDiskNames = new List<string>();
             foreach (var dev in Enumerate(pnpSearch))
             {
                 var name = dev["Name"]?.ToString();
                 if (!string.IsNullOrEmpty(name)) storageDiskNames.Add(name);
-            }
-
-            if (storageDiskNames.Count > 0)
-            {
-                result.IsActive = true;
-                result.DeviceCategory = "Storage disks";
-                result.StorageDisks = storageDiskNames;
-                if (string.IsNullOrEmpty(result.Details))
-                    result.Details = "Drives found under Storage disks category";
-            }
-            else if (!result.IsActive)
-            {
-                result.DeviceCategory = "Disk drives (legacy)";
-                result.ActiveDriver = "stornvme.sys / disk.sys (Legacy SCSI)";
-                result.Details = "Legacy NVMe stack active (pre-patch or reboot required)";
             }
 
             using var signedSearch = new ManagementObjectSearcher(
@@ -360,16 +342,55 @@ public static class DriveService
             {
                 if (drv["InfName"]?.ToString() == "nvmedisk.inf")
                 {
-                    result.IsActive = true;
-                    result.ActiveDriver = $"nvmedisk.sys v{drv["DriverVersion"]}";
+                    boundInfVersion = drv["DriverVersion"]?.ToString() ?? string.Empty;
                     break;
                 }
             }
         }
         catch (Exception ex)
         {
-            result.Details = $"Unable to determine driver status: {ex.Message}";
+            var partial = ClassifyNativeNVMe(serviceRunning, storageDiskNames, boundInfVersion);
+            partial.Details = $"Unable to determine driver status: {ex.Message}";
+            return partial;
         }
+        return ClassifyNativeNVMe(serviceRunning, storageDiskNames, boundInfVersion);
+    }
+
+    /// <summary>
+    /// Native NVMe is active only when a drive is bound to nvmedisk: a Storage disks class device
+    /// or an nvmedisk.inf device binding. The service state alone proves nothing, because 25H2
+    /// loads nvmedisk.sys at boot on every PC even when every drive stays on stornvme (issue #18
+    /// bundle). Treating that as active told users "apply is unnecessary" and let post-reboot
+    /// verification report Confirmed for a patch that never bound.
+    /// </summary>
+    internal static NativeNVMeStatus ClassifyNativeNVMe(
+        bool serviceRunning,
+        IReadOnlyList<string> storageDisks,
+        string? boundInfVersion)
+    {
+        var result = new NativeNVMeStatus();
+        if (storageDisks.Count > 0 || boundInfVersion is not null)
+        {
+            result.IsActive = true;
+            result.ActiveDriver = boundInfVersion is null
+                ? "nvmedisk.sys (Native NVMe)"
+                : $"nvmedisk.sys v{boundInfVersion}";
+            if (storageDisks.Count > 0)
+            {
+                result.DeviceCategory = "Storage disks";
+                result.StorageDisks = storageDisks.ToList();
+            }
+            result.Details = serviceRunning
+                ? "Native NVMe driver is running"
+                : "Drives found under Storage disks category";
+            return result;
+        }
+
+        result.DeviceCategory = "Disk drives (legacy)";
+        result.ActiveDriver = "stornvme.sys / disk.sys (Legacy SCSI)";
+        result.Details = serviceRunning
+            ? "nvmedisk.sys is loaded, but no drive is bound to it; NVMe drives are still on the legacy stornvme stack"
+            : "Legacy NVMe stack active (pre-patch or reboot required)";
         return result;
     }
 

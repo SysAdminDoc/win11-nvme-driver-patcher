@@ -13,6 +13,12 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - "Resolve blockers" now says what the blocker is. The next-step card shows the first failing
   check's full text (plus a count of any others), and the Compat tile's tooltip carries the
   complete blocker message the tile itself truncates.
+- Native NVMe is no longer reported as active just because `nvmedisk.sys` is loaded. On 25H2,
+  Windows loads that driver at boot on every PC even when every drive stays on `stornvme`, so
+  the app was telling people "Native NVMe is enabled by Windows itself, apply is unnecessary"
+  while their SSD sat under Disk drives (found in a #18 support bundle). The same check fed
+  post-reboot verification, which could have called a patch that never bound "Confirmed". It
+  now needs a drive under Storage disks or an `nvmedisk.inf` device binding.
 
 ### Docs
 - The README no longer asks a visitor to paste a fetch-and-run command. The GUI, CLI, MSI, and

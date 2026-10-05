@@ -4,6 +4,36 @@ namespace NVMeDriverPatcher.Tests;
 
 public sealed class DriveServiceTests
 {
+    // Found in issue #18's support bundle: on 25H2 (26200.9457) nvmedisk.sys is loaded at boot on
+    // every PC whether or not a drive binds to it. A running service with no Storage disks device
+    // and no nvmedisk.inf binding is the legacy stack, not native NVMe.
+    [Fact]
+    public void ClassifyNativeNVMe_LoadedServiceWithNoBoundDrive_IsLegacy()
+    {
+        var status = DriveService.ClassifyNativeNVMe(serviceRunning: true, storageDisks: [], boundInfVersion: null);
+
+        Assert.False(status.IsActive);
+        Assert.Equal("Disk drives (legacy)", status.DeviceCategory);
+        Assert.Contains("no drive is bound", status.Details);
+    }
+
+    [Fact]
+    public void ClassifyNativeNVMe_RequiresDeviceBindingEvidence()
+    {
+        var byClass = DriveService.ClassifyNativeNVMe(true, ["SPCC M.2 PCIe SSD"], null);
+        Assert.True(byClass.IsActive);
+        Assert.Equal("Storage disks", byClass.DeviceCategory);
+        Assert.Equal(["SPCC M.2 PCIe SSD"], byClass.StorageDisks);
+
+        var byInf = DriveService.ClassifyNativeNVMe(false, [], "10.0.26100.9278");
+        Assert.True(byInf.IsActive);
+        Assert.Equal("nvmedisk.sys v10.0.26100.9278", byInf.ActiveDriver);
+
+        var legacy = DriveService.ClassifyNativeNVMe(false, [], null);
+        Assert.False(legacy.IsActive);
+        Assert.Equal("Legacy NVMe stack active (pre-patch or reboot required)", legacy.Details);
+    }
+
     [Theory]
     [InlineData(0, "Healthy")]
     [InlineData(1, "Warning")]
