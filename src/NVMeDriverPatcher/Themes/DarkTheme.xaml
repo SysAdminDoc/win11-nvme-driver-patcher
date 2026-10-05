@@ -84,7 +84,7 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceCardBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="CornerRadius" Value="12"/>
         <Setter Property="Padding" Value="16,14"/>
     </Style>
 
@@ -104,7 +104,7 @@
     <Style x:Key="HeroCard" TargetType="Border" BasedOn="{StaticResource SurfaceCard}">
         <Setter Property="Background" Value="{DynamicResource HeroSurfaceBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderLight}"/>
-        <Setter Property="CornerRadius" Value="14"/>
+        <Setter Property="CornerRadius" Value="12"/>
         <Setter Property="Padding" Value="20,18"/>
     </Style>
 
@@ -114,7 +114,7 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceInset}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderLight}"/>
         <Setter Property="BorderThickness" Value="2"/>
-        <Setter Property="CornerRadius" Value="17"/>
+        <Setter Property="CornerRadius" Value="8"/>
     </Style>
 
     <Style x:Key="WorkflowNodeNumber" TargetType="TextBlock">
@@ -177,7 +177,7 @@
                                     Margin="-12,8,0,8"
                                     HorizontalAlignment="Left"
                                     Background="{DynamicResource Accent}"
-                                    CornerRadius="0,2,2,0"
+                                    CornerRadius="0"
                                     Opacity="0"/>
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="Center"/>
@@ -244,7 +244,6 @@
         <Setter Property="Padding" Value="24,32"/>
         <Setter Property="Background" Value="{DynamicResource InsetCardBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderLight}"/>
-        <Setter Property="CornerRadius" Value="8"/>
     </Style>
 
     <Style x:Key="EmptyStateTitle" TargetType="TextBlock">

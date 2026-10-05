@@ -53,14 +53,14 @@
                                     Background="{DynamicResource AccentBg}"
                                     BorderBrush="{DynamicResource Accent}"
                                     BorderThickness="1"
-                                    CornerRadius="9">
+                                    CornerRadius="8">
                                 <Grid>
                                     <Border Width="22"
                                             Height="18"
                                             Background="Transparent"
                                             BorderBrush="{DynamicResource Accent}"
                                             BorderThickness="1.5"
-                                            CornerRadius="3"/>
+                                            CornerRadius="4"/>
                                     <TextBlock Text="N"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"
@@ -77,7 +77,7 @@
                                 <TextBlock Text="DRIVER CONSOLE"
                                            Margin="0,2,0,0"
                                            Foreground="{DynamicResource TextDim}"
-                                           FontSize="9.5"
+                                           FontSize="10"
                                            FontWeight="SemiBold"/>
                             </StackPanel>
                         </Grid>
@@ -145,7 +145,7 @@
                                 <Border Width="28"
                                         Height="28"
                                         Background="{DynamicResource GreenBg}"
-                                        CornerRadius="7">
+                                        CornerRadius="6">
                                     <TextBlock Text="&#xEA18;"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"
@@ -351,17 +351,17 @@
                                                 Background="{DynamicResource SurfaceInset}"
                                                 BorderBrush="{Binding StatusColor, Converter={StaticResource StrToBrush}}"
                                                 BorderThickness="1"
-                                                CornerRadius="10"
+                                                CornerRadius="4"
                                                 AutomationProperties.Name="Current patch state">
                                             <StackPanel Orientation="Horizontal">
-                                                <Ellipse Width="6"
-                                                         Height="6"
-                                                         Margin="0,0,6,0"
-                                                         VerticalAlignment="Center"
-                                                         Fill="{Binding StatusColor, Converter={StaticResource StrToBrush}}"/>
+                                                <Rectangle Width="6"
+                                                           Height="6"
+                                                           Margin="0,0,6,0"
+                                                           VerticalAlignment="Center"
+                                                           Fill="{Binding StatusColor, Converter={StaticResource StrToBrush}}"/>
                                                 <TextBlock Text="{Binding StatusText}"
                                                            Foreground="{Binding StatusColor, Converter={StaticResource StrToBrush}}"
-                                                           FontSize="10"
+                                                           FontSize="10.5"
                                                            FontWeight="SemiBold"/>
                                             </StackPanel>
                                         </Border>
@@ -482,7 +482,7 @@
                                                 <ColumnDefinition Width="3"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <Border Background="{Binding NextStepColor, Converter={StaticResource StrToBrush}}" CornerRadius="2"/>
+                                            <Border Background="{Binding NextStepColor, Converter={StaticResource StrToBrush}}" CornerRadius="0"/>
                                             <StackPanel Grid.Column="1" Margin="10,0,0,0">
                                                 <TextBlock Text="{Binding NextStepTitle}"
                                                            Foreground="{DynamicResource TextSecondary}"
@@ -590,8 +590,8 @@
                                         Background="{DynamicResource SurfaceInset}"
                                         BorderBrush="{DynamicResource Border}"
                                         BorderThickness="1"
-                                        CornerRadius="11">
-                                    <StackPanel VerticalAlignment="Center">
+                                        CornerRadius="10">
+                                    <StackPanel VerticalAlignment="Top">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="44"/>
@@ -647,11 +647,11 @@
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <Ellipse Width="7"
-                                                     Height="7"
-                                                     Margin="0,4,9,0"
-                                                     VerticalAlignment="Top"
-                                                     Fill="{DynamicResource Accent}"/>
+                                            <Rectangle Width="7"
+                                                       Height="7"
+                                                       Margin="0,4,9,0"
+                                                       VerticalAlignment="Top"
+                                                       Fill="{DynamicResource Accent}"/>
                                             <StackPanel Grid.Column="1">
                                                 <TextBlock Text="Post-reboot verification"
                                                            Foreground="{DynamicResource TextSecondary}"
@@ -675,7 +675,7 @@
                                 <Border Margin="0,0,5,0" Style="{StaticResource MetricCard}">
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                        <Border Width="30" Height="30" Background="{DynamicResource AccentBg}" CornerRadius="7">
+                                        <Border Width="30" Height="30" Background="{DynamicResource AccentBg}" CornerRadius="6">
                                             <TextBlock Text="&#xE7F8;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Accent}"/>
                                         </Border>
                                         <StackPanel Grid.Column="1">
@@ -687,7 +687,7 @@
                                 <Border Margin="3,0" Style="{StaticResource MetricCard}">
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                        <Border Width="30" Height="30" Background="{DynamicResource AccentBg}" CornerRadius="7">
+                                        <Border Width="30" Height="30" Background="{DynamicResource AccentBg}" CornerRadius="6">
                                             <TextBlock Text="&#xEDA2;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Accent}"/>
                                         </Border>
                                         <StackPanel Grid.Column="1">
@@ -699,7 +699,7 @@
                                 <Border Margin="5,0,3,0" Style="{StaticResource MetricCard}">
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                        <Border Width="30" Height="30" Background="{DynamicResource AccentBg}" CornerRadius="7">
+                                        <Border Width="30" Height="30" Background="{DynamicResource AccentBg}" CornerRadius="6">
                                             <TextBlock Text="&#xE968;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Accent}"/>
                                         </Border>
                                         <StackPanel Grid.Column="1">
@@ -711,7 +711,7 @@
                                 <Border Margin="5,0,0,0" Style="{StaticResource MetricCard}">
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                        <Border Width="30" Height="30" CornerRadius="7">
+                                        <Border Width="30" Height="30" CornerRadius="6">
                                             <Border.Style>
                                                 <Style TargetType="Border">
                                                     <Setter Property="Background" Value="{DynamicResource YellowBg}"/>
@@ -823,8 +823,8 @@
                                                                 <TextBlock Text="DRIVER PATH" Style="{StaticResource SectionEyebrow}"/>
                                                                 <TextBlock Text="Windows storage stack" Margin="0,5,0,0" Style="{StaticResource SectionTitle}"/>
                                                             </StackPanel>
-                                                            <Border Grid.Column="1" Padding="8,4" Background="{DynamicResource AccentBg}" CornerRadius="9">
-                                                                <TextBlock Text="SYSTEM" Foreground="{DynamicResource Accent}" FontSize="9.5" FontWeight="SemiBold"/>
+                                                            <Border Grid.Column="1" VerticalAlignment="Top" Style="{StaticResource StatusChipBorder}" Background="{DynamicResource AccentBg}" BorderBrush="{DynamicResource AccentSoft}">
+                                                                <TextBlock Text="SYSTEM" Style="{StaticResource StatusChipText}" Foreground="{DynamicResource Accent}"/>
                                                             </Border>
                                                         </Grid>
                                                         <Grid Grid.Row="1" Margin="0,14,0,0">
@@ -835,21 +835,21 @@
                                                                 <ColumnDefinition Width="30"/>
                                                                 <ColumnDefinition Width="*"/>
                                                             </Grid.ColumnDefinitions>
-                                                            <Border Padding="6,8" Background="{DynamicResource BgMedium}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="7">
+                                                            <Border Padding="6,8" Background="{DynamicResource BgMedium}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="6">
                                                                 <StackPanel>
                                                                     <TextBlock Text="WINDOWS" Style="{StaticResource SectionEyebrow}"/>
                                                                     <TextBlock Text="Storage stack" Margin="0,4,0,0" Foreground="{DynamicResource TextSecondary}" FontSize="11.5" FontWeight="SemiBold"/>
                                                                 </StackPanel>
                                                             </Border>
                                                             <TextBlock Grid.Column="1" Text="&#xE76C;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource TextDim}"/>
-                                                            <Border Grid.Column="2" Padding="6,8" Background="{DynamicResource BgMedium}" BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="7">
+                                                            <Border Grid.Column="2" Padding="6,8" Background="{DynamicResource BgMedium}" BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="6">
                                                                 <StackPanel>
                                                                     <TextBlock Text="CONTROLLER" Style="{StaticResource SectionEyebrow}"/>
                                                                     <TextBlock Text="stornvme.sys" Margin="0,4,0,0" Foreground="{DynamicResource TextPrimary}" FontFamily="Cascadia Code, Consolas" FontSize="10" FontWeight="SemiBold"/>
                                                                 </StackPanel>
                                                             </Border>
                                                             <TextBlock Grid.Column="3" Text="&#xE76C;" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource TextDim}"/>
-                                                            <Border Grid.Column="4" Padding="6,8" Background="{DynamicResource BgMedium}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="7">
+                                                            <Border Grid.Column="4" Padding="6,8" Background="{DynamicResource BgMedium}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="6">
                                                                 <StackPanel>
                                                                     <TextBlock Text="DISK" Style="{StaticResource SectionEyebrow}"/>
                                                                     <TextBlock Text="nvmedisk.sys" Margin="0,4,0,0" Foreground="{DynamicResource TextSecondary}" FontFamily="Cascadia Code, Consolas" FontSize="10" FontWeight="SemiBold"/>
@@ -872,7 +872,7 @@
                                                                 <TextBlock Text="RECOVERY HEALTH" Style="{StaticResource SectionEyebrow}"/>
                                                                 <TextBlock Text="Rollback readiness" Margin="0,5,0,0" Style="{StaticResource SectionTitle}"/>
                                                             </StackPanel>
-                                                            <Border Grid.Column="1" Padding="8,4" CornerRadius="9">
+                                                            <Border Grid.Column="1" Padding="9,4" VerticalAlignment="Top" CornerRadius="4">
                                                                 <Border.Style>
                                                                     <Style TargetType="Border">
                                                                         <Setter Property="Background" Value="{DynamicResource YellowBg}"/>
@@ -883,12 +883,12 @@
                                                                         </Style.Triggers>
                                                                     </Style>
                                                                 </Border.Style>
-                                                                <TextBlock Text="{Binding RecoveryTabBadgeText}" Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}" FontSize="9.5" FontWeight="SemiBold"/>
+                                                                <TextBlock Text="{Binding RecoveryTabBadgeText}" Foreground="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}" FontSize="10.5" FontWeight="SemiBold"/>
                                                             </Border>
                                                         </Grid>
                                                         <Grid Margin="0,13,0,0">
                                                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                                            <Ellipse Width="7" Height="7" Margin="0,3,9,0" VerticalAlignment="Top" Fill="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"/>
+                                                            <Rectangle Width="7" Height="7" Margin="0,3,9,0" VerticalAlignment="Top" Fill="{Binding RecoveryTabBadgeColor, Converter={StaticResource StrToBrush}}"/>
                                                             <StackPanel Grid.Column="1">
                                                                 <TextBlock Text="Recovery kit" Foreground="{DynamicResource TextSecondary}" FontSize="11.5" FontWeight="SemiBold"/>
                                                                 <TextBlock Text="{Binding RecoveryKitStatusText}" Margin="0,3,0,0" MaxHeight="30" Foreground="{DynamicResource TextDim}" FontSize="10.5" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
@@ -896,7 +896,7 @@
                                                         </Grid>
                                                         <Grid Margin="0,10,0,0">
                                                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                                            <Ellipse Width="7" Height="7" Margin="0,3,9,0" VerticalAlignment="Top" Fill="{DynamicResource Accent}"/>
+                                                            <Rectangle Width="7" Height="7" Margin="0,3,9,0" VerticalAlignment="Top" Fill="{DynamicResource Accent}"/>
                                                             <StackPanel Grid.Column="1">
                                                                 <TextBlock Text="Post-reboot verification" Foreground="{DynamicResource TextSecondary}" FontSize="11.5" FontWeight="SemiBold"/>
                                                                 <TextBlock Text="{Binding VerificationScriptStatusText}" Margin="0,3,0,0" MaxHeight="30" Foreground="{DynamicResource TextDim}" FontSize="10.5" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
@@ -1720,7 +1720,7 @@
                                             <Setter Property="Background" Value="{DynamicResource SurfaceInset}"/>
                                             <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
                                             <Setter Property="BorderThickness" Value="1"/>
-                                            <Setter Property="CornerRadius" Value="8"/>
+                                            <Setter Property="CornerRadius" Value="10"/>
                                             <Setter Property="VerticalAlignment" Value="Top"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsChecked, ElementName=ActivityLogToggle}" Value="True">
