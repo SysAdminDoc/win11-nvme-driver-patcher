@@ -140,7 +140,7 @@ public static class CliCommandRegistry
         new("bundle", ["export-bundle", "support-bundle"], CommandGroup.Diagnostics,
             "Export shareable support bundle (.zip: report + config + crash + regs + db)"),
         new("watchdog", [], CommandGroup.Diagnostics,
-            "Read watchdog verdict (exit: 0=healthy, 1=unstable, 2=warning; --auto-revert to arm)"),
+            "Read watchdog verdict (exit: 0=healthy, 1=unstable, 2=warning; --auto-revert runs the revert check now and can remove the patch)"),
         new("watchdog-service", ["service-status"], CommandGroup.Diagnostics,
             "Report real-time service state (exit: 0=running, 2=stopped, 3=not installed)"),
         new("reliability", [], CommandGroup.Diagnostics,
@@ -152,7 +152,7 @@ public static class CliCommandRegistry
         new("controllers", ["per-controller"], CommandGroup.Diagnostics,
             "Per-controller NVMe driver audit (bound driver, queue depth)"),
         new("tail", ["events-tail"], CommandGroup.Diagnostics,
-            "Live event-log tail (Storport/nvmedisk/disk IDs)"),
+            "Print the last hour of storage-stack System events (Storport/nvmedisk/disk IDs, up to 100)"),
         new("physical-disks", [], CommandGroup.Diagnostics,
             "MSFT_PhysicalDisk + StorageReliabilityCounter telemetry"),
         new("bypassio", [], CommandGroup.Diagnostics,
@@ -193,7 +193,7 @@ public static class CliCommandRegistry
 
         // ── Fleet & Admin ──
         new("register-tasks", [], CommandGroup.FleetAdmin,
-            "Register scheduled-task jobs (benchmark regression, firmware nudge)"),
+            "Register the boot-time watchdog check (with auto-revert) and an hourly watchdog sweep as scheduled tasks"),
         new("unregister-tasks", [], CommandGroup.FleetAdmin,
             "Remove all NVMe Patcher scheduled tasks"),
         new("policy-install", [], CommandGroup.FleetAdmin,
@@ -325,7 +325,8 @@ public static class CliCommandRegistry
         sb.AppendLine("  --no-server-key            Force the optional Server 2025 key off for this run");
         sb.AppendLine("  --dry-run, --preview       Preview changes without applying them (works with 'apply')");
         sb.AppendLine("  --unattended               No prompts, auto-reboot, non-zero exit on any blocker");
-        sb.AppendLine("  --json                     Emit machine-readable JSON (status, watchdog, controllers, recovery-proof, bypassio)");
+        sb.AppendLine("  --json                     Emit machine-readable JSON (status, preflight, recovery-proof, watchdog, reliability,");
+        sb.AppendLine("                             minidump, controllers, bypassio, firmware, benchmark, featurestore, verify-payload)");
 
         sb.AppendLine();
         sb.AppendLine("Exit codes:");
