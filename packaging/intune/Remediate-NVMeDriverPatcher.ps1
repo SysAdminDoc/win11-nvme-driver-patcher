@@ -4,13 +4,16 @@
   Intune remediation script for NVMe Driver Patcher.
 
 .DESCRIPTION
-  Pair with Check-NVMeDriverPatcher.ps1 under Devices > Scripts and remediations. Runs the CLI's
-  unattended apply and passes its exit code back to Intune: 0 is success, anything else failed.
+  Pair with Check-NVMeDriverPatcher.ps1 under Devices > Scripts and remediations. Refreshes the
+  recovery kit, runs the CLI's unattended apply and passes its exit code back to Intune: 0 is
+  success, anything else failed.
 
   It never passes --force or --force-unsupported-build. The CLI refuses apply on a Windows build
-  with no known enablement path, on a failed critical safety check, and when the recovery files
-  aren't in place, and a fleet remediation honors all three. The device isn't restarted unless
-  $restartAfterApply below is set to $true. The native driver loads on the next restart.
+  with no known enablement path, on a failed critical safety check, and when its recovery checks
+  don't pass (BitLocker recovery, System Restore on the system drive, SafeBoot entries that need
+  upgrade-safeboot first). A fleet remediation honors all of them and prints the CLI's reason.
+  The device isn't restarted unless $restartAfterApply below is set to $true. The native driver
+  loads on the next restart.
 
   Run it as SYSTEM in 64-bit PowerShell, same as the check script.
 
@@ -55,16 +58,43 @@ if (-not $cli) {
     exit 1
 }
 
+function Invoke-Cli {
+    param([string[]]$Arguments)
+    # A CLI that never starts leaves $LASTEXITCODE alone, so clear it first or a stale 0 reads
+    # as success.
+    $global:LASTEXITCODE = $null
+    try {
+        $text = (& $cli @Arguments) | Out-String
+    } catch {
+        return @{ Code = 1; Text = "Couldn't run the CLI: $($_.Exception.Message)" }
+    }
+    $code = if ($null -eq $LASTEXITCODE) { 1 } else { $LASTEXITCODE }
+    return @{ Code = $code; Text = $text }
+}
+
+function Write-Tail {
+    param([string]$Text)
+    # Intune keeps about 2,048 characters of output, so keep the end, where the result is.
+    @($Text -split "`r?`n" | Where-Object { $_.Trim() }) |
+        Select-Object -Last 20 | ForEach-Object { Write-Output $_ }
+}
+
+# apply refuses to run without a recovery kit from the last 30 days, so refresh it first. It
+# lands in the tool's working folder and replaces the previous kit.
+$kit = Invoke-Cli @('recovery-kit')
+if ($kit.Code -ne 0) {
+    Write-Tail $kit.Text
+    Write-Output "Couldn't create the recovery kit (exit $($kit.Code)), so apply wasn't attempted."
+    exit 1
+}
+Write-Output 'Recovery kit refreshed.'
+
 $cliArgs = @('apply', '--unattended')
 if (-not $restartAfterApply) { $cliArgs += '--no-restart' }
 
-$output = (& $cli @cliArgs) | Out-String
-$code = $LASTEXITCODE
-
-# Intune keeps about 2,048 characters of output, so keep the end, where the result is.
-$lines = @($output -split "`r?`n" | Where-Object { $_.Trim() })
-$lines | Select-Object -Last 20 | ForEach-Object { Write-Output $_ }
-if ($code -eq 0 -and -not $restartAfterApply) {
+$apply = Invoke-Cli $cliArgs
+Write-Tail $apply.Text
+if ($apply.Code -eq 0 -and -not $restartAfterApply) {
     Write-Output 'Applied. The native driver loads after the next restart.'
 }
-exit $code
+exit $apply.Code

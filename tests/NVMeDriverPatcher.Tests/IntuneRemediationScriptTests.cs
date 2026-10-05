@@ -47,19 +47,56 @@ public sealed class IntuneRemediationScriptTests : IDisposable
         Assert.Contains("Couldn't read status from the CLI: Access is denied.", garbled.StdOut, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(1)]
-    public void Remediate_RunsAnUnattendedApplyWithoutRestartAndPassesTheExitCodeBack(int cliExit)
+    [Fact]
+    public void Check_FindsTheEnvelopeAfterALogLineCarryingABracedGuid()
     {
-        var cli = WriteFakeCli($"@echo %*> \"%~dp0args.txt\"\r\n@echo Apply finished.\r\n@exit /b {cliExit}\r\n");
+        File.WriteAllText(Path.Combine(_tempRoot, "status.json"),
+            """{"schemaVersion":1,"command":"status","data":{"applied":true,"status":"applied","nativeActive":false,"applyAllowed":true}}""");
+        var cli = WriteFakeCli(
+            "@echo Restored HKLM\\SYSTEM\\CurrentControlSet\\Control\\SafeBoot\\Minimal\\{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}\r\n" +
+            "@type \"%~dp0status.json\"\r\n@exit /b 0\r\n");
+
+        var result = RunScript("Check-NVMeDriverPatcher.ps1", cli);
+
+        Assert.True(result.ExitCode == 0, result.StdOut + result.StdErr);
+        Assert.Contains("Compliant", result.StdOut, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0, new[] { "recovery-kit", "apply --unattended --no-restart" })]
+    [InlineData(0, 1, 1, new[] { "recovery-kit", "apply --unattended --no-restart" })]
+    [InlineData(1, 0, 1, new[] { "recovery-kit" })]
+    public void Remediate_RefreshesTheKitThenAppliesWithoutRestart(int kitExit, int applyExit, int expectedExit, string[] expectedCalls)
+    {
+        // apply refuses without a recovery kit from the last 30 days, so the kit comes first and a
+        // failed kit means apply never runs.
+        var cli = WriteFakeCli(
+            "@echo %*>> \"%~dp0args.txt\"\r\n" +
+            $"@if \"%1\"==\"recovery-kit\" (echo Kit written.& exit /b {kitExit})\r\n" +
+            $"@echo Apply finished.\r\n@exit /b {applyExit}\r\n");
 
         var result = RunScript("Remediate-NVMeDriverPatcher.ps1", cli);
 
-        Assert.True(result.ExitCode == cliExit, result.StdOut + result.StdErr);
-        Assert.Equal("apply --unattended --no-restart", File.ReadAllText(Path.Combine(_tempRoot, "args.txt")).Trim());
-        Assert.Contains("Apply finished.", result.StdOut, StringComparison.Ordinal);
-        Assert.Equal(cliExit == 0, result.StdOut.Contains("loads after the next restart", StringComparison.Ordinal));
+        Assert.True(result.ExitCode == expectedExit, result.StdOut + result.StdErr);
+        Assert.Equal(expectedCalls, File.ReadAllLines(Path.Combine(_tempRoot, "args.txt")).Select(line => line.Trim()));
+        Assert.Equal(kitExit == 0, result.StdOut.Contains("Recovery kit refreshed.", StringComparison.Ordinal));
+        Assert.Equal(kitExit != 0, result.StdOut.Contains("apply wasn't attempted", StringComparison.Ordinal));
+        Assert.Equal(expectedExit == 0, result.StdOut.Contains("loads after the next restart", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("Check-NVMeDriverPatcher.ps1")]
+    [InlineData("Remediate-NVMeDriverPatcher.ps1")]
+    public void BothScripts_FailWhenTheCliCannotStart(string script)
+    {
+        // Not a valid program, so CreateProcess refuses it. Nothing runs and no window opens.
+        var cli = Path.Combine(_tempRoot, "broken.exe");
+        File.WriteAllText(cli, "not a program");
+
+        var result = RunScript(script, cli);
+
+        Assert.True(result.ExitCode == 1, result.StdOut + result.StdErr);
+        Assert.Contains("Couldn't run the CLI", result.StdOut, StringComparison.Ordinal);
     }
 
     [Fact]

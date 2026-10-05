@@ -106,9 +106,11 @@ class Program
             // Recover any previous process that terminated after publishing Prepared/Applied but
             // before the reboot checkpoint became durable. RebootPending operations are left intact
             // for normal post-reboot verification.
+            // With --json, stdout carries only the envelope; scripts parse it whole.
+            bool jsonRequested = args.Any(a => a is not null && MatchesAny(a, "--json"));
             var interruptedRecovery = MutationLedgerService.RecoverInterrupted(
                 config.WorkingDir,
-                message => Console.WriteLine(message));
+                message => (jsonRequested ? Console.Error : Console.Out).WriteLine(message));
             if (!interruptedRecovery.Success)
             {
                 RecoverySafetyGateService.ObserveInterruptedRecovery(interruptedRecovery);

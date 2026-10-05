@@ -24,7 +24,11 @@ The Win32 app above installs the tool. To keep the patch applied across a fleet,
 
 The check script reads `NVMeDriverPatcher.Cli.exe status --json` and exits 1 only when the patch is missing or partial on a Windows build where apply is allowed. A device that's already patched, or already running the native driver, exits 0. So does a build with no known enablement path or with stale build rules, and the reason shows up in the script output column, so those devices read as "nothing to fix" instead of failing remediation on every run.
 
-The remediation script runs `apply --unattended --no-restart` and hands the CLI's exit code back to Intune. It never passes `--force` or `--force-unsupported-build`, so the CLI's own refusals still stand: a blocked build, a failed critical safety check, or recovery files that aren't in place all end the run with exit 1 and the CLI's reason in the output. The native driver loads at the device's next restart. If you'd rather restart right away, set `$restartAfterApply = $true` near the top of the remediation script before uploading it.
+The remediation script first runs `recovery-kit`, because apply won't run without a recovery kit from the last 30 days. The kit lands in the tool's working folder and replaces the previous one. Then it runs `apply --unattended --no-restart` and hands the CLI's exit code back to Intune. It never passes `--force` or `--force-unsupported-build`, so the CLI's own refusals still stand.
+
+Apply also wants System Protection turned on for the system drive, and on a BitLocker system drive it wants the volume fully encrypted with a recovery password protector. It stops on SafeBoot entries left by an older patch or another script until `upgrade-safeboot` has run once on that device. Any of these, like a blocked build or a failed safety check, ends the run with exit 1 and the CLI's reason in the output column.
+
+The native driver loads at the device's next restart. If you'd rather restart right away, set `$restartAfterApply = $true` near the top of the remediation script before uploading it.
 
 `Detect-NVMeDriverPatcher.ps1` stays the Win32 app's detection script. It only answers "is the tool installed", which is a different question from the remediation check's "is the patch in place".
 
