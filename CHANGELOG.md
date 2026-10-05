@@ -76,6 +76,14 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - The dry-run preview now lists all four SafeBoot keys apply writes (it left out the two
   `nvmedisk` service entries), shows what's in each key today instead of assuming it's empty,
   and says when a write replaces a value Windows put there. Its summary no longer ends in "..".
+- Screen readers and UI Automation tools can now reach the controls on every workspace page. The page switcher kept each page's content out of the accessibility tree, so the Theme menu, the benchmark button and everything else under the page title were invisible to them.
+- Switching between Dark and Light with the header button no longer leaves the status chip, the step markers and the warning and recovery badges in the old theme's colors. On a light background they were close to unreadable.
+- Dimmed text, the light theme's accent blue and its amber warning text now reach the WCAG AA contrast ratio of 4.5:1 on every surface they sit on. The HTML dashboard's light palette got the same fix.
+- Drives: a reading Windows can't provide (N/A) is now gray. It used to be colored as if the drive were cool, or as if it had no life left.
+- The empty temperature and wear charts no longer show bright corners behind their "No history yet" card.
+- The activity counts read "35 entries, 2 warnings, 0 errors" everywhere. The rail said "35  events, 2 advisories, 0 issues" for the same numbers (with a doubled space), and the badge said "issues".
+- A dry run's line in the activity log no longer starts with "Dry-run: Dry-run install".
+- On a Windows build with no known way to turn on the native driver, Overview no longer says the system "can proceed" and asks you to review the tradeoffs right above a notice that Apply is off. It now says there's no known way yet and suggests making a recovery kit in the meantime. When Apply is off because of an unfinished recovery instead, the notice says so rather than blaming the Windows build.
 
 ### Changed
 - Reworded app, tray, CLI and offline-doc text that used dashes as punctuation into plain
@@ -104,6 +112,12 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   was removed and Windows restarted. The Safe profile doesn't write it. The README has a new
   Troubleshooting entry for it, and the 24H2 build rule now records what that test install
   showed.
+- Shapes follow one corner radius scale. Status chips, step markers and list dots are square-cornered instead of pills and circles, and card corners match from page to page.
+- Plainer wording in the page subtitles, the four workflow steps, the recovery status, the Diagnostics rows and the Tuning page. "Mutation actions are disabled" now reads "Patch actions are turned off on this Windows build".
+- Settings: the Server 2025 key moved into Patch profile, since it changes what Apply writes. The two summary lines that repeated the controls under them are gone, and the restart delay shows its 5 to 300 second range next to the box.
+- Diagnostics shows its four checks as matching rows, dry run included, and each row says what its check looks for before you run it.
+- New tooltips on Create Recovery Kit, Run first benchmark, the four Diagnostics buttons, the Settings checkboxes and the activity log buttons.
+- The recovery card on Overview starts at the top instead of floating halfway down with empty space above it, and the activity rail's subtitle ("Saved on close · Event Log on") fits without being cut off.
 
 ### Docs
 - CLI help now describes what `register-tasks`, `tail` and `watchdog --auto-revert` actually do,
@@ -410,14 +424,14 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [5.4.0] - 2026-08-02
 
 ### Changed
-- **Unaudited-surface follow-up completed (2026-08-02)** - the offscreen workspace snapshot gate now
+- **Unaudited-surface follow-up completed (2026-08-02)**. The offscreen workspace snapshot gate now
   renders and asserts Dark, Light and High Contrast pages; WPF startup was placement-proved on the
   exact isolated virtual display and private desktop; the tray agent, all 85 Core service files and
   the 208 KB legacy PowerShell artifact received static/contract review; and malformed artifact-
   manifest, WinPE controller-report and recovery-kit manifest inputs are covered by fail-closed
   tests. No new findings were identified. Live pointer/keyboard interaction remains outside the
   mandatory invisible verification contract.
-- **Bundled `windows_build_rules.json` re-verified and refreshed (2026-08-02)** - every rule was
+- **Bundled `windows_build_rules.json` re-verified and refreshed (2026-08-02)**. Every rule was
   dated `2026-07-14`, and `BuildActionPolicyService` treats a review date older than 30 days as
   stale, so on **2026-08-13** apply would have become verify/rollback-only on every build with no
   code change, no release and no user action. All eight verdicts were re-checked against their
@@ -429,7 +443,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   with the FeatureStore fallback as the working path. The `26300-feature-flags-page` rule cited a
   community thread that did not actually evidence the Feature flags page. It now cites Microsoft's
   own Insider release notes, which document it, and records that native NVMe is not listed there.
-- **The 30-day staleness window is no longer a silent expiry** - it was doing its job (a rule
+- **The 30-day staleness window is no longer a silent expiry**. It was doing its job (a rule
   nobody has re-verified must not authorize a mutation), so the window stays at 30 days and
   `scripts/Validate-BuildRulesFreshness.ps1` makes the expiry visible instead. It fails a release
   whose bundled rules are already stale or would go stale within 14 days of shipping, and also
@@ -447,7 +461,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   capped, `model`/`firmware` length-capped and allowlisted, `verification`/`profile`/`watchdog`
   constrained to their enums) and only a normalized projection is persisted. A test asserts the
   worker's allowlists and the shipped schema stay in agreement.
-- **The CORS allowlist was not a request-blocking control** - the worker omitted
+- **The CORS allowlist was not a request-blocking control**. The worker omitted
   `Access-Control-Allow-Origin` for non-allowlisted origins but still executed the KV write, and
   omitting the header only stops an attacker reading the response, not the write landing. A simple
   cross-origin `POST` therefore made any website's visitors submit records. A request carrying a
@@ -460,13 +474,13 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   `RATE_LIMITER` binding was commented out in `wrangler.toml`, so a stock deployment silently
   degraded to that racy path. Both limiter bindings are now required and the KV counter is gone; a
   deployment missing either fails closed with `500` instead of degrading.
-- **`GET /nvme/compat/summary` ran ahead of the rate-limit gate** - the most expensive endpoint,
+- **`GET /nvme/compat/summary` ran ahead of the rate-limit gate**. The most expensive endpoint,
   which enumerates the KV namespace and recomputes the aggregate per request, was the one route
   with no throttle at all. The gate now runs before route dispatch so it covers every route, the
   summary has its own tighter budget (`SUMMARY_RATE_LIMITER`), the computed aggregate is cached for
   five minutes, and pagination stops at a page ceiling and reports `truncated` rather than scanning
   an unbounded namespace.
-- **Telemetry privacy claims did not match the implementation** - three defects each contradicted a
+- **Telemetry privacy claims did not match the implementation**. Three defects each contradicted a
   documented guarantee. Submitter IPs were hashed with an **unkeyed, unsalted** SHA-256 and
   persisted as KV keys, which the enumerable IPv4 space makes reversible, so "no IP addresses are
   stored" did not hold; no IP-derived value is persisted at all now. `env.SALT` silently defaulted
@@ -503,7 +517,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   default per-machine directory, and refuses any candidate whose directory grants write access to a
   non-administrative principal. `scripts/Test-PackageSandbox.ps1` no longer resolves
   `WindowsSandbox.exe` through `$PATH`.
-- **MSI never ACL-hardened `INSTALLFOLDER`** - the directory is user-selectable through
+- **MSI never ACL-hardened `INSTALLFOLDER`**. The directory is user-selectable through
   WixUI_InstallDir and inherited its parent's DACL, so an install outside Program Files left every
   shipped binary writable by a standard user while the MSI registered the watchdog as an auto-start
   service and invoked it from a deferred SYSTEM custom action: a direct write-to-SYSTEM-execution
@@ -511,7 +525,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   Administrators, SYSTEM/Administrators full, Users read+execute, no inheritance). Verified in the
   compiled MSI's `MsiLockPermissionsEx` table, and `scripts/Test-InstallFolderAcl.ps1` proves it
   lands at install time by installing into a deliberately user-writable parent.
-- **Watchdog packaging smoke launched `sc.exe` by bare name while running elevated** - a planted
+- **Watchdog packaging smoke launched `sc.exe` by bare name while running elevated**. A planted
   stub returning success would have made every SCM assertion in it pass against a service that was
   never registered. It now resolves `sc.exe` from System32.
 - **Bare-name execution gate extended beyond `src/`**: it now also scans `packaging/` and `scripts/`

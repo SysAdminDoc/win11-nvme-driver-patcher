@@ -10,6 +10,36 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
+- [ ] P3 — GUI font sizes have no scale
+  Category: ui
+  Where: `src/NVMeDriverPatcher/Views/*.xaml`, `Themes/*.xaml`
+  Problem: The XAML uses 18 different font sizes (10 through 27, including 10.5, 11.5, 12.5 and 13.5), set inline on each TextBlock. Neighboring labels drift by half a point and there's no token to change them together.
+  Evidence: 2026-10-05 polish pass: `grep FontSize=` counts 32 uses of 11.5, 27 of 12, 18 of 12.5 and 15 of 10.5, plus single uses of 13.5, 15 and 27.
+  Fix: Define a type ramp in the shared theme dictionary (caption, label, body, subtitle, title, display) as `sys:Double` resources or text styles, move inline sizes onto it, and add a test that fails on an inline size outside the ramp.
+  Acceptance: Every FontSize in Views resolves to a ramp token, and a test enforces it.
+  Confidence: Confirmed
+  Effort: M
+
+- [ ] P3 — Collapsed footer with GitHub and Docs links is never shown
+  Category: ui
+  Where: `MainWindow.xaml` `FooterActionsPanel`, `MainWindow.xaml.cs` compact-layout handler
+  Problem: The footer that holds the GitHub and Docs links is collapsed in every state, so there's no way to reach the docs or the project page from the GUI. Its separator dot is also the only place the `TextDimmer` token (below 4.5:1 on every theme) is used outside disabled controls.
+  Evidence: 2026-10-05 polish pass screenshots in all three themes; `FooterActionsPanel` is only touched by the compact-layout margin code.
+  Fix: Move the two links into Settings (an About row with the version) and delete the footer markup and its code-behind margin handling.
+  Acceptance: Docs and GitHub links are reachable from Settings, the footer is gone, and `TextDimmer` is only used for disabled states.
+  Confidence: Confirmed
+  Effort: S
+
+- [ ] P3 — OS recovery summary reads like a log line
+  Category: copy
+  Where: `OsRecoveryEvidenceService.Summary`, `PointInTimeRestoreSummary`, `QuickMachineRecoverySummary`
+  Problem: The Recovery page shows "OS-native recovery advisory. Point-in-Time Restore: {state}; {point}. Quick Machine Recovery: {state}; {auto}." The other Recovery copy now reads as plain sentences, and this one still uses semicolons and an "advisory" prefix.
+  Evidence: 2026-10-05 polish pass. The string is shared by the GUI, the CLI, the JSON report and tests, so it was left alone in the GUI copy pass.
+  Fix: Give the GUI its own sentence built from the state fields, or reword the Core summary and update the CLI and JSON consumers and their tests together.
+  Acceptance: The Recovery page states both features in plain sentences, and CLI and JSON output stay consistent with whatever the GUI shows.
+  Confidence: Confirmed
+  Effort: S
+
 - [ ] P3 — Preflight passes SafeBoot GUID keys that Windows write-protects
   Category: correctness
   Where: `CriticalEnvironmentProbeService.ProbeSafeBoot`, `SafeBootStateService.Classify`, `RealSafeBootRegistry.Read`
