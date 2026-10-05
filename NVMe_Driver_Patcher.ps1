@@ -322,7 +322,10 @@ function Get-RelaunchArgs {
 if (-not (Test-Administrator)) {
     $argList = Get-RelaunchArgs
     try {
-        Start-Process powershell.exe -ArgumentList $argList -Verb RunAs
+        # Absolute path: a bare name resolves through PATH and the current directory, and
+        # whatever it finds is what the UAC prompt elevates.
+        $powerShellPath = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
+        Start-Process -FilePath $powerShellPath -ArgumentList $argList -Verb RunAs
     }
     catch {
         if (-not $Silent -and -not $ExportDiagnostics -and -not $GenerateVerifyScript -and -not $ExportRecoveryKit) {
@@ -971,52 +974,65 @@ function Test-NativeNVMeActive {
     return $result
 }
 
-function Get-BypassIOStatus {
+# fsutil prints its BypassIO report in the Windows display language and only the English
+# phrasing is parsed here. Output it can't read leaves Supported at $null (unknown) instead of
+# reporting every non-English system as unsupported.
+function ConvertFrom-BypassIOState {
+    param([string]$Output)
+
     $result = @{
-        Supported    = $false
+        Supported    = $null
         StorageType  = "Unknown"
         DriverCompat = "Unknown"
         BlockedBy    = ""
-        RawOutput    = ""
+        RawOutput    = "$Output".Trim()
         Warning      = ""
     }
 
-    try {
-        $systemDrive = $env:SystemDrive + "\"
-        $output = & fsutil bypassio state $systemDrive 2>&1 | Out-String
-        $result.RawOutput = $output.Trim()
-
-        if ($output -match "is currently supported") {
-            $result.Supported = $true
-        }
-        elseif ($output -match "is not currently supported") {
-            $result.Supported = $false
-        }
-
-        if ($output -match "Storage Type:\s*(.+)") {
-            $result.StorageType = $matches[1].Trim()
-        }
-
-        if ($output -match "Storage Driver:\s*(.+)") {
-            $result.DriverCompat = $matches[1].Trim()
-        }
-
-        if ($output -match "Driver Name:\s*(.+)") {
-            $result.BlockedBy = $matches[1].Trim()
-        }
-        elseif ($output -match "Driver:\s*(\S+\.sys)") {
-            $result.BlockedBy = $matches[1].Trim()
-        }
-
-        if (-not $result.Supported -and $result.StorageType -eq "NVMe") {
-            $result.Warning = "Native NVMe driver does not support BypassIO. DirectStorage games may have higher CPU usage."
-        }
+    if ($Output -match "is currently supported") {
+        $result.Supported = $true
     }
-    catch {
-        $result.RawOutput = "Unable to check BypassIO: $($_.Exception.Message)"
+    elseif ($Output -match "is not currently supported") {
+        $result.Supported = $false
+    }
+
+    if ($Output -match "Storage Type:\s*(.+)") {
+        $result.StorageType = $matches[1].Trim()
+    }
+
+    if ($Output -match "Storage Driver:\s*(.+)") {
+        $result.DriverCompat = $matches[1].Trim()
+    }
+
+    if ($Output -match "Driver Name:\s*(.+)") {
+        $result.BlockedBy = $matches[1].Trim()
+    }
+    elseif ($Output -match "Driver:\s*(\S+\.sys)") {
+        $result.BlockedBy = $matches[1].Trim()
+    }
+
+    if ($null -eq $result.Supported) {
+        $result.Warning = "Couldn't read the BypassIO state. This script only understands English fsutil output, so on other display languages it stays unknown."
+    }
+    elseif (-not $result.Supported -and $result.StorageType -eq "NVMe") {
+        $result.Warning = "Native NVMe driver does not support BypassIO. DirectStorage games may have higher CPU usage."
     }
 
     return $result
+}
+
+function Get-BypassIOStatus {
+    try {
+        $systemDrive = $env:SystemDrive + "\"
+        $fsutil = Join-Path ([Environment]::SystemDirectory) 'fsutil.exe'
+        $output = & $fsutil bypassio state $systemDrive 2>&1 | Out-String
+        return ConvertFrom-BypassIOState -Output $output
+    }
+    catch {
+        $result = ConvertFrom-BypassIOState -Output ""
+        $result.RawOutput = "Unable to check BypassIO: $($_.Exception.Message)"
+        return $result
+    }
 }
 
 function Get-WindowsBuildDetails {
@@ -1219,7 +1235,10 @@ function Invoke-PreflightChecks {
     # BypassIO / DirectStorage Status
     Write-Log "  [10/11] Checking BypassIO / DirectStorage..." -Level "DEBUG"
     $script:BypassIOStatus = Get-BypassIOStatus
-    if ($script:BypassIOStatus.Supported) {
+    if ($null -eq $script:BypassIOStatus.Supported) {
+        $script:PreflightChecks.BypassIO = @{ Status = "Info"; Message = "Unknown (fsutil output not read)"; Critical = $false }
+    }
+    elseif ($script:BypassIOStatus.Supported) {
         $script:PreflightChecks.BypassIO = @{ Status = "Pass"; Message = "Supported"; Critical = $false }
     }
     else {
@@ -1402,7 +1421,8 @@ function Export-SystemDiagnostics {
 
     [void]$sb.AppendLine(); [void]$sb.AppendLine("BYPASSIO / DIRECTSTORAGE STATUS"); [void]$sb.AppendLine("-------------------------------")
     $bypassStatus = if ($script:BypassIOStatus) { $script:BypassIOStatus } else { Get-BypassIOStatus }
-    [void]$sb.AppendLine("BypassIO Supported: $(if ($bypassStatus.Supported) { 'Yes' } else { 'No' })")
+    [void]$sb.AppendLine("BypassIO Supported: $(if ($null -eq $bypassStatus.Supported) { 'Unknown' } elseif ($bypassStatus.Supported) { 'Yes' } else { 'No' })")
+    if ($null -eq $bypassStatus.Supported -and $bypassStatus.RawOutput) { [void]$sb.AppendLine("fsutil Output: $($bypassStatus.RawOutput)") }
     [void]$sb.AppendLine("Storage Type: $($bypassStatus.StorageType)")
     [void]$sb.AppendLine("Driver Compatibility: $($bypassStatus.DriverCompat)")
     if ($bypassStatus.BlockedBy) { [void]$sb.AppendLine("Blocked By: $($bypassStatus.BlockedBy)") }
@@ -1651,14 +1671,20 @@ Write-Host ""
 
 try {
     $systemDrive = $env:SystemDrive + "\"
-    $bypassOutput = & fsutil bypassio state $systemDrive 2>&1 | Out-String
+    $fsutil = Join-Path ([Environment]::SystemDirectory) 'fsutil.exe'
+    $bypassOutput = & $fsutil bypassio state $systemDrive 2>&1 | Out-String
 
+    # fsutil answers in the Windows display language; only the English phrasing is read here.
     if ($bypassOutput -match "is currently supported") {
         Write-Host "  [PASS] BypassIO is supported on $systemDrive" -ForegroundColor Green
     }
-    else {
+    elseif ($bypassOutput -match "is not currently supported") {
         Write-Host "  [WARN] BypassIO is NOT supported on $systemDrive" -ForegroundColor Yellow
         Write-Host "         DirectStorage games may have higher CPU usage." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "  [INFO] Couldn't read the BypassIO state for $systemDrive" -ForegroundColor Yellow
+        Write-Host "         This check only understands English fsutil output. See the raw output below." -ForegroundColor Yellow
     }
 
     Write-Host ""
@@ -1771,7 +1797,9 @@ Windows Registry Editor Version 5.00
 "@
 
     $regFile = Join-Path $kitDir "NVMe_Remove_Patch.reg"
-    $regContent | Out-File -FilePath $regFile -Encoding Unicode -NoNewline
+    # regedit expects CRLF and a line break after the last entry, or it can drop that entry.
+    # The here-string carries this script file's own line endings, so normalize explicitly.
+    (($regContent -replace "`r?`n", "`r`n") + "`r`n") | Out-File -FilePath $regFile -Encoding Unicode -NoNewline
 
     # Generate batch file for WinRE (handles offline hive loading)
     $batContent = @"
@@ -1786,7 +1814,7 @@ echo.
 
 :: Detect WinRE/WinPE. HKLM\SYSTEM\CurrentControlSet exists in both full Windows
 :: and the recovery environment, so it is not a reliable discriminator.
-reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinPE" >nul 2>&1
+"%SystemRoot%\System32\reg.exe" query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinPE" >nul 2>&1
 if %errorlevel% neq 0 (
     echo Detected: Running in Windows
     echo.
@@ -1861,7 +1889,8 @@ pause
 "@
 
     $batFile = Join-Path $kitDir "Remove_NVMe_Patch.bat"
-    $batContent | Out-File -FilePath $batFile -Encoding ASCII
+    # cmd.exe misreads LF-only batch files (GOTO can miss a label), so write CRLF here too.
+    ($batContent -replace "`r?`n", "`r`n") | Out-File -FilePath $batFile -Encoding ASCII
 
     # Generate README
     $readmeContent = @"
@@ -2989,7 +3018,7 @@ function Uninstall-NVMePatch {
             $result = Show-ConfirmDialog -Title "Removal Complete" -Message $restartMsg
             if ($result) {
                 Write-Log "Initiating system restart in $($script:Config.RestartDelay) seconds..."
-                Start-Process "shutdown.exe" -ArgumentList "/r /t $($script:Config.RestartDelay) /c `"NVMe Driver Patch Removed - Restarting in $($script:Config.RestartDelay) seconds. Save your work!`""
+                Start-Process -FilePath (Join-Path ([Environment]::SystemDirectory) 'shutdown.exe') -ArgumentList "/r /t $($script:Config.RestartDelay) /c `"NVMe Driver Patch Removed - Restarting in $($script:Config.RestartDelay) seconds. Save your work!`""
             }
         }
         return $true
@@ -3056,7 +3085,7 @@ function Show-ConfirmDialog {
     }
 
     if ($script:BitLockerEnabled) {
-        [void]$warnings.Add("[!] BITLOCKER ACTIVE - Will be automatically suspended for one reboot to prevent recovery key prompt.")
+        [void]$warnings.Add("[i] BITLOCKER ACTIVE: This script doesn't suspend BitLocker. Keep your recovery key handy in case Windows asks for it after the restart.")
     }
 
     foreach ($sw in $script:IncompatibleSoftware) {
@@ -3775,7 +3804,7 @@ if ($script:ui['TxtRestartDelay']) {
 }
 if ($script:ui['BtnOpenFolder']) {
     $script:ui['BtnOpenFolder'].Add_Click({
-        Start-Process "explorer.exe" -ArgumentList $script:Config.WorkingDir
+        Start-Process -FilePath (Join-Path ([Environment]::GetFolderPath('Windows')) 'explorer.exe') -ArgumentList $script:Config.WorkingDir
     })
 }
 
@@ -3932,7 +3961,7 @@ $script:window.Add_ContentRendered({
     $funcNames = @('Get-WindowsBuildDetails', 'Get-NVMeHealthData', 'Get-SystemDrives',
                    'Test-BitLockerEnabled', 'Test-VeraCryptSystemEncryption', 'Get-IncompatibleSoftware',
                    'Test-LaptopChassis', 'Get-StorageDiskMigration', 'Get-NVMeDriverInfo', 'Test-NativeNVMeActive',
-                   'Get-BypassIOStatus', 'Test-PatchStatus', 'Invoke-PreflightChecks',
+                   'ConvertFrom-BypassIOState', 'Get-BypassIOStatus', 'Test-PatchStatus', 'Invoke-PreflightChecks',
                    'Test-UpdateAvailable')
     $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
     # Write-Log in the background runspace: collects messages for replay on UI thread
