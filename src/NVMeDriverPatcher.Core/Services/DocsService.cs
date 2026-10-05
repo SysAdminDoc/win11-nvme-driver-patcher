@@ -37,10 +37,14 @@ lost in exchange, which affects DirectStorage-aware games.
         ["profiles"] = @"
 Safe profile (default)    Writes only the primary feature flag (735209102) + both
                           SafeBoot keys. Community BSOD reports cluster on the two
-                          extended flags — Safe mode avoids them.
+                          extended flags, and Safe mode avoids them.
 Full profile              Adds UxAccOptimization (1853569164) and Standalone_Future
                           (156965516). Higher peak performance on some drives; higher
-                          BSOD correlation per early 2026 community threads.
+                          BSOD correlation per early 2026 community threads. While
+                          156965516 is set, DISM /ScanHealth reports component store
+                          corruption (seen on 24H2 26100.9550). SFC stays clean, and
+                          the report clears once the patch is removed and Windows
+                          restarts.
 
 Flip via `apply --safe` / `apply --full` or the GUI's Install Mode radio.
 ",

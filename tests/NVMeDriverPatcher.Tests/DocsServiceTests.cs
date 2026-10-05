@@ -129,6 +129,22 @@ public sealed class DocsServiceTests
         Assert.All(safeBootDeletes, line => Assert.Contains(" /ve /f", line));
     }
 
+    [Fact]
+    public void FullProfileDocs_WarnThatStandaloneFutureTripsDismScanHealth()
+    {
+        // Issue #19: on 24H2 26100.9550, override 156965516 alone made DISM /ScanHealth report
+        // reverse-delta payloads as corrupt until it was removed. The Full profile writes it, so
+        // the offline docs and README both have to say so before someone picks Full.
+        var profiles = DocsService.Render("profiles");
+        Assert.Contains("156965516", profiles);
+        Assert.Contains("DISM /ScanHealth", profiles);
+        Assert.Contains("SFC stays clean", profiles);
+
+        var readme = File.ReadAllText(Path.Combine(RepoRoot(), "README.md"));
+        Assert.Contains("### DISM /ScanHealth reports component store corruption", readme);
+        Assert.Contains("(#dism-scanhealth-reports-component-store-corruption)", readme);
+    }
+
     private static string RepoRoot([CallerFilePath] string sourceFile = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFile)!, "..", ".."));
 }
