@@ -10,15 +10,15 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
-- [ ] P3 — `NvmeIdentifyService.Query` ignores the protocol-level result; zeroed buffers can report as successful identifies
+- [ ] P3 — NVMe Identify has never been seen working on a real drive; pass-through may be refused for Identify
   Category: correctness
-  Where: `src/NVMeDriverPatcher.Core/Services/NvmeIdentifyService.cs:147-198`
-  Problem: After `DeviceIoControl` returns TRUE, `ReturnStatus`/`ErrorCode` in the returned `STORAGE_PROTOCOL_COMMAND` header are never re-read; `Success=true` unconditionally. A controller failing the NVMe command yields empty model/serial/"0x0000" VID as a successful identify, feeding `DiagnosticsService.BuildTrustLedger` and `FirmwareCompatService` identity.
-  Evidence: Marshal path read — header not re-read after the call.
-  Fix: `Marshal.PtrToStructure` the header post-call; gate `Success` on `ReturnStatus == STORAGE_PROTOCOL_STATUS_SUCCESS`.
-  Acceptance: Unit test on the parse path with a nonzero ReturnStatus fixture reports failure.
+  Where: `src/NVMeDriverPatcher.Core/Services/NvmeIdentifyService.cs` (`Query`); consumers are the CLI `identify` command, `ApstInspectorService` (Identify power states) and `DiagnosticsService`
+  Problem: Until the protocol-status fix, the request used IOCTL code 0x2DD4C0 (function 0x530, not IOCTL_STORAGE_PROTOCOL_COMMAND) and left CommandSpecific at 0, so every Query most likely failed inside DeviceIoControl and callers quietly fell back. The corrected request (0x2DD3C0, NVMe admin CommandSpecific) is pinned against winioctl.h by tests but hasn't run on hardware. Microsoft's NVMe guide shows Identify going through IOCTL_STORAGE_QUERY_PROPERTY and describes protocol-command pass-through for vendor-specific commands, so stornvme/nvmedisk may still refuse this request.
+  Evidence: The ReturnStatus gate now reports any refusal as a failure instead of an empty identity, so nothing breaks either way; the open question is whether Identify data ever arrives.
+  Fix: From an elevated shell run `NVMeDriverPatcher.Cli identify` on a stornvme-bound and an nvmedisk-bound drive. If the request is refused (Win32 error or a non-success protocol status), switch `Query` to IOCTL_STORAGE_QUERY_PROPERTY with StorageAdapterProtocolSpecificProperty / NVMeDataTypeIdentify / CNS controller, which also works on a handle opened with no access rights.
+  Acceptance: `identify` prints the real model, serial, firmware and VID on at least one drive per driver, and the APST inspector shows Identify power states.
   Confidence: Likely
-  Effort: S
+  Effort: M
 
 - [ ] P3 — WinRE `winre.wim` backups (0.5–1 GB each) accumulate unboundedly and no cleanup path knows about them
   Category: reliability
