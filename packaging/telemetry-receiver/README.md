@@ -28,8 +28,8 @@ npm run deploy
 ```
 
 `npm run check` should list `env.COMPAT` as a KV Namespace and both limiters as Rate Limit
-bindings. If `COMPAT` shows up as an Environment Variable instead, the `[[kv_namespaces]]` table
-has been turned back into a line under `[vars]`.
+bindings. If it lists `env.kv_namespaces` as an Environment Variable and no `COMPAT` at all, the
+`[[kv_namespaces]]` table has been turned back into a line under `[vars]`.
 
 ## CORS allowlist (browser submissions)
 
