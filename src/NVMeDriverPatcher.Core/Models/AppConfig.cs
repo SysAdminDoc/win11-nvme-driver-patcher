@@ -155,7 +155,7 @@ public class AppConfig
     /// Windows' own entry on current builds says "NvmeDisk" (issue #13) and never matches.
     /// </summary>
     public static bool IsPatchSafeBootDefault(string? value) =>
-        string.Equals(value?.Trim(), SafeBootValue, StringComparison.OrdinalIgnoreCase);
+        string.Equals(value, SafeBootValue, StringComparison.OrdinalIgnoreCase);
 
     public static readonly Dictionary<string, string> FeatureNames = new()
     {

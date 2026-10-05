@@ -29,6 +29,7 @@ public sealed class ThirdPartyResidueTests
         Assert.Contains("SafeBoot Minimal and Network entries", check.Message, StringComparison.Ordinal);
         Assert.Contains("no NVMe override is", check.Message, StringComparison.Ordinal);
         Assert.Contains("Remove clears them", check.Message, StringComparison.Ordinal);
+        Assert.Contains("run the SafeBoot upgrade first", check.Message, StringComparison.Ordinal);
         Assert.Contains(@"Policies\Microsoft registry tree is gone", check.Message, StringComparison.Ordinal);
         Assert.Contains("gpupdate /force", check.Message, StringComparison.Ordinal);
     }
@@ -113,7 +114,8 @@ public sealed class ThirdPartyResidueTests
     [Theory]
     [InlineData("Storage Disks", true)]
     [InlineData("Storage disks", true)]
-    [InlineData("STORAGE DISKS ", true)]
+    [InlineData("STORAGE DISKS", true)]
+    [InlineData("Storage Disks ", false)]
     [InlineData("NvmeDisk", false)]
     [InlineData("", false)]
     [InlineData(null, false)]
