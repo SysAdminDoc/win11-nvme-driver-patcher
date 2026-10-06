@@ -276,7 +276,7 @@ NVMeDriverPatcher.Cli config-export --export=<path>        # Export config bundl
 NVMeDriverPatcher.Cli config-import --import=<path>        # Import config bundle
 ```
 
-When you redirect the CLI's output to a file or a pipe, it's written as UTF-8 without a BOM, so `NVMeDriverPatcher.Cli dry-run > plan.md` keeps the arrows in the "Before → After" column. Output to the console itself is unchanged, and the CLI never changes your console's code page. Windows PowerShell 5.1 reads a program's output in the console code page, so run `[Console]::OutputEncoding = [Text.Encoding]::UTF8` first if you capture the output there.
+When you redirect the CLI's output to a file or a pipe, it's written as UTF-8 without a BOM, so `NVMeDriverPatcher.Cli dry-run > plan.md` from cmd or PowerShell 7.4+ keeps the arrows in the "Before → After" column. Output to the console itself is unchanged, and the CLI never changes your console's code page. Windows PowerShell 5.1 decodes a program's output with the console code page and writes `>` files as UTF-16, so run `[Console]::OutputEncoding = [Text.Encoding]::UTF8` first there, and pipe to `Out-File -Encoding utf8` if you need a UTF-8 file. The PowerShell module and the Intune remediation script already decode it as UTF-8.
 
 **Exit Codes (Silent Mode):**
 

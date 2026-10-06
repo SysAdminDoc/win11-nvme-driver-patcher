@@ -63,12 +63,21 @@ function Invoke-Cli {
     # A CLI that never starts leaves $LASTEXITCODE alone, so clear it first or a stale 0 reads
     # as success.
     $global:LASTEXITCODE = $null
+    # The CLI writes UTF-8 when its output is captured; decode it that way. Intune runs this
+    # without a console, which can refuse the change, and then the output reads as before.
+    $previousEncoding = $null
+    try {
+        $previousEncoding = [Console]::OutputEncoding
+        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    } catch { $previousEncoding = $null }
     try {
         $text = (& $cli @Arguments) | Out-String
+        $code = if ($null -eq $LASTEXITCODE) { 1 } else { $LASTEXITCODE }
     } catch {
         return @{ Code = 1; Text = "Couldn't run the CLI: $($_.Exception.Message)" }
+    } finally {
+        if ($null -ne $previousEncoding) { try { [Console]::OutputEncoding = $previousEncoding } catch { } }
     }
-    $code = if ($null -eq $LASTEXITCODE) { 1 } else { $LASTEXITCODE }
     return @{ Code = $code; Text = $text }
 }
 

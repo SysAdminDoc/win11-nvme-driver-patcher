@@ -167,7 +167,7 @@ public static class RecoveryProofGateService
         {
             var sb = SafeBootUpgradeService.Evaluate();
             var registry = new RealSafeBootRegistry();
-            bool windowsOwnsGuidKeys = registry.Read(AppConfig.SafeBootMinimalPath).WindowsOwned ||
+            bool windowsOwnsGuidKeys = registry.Read(AppConfig.SafeBootMinimalPath).WindowsOwned &&
                                        registry.Read(AppConfig.SafeBootNetworkPath).WindowsOwned;
             return ClassifySafeBootEntries(sb.GuidEntriesPresent, sb.ServiceEntriesComplete, windowsOwnsGuidKeys);
         }
@@ -192,9 +192,11 @@ public static class RecoveryProofGateService
         {
             Label = "SafeBoot entries",
             Passed = true,
-            Detail = windowsOwnsGuidKeys
-                ? "Windows' own GUID entries are in place and stay as they are. Apply adds the service-name entries"
-                : "No SafeBoot entries from this tool yet. Apply creates them"
+            Detail = !windowsOwnsGuidKeys
+                ? "No SafeBoot entries from this tool yet. Apply creates them"
+                : serviceEntriesComplete
+                    ? "Windows' own GUID entries are in place and stay as they are, and the service-name entries are present"
+                    : "Windows' own GUID entries are in place and stay as they are. Apply adds the service-name entries"
         };
     }
 

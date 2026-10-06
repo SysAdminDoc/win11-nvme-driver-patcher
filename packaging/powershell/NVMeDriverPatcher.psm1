@@ -130,9 +130,22 @@ function Invoke-Cli {
         [string[]] $Arguments = @()
     )
     $cli = Get-CliPath
-    $stdout = & $cli $Command @Arguments 2>&1
+    # The CLI writes UTF-8 when its output is captured, and Windows PowerShell decodes a program's
+    # output with [Console]::OutputEncoding, so match it for this call. A host without a console
+    # can refuse the change; the output is then decoded as before.
+    $previousEncoding = $null
+    try {
+        $previousEncoding = [Console]::OutputEncoding
+        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    } catch { $previousEncoding = $null }
+    try {
+        $stdout = & $cli $Command @Arguments 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        if ($null -ne $previousEncoding) { try { [Console]::OutputEncoding = $previousEncoding } catch { } }
+    }
     [PSCustomObject]@{
-        ExitCode = $LASTEXITCODE
+        ExitCode = $exitCode
         Output   = $stdout
         Raw      = ($stdout -join "`n")
     }

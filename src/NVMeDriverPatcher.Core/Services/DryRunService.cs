@@ -21,6 +21,7 @@ public class DryRunReport
     public bool IncludeStandaloneFuture { get; set; }
     public int TotalWrites { get; set; }
     public int TotalCreates { get; set; }
+    public int TotalDeletes { get; set; }
     public RegistryOverrideAssessment? RegistryOverrideAssessment { get; set; }
     public List<DryRunPlanItem> Items { get; set; } = new();
     public List<string> PreflightBlockers { get; set; } = new();
@@ -89,8 +90,27 @@ public static class DryRunService
                 ? OverrideRow(mutation, current, mirrorNote)
                 : SafeBootRow(mutation, current, mirrorNote));
         }
+        // #19: apply clears a 156965516 left by an earlier Full install when this one doesn't write it.
+        if (!report.IncludeStandaloneFuture)
+        {
+            foreach (var subKey in MutationLedgerService.FeatureOverrideSubKeys(mirrorControlSets))
+            {
+                var current = readCurrent(subKey, AppConfig.StandaloneFutureFeatureID);
+                if (current.Value is null) continue;
+                report.Items.Add(new DryRunPlanItem
+                {
+                    Action = "DELETE",
+                    Target = $@"HKEY_LOCAL_MACHINE\{subKey}",
+                    ValueName = AppConfig.StandaloneFutureFeatureID,
+                    Before = Convert.ToString(current.Value, System.Globalization.CultureInfo.InvariantCulture) ?? "(absent)",
+                    After = "(absent)",
+                    Note = "Left by an earlier Full install. This profile doesn't include it, so apply clears it."
+                });
+            }
+        }
         report.TotalWrites = report.Items.Count(item => item.Action == "WRITE");
         report.TotalCreates = report.Items.Count(item => item.Action == "CREATE");
+        report.TotalDeletes = report.Items.Count(item => item.Action == "DELETE");
 
         if (preflight is not null)
         {
@@ -203,7 +223,9 @@ public static class DryRunService
     {
         var sb = new StringBuilder();
         sb.Append("Dry-run install: ");
-        sb.Append($"{report.TotalWrites} value write(s), {report.TotalCreates} new key(s). ");
+        sb.Append($"{report.TotalWrites} value write(s), {report.TotalCreates} new key(s)");
+        if (report.TotalDeletes > 0) sb.Append($", {report.TotalDeletes} leftover value(s) cleared");
+        sb.Append(". ");
         sb.Append("Scope: machine-wide across every eligible NVMe drive/controller; per-drive exclusions are not enforced. ");
         sb.Append($"Profile: {report.Profile}");
         if (report.IncludeServerKey) sb.Append(" + Server 2025 key");

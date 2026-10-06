@@ -28,6 +28,9 @@ public sealed class SafeModeVerifyScriptServiceTests : IDisposable
         Assert.Contains(AppConfig.SafeBootServiceName, script);
         Assert.Contains(AppConfig.SafeBootValue, script);
         Assert.Contains(AppConfig.SafeBootServiceValue, script);
+        // 26100.9550's own TrustedInstaller-owned GUID keys hold 'NvmeDisk' and the patch keeps them,
+        // so the script must accept that value instead of reporting a miss on a working machine.
+        Assert.Contains("-in @('" + AppConfig.SafeBootValue + "', 'NvmeDisk')", script);
     }
 
     [Fact]

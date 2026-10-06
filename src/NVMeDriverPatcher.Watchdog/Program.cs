@@ -23,6 +23,7 @@ internal static class Program
 
     public static async Task<int> Main(string[] args)
     {
+        RedirectedConsoleEncoding.UseUtf8WhenRedirected();
         if (args.Length > 0 && IsControlVerb(args[0]))
             return HandleServiceControl(args[0]);
 

@@ -825,7 +825,8 @@ public partial class MainViewModel : ObservableObject
         {
             bool isSet = status.Keys.Contains(id);
             string name = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn.Split('(')[0].Trim() : "Unknown";
-            bool optional = id == AppConfig.StandaloneFutureFeatureID && !Config.IncludeStandaloneFuture && !isSet;
+            bool planned = Config.PatchProfile == PatchProfile.Full && Config.IncludeStandaloneFuture;
+            bool optional = id == AppConfig.StandaloneFutureFeatureID && !planned && !isSet;
             RegistryFlags.Add(new RegistryFlagVM { Id = id, Name = optional ? $"{name} (optional)" : name, IsSet = isSet, IsOptional = optional });
         }
 

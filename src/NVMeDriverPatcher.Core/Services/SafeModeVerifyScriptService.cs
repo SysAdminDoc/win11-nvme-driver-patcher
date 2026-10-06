@@ -30,7 +30,9 @@ public static class SafeModeVerifyScriptService
         sb.AppendLine("    param([string]$Scope)");
         sb.AppendLine("    $guidKey = \"HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SafeBoot\\$Scope\\" + AppConfig.SafeBootGuid + "\"");
         sb.AppendLine("    $svcKey  = \"HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SafeBoot\\$Scope\\" + AppConfig.SafeBootServiceName + "\"");
-        sb.AppendLine("    $guidOk = (Test-Path $guidKey) -and ((Get-ItemProperty $guidKey -ErrorAction SilentlyContinue).'(default)' -eq '" + AppConfig.SafeBootValue + "')");
+        // 24H2 26100.9550 ships its own TrustedInstaller-owned GUID keys with 'NvmeDisk', which the
+        // patch leaves alone, so either value means Safe Mode has the entry.
+        sb.AppendLine("    $guidOk = (Test-Path $guidKey) -and ((Get-ItemProperty $guidKey -ErrorAction SilentlyContinue).'(default)' -in @('" + AppConfig.SafeBootValue + "', 'NvmeDisk'))");
         sb.AppendLine("    $svcOk  = (Test-Path $svcKey)  -and ((Get-ItemProperty $svcKey  -ErrorAction SilentlyContinue).'(default)' -eq '" + AppConfig.SafeBootServiceValue + "')");
         sb.AppendLine("    $guidStatus = if ($guidOk) { '[OK]  ' } else { '[MISS]' }");
         sb.AppendLine("    $svcStatus  = if ($svcOk)  { '[OK]  ' } else { '[MISS]' }");

@@ -7,7 +7,7 @@ class Program
 {
     static int Main(string[] args)
     {
-        CliConsoleEncoding.UseUtf8WhenRedirected();
+        RedirectedConsoleEncoding.UseUtf8WhenRedirected();
         try
         {
             RecoverySafetyGateService.Reset();
@@ -1511,6 +1511,7 @@ class Program
             Console.WriteLine("No firmware-update marker found. Re-applying the current configured profile.");
 
         config.PatchProfile = profile;
+        FirmwareUpdateWorkflowService.RestoreMarkedOptions(marker, config);
         Console.WriteLine($"Re-enabling Native NVMe ({profile} profile) after the firmware update...");
 
         // Thread the build-policy override through. Without it the refusal message told the

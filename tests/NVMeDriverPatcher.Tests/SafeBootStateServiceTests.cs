@@ -239,6 +239,37 @@ public sealed class SafeBootStateServiceTests
     }
 
     [Fact]
+    public void Restore_KeyWindowsTookOverAfterApply_IsLeftAloneNotAFailure()
+    {
+        // Patched on a build without the GUID keys (baseline: absent), then servicing added its own
+        // TrustedInstaller-owned keys. Remove plans a whole-key delete that Windows refuses; there's
+        // nothing of this tool's left to undo, so it mustn't strand remove as a failure.
+        var reg = new FakeSafeBootRegistry();
+        var journal = SafeBootStateService.CaptureJournal(reg, "2026-10-05T00:00:00Z");
+        reg.Set(AppConfig.SafeBootMinimalPath, WindowsOwnedNvmeDisk());
+        reg.Set(AppConfig.SafeBootNetworkPath, WithDefault(ExpectedDefault));   // this tool's write
+        reg.WriteProtected.Add(AppConfig.SafeBootMinimalPath);
+        var log = new List<string>();
+
+        var failures = SafeBootStateService.RestoreFromJournal(reg, journal, log.Add);
+
+        Assert.Empty(failures);
+        Assert.Contains(log, line => line.Contains(AppConfig.SafeBootMinimalPath, StringComparison.Ordinal) &&
+                                     line.Contains("Windows took it over", StringComparison.Ordinal));
+        Assert.True(reg.Read(AppConfig.SafeBootMinimalPath).WindowsOwned);
+        Assert.False(reg.Read(AppConfig.SafeBootNetworkPath).Existed);   // ours is still removed
+    }
+
+    [Fact]
+    public void BaselineCheck_AcceptsAWindowsOwnedKeyButNotThisToolsLeftover()
+    {
+        Assert.True(SafeBootStateService.IsAtBaselineOrWindowsOwned(Absent(), WindowsOwnedNvmeDisk()));
+        Assert.True(SafeBootStateService.IsAtBaselineOrWindowsOwned(WithDefault("NvmeDisk"), WithDefault("NvmeDisk")));
+        Assert.False(SafeBootStateService.IsAtBaselineOrWindowsOwned(Absent(), WithDefault(ExpectedDefault)));
+        Assert.False(SafeBootStateService.IsAtBaselineOrWindowsOwned(WithDefault("NvmeDisk"), WithDefault(ExpectedDefault)));
+    }
+
+    [Fact]
     public void Journal_KeepsOwnershipThroughDisk()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"NVMeDriverPatcher.SafeBoot.{Guid.NewGuid():N}");

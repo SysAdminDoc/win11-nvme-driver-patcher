@@ -600,7 +600,7 @@ public static class MutationLedgerService
             try
             {
                 var actual = safeBoot.Read(expected.Path);
-                if (!SafeBootSnapshotsEqual(expected.ToSnapshot(), actual))
+                if (!SafeBootStateService.IsAtBaselineOrWindowsOwned(expected.ToSnapshot(), actual))
                     differences.Add("SafeBoot key differs from baseline: " + expected.Path);
             }
             catch (Exception ex)
@@ -796,9 +796,6 @@ public static class MutationLedgerService
           left.IntegerData == right.IntegerData &&
           (left.StringArrayData ?? new()).SequenceEqual(right.StringArrayData ?? new(), StringComparer.Ordinal) &&
           string.Equals(left.BinaryBase64, right.BinaryBase64, StringComparison.Ordinal)));
-
-    private static bool SafeBootSnapshotsEqual(SafeBootKeySnapshot left, SafeBootKeySnapshot right) =>
-        SafeBootStateService.SnapshotsMatch(left, right);
 
     private static MutationOperationLedger? LoadUnsafe(string workingDir)
     {
