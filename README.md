@@ -256,7 +256,7 @@ NVMeDriverPatcher.Cli minidump                             # NVMe-stack crash sc
 NVMeDriverPatcher.Cli controllers [--json]                 # Bound driver plus read-only candidate/rank evidence
 NVMeDriverPatcher.Cli bypassio                             # Per-volume BypassIO + named-game gaming impact
 NVMeDriverPatcher.Cli bypassio --history                   # Pre/post patch BypassIO comparison
-NVMeDriverPatcher.Cli apst                                 # APST state + battery impact estimate
+NVMeDriverPatcher.Cli apst                                 # how Windows idles the drive + battery estimate
 NVMeDriverPatcher.Cli identify                             # NVMe Identify Controller dump
 NVMeDriverPatcher.Cli bundle                               # Export support bundle (.zip)
 NVMeDriverPatcher.Cli diagnostics                          # Export diagnostics report (.txt)

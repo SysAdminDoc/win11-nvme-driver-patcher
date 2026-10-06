@@ -269,4 +269,37 @@ internal static partial class NativeMethods
         uint ulFlags);
 
     internal const uint CM_LOCATE_DEVNODE_NORMAL = 0x00000000;
+
+    // ========================================================================
+    // powrprof.dll - Active power plan values (readable without elevation)
+    // ========================================================================
+
+    [LibraryImport("powrprof.dll")]
+    internal static partial uint PowerGetActiveScheme(IntPtr userRootPowerKey, out IntPtr activePolicyGuid);
+
+    [LibraryImport("powrprof.dll")]
+    internal static partial uint PowerReadACValueIndex(
+        IntPtr rootPowerKey, in Guid schemeGuid, in Guid subGroupOfPowerSettingsGuid, in Guid powerSettingGuid, out uint acValueIndex);
+
+    [LibraryImport("powrprof.dll")]
+    internal static partial uint PowerReadDCValueIndex(
+        IntPtr rootPowerKey, in Guid schemeGuid, in Guid subGroupOfPowerSettingsGuid, in Guid powerSettingGuid, out uint dcValueIndex);
+
+    [LibraryImport("kernel32.dll")]
+    internal static partial IntPtr LocalFree(IntPtr hMem);
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct SYSTEM_POWER_STATUS
+    {
+        public byte ACLineStatus;   // 0 offline, 1 online, 255 unknown
+        public byte BatteryFlag;
+        public byte BatteryLifePercent;
+        public byte SystemStatusFlag;
+        public uint BatteryLifeTime;
+        public uint BatteryFullLifeTime;
+    }
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
 }

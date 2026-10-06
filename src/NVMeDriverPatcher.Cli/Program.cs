@@ -575,13 +575,16 @@ class Program
         var report = ApstInspectorService.Inspect();
         Console.WriteLine(report.Summary);
         foreach (var s in report.States)
-            Console.WriteLine($"  PS{s.PowerStateNumber}  max={(s.MaxPowerWatts is double watts ? $"{watts:0.####}W" : "n/a")}  idle={(s.IdleTimeMicroseconds is int idle ? $"{idle}us" : "n/a")}  entry={s.EntryLatencyUs}us  exit={s.ExitLatencyUs}us  nonOp={s.NonOperational}");
+            Console.WriteLine($"  PS{s.PowerStateNumber}  max={(s.MaxPowerWatts is double watts ? $"{watts:0.####}W" : "n/a")}  idle={(s.IdleTimeMicroseconds is int idle ? $"{idle / 1000.0:0.###}ms" : "n/a")}  entry={s.EntryLatencyUs}us  exit={s.ExitLatencyUs}us  nonOp={s.NonOperational}");
+        foreach (var (label, plan) in new[] { ("AC", report.PowerPlanAc), ("DC", report.PowerPlanDc) })
+            if (plan is not null)
+                Console.WriteLine($"  Power plan {label}: primary idle {plan.PrimaryIdleTimeoutMs} ms (latency {plan.PrimaryLatencyToleranceMs} ms), secondary idle {plan.SecondaryIdleTimeoutMs} ms (latency {plan.SecondaryLatencyToleranceMs} ms)");
         if (report.BatteryEstimate is { } est)
         {
             Console.WriteLine();
             Console.WriteLine("Battery impact estimate:");
             Console.WriteLine($"  System type:    {(est.IsLaptop ? "Laptop" : "Desktop")}");
-            Console.WriteLine($"  APST honored:   {(est.ApstHonored ? "Yes" : "No")}");
+            Console.WriteLine($"  Low-power idle: {est.IdleStatesUsed switch { true => "Yes", false => "No", null => "Not reported" }}");
             if (est.ActivePowerWatts.HasValue) Console.WriteLine($"  Active power:   {est.ActivePowerWatts:F2}W");
             if (est.LowestIdlePowerWatts.HasValue) Console.WriteLine($"  Lowest idle:    {est.LowestIdlePowerWatts:F2}W");
             if (est.EstimatedIdleSavingsWatts.HasValue) Console.WriteLine($"  Idle savings:   ~{est.EstimatedIdleSavingsWatts:F1}W (lost after patching)");

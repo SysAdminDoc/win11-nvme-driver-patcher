@@ -196,7 +196,7 @@ public static class CliCommandRegistry
         new("bypassio", [], CommandGroup.Diagnostics,
             "Per-volume BypassIO/DirectStorage status with named-game gaming impact (--history for pre/post diff)"),
         new("apst", [], CommandGroup.Diagnostics,
-            "APST power-state inspector and current override state"),
+            "How Windows idles the NVMe drive (power plan settings and power states), with a battery estimate"),
         new("identify", [], CommandGroup.Diagnostics,
             "NVMe Identify Controller dump (vendor, model, firmware, features)"),
         new("scope", [], CommandGroup.Diagnostics,
