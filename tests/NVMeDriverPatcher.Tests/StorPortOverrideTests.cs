@@ -92,7 +92,8 @@ public sealed class StorPortOverrideTests
         Assert.NotNull(verdict);
         Assert.Contains("EnableNVMeInterface=0", verdict, StringComparison.Ordinal);
 
-        Assert.Null(StorPortOverrideService.DescribeForVerdict(snapshot, nativeActive: true));
+        // Bound elsewhere: the held controller is still on stornvme, and a Confirmed verdict says so.
+        Assert.Contains("stays on stornvme.sys", StorPortOverrideService.DescribeForVerdict(snapshot, nativeActive: true), StringComparison.Ordinal);
         Assert.Empty(StorPortOverrideService.DescribeAfterRemoval(snapshot));
     }
 
@@ -134,6 +135,86 @@ public sealed class StorPortOverrideTests
 
         var removal = Assert.Single(StorPortOverrideService.DescribeAfterRemoval(snapshot));
         Assert.StartsWith($"{Instance} has EnableNVMeInterface=1", removal, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LegacyHold_IsTheKillSwitchOrEveryControllerAtZero_AndNothingElse()
+    {
+        Assert.Contains("DisableNativeNVMeStack is 1", StorPortOverrideService.DescribeLegacyHold(Snapshot(1, null)), StringComparison.Ordinal);
+        Assert.Contains("EnableNVMeInterface=0", StorPortOverrideService.DescribeLegacyHold(Snapshot(null, 0)), StringComparison.Ordinal);
+        Assert.Null(StorPortOverrideService.DescribeLegacyHold(Snapshot(null, null)));
+        Assert.Null(StorPortOverrideService.DescribeLegacyHold(Snapshot(0, 1)));
+        Assert.Null(StorPortOverrideService.DescribeLegacyHold(new StorPortOverrideSnapshot()));
+
+        // One controller held at 0, another left to the feature route: not a whole-machine hold.
+        var mixed = new StorPortOverrideSnapshot
+        {
+            Controllers =
+            [
+                new StorPortControllerOverride(Instance, "Held", 0),
+                new StorPortControllerOverride(Instance + "2", "Free", null)
+            ]
+        };
+        Assert.Null(StorPortOverrideService.DescribeLegacyHold(mixed));
+    }
+
+    [Fact]
+    public void BoundVerdict_NamesAControllerStillHeldAtZero()
+    {
+        var mixed = new StorPortOverrideSnapshot
+        {
+            Controllers =
+            [
+                new StorPortControllerOverride(Instance, "Held", 0),
+                new StorPortControllerOverride(Instance + "2", "Free", null)
+            ]
+        };
+
+        var verdict = StorPortOverrideService.DescribeForVerdict(mixed, nativeActive: true);
+
+        Assert.NotNull(verdict);
+        Assert.Contains("Held has EnableNVMeInterface=0", verdict, StringComparison.Ordinal);
+        Assert.Contains("stays on stornvme.sys while the others use nvmedisk", verdict, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ForcedNative_IsReportedForActivationAndNotForAKillSwitch()
+    {
+        Assert.True(StorPortOverrideService.ForcesNativeAnywhere(Snapshot(null, 1)));
+        Assert.False(StorPortOverrideService.ForcesNativeAnywhere(Snapshot(1, 1)));
+        Assert.False(StorPortOverrideService.ForcesNativeAnywhere(Snapshot(null, 0)));
+    }
+
+    [Fact]
+    public void ValueOfAnotherType_IsNamedInReadinessAndTheReport_NotCalledUnset()
+    {
+        var snapshot = new StorPortOverrideSnapshot
+        {
+            DisableNativeNVMeStackOtherKind = "REG_SZ \"1\"",
+            Controllers = [new StorPortControllerOverride(Instance, "Standard NVM Express Controller", null, "REG_QWORD 1")]
+        };
+
+        var check = StorPortOverrideService.Classify(snapshot);
+        Assert.NotNull(check);
+        Assert.Contains("DisableNativeNVMeStack is set under", check.Message, StringComparison.Ordinal);
+        Assert.Contains("as REG_SZ \"1\", not a DWORD", check.Message, StringComparison.Ordinal);
+        Assert.Contains("EnableNVMeInterface set as REG_QWORD 1, not a DWORD", check.Message, StringComparison.Ordinal);
+
+        var report = StorPortOverrideService.FormatForReport(snapshot);
+        Assert.EndsWith("present as REG_SZ \"1\" (not a DWORD)", report[0], StringComparison.Ordinal);
+        Assert.EndsWith("present as REG_QWORD 1 (not a DWORD)", report[1], StringComparison.Ordinal);
+
+        // Unknown effect, so no hold is claimed, but the unbound verdict still names it.
+        Assert.Null(StorPortOverrideService.DescribeLegacyHold(snapshot));
+        Assert.Contains("not a DWORD", StorPortOverrideService.DescribeForVerdict(snapshot, nativeActive: false), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(Microsoft.Win32.RegistryValueKind.String, "1", "REG_SZ \"1\"")]
+    [InlineData(Microsoft.Win32.RegistryValueKind.QWord, 1L, "REG_QWORD 1")]
+    public void OtherKinds_DescribeTheirTypeAndValue(Microsoft.Win32.RegistryValueKind kind, object raw, string expected)
+    {
+        Assert.Equal(expected, StorPortOverrideService.DescribeOtherKind(kind, raw));
     }
 
     [Fact]

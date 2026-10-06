@@ -46,7 +46,7 @@ const ALLOWED_CONTROLLER_FIELDS = ["model", "firmware", "migrated"];
 // documented null-fallbacks ("Unknown" for verification, "Idle" for watchdog).
 const VERIFICATION_VALUES = [
   "None", "Confirmed", "AwaitingRestart", "OverrideBlocked",
-  "FlagsEnabledNotBound", "Reverted", "StalePending", "Unknown"
+  "FlagsEnabledNotBound", "Reverted", "StalePending", "StorPortHeldLegacy", "Unknown"
 ];
 const WATCHDOG_VALUES = ["Unavailable", "Idle", "Healthy", "Warning", "Unstable", "Completed"];
 const PROFILE_VALUES = ["Safe", "Full"];
@@ -424,7 +424,7 @@ async function handleSummary(env, corsOrigin) {
 // Anything unrecognized lands in `Other` so an added enum value never silently vanishes.
 const VERDICT_BUCKETS = [
   "Confirmed", "AwaitingRestart", "OverrideBlocked", "FlagsEnabledNotBound",
-  "Reverted", "StalePending", "None", "Unknown", "Other"
+  "Reverted", "StalePending", "StorPortHeldLegacy", "None", "Unknown", "Other"
 ];
 
 export function summarizeReports(reports) {

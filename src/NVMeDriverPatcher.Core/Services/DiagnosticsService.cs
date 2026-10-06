@@ -753,10 +753,20 @@ public static class DiagnosticsService
             if (PatchVerificationService.IsUntrackedDriverActivation(
                     nativeStatus.IsActive, status.Count, fallbackEvidence))
             {
+                bool storPortForced;
+                try { storPortForced = StorPortOverrideService.ForcesNativeAnywhere(StorPortOverrideService.ReadSnapshot()); }
+                catch { storPortForced = false; }
                 sb.AppendLine();
-                sb.AppendLine(PatchVerificationService.UntrackedDriverActivationNote);
-                sb.AppendLine();
-                sb.AppendLine(controllerAudit.RenderForcedDriverEvidence());
+                if (storPortForced)
+                {
+                    sb.AppendLine(StorPortOverrideService.ForcedNativeActivationNote);
+                }
+                else
+                {
+                    sb.AppendLine(PatchVerificationService.UntrackedDriverActivationNote);
+                    sb.AppendLine();
+                    sb.AppendLine(controllerAudit.RenderForcedDriverEvidence());
+                }
             }
             else
             {

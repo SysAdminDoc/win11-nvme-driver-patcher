@@ -28,7 +28,12 @@ public enum VerificationOutcome
     /// <summary>Pending flag has been set for longer than we're willing to wait (30 days).
     /// User patched, never rebooted, and we should stop pestering them. Caller clears the
     /// flag without surfacing a user-visible notice.</summary>
-    StalePending
+    StalePending,
+    /// <summary>The patch is in place and the machine rebooted, but a StorPort value another
+    /// tool wrote keeps stornvme.sys: <c>DisableNativeNVMeStack</c> is set, or every controller
+    /// has <c>EnableNVMeInterface=0</c>. Neither the override block nor the fallback explains
+    /// it, so neither is offered.</summary>
+    StorPortHeldLegacy
 }
 
 public class VerificationReport
@@ -163,12 +168,18 @@ public static class PatchVerificationService
         try { fallbackEvidence = FeatureStoreWriterService.HasFallbackEvidence(); }
         catch { fallbackEvidence = false; }
 
+        StorPortOverrideSnapshot? storPortSnapshot;
+        try { storPortSnapshot = StorPortOverrideService.ReadSnapshot(); }
+        catch { storPortSnapshot = null; }
+        var storPortHold = storPortSnapshot is null ? null : StorPortOverrideService.DescribeLegacyHold(storPortSnapshot);
+
         var (outcome, summary, detail) = ClassifyPostRebootState(
-            native.IsActive, native.ActiveDriver, status.Count, fallbackEvidence);
-        string? storPort;
-        try { storPort = StorPortOverrideService.DescribeForVerdict(StorPortOverrideService.ReadSnapshot(), native.IsActive); }
-        catch { storPort = null; }
-        if (storPort is not null) detail += " " + storPort;
+            native.IsActive, native.ActiveDriver, status.Count, fallbackEvidence, storPortHold);
+        if (outcome != VerificationOutcome.StorPortHeldLegacy && storPortSnapshot is not null)
+        {
+            var storPort = StorPortOverrideService.DescribeForVerdict(storPortSnapshot, native.IsActive);
+            if (storPort is not null) detail += " " + storPort;
+        }
         report.Outcome = outcome;
         report.Summary = summary;
         report.Detail = AppendBuildRuleDetail(detail, WindowsBuildRulesService.MatchCurrent());
@@ -209,13 +220,15 @@ public static class PatchVerificationService
     /// Pure post-reboot classification — separated from the WMI/registry probes so the
     /// full truth table is unit-testable. Precedence:
     ///   1. Driver bound → Confirmed (regardless of which route enabled it).
-    ///   2. Not bound + fallback evidence → FlagsEnabledNotBound (the fallback itself
+    ///   2. Not bound + a patch present + a StorPort value that holds the legacy driver →
+    ///      StorPortHeldLegacy (neither the override block nor the fallback is the cause).
+    ///   3. Not bound + fallback evidence → FlagsEnabledNotBound (the fallback itself
     ///      failed; suggesting it again would misdiagnose — ViVe issue #164, 26200.8524+).
-    ///   3. Not bound + no evidence + no keys → Reverted.
-    ///   4. Not bound + no evidence + keys present → OverrideBlocked (route to fallback).
+    ///   4. Not bound + no evidence + no keys → Reverted.
+    ///   5. Not bound + no evidence + keys present → OverrideBlocked (route to fallback).
     /// </summary>
     internal static (VerificationOutcome Outcome, string Summary, string Detail) ClassifyPostRebootState(
-        bool nativeActive, string? activeDriver, int overrideKeyCount, bool fallbackEvidence)
+        bool nativeActive, string? activeDriver, int overrideKeyCount, bool fallbackEvidence, string? storPortHold = null)
     {
         if (nativeActive)
         {
@@ -224,6 +237,14 @@ public static class PatchVerificationService
                 : $"nvmedisk.sys is bound ({activeDriver}). No registry override keys are present. " +
                   "enablement is via the ViVeTool/FeatureStore fallback or an official Windows rollout.";
             return (VerificationOutcome.Confirmed, "Native NVMe driver is active", detail);
+        }
+
+        if (storPortHold is not null && (overrideKeyCount > 0 || fallbackEvidence))
+        {
+            return (VerificationOutcome.StorPortHeldLegacy,
+                "A StorPort setting keeps the legacy driver",
+                "The patch is in place and the machine has restarted, but Windows is still using " +
+                "stornvme.sys because of a StorPort value another tool wrote. " + storPortHold);
         }
 
         if (fallbackEvidence)

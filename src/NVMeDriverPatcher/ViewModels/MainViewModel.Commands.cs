@@ -270,7 +270,10 @@ public partial class MainViewModel
 
                 var restartMsg = $"Patch removed successfully ({result.AppliedCount} component(s)).\n\n" +
                     "Restart to restore the legacy NVMe driver path.\n\n" +
-                    "After reboot, drives return to Disk drives using stornvme.sys.";
+                    (result.StorPortNotes.Count == 0
+                        ? "After reboot, drives return to Disk drives using stornvme.sys."
+                        : "After reboot, drives return to stornvme.sys except where a StorPort value keeps nvmedisk:\n\n" +
+                          string.Join("\n\n", result.StorPortNotes));
 
                 if (ConfirmDialog?.Invoke("Removal Complete", restartMsg) == true)
                 {

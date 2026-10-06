@@ -139,7 +139,7 @@ worker, keep those field names in sync with the client (a contract test pins the
 Controllers are counted **per drive** (`model/firmware`), so a two-NVMe machine contributes two
 controller rows but one `totalSubmissions`. `verification` is bucketed per submission against the
 `VerificationOutcome` set (`Confirmed`, `AwaitingRestart`, `OverrideBlocked`, `FlagsEnabledNotBound`,
-`Reverted`, `StalePending`, `None`) plus `Unknown`; anything else falls into `Other`.
+`Reverted`, `StalePending`, `StorPortHeldLegacy`, `None`) plus `Unknown`; anything else falls into `Other`.
 
 ## Aggregation
 
@@ -159,6 +159,7 @@ controller rows but one `totalSubmissions`. `verification` is bucketed per submi
     "FlagsEnabledNotBound": 5,
     "Reverted": 0,
     "StalePending": 0,
+    "StorPortHeldLegacy": 0,
     "None": 0,
     "Unknown": 0,
     "Other": 2

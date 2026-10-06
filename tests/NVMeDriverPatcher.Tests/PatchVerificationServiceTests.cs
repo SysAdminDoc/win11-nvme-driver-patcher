@@ -155,6 +155,7 @@ public sealed class PatchVerificationServiceTests
     [InlineData(VerificationOutcome.None, false, false)]
     [InlineData(VerificationOutcome.Confirmed, true, true)]
     [InlineData(VerificationOutcome.OverrideBlocked, true, true)]
+    [InlineData(VerificationOutcome.StorPortHeldLegacy, false, false)]
     public void ClassifyAutoResetDecision_TruthTable(
         VerificationOutcome outcome, bool watchdogRevert, bool expected)
     {
@@ -219,6 +220,31 @@ public sealed class PatchVerificationServiceTests
         Assert.Equal(expected, outcome);
         Assert.False(string.IsNullOrWhiteSpace(summary));
         Assert.False(string.IsNullOrWhiteSpace(detail));
+    }
+
+    // A StorPort hold (kill switch, or every controller at 0) explains a failed bind whenever a
+    // patch is present, ahead of both the override block and the failed fallback.
+    [Theory]
+    [InlineData(true, 3, false, VerificationOutcome.Confirmed)]
+    [InlineData(false, 3, false, VerificationOutcome.StorPortHeldLegacy)]
+    [InlineData(false, 3, true, VerificationOutcome.StorPortHeldLegacy)]
+    [InlineData(false, 0, true, VerificationOutcome.StorPortHeldLegacy)]
+    [InlineData(false, 0, false, VerificationOutcome.Reverted)]
+    public void ClassifyPostRebootState_StorPortHold_TruthTable(
+        bool nativeActive, int keyCount, bool fallbackEvidence, VerificationOutcome expected)
+    {
+        const string hold = "DisableNativeNVMeStack is 1 under HKLM\\SYSTEM\\CurrentControlSet\\Control\\StorPort.";
+
+        var (outcome, _, detail) = PatchVerificationService.ClassifyPostRebootState(
+            nativeActive, "stornvme.sys", keyCount, fallbackEvidence, hold);
+
+        Assert.Equal(expected, outcome);
+        if (expected == VerificationOutcome.StorPortHeldLegacy)
+        {
+            Assert.Contains(hold, detail, StringComparison.Ordinal);
+            Assert.DoesNotContain("FeatureStore fallback", detail, StringComparison.Ordinal);
+            Assert.DoesNotContain("no working enablement path", detail, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
