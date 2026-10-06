@@ -410,7 +410,7 @@ The readiness scan also reports what Windows itself offers for recovery. That's 
 
 **Copy this folder to a USB drive** before rebooting to have an offline recovery option if the system won't boot. Run `NVMeDriverPatcher.Cli verify-payload --input=<copied-folder>` after copying when a Windows support station is available; the recovery batch also fails closed on missing, extra, truncated, or modified required files.
 
-Advanced hardening: `NVMeDriverPatcher.Cli.exe winre-inject` previews the DISM plan to inject `stornvme.inf` into the local WinRE image. `winre-inject --apply` backs up `winre.wim`, logs original/backup/final SHA-256 hashes, mounts to an app-owned temp folder, injects the driver, and commits or discards cleanly. After applying, boot into WinRE once and confirm the system volume is accessible.
+Advanced hardening: `NVMeDriverPatcher.Cli.exe winre-inject` previews the DISM plan to inject `stornvme.inf` into the local WinRE image. The driver comes from the Driver Store package, so the recovery image gets the same stornvme build the running system has. `winre-inject --apply` backs up `winre.wim`, logs original/backup/final SHA-256 hashes, mounts to an app-owned temp folder, injects the driver, and commits or discards cleanly. After applying, boot into WinRE once and confirm the system volume is accessible. Each backup is a full copy of the image (0.5 to 1 GB), so only the two newest stay in the `backups` folder of the data directory. `clean-data` removes all but the newest one and tells you where it is.
 
 ## Scope
 

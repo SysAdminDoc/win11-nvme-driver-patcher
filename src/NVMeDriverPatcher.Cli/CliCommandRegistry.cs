@@ -224,7 +224,7 @@ public static class CliCommandRegistry
         new("tuning-import", [], CommandGroup.ConfigData,
             "Import StorNVMe tuning profile from --import=<path>"),
         new("clean-data", [], CommandGroup.ConfigData,
-            "Purge stale logs, orphaned DBs, and temp files from the data directory",
+            "Purge logs, traces, registry backups, older WinRE image backups, the history DB and temp files from the data directory",
             RiskLevel.Caution),
         new("verify-backup", [], CommandGroup.ConfigData,
             "Verify a registry backup file's integrity (--import=<path>)"),

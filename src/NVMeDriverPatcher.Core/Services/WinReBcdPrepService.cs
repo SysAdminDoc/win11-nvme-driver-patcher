@@ -72,6 +72,45 @@ public static class WinReBcdPrepService
 
     private static bool IsZeroGuid(string guid) => guid.All(c => c is '0' or '-');
 
+    private const string GlobalRoot = @"\\?\GLOBALROOT";
+
+    /// <summary>
+    /// Pure: turns the recovery entry's <c>osdevice ramdisk=[volume]\path</c> into a path Win32 can
+    /// open. BCD names a volume that has no drive letter by its NT device
+    /// (<c>\Device\HarddiskVolume4</c>), and the recovery partition never has a letter on a standard
+    /// install. File APIs and DISM read a path that starts with <c>\Device</c> as relative to the
+    /// current drive, so they need it behind <c>\\?\GLOBALROOT</c>.
+    /// </summary>
+    internal static string? ParseBcdImagePath(string? bcdStdout)
+    {
+        if (string.IsNullOrWhiteSpace(bcdStdout)) return null;
+        var match = RxOsDevice.Match(bcdStdout);
+        if (!match.Success) return null;
+
+        var volume = match.Groups["vol"].Value.Trim().TrimEnd('\\');
+        var path = match.Groups["path"].Value;
+        if (volume.Length == 2 && char.IsAsciiLetter(volume[0]) && volume[1] == ':') return volume + path;
+        if (volume.StartsWith(@"\\?\", StringComparison.Ordinal)) return volume + path;
+        if (volume.StartsWith(@"\Device\", StringComparison.OrdinalIgnoreCase)) return GlobalRoot + volume + path;
+        // Anything else ("unknown" for a volume BCD can't resolve) isn't a place to look.
+        return null;
+    }
+
+    /// <summary>
+    /// Picks the WinRE image path: the one the boot entry names, else <c>Winre.wim</c> under the
+    /// location <c>reagentc /info</c> reports. The first that exists wins. With neither on disk the
+    /// first candidate comes back, so the caller's warning names where the image should be.
+    /// </summary>
+    internal static string? ResolveImagePath(string? bcdStdout, string? winReLocation, Func<string, bool> exists)
+    {
+        var candidates = new List<string>(2);
+        if (ParseBcdImagePath(bcdStdout) is { } fromBcd) candidates.Add(fromBcd);
+        if (!string.IsNullOrWhiteSpace(winReLocation))
+            candidates.Add(winReLocation.Trim().TrimEnd('\\') + @"\Winre.wim");
+
+        return candidates.FirstOrDefault(exists) ?? candidates.FirstOrDefault();
+    }
+
     public static WinReProvisionInfo Probe()
     {
         var info = new WinReProvisionInfo();
@@ -93,11 +132,7 @@ public static class WinReBcdPrepService
             if (!string.IsNullOrEmpty(info.DeviceGuid))
             {
                 var bcd = RunCapture(SystemToolPathService.Resolve("bcdedit.exe"), new[] { "/enum", info.DeviceGuid, "/v" }, 20);
-                var imgMatch = RxOsDevice.Match(bcd.Stdout);
-                if (imgMatch.Success)
-                {
-                    info.ImagePath = imgMatch.Groups["vol"].Value + imgMatch.Groups["path"].Value;
-                }
+                info.ImagePath = ResolveImagePath(bcd.Stdout, info.WinReLocation, File.Exists);
             }
         }
         catch (Exception ex)
