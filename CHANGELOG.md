@@ -193,6 +193,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   next cut actually uploads its sidecars.
 
 ### Security
+- Each release now carries a signed `update-manifest.json` with the version, the oldest install allowed to take it, an expiry and the SHA-256 of every release file. The update staging code refuses a download unless the signature matches one of the two public keys the app ships with, the manifest names that release and a newer version, it hasn't expired, and the file matches both its `.sha256` sidecar and the manifest. Swapping an exe and its sidecar on the release page no longer gets past it. The release gate checks the signature and every hash before anything is published. The README explains key rotation.
 - Release publishing now requires SDK 10.0.401 or newer, embeds .NET runtime 10.0.12 or newer
   in every self-contained executable, and rejects older runtime payloads from the release gate.
   10.0.12 (2026-09-08) fixes CVE-2026-69439, 71328, 69522, 69304, 58649 and 69806. The 10.0.3xx

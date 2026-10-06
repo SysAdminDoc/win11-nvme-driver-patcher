@@ -6,6 +6,8 @@
 #   - any checksummed artifact lacks its per-asset .sha256 sidecar in publish/
 #   - SHA256SUMS.txt omits a checksummed artifact or carries a stale hash
 #   - a self-contained executable embeds an older .NET runtime than the release floor
+#   - update-manifest.json isn't signed by a key UpdateManifestService.cs trusts, names another
+#     version, expires within 30 days, or disagrees with the built checksummed artifacts
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string]$Version,   # tag-derived, no leading v (e.g. 4.6.2)
@@ -75,6 +77,40 @@ function Get-Sha256Hex {
         $sha.Dispose()
         $stream.Dispose()
     }
+}
+
+# The public keys the app trusts, read from between the markers in UpdateManifestService.cs.
+function Get-TrustedUpdateKeys {
+    $source = Join-Path $repoRoot 'src/NVMeDriverPatcher.Core/Services/UpdateManifestService.cs'
+    if (-not (Test-Path -LiteralPath $source)) { return @() }
+    $block = [regex]::Match((Get-Content -Raw -LiteralPath $source), '(?s)// update-manifest-keys:start(?<keys>.*?)// update-manifest-keys:end')
+    if (-not $block.Success) { return @() }
+    return @([regex]::Matches($block.Groups['keys'].Value, '"(?<key>[A-Za-z0-9+/=]{80,})"') | ForEach-Object { $_.Groups['key'].Value })
+}
+
+# Windows PowerShell 5.1 can't import a SubjectPublicKeyInfo, so the P-256 point is read from its
+# fixed layout: a 27-byte header ending in the uncompressed-point tag, then X and Y.
+function Test-UpdateManifestSignature {
+    param([byte[]]$Data, [byte[]]$Signature, [string[]]$Keys)
+
+    $header = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE'
+    foreach ($key in $Keys) {
+        if (-not $key.StartsWith($header, [StringComparison]::Ordinal)) { continue }
+        $spki = [Convert]::FromBase64String($key)
+        if ($spki.Length -ne 91) { continue }
+        $point = New-Object System.Security.Cryptography.ECPoint
+        $point.X = [byte[]]$spki[27..58]
+        $point.Y = [byte[]]$spki[59..90]
+        $parameters = New-Object System.Security.Cryptography.ECParameters
+        $parameters.Curve = [System.Security.Cryptography.ECCurve+NamedCurves]::nistP256
+        $parameters.Q = $point
+        $verifier = [System.Security.Cryptography.ECDsa]::Create($parameters)
+        try {
+            if ($verifier.VerifyData($Data, $Signature, [System.Security.Cryptography.HashAlgorithmName]::SHA256)) { return $true }
+        }
+        finally { $verifier.Dispose() }
+    }
+    return $false
 }
 
 function Get-StreamSha256Hex {
@@ -292,6 +328,68 @@ foreach ($a in $contract.artifacts) {
         }
     }
 
+    if ($a.id -eq 'update-manifest') {
+        $keys = @(Get-TrustedUpdateKeys)
+        $signaturePath = "$full.sig"
+        if ($keys.Count -eq 0) {
+            $failures.Add('no trusted update-manifest keys found between the markers in UpdateManifestService.cs')
+        }
+        elseif (-not (Test-Path -LiteralPath $signaturePath)) {
+            $failures.Add("update manifest signature missing: $leaf.sig")
+        }
+        else {
+            $signature = $null
+            try { $signature = [Convert]::FromBase64String((Get-Content -Raw -LiteralPath $signaturePath).Trim()) } catch { }
+            if (-not $signature -or -not (Test-UpdateManifestSignature -Data ([IO.File]::ReadAllBytes($full)) -Signature $signature -Keys $keys)) {
+                $failures.Add('update manifest signature does not verify against a key UpdateManifestService.cs trusts')
+            }
+        }
+
+        $manifest = $null
+        try { $manifest = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($full)) | ConvertFrom-Json } catch { }
+        if ($null -eq $manifest) {
+            $failures.Add('update manifest is not valid JSON')
+        }
+        else {
+            if ($manifest.schema -ne 1 -or $manifest.product -ne 'NVMeDriverPatcher') {
+                $failures.Add('update manifest has the wrong schema or product')
+            }
+            if ($manifest.version -ne $Version) {
+                $failures.Add("update manifest names $($manifest.version), expected $Version")
+            }
+            # PowerShell 7's ConvertFrom-Json turns ISO dates into DateTime; 5.1 leaves a string.
+            $expires = [DateTime]::MinValue
+            if ($manifest.expiresUtc -is [DateTime]) { $expires = $manifest.expiresUtc.ToUniversalTime() }
+            else {
+                $styles = [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal
+                [void][DateTime]::TryParse([string]$manifest.expiresUtc, [Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$expires)
+            }
+            if ($expires -le [DateTime]::UtcNow.AddDays(30)) {
+                $failures.Add("update manifest expires too soon or has no expiry ($($manifest.expiresUtc))")
+            }
+
+            $listed = @{}
+            if ($manifest.assets) { foreach ($p in $manifest.assets.PSObject.Properties) { $listed[$p.Name] = [string]$p.Value } }
+            foreach ($other in $contract.artifacts) {
+                if (-not $other.checksum) { continue }
+                $otherRel = $other.path -replace '\{version\}', $Version
+                $otherFull = Join-Path $repoRoot $otherRel
+                if (-not (Test-Path -LiteralPath $otherFull)) { continue }
+                $otherLeaf = Split-Path $otherRel -Leaf
+                if (-not $listed.ContainsKey($otherLeaf)) {
+                    $failures.Add("update manifest does not list $otherLeaf")
+                }
+                elseif ($listed[$otherLeaf] -ne (Get-Sha256Hex $otherFull)) {
+                    $failures.Add("update manifest hash for $otherLeaf does not match the built file")
+                }
+                $listed.Remove($otherLeaf)
+            }
+            foreach ($extra in @($listed.Keys)) {
+                $failures.Add("update manifest lists $extra, which isn't a checksummed artifact")
+            }
+        }
+    }
+
     if ($a.id -eq 'scoop-manifest') {
         $guiPath = Join-Path $repoRoot 'publish/gui/NVMeDriverPatcher.exe'
         $arm64Path = Join-Path $repoRoot 'publish/NVMeDriverPatcher-win-arm64.exe'
@@ -363,12 +461,15 @@ if ($PublishedTag) {
         foreach ($name in $publishedAssets) { $publishedSet[$name] = $true }
 
         foreach ($a in $contract.artifacts) {
-            if (-not $a.checksum) { continue }
+            # Checksummed assets need their sidecar; the update manifest and its signature have to
+            # be there too, or every updater from the version that checks them refuses the release.
+            if (-not $a.checksum -and $a.id -notlike 'update-manifest*') { continue }
             $leaf = Split-Path ($a.path -replace '\{version\}', $Version) -Leaf
             if (-not $publishedSet.ContainsKey($leaf)) {
                 if ($a.required) { $failures.Add("published release $PublishedTag is missing required asset $leaf") }
                 continue
             }
+            if (-not $a.checksum) { continue }
             if (-not $publishedSet.ContainsKey("$leaf.sha256")) {
                 $failures.Add("published release $PublishedTag is missing the .sha256 sidecar for $leaf")
             }

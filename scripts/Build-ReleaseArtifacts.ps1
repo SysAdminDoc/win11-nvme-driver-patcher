@@ -282,6 +282,19 @@ foreach ($artifact in $contract.artifacts) {
 }
 Set-Content -LiteralPath (Join-Path $publishRoot 'SHA256SUMS.txt') -Value $sumLines -Encoding ASCII
 
+# Sign the update manifest over the same checksummed artifacts. The key stays outside the repo.
+Invoke-Checked $powerShellPath @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    (Join-Path $repoRoot 'scripts/New-UpdateManifest.ps1'),
+    '-Version',
+    $Version,
+    '-RepoRoot',
+    $repoRoot
+)
+
 # Validate the artifacts that were just built, including the runtimeconfig embedded in every
 # self-contained executable. This keeps the runtime floor a release-builder gate, not merely a
 # check that a release operator has to remember to run separately.

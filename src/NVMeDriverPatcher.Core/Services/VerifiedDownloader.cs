@@ -186,7 +186,23 @@ public static class VerifiedDownloader
         CancellationToken cancellationToken)
     {
         var sidecarUri = new UriBuilder(assetUri) { Path = assetUri.AbsolutePath + ".sha256" }.Uri;
+        var body = await TryFetchSmallFileAsync(client, sidecarUri, allowedHosts, MaxSidecarBytes, cancellationToken)
+            .ConfigureAwait(false);
+        return body is null ? null : ExtractSha256(System.Text.Encoding.UTF8.GetString(body));
+    }
 
+    /// <summary>
+    /// Fetches a small release file (a sidecar, the signed update manifest or its signature),
+    /// following allowlisted https redirects by hand. Null when it's missing, off the allowlist,
+    /// larger than <paramref name="maxBytes"/>, or the request fails.
+    /// </summary>
+    public static async Task<byte[]?> TryFetchSmallFileAsync(
+        HttpClient client,
+        Uri uri,
+        IReadOnlyCollection<string> allowedHosts,
+        int maxBytes,
+        CancellationToken cancellationToken)
+    {
         try
         {
             // GitHub serves every releases/download asset — sidecars included — as a 302 to its
@@ -194,8 +210,8 @@ public static class VerifiedDownloader
             // re-checked against the allowlist. Treating a redirect as "no sidecar" reported every
             // real release as unverifiable, which fails closed under RequireIntegrity and made
             // staging impossible. Follow the hops here too, with the same host and scheme checks.
-            var current = sidecarUri;
-            for (int hops = 0; hops < MaxSidecarRedirects; hops++)
+            var current = uri;
+            for (int hops = 0; hops < MaxSmallFileRedirects; hops++)
             {
                 if (!IsAllowedHost(current.Host, allowedHosts)) return null;
                 if (current.Scheme != Uri.UriSchemeHttps) return null;
@@ -213,8 +229,9 @@ public static class VerifiedDownloader
                 }
 
                 if (!resp.IsSuccessStatusCode) return null;
-                var body = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                return ExtractSha256(body);
+                if (resp.Content.Headers.ContentLength is long declared && declared > maxBytes) return null;
+                var body = await resp.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+                return body.Length > maxBytes ? null : body;
             }
             return null;
         }
@@ -226,7 +243,8 @@ public static class VerifiedDownloader
 
     // A sidecar is a few dozen bytes behind at most one CDN redirect; more hops than this is a
     // misconfiguration, not a route worth chasing.
-    private const int MaxSidecarRedirects = 5;
+    private const int MaxSmallFileRedirects = 5;
+    private const int MaxSidecarBytes = 64 * 1024;
 
     private static async Task<string?> TryFetchPreferredSidecarHashAsync(
         HttpClient client,

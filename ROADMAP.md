@@ -281,13 +281,6 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
   Acceptance: On a SAC-enabled VM the browser-downloaded GUI exe, MSI and PowerShell module are each tried, and the README states what happens and the way through. The in-app updater's download is tried too, and its message matches the result. The support bundle records SAC state.
   Complexity: M
 
-- [ ] P2 — Sign the update manifest so the updater doesn't rest on a same-release SHA-256 file
-  Why: `AutoUpdaterService` accepts only `IntegritySignal.Sha256Sidecar`, a hash file from the same release as the exe, so whoever can replace one can replace both. It already refuses equal or older versions (`UpdateService.cs:88`). A manifest signed with an offline key whose public half ships in the app closes the gap without a certificate. ECDSA P-256 is in the .NET base library, so it needs no new package.
-  Evidence: `src/NVMeDriverPatcher.Core/Services/AutoUpdaterService.cs:140`; `UpdateService.cs:86-88`; https://github.com/NetSparkleUpdater/NetSparkle (signed appcast model).
-  Touches: `Build-ReleaseArtifacts.ps1` (write and sign a manifest with version, SHA-256, minimum version and expiry), `UpdateService`, `AutoUpdaterService`, `release-artifacts.json`, `Validate-ReleaseAssets.ps1`, tests.
-  Acceptance: Tests show the updater refuses a replaced exe with a matching replaced sidecar, an expired manifest and a manifest naming an older version. Two embedded public keys allow a rotation overlap, and the README says how rotation works.
-  Complexity: M
-
 ### P3
 
 - [ ] P3 — Record the DiskSpd version and flags with every benchmark result
@@ -338,3 +331,10 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
   Touches: one test that runs `Validate-DocumentationFacts.ps1 -RepoRoot <repo>` on the checkout, skipping the untracked `CLAUDE.md` checks when the file is absent so a clean clone still passes.
   Acceptance: Changing the README preflight count by one makes the suite fail with the validator's message; a clean clone without CLAUDE.md passes.
   Complexity: S
+
+- [ ] P3 — The in-place updater's staging code has no caller
+  Why: `AutoUpdaterService.StageUpdateAsync` (sidecar check, signed manifest, protected staging, swap command) is only reached from tests. The GUI's update badge opens the release page, and the CLI's `update-check` only prints the asset URL. The README used to describe a Help menu updater that stages downloads; it was corrected on 2026-10-06. The code either gets a front end or goes.
+  Evidence: `git grep StageUpdateAsync` (tests only); `MainViewModel.ApplyUpdateBadge`; `Program.UpdateCheckCommand`.
+  Touches: either a CLI `update --stage` command (admin, prints the restart command) plus a GUI button behind it, or deleting `StageUpdateAsync`, `DownloadPinnedAsync`, `BuildRestartCommand` and their tests while keeping the manifest checks for `update-check`.
+  Acceptance: Either a user can stage a verified update from the CLI and the GUI, shown working against a real release with a signed manifest, or the dead path is gone and `update-check` reports whether the latest release's manifest verifies.
+  Complexity: M

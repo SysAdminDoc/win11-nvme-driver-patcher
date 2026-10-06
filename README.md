@@ -79,13 +79,31 @@ $actual = (Get-FileHash -Algorithm SHA256 -Path $file).Hash.ToLower()
 if ($expected -eq $actual) { "OK: $file" } else { "MISMATCH: expected $expected, got $actual" }
 ```
 
-The GUI's in-app auto-updater (**Help → Check for updates**) does its own check separately: it
-fetches a per-asset `NVMeDriverPatcher.exe.sha256` sidecar at the original GitHub release asset
-URL, following redirects to the CDN, before staging anything. It refuses to stage a binary that
-either fails the hash or has no sidecar (an arbitrary valid Authenticode signer is not accepted).
-This is load-bearing supply-chain defense, not just UI polish. Staged executables live in an
-Administrators/SYSTEM-only ProgramData directory; the post-exit replacement command re-checks
-the release SHA-256 immediately before copy and verifies the installed target again before launch.
+When a newer release is out, the app shows a version badge in its title bar that opens the
+release page. It doesn't download or replace itself, so check what you download the same way as
+above.
+
+### Update signing
+
+Releases newer than v5.6.0 carry `update-manifest.json` and `update-manifest.json.sig`. The manifest
+lists the release version, the oldest version allowed to update straight to it, an expiry date
+and the SHA-256 of every release file. It's signed with an ECDSA P-256 key that never leaves the
+maintainer's machine, and the app ships the public half. This isn't code signing (the exes stay
+unsigned). It's a check the app runs itself.
+
+The app's update staging code isn't wired to a button yet, but it already refuses a download
+unless all of this holds: the manifest's signature matches a key the app ships with, the manifest
+names the same release and a newer version than the one installed, it hasn't expired, and the
+file matches both its `.sha256` sidecar and the manifest. Replacing an exe and its sidecar on
+GitHub isn't enough to get a swapped file through. Staged files live in an Administrators and
+SYSTEM only ProgramData folder, and the replacement command re-checks the SHA-256 before it
+copies and again before it launches.
+
+**Key rotation.** Each version trusts two public keys. Releases are signed with the first. To
+rotate, a release moves the second key into first place, adds a fresh second key, and is signed
+with the key every installed copy already trusts. Copies from before the rotation accept it, and
+the retired key is gone from then on. If a signing key ever leaked, the same step drops it, and
+the CHANGELOG would say so.
 
 ## What Does This Do?
 
