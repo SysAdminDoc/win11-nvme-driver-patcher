@@ -317,11 +317,12 @@ public static class ApstInspectorService
     public static string? IdleSavingsText(ApstBatteryEstimate est)
     {
         if (est.EstimatedIdleSavingsWatts is not double watts) return null;
+        var figure = watts.ToString("F1", CultureInfo.InvariantCulture);
         return est.IdleStatesUsed switch
         {
-            true => $"~{watts:F1}W (lost after patching)",
+            true => $"~{figure}W (lost after patching)",
             false => null,
-            null => $"up to ~{watts:F1}W, if Windows idles this drive (not confirmed)"
+            null => $"up to ~{figure}W, if Windows idles this drive (not confirmed)"
         };
     }
 

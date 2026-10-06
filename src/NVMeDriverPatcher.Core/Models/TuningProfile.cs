@@ -99,8 +99,10 @@ public class TuningProfile
     public int? PowerStateTransitionLatency { get; set; }
 
     /// <summary>
-    /// Disable low-power transitions entirely (v4.5). 1 = drive stays in active state — removes
-    /// the APST regression at the cost of ~15% battery life on laptops.
+    /// Community tweak carried since v4.5: 1 is meant to keep the drive in an operational state.
+    /// Microsoft doesn't document this value for stornvme and the driver isn't known to read it,
+    /// so the effect can't be confirmed; the power plan's NVMe idle settings are what Windows
+    /// documents (see ApstInspectorService).
     /// </summary>
     public int? NoLowPowerTransitions { get; set; }
 

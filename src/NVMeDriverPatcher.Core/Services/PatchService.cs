@@ -52,18 +52,22 @@ public static class PatchService
     /// before the first apply and belongs to whoever set it.
     /// </summary>
     /// <summary>A set override value this apply doesn't write. <paramref name="BaselineCapturedMidLife"/>
-    /// marks one the baseline recorded as present but presumed this tool's, because that baseline
-    /// also held the primary flag (see <see cref="FindUnplannedOverrides"/>).</summary>
+    /// marks one that was already set when this tool first looked, alongside the primary flag, and
+    /// is therefore presumed to be an older version's (see <see cref="FindUnplannedOverrides"/>).</summary>
     internal sealed record UnplannedOverride(string SubKey, string ValueName, bool WrittenByThisTool, bool BaselineCapturedMidLife = false);
 
     /// <summary>
     /// #19 and profile switches: an earlier Full apply leaves 1853569164 and 156965516 set, which a
-    /// later Safe or plain Full apply doesn't write. A null <paramref name="baseline"/> means a fresh
-    /// one is about to be captured, which would record every value set now as already there.
+    /// later Safe or plain Full apply doesn't write.
     /// The ledger arrived in v5.1.0, so a baseline captured over a v5.0.0 patch records that
     /// version's flags as pre-existing. The primary flag gives that away: no apply of this tool
     /// writes the other flags without it, so a baseline that holds it was captured mid-life and
-    /// the flags it holds are presumed this tool's.
+    /// the flags it holds are presumed this tool's. It is a presumption: a script that set the
+    /// primary flag and the extras before this tool ever ran looks the same, which is why the
+    /// wording says so and Remove still restores the recorded baseline.
+    /// A null <paramref name="baseline"/> means apply captures a fresh one next, which records
+    /// whatever is set now as pre-existing; the primary flag's live value decides that case the
+    /// same way, so the preview can't say KEEP where apply will clear.
     /// </summary>
     internal static IReadOnlyList<UnplannedOverride> FindUnplannedOverrides(
         IEnumerable<string> overrideSubKeys,
@@ -79,14 +83,15 @@ public static class PatchService
                 .Where(m => string.Equals(m.Path, subKey, StringComparison.OrdinalIgnoreCase))
                 .Select(m => m.ValueName)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            bool baselineMidLife = baseline is not null &&
-                                   BaselineRecord(baseline, subKey, AppConfig.PrimaryFeatureID)?.Existed == true;
+            bool baselineMidLife = baseline is null
+                ? isSet(subKey, AppConfig.PrimaryFeatureID)
+                : BaselineRecord(baseline, subKey, AppConfig.PrimaryFeatureID)?.Existed == true;
             foreach (var id in AppConfig.OwnedOverrideValueNames)
             {
                 if (planned.Contains(id) || !isSet(subKey, id)) continue;
                 if (baseline is null)
                 {
-                    found.Add(new UnplannedOverride(subKey, id, WrittenByThisTool: false));
+                    found.Add(new UnplannedOverride(subKey, id, WrittenByThisTool: baselineMidLife, BaselineCapturedMidLife: baselineMidLife));
                     continue;
                 }
                 var before = BaselineRecord(baseline, subKey, id);
@@ -130,7 +135,7 @@ public static class PatchService
                 delete(item.SubKey, item.ValueName);
                 cleared++;
                 log?.Invoke(item.BaselineCapturedMidLife
-                    ? $"  [CLEARED] {item.ValueName} under {item.SubKey}: it was set together with this tool's primary flag when the first ledger was captured, so a version before 5.1.0 wrote it, and this apply doesn't include it"
+                    ? $"  [CLEARED] {item.ValueName} under {item.SubKey}: it was already set alongside this tool's primary flag before any ledger existed, so it's presumed to be an older version's, and this apply doesn't include it. Remove restores it with the rest of the recorded baseline."
                     : $"  [CLEARED] {item.ValueName} under {item.SubKey}: an earlier apply of this tool wrote it, and this apply doesn't include it");
             }
             catch (Exception ex)

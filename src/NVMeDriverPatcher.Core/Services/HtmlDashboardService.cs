@@ -91,9 +91,9 @@ public static class HtmlDashboardService
         var path = customPath ?? Path.Combine(dir, $"nvme_dashboard_{DateTime.UtcNow:yyyyMMddHHmmss}.html");
 
         // Ensure the output directory exists (custom paths may point at a folder that hasn't
-        // been created yet). Then write atomically via a `.tmp` sibling so a crash or power
-        // loss between bytes 0 and N never leaves a half-rendered dashboard for the user to
-        // open. Same pattern as ConfigService.Save / DiagnosticsService.ExportBundle.
+        // been created yet). Then write through AtomicFile (a uniquely named staging file moved
+        // into place) so a crash or power loss between bytes 0 and N never leaves a half-rendered
+        // dashboard for the user to open.
         var outDir = Path.GetDirectoryName(Path.GetFullPath(path));
         if (!string.IsNullOrEmpty(outDir))
             Directory.CreateDirectory(outDir);

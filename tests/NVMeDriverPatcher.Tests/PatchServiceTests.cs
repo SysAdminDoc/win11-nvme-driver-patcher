@@ -222,6 +222,9 @@ public sealed class PatchServiceTests
         return (_, id) => set.Contains(id);
     }
 
+    // The two extra flags set, the primary one not: nothing this tool does leaves a machine like that.
+    private static bool ExtrasOnly(string _, string id) => id is "1853569164" or "156965516";
+
     [Theory]
     [InlineData(PatchProfile.Safe, false, new[] { "1853569164", "156965516" })]   // Safe after Full
     [InlineData(PatchProfile.Full, false, new[] { "156965516" })]                 // #19: Full without the opt-in
@@ -271,12 +274,31 @@ public sealed class PatchServiceTests
             Assert.False(u.WrittenByThisTool);
             Assert.False(u.BaselineCapturedMidLife);
         });
-        // No ledger to reuse: apply captures a fresh baseline, which would call it pre-existing too.
-        var fresh = PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), baseline: null);
+        // No ledger to reuse and the primary flag isn't set: nobody but a script leaves a machine
+        // like that, so the extras are whoever's and stay.
+        var fresh = PatchService.FindUnplannedOverrides(Overrides, planned, ExtrasOnly, baseline: null);
         Assert.Equal(Overrides.Count, fresh.Count);
         Assert.All(fresh, u => Assert.False(u.WrittenByThisTool));
         // A ledger with no record of the value can't say whose it is.
         Assert.Empty(PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), []));
+    }
+
+    [Fact]
+    public void FindUnplannedOverrides_NoLedgerButThePrimaryFlagIsSet_DecidesLikeTheBaselineApplyWillCapture()
+    {
+        // A v5.0.0 machine on its first apply with this build: apply captures a baseline in which
+        // the primary flag exists, and the mid-life rule then clears the extras. The preview runs
+        // this same path with no ledger and must say the same thing.
+        var planned = PatchService.BuildRequiredRegistryMutations(PatchProfile.Safe, false, ["ControlSet002"], false);
+
+        var unplanned = PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), baseline: null);
+
+        Assert.Equal(Overrides.Count * 2, unplanned.Count);
+        Assert.All(unplanned, u =>
+        {
+            Assert.True(u.WrittenByThisTool);
+            Assert.True(u.BaselineCapturedMidLife);
+        });
     }
 
     [Fact]
@@ -338,7 +360,8 @@ public sealed class PatchServiceTests
         Assert.Equal(["156965516"], deleted);
         var line = Assert.Single(log);
         Assert.Contains("[CLEARED] 156965516", line, StringComparison.Ordinal);
-        Assert.Contains("version before 5.1.0", line, StringComparison.Ordinal);
+        Assert.Contains("presumed to be an older version's", line, StringComparison.Ordinal);
+        Assert.Contains("Remove restores it", line, StringComparison.Ordinal);
     }
 
     [Fact]
