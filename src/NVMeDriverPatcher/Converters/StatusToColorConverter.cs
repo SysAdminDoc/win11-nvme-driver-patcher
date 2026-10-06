@@ -44,35 +44,6 @@ public class BoolToVisibilityConverter : IValueConverter
         => System.Windows.Data.Binding.DoNothing;
 }
 
-public class SettingsToggleConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        => value is true ? "- Settings" : "+ Settings";
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => System.Windows.Data.Binding.DoNothing;
-}
-
-public class StringToColorConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        if (value is string token && !string.IsNullOrWhiteSpace(token))
-        {
-            if (Application.Current?.TryFindResource(token) is SolidColorBrush resourceBrush)
-                return resourceBrush.Color;
-
-            try { return (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(token); }
-            catch { }
-        }
-        return (Application.Current?.TryFindResource("TextDim") as SolidColorBrush)?.Color
-               ?? StatusToColorConverter.DefaultBrush.Color;
-    }
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => System.Windows.Data.Binding.DoNothing;
-}
-
 public class StringToBrushConverter : IValueConverter
 {
     private static readonly BrushConverter BC = new();

@@ -210,9 +210,6 @@ public partial class MainWindow : Window
         catch (InvalidOperationException) { }
     }
 
-    private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
-    private void MaximizeRestore_Click(object sender, RoutedEventArgs e) => ToggleMaximizeRestore();
-    private void Close_Click(object sender, RoutedEventArgs e) => Close();
     private void ThemeToggle_Click(object sender, RoutedEventArgs e)
     {
         var nextMode = ThemeService.CurrentTheme is AppTheme.Dark or AppTheme.HighContrast
@@ -319,18 +316,12 @@ public partial class MainWindow : Window
 
     private void UpdateWindowPresentation()
     {
-        bool maximized = WindowState == WindowState.Maximized;
-
+        // The OS caption buttons handle minimize, maximize and close (SingleBorderWindow); the
+        // shell stays flush with the frame in both window states.
         RootFrame.Margin = new Thickness(0);
         ShellBorder.CornerRadius = new CornerRadius(0);
         ShellAccentBar.CornerRadius = new CornerRadius(0);
         ShellBorder.Effect = null;
-
-        MaximizeRestoreButton.Content = maximized ? "❐" : "□";
-        MaximizeRestoreButton.ToolTip = maximized ? "Restore down" : "Maximize";
-        System.Windows.Automation.AutomationProperties.SetName(
-            MaximizeRestoreButton,
-            maximized ? "Restore window" : "Maximize window");
     }
 
     private void EnsureWindowWithinWorkArea()
@@ -418,10 +409,6 @@ public partial class MainWindow : Window
         TitleBarRegion.Padding = compact
             ? new Thickness(16, 13, 16, 11)
             : new Thickness(20, 14, 20, 12);
-        MainContentSpacerColumn.Width = new GridLength(0);
-        MainContentSplitter.Visibility = Visibility.Collapsed;
-        MainContentSecondaryRow.Height = GridLength.Auto;
-
         WorkspaceSurface.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);
         SettingsAboutCard.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0, 10, 0, 0);
         SettingsAuditCard.Margin = compact ? new Thickness(0, 16, 0, 0) : new Thickness(0);

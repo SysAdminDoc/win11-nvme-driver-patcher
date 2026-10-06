@@ -806,9 +806,6 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
-    private void ToggleSettings() => SettingsPanelVisible = !SettingsPanelVisible;
-
-    [RelayCommand]
     private void UseRecommendedSetup()
     {
         IncludeServerKey = true;

@@ -61,7 +61,6 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _progressValue;
     [ObservableProperty] private string _progressText = "";
     [ObservableProperty] private bool _progressVisible;
-    [ObservableProperty] private bool _settingsPanelVisible;
     [ObservableProperty] private bool _isLoading = true;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(LogEntryCountText))] private int _logEntryCount;
     [ObservableProperty] private int _logSuccessCount;
