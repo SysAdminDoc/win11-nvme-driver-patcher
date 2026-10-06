@@ -61,7 +61,7 @@ public static class DiagnosticsService
             $"NVMe_Diagnostics_{Guid.NewGuid():N}.txt");
         var report = Export(workingDir, preflight, logHistory, reportPath);
 
-        var tempZip = outputPath + ".tmp";
+        var tempZip = AtomicFile.StagingPath(outputPath);
         try
         {
             var outputDir = Path.GetDirectoryName(Path.GetFullPath(outputPath));
@@ -244,15 +244,9 @@ public static class DiagnosticsService
         }
         finally
         {
-            // Export() internally writes `<reportPath>.tmp` then renames — if it threw between
-            // the two, the sidecar can leak. Sweep both to keep %TEMP% clean.
+            // Export() publishes the report in one step and cleans its own staging file, so only
+            // the report itself is left to sweep from %TEMP%.
             try { if (File.Exists(reportPath)) File.Delete(reportPath); } catch { }
-            try
-            {
-                var reportTemp = reportPath + ".tmp";
-                if (File.Exists(reportTemp)) File.Delete(reportTemp);
-            }
-            catch { }
         }
     }
 
@@ -796,15 +790,7 @@ public static class DiagnosticsService
             var dir = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
-            var tempPath = outputPath + ".tmp";
-            using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (var sw = new StreamWriter(fs, new System.Text.UTF8Encoding(false)))
-            {
-                sw.Write(sb.ToString());
-                sw.Flush();
-                fs.Flush(flushToDisk: true);
-            }
-            File.Move(tempPath, outputPath, overwrite: true);
+            AtomicFile.WriteAllText(outputPath, sb.ToString());
             return outputPath;
         }
         catch { return null; }

@@ -53,14 +53,25 @@ public static class AutoBenchmarkService
         catch { return null; }
     }
 
-    public static void SaveBaseline(AppConfig config, BenchmarkBaseline baseline)
+    /// <summary>
+    /// Publishes the baseline in one step. False means it wasn't written and says why through
+    /// <paramref name="log"/>; the previous baseline, if any, is still intact.
+    /// </summary>
+    public static bool SaveBaseline(AppConfig config, BenchmarkBaseline baseline, Action<string>? log = null)
     {
         var path = BaselinePath(config);
-        var dir = Path.GetDirectoryName(path);
-        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-        var tmp = path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(baseline, JsonOptions));
-        File.Move(tmp, path, overwrite: true);
+        try
+        {
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            AtomicFile.WriteAllText(path, JsonSerializer.Serialize(baseline, JsonOptions));
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            log?.Invoke($"[WARN] Benchmark baseline not saved to {path}: {ex.Message}");
+            return false;
+        }
     }
 
     public static BenchmarkBaseline? LoadBaselineFromPath(string path)

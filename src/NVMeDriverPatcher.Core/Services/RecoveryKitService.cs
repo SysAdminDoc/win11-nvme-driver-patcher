@@ -528,23 +528,7 @@ Write-Host """"; Write-Host ""Press any key...""; $null = $Host.UI.RawUI.ReadKey
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
 
-        var tempPath = path + ".tmp";
-        try
-        {
-            using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (var sw = new StreamWriter(fs, encoding))
-            {
-                sw.Write(content);
-                sw.Flush();
-                fs.Flush(flushToDisk: true);
-            }
-            File.Move(tempPath, path, overwrite: true);
-        }
-        catch
-        {
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-            throw;
-        }
+        AtomicFile.WriteAllText(path, content, encoding);
     }
 
     private static void DeleteDirectoryBestEffort(string path)

@@ -272,15 +272,7 @@ public static class RegistryService
 
             // .reg files must be UTF-16 LE with BOM. Atomic write so a crash doesn't leave
             // a half-written backup that regedit will silently refuse to import.
-            var tempFile = backupFile + ".tmp";
-            using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (var sw = new StreamWriter(fs, System.Text.Encoding.Unicode))
-            {
-                sw.Write(string.Join("\r\n", lines));
-                sw.Flush();
-                fs.Flush(flushToDisk: true);
-            }
-            File.Move(tempFile, backupFile, overwrite: true);
+            AtomicFile.WriteAllText(backupFile, string.Join("\r\n", lines), System.Text.Encoding.Unicode);
             return backupFile;
         }
         catch

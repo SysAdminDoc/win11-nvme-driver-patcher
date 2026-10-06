@@ -143,10 +143,7 @@ public static class CompatTelemetryService
     {
         var dir = string.IsNullOrWhiteSpace(config.WorkingDir) ? AppConfig.GetWorkingDir() : config.WorkingDir;
         var path = Path.Combine(dir, ReportFile);
-        var json = JsonSerializer.Serialize(report, JsonOptions);
-        var tmp = path + ".tmp";
-        File.WriteAllText(tmp, json, new UTF8Encoding(false));
-        File.Move(tmp, path, overwrite: true);
+        AtomicFile.WriteAllText(path, JsonSerializer.Serialize(report, JsonOptions));
         return path;
     }
 

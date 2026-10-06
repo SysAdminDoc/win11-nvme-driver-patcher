@@ -568,34 +568,21 @@ public static class BenchmarkService
         var benchFile = Path.Combine(workingDir, "benchmark_results.json");
         try
         {
-            var existing = new List<BenchmarkResult>();
-            if (File.Exists(benchFile))
+            // The GUI, the CLI and the scheduled task all append here. The read-modify-write runs
+            // under one machine-wide lock so a concurrent writer can't read the list before this
+            // entry lands and then publish a copy without it.
+            using var mutex = CrossPrivilegeMutex.Create(HistoryMutexName);
+            var held = false;
+            try { held = mutex.WaitOne(HistoryLockTimeout); }
+            catch (AbandonedMutexException) { held = true; }
+            try
             {
-                try
-                {
-                    var json = File.ReadAllText(benchFile);
-                    var parsed = JsonSerializer.Deserialize<List<BenchmarkResult>>(json, JsonOptions);
-                    existing = SanitizeBenchmarkHistory(parsed);
-                }
-                catch
-                {
-                    // Corrupt file — preserve it for forensics, then start fresh.
-                    try { File.Move(benchFile, benchFile + ".corrupt", overwrite: true); } catch { }
-                }
+                AppendToHistoryFile(benchFile, result);
             }
-            existing.Add(result);
-            if (existing.Count > 10) existing = existing.Skip(existing.Count - 10).ToList();
-
-            // Atomic write so a crash mid-save doesn't truncate the history file.
-            var tempFile = benchFile + ".tmp";
-            using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (var sw = new StreamWriter(fs, new System.Text.UTF8Encoding(false)))
+            finally
             {
-                sw.Write(JsonSerializer.Serialize(existing, JsonOptions));
-                sw.Flush();
-                fs.Flush(flushToDisk: true);
+                if (held) mutex.ReleaseMutex();
             }
-            File.Move(tempFile, benchFile, overwrite: true);
         }
         catch { }
 
@@ -605,6 +592,35 @@ public static class BenchmarkService
                 DataService.SaveBenchmark(result);
         }
         catch { }
+    }
+
+    internal const string HistoryMutexName = @"Global\NVMeDriverPatcher.BenchmarkHistory";
+    internal const int HistoryLength = 10;
+    private static readonly TimeSpan HistoryLockTimeout = TimeSpan.FromSeconds(10);
+
+    // Writes the entry even when the lock didn't come in time: a writer stuck for ten seconds is
+    // the rare case, and losing this result for certain is worse than racing it.
+    private static void AppendToHistoryFile(string benchFile, BenchmarkResult result)
+    {
+        var existing = new List<BenchmarkResult>();
+        if (File.Exists(benchFile))
+        {
+            try
+            {
+                var json = File.ReadAllText(benchFile);
+                var parsed = JsonSerializer.Deserialize<List<BenchmarkResult>>(json, JsonOptions);
+                existing = SanitizeBenchmarkHistory(parsed);
+            }
+            catch
+            {
+                // Corrupt file — preserve it for forensics, then start fresh.
+                try { File.Move(benchFile, benchFile + ".corrupt", overwrite: true); } catch { }
+            }
+        }
+        existing.Add(result);
+        if (existing.Count > HistoryLength) existing = existing.Skip(existing.Count - HistoryLength).ToList();
+
+        AtomicFile.WriteAllText(benchFile, JsonSerializer.Serialize(existing, JsonOptions));
     }
 
     public static List<BenchmarkResult> GetHistory(string workingDir)

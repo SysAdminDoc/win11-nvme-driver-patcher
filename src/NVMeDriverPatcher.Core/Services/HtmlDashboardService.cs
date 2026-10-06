@@ -98,23 +98,7 @@ public static class HtmlDashboardService
         if (!string.IsNullOrEmpty(outDir))
             Directory.CreateDirectory(outDir);
 
-        var tempPath = path + ".tmp";
-        try
-        {
-            using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
-            {
-                sw.Write(html);
-                sw.Flush();
-                fs.Flush(flushToDisk: true);
-            }
-            File.Move(tempPath, path, overwrite: true);
-        }
-        catch
-        {
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-            throw;
-        }
+        AtomicFile.WriteAllText(path, html);
         return path;
     }
 
