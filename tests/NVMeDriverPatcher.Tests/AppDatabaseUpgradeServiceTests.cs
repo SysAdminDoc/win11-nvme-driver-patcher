@@ -130,6 +130,88 @@ public sealed class AppDatabaseUpgradeServiceTests : IDisposable
         Assert.Equal(99L, Convert.ToInt64(Scalar(path, "PRAGMA user_version")));
     }
 
+    [Fact]
+    public void Upgrade_LeavesTheThreeNewestPreUpgradeBackups()
+    {
+        // Every upgrade took a full copy of the database into database-backups and nothing
+        // removed any of them.
+        var path = Path.Combine(_root, "v1.db");
+        CreateV1Fixture(path);
+        var backups = Directory.CreateDirectory(Path.Combine(_root, "database-backups")).FullName;
+        var older = Enumerable.Range(1, 4)
+            .Select(i => Path.Combine(backups, $"nvmepatcher-preupgrade-v1-2026010{i}-000000-{new string((char)('a' + i), 32)}.db"))
+            .ToList();
+        foreach (var file in older) File.WriteAllText(file, "old copy");
+        var unrelated = Path.Combine(backups, "copy-i-made-myself.db");
+        File.WriteAllText(unrelated, "mine");
+
+        var result = Upgrade(path);
+
+        Assert.True(result.IsAvailable, result.Summary);
+        Assert.True(File.Exists(result.BackupPath));
+        var remaining = Directory.GetFiles(backups, "nvmepatcher-preupgrade-*.db").Select(Path.GetFileName).Order().ToList();
+        Assert.Equal(AppDatabaseUpgradeService.UpgradeBackupRetention, remaining.Count);
+        Assert.Contains(Path.GetFileName(result.BackupPath!), remaining);
+        Assert.Contains(Path.GetFileName(older[3]), remaining);
+        Assert.Contains(Path.GetFileName(older[2]), remaining);
+        Assert.False(File.Exists(older[0]));
+        Assert.False(File.Exists(older[1]));
+        Assert.True(File.Exists(unrelated));
+    }
+
+    [Fact]
+    public void PruneUpgradeBackups_KeepsTheCopyJustMade_EvenWhenItsStampSortsOldest()
+    {
+        var backups = Directory.CreateDirectory(Path.Combine(_root, "database-backups")).FullName;
+        string Name(string stamp, char fill) => Path.Combine(backups, $"nvmepatcher-preupgrade-v2-{stamp}-{new string(fill, 32)}.db");
+        var justMade = Name("20250101-000000", 'a');   // clock went backwards
+        var newer = new[] { Name("20260301-000000", 'b'), Name("20260302-000000", 'c'), Name("20260303-000000", 'd'), Name("20260304-000000", 'e') };
+        foreach (var file in newer.Append(justMade)) File.WriteAllText(file, "x");
+
+        var removed = AppDatabaseUpgradeService.PruneUpgradeBackups(backups, 3, justMade);
+
+        Assert.Equal(2, removed);
+        Assert.True(File.Exists(justMade));
+        Assert.True(File.Exists(newer[3]));
+        Assert.True(File.Exists(newer[2]));
+        Assert.False(File.Exists(newer[1]));
+        Assert.False(File.Exists(newer[0]));
+        Assert.Equal(0, AppDatabaseUpgradeService.PruneUpgradeBackups(Path.Combine(_root, "missing"), 3, null));
+    }
+
+    [Fact]
+    public void PruneBypassIoHistory_TrimsAnOversizedTableToTheNewestRows()
+    {
+        // BypassIoHistory was the one table with no prune at all.
+        var path = Path.Combine(_root, "history.db");
+        Assert.True(Upgrade(path).IsAvailable);
+        using (var seed = new AppDbContext(path))
+        {
+            for (var i = 0; i < 130; i++)
+            {
+                seed.BypassIoHistory.Add(new BypassIoHistoryRecord
+                {
+                    Timestamp = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(i),
+                    VolumeLetter = "C:",
+                    Stack = "stornvme.sys",
+                    Description = "row " + i,
+                    IsPrePatch = i % 2 == 0,
+                });
+            }
+            seed.SaveChanges();
+        }
+
+        using var db = new AppDbContext(path);
+        var removed = NVMeDriverPatcher.Services.DataService.PruneBypassIoHistory(db, 100);
+
+        Assert.Equal(30, removed);
+        var left = db.BypassIoHistory.OrderBy(b => b.Timestamp).Select(b => b.Description).ToList();
+        Assert.Equal(100, left.Count);
+        Assert.Equal("row 30", left[0]);
+        Assert.Equal("row 129", left[^1]);
+        Assert.Equal(0, NVMeDriverPatcher.Services.DataService.PruneBypassIoHistory(db, 100));
+    }
+
     private AppDatabaseState Upgrade(string path) =>
         AppDatabaseUpgradeService.Upgrade(path, mutexName: MutexName());
 

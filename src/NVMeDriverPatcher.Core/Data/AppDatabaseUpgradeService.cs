@@ -209,6 +209,9 @@ internal static class AppDatabaseUpgradeService
             ApplyPersistentPragmas(connection);
             ValidateQuickCheck(connection);
             ValidateCurrentSchema(connection);
+            // The upgrade went through, so older pre-upgrade copies are no longer a recovery
+            // path anyone needs. A failed upgrade leaves every backup in place.
+            PruneUpgradeBackups(Path.GetDirectoryName(backup.SnapshotPath)!, UpgradeBackupRetention, backup.SnapshotPath);
             return new AppDatabaseState(
                 AppDatabaseAvailability.Available,
                 CurrentSchemaVersion,
@@ -419,6 +422,52 @@ internal static class AppDatabaseUpgradeService
         var directory = Path.Combine(Path.GetDirectoryName(path)!, "database-backups");
         var file = $"nvmepatcher-preupgrade-v{sourceVersion}-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.db";
         return Path.Combine(directory, file);
+    }
+
+    /// <summary>How many pre-upgrade database copies stay after an upgrade succeeds.</summary>
+    internal const int UpgradeBackupRetention = 3;
+
+    private static readonly System.Text.RegularExpressions.Regex RxBackupName = new(
+        @"^nvmepatcher-preupgrade-v\d+-(?<stamp>\d{8}-\d{6})-[0-9a-f]{32}\.db$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Deletes pre-upgrade copies beyond the <paramref name="keep"/> newest by the time stamp in
+    /// their name. <paramref name="justMade"/> always stays, whatever its stamp says, and files
+    /// that aren't backups by name are not touched. Returns how many were removed.
+    /// </summary>
+    internal static int PruneUpgradeBackups(string directory, int keep, string? justMade)
+    {
+        if (!Directory.Exists(directory)) return 0;
+        var backups = Directory.EnumerateFiles(directory, "*.db")
+            .Select(file => (Path: file, Match: RxBackupName.Match(Path.GetFileName(file))))
+            .Where(entry => entry.Match.Success)
+            .OrderByDescending(entry => entry.Match.Groups["stamp"].Value, StringComparer.Ordinal)
+            .ThenByDescending(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => entry.Path)
+            .ToList();
+
+        var removed = 0;
+        var kept = justMade is not null && backups.Contains(justMade, StringComparer.OrdinalIgnoreCase) ? 1 : 0;
+        foreach (var file in backups)
+        {
+            if (string.Equals(file, justMade, StringComparison.OrdinalIgnoreCase)) continue;
+            if (kept < keep)
+            {
+                kept++;
+                continue;
+            }
+            try
+            {
+                File.Delete(file);
+                removed++;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Still in use or protected; it stays for the next upgrade to try.
+            }
+        }
+        return removed;
     }
 
     private static AppDatabaseState Available(int version, string summary) => new(
