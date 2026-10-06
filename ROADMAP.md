@@ -30,16 +30,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Likely
   Effort: S
 
-- [ ] P3 — SafeBoot journal restore re-types non-REG_SZ defaults and expands REG_EXPAND_SZ, breaking the byte-for-byte claim
-  Category: correctness
-  Where: `src/NVMeDriverPatcher.Core/Services/SafeBootStateService.cs:325-330` (`Read` uses `key.GetValue(name)` — expands), `:362-365` (`ApplyRestore` always writes `RegistryValueKind.String`)
-  Problem: A pre-existing REG_EXPAND_SZ (or other-kind) SafeBoot default is restored expanded and re-typed; the ledger's `SafeBootSnapshotsEqual` (`MutationLedgerService.cs:791-798` compares Kind) then flags a permanent baseline difference on every restore. Real-world incidence low (SafeBoot defaults are REG_SZ driver-group names).
-  Evidence: Both methods read.
-  Fix: Capture with `RegistryValueOptions.DoNotExpandEnvironmentNames`; restore with the recorded Kind.
-  Acceptance: Round-trip test with a REG_EXPAND_SZ fixture default restores kind and raw data exactly.
-  Confidence: Verified (mechanism)
-  Effort: S
-
 - [ ] P3 — `DetectBcdTestSigningEnabled` drains process pipes synchronously and sequentially with no effective timeout
   Category: reliability
   Where: `src/NVMeDriverPatcher.Core/Services/PreflightService.cs:671-679` (`ReadToEnd()` stdout then stderr before `WaitForExit(10_000)`)

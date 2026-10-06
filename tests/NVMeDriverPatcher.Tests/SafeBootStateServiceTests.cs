@@ -1,3 +1,4 @@
+using Microsoft.Win32;
 using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 
@@ -35,7 +36,7 @@ public sealed class SafeBootStateServiceTests
             else if (plan.RestorePriorDefault is not null)
             {
                 values.RemoveAll(v => v.Name.Length == 0);
-                values.Add(new SafeBootValueSnapshot("", 1, plan.RestorePriorDefault));
+                values.Add(new SafeBootValueSnapshot("", plan.RestorePriorDefaultKind, plan.RestorePriorDefault));
             }
             Set(path, snap with { Existed = true, Values = values });
         }
@@ -102,6 +103,106 @@ public sealed class SafeBootStateServiceTests
         Assert.False(plan.DeleteEntireKey);
         Assert.False(plan.DeleteAppDefaultValue);
         Assert.Equal("Prior Value", plan.RestorePriorDefault);
+        Assert.Equal((int)RegistryValueKind.String, plan.RestorePriorDefaultKind);
+    }
+
+    // --- A prior default that isn't REG_SZ keeps its kind and raw data ---
+
+    [Fact]
+    public void PlanRestore_ExpandStringDefault_CarriesTheKind_AndTheFakeRoundTripsIt()
+    {
+        // Restoring every default as REG_SZ changed the kind, so the ledger saw a permanent
+        // baseline difference on the key after every remove.
+        var prior = new SafeBootKeySnapshot
+        {
+            Existed = true,
+            Values = new[] { new SafeBootValueSnapshot("", (int)RegistryValueKind.ExpandString, @"%SystemRoot%\System32\drivers") }
+        };
+        var registry = new FakeSafeBootRegistry();
+        registry.Set(@"SafeBoot\Minimal\{test}", prior with
+        {
+            Values = new[] { new SafeBootValueSnapshot("", (int)RegistryValueKind.String, ExpectedDefault) }
+        });
+
+        var plan = SafeBootStateService.PlanRestore(prior);
+        registry.ApplyRestore(@"SafeBoot\Minimal\{test}", plan);
+
+        Assert.Equal((int)RegistryValueKind.ExpandString, plan.RestorePriorDefaultKind);
+        Assert.Equal(@"%SystemRoot%\System32\drivers", plan.RestorePriorDefault);
+        Assert.True(SafeBootStateService.SnapshotsMatch(prior, registry.Read(@"SafeBoot\Minimal\{test}")));
+    }
+
+    [Fact]
+    public void RealRegistry_ReadAndRestore_RoundTripAnExpandStringDefaultUnexpanded()
+    {
+        // Against a scratch key under HKCU, which needs no elevation. GetValue expands
+        // %SystemRoot% by default, so the journal used to hold C:\WINDOWS\... and write that
+        // back as REG_SZ.
+        var path = @"Software\NVMePatcherTests\" + Guid.NewGuid().ToString("N");
+        using var hkcu = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
+        try
+        {
+            SafeBootKeySnapshot prior;
+            using (var key = hkcu.CreateSubKey(path, writable: true)!)
+            {
+                key.SetValue("", @"%SystemRoot%\System32\drivers", RegistryValueKind.ExpandString);
+                key.SetValue("Count", unchecked((int)0xFFFFFFFE), RegistryValueKind.DWord);
+                key.SetValue("Big", 5_000_000_000L, RegistryValueKind.QWord);
+                key.SetValue("Groups", new[] { "Boot Bus Extender", "SCSI miniport" }, RegistryValueKind.MultiString);
+                key.SetValue("Blob", new byte[] { 0x01, 0x00, 0xFE }, RegistryValueKind.Binary);
+                prior = RealSafeBootRegistry.ReadKey(key, path);
+            }
+
+            var def = Assert.Single(prior.Values, v => v.Name.Length == 0);
+            Assert.Equal((int)RegistryValueKind.ExpandString, def.Kind);
+            Assert.Equal(@"%SystemRoot%\System32\drivers", def.StringData);
+            Assert.Equal("-2", Assert.Single(prior.Values, v => v.Name == "Count").StringData);
+            Assert.Equal("5000000000", Assert.Single(prior.Values, v => v.Name == "Big").StringData);
+            Assert.Equal("Boot Bus Extender\0SCSI miniport", Assert.Single(prior.Values, v => v.Name == "Groups").StringData);
+            Assert.Equal("0100FE", Assert.Single(prior.Values, v => v.Name == "Blob").StringData);
+
+            using (var key = hkcu.OpenSubKey(path, writable: true)!)
+            {
+                key.SetValue("", ExpectedDefault, RegistryValueKind.String);   // what apply writes
+                RealSafeBootRegistry.RestoreDefault(key, SafeBootStateService.PlanRestore(prior));
+
+                Assert.Equal(RegistryValueKind.ExpandString, key.GetValueKind(""));
+                Assert.Equal(@"%SystemRoot%\System32\drivers",
+                    key.GetValue("", null, RegistryValueOptions.DoNotExpandEnvironmentNames));
+                Assert.True(SafeBootStateService.SnapshotsMatch(prior, RealSafeBootRegistry.ReadKey(key, path)));
+            }
+        }
+        finally
+        {
+            try { hkcu.DeleteSubKeyTree(path, throwOnMissingSubKey: false); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(RegistryValueKind.DWord, "-2", typeof(int))]
+    [InlineData(RegistryValueKind.QWord, "5000000000", typeof(long))]
+    [InlineData(RegistryValueKind.MultiString, "a\0b", typeof(string[]))]
+    [InlineData(RegistryValueKind.Binary, "0100FE", typeof(byte[]))]
+    [InlineData(RegistryValueKind.ExpandString, "%SystemRoot%", typeof(string))]
+    [InlineData(RegistryValueKind.String, "plain", typeof(string))]
+    public void Codec_DecodesEachKindToWhatSetValueExpects(RegistryValueKind kind, string data, Type expected)
+    {
+        var (value, decodedKind) = SafeBootValueCodec.Decode((int)kind, data);
+
+        Assert.Equal(kind, decodedKind);
+        Assert.IsType(expected, value);
+        Assert.Equal(data, SafeBootValueCodec.Encode(kind, value));
+    }
+
+    [Theory]
+    [InlineData(RegistryValueKind.DWord, "not a number")]
+    [InlineData(RegistryValueKind.Binary, "xyz")]
+    public void Codec_DataThatDoesNotParseAsItsKind_FallsBackToAString(RegistryValueKind kind, string data)
+    {
+        var (value, decodedKind) = SafeBootValueCodec.Decode((int)kind, data);
+
+        Assert.Equal(RegistryValueKind.String, decodedKind);
+        Assert.Equal(data, value);
     }
 
     // --- End-to-end journal capture + restore against the fake ---
