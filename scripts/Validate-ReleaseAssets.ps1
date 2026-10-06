@@ -21,7 +21,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = if ($RepoRoot) { Resolve-Path $RepoRoot } else { Resolve-Path (Join-Path $PSScriptRoot '..') }
 $Version = $Version.TrimStart('v')
 
-$minimumEmbeddedRuntime = [Version]'10.0.11'
+$minimumEmbeddedRuntime = [Version]'10.0.12'
 $propsPath = Join-Path $repoRoot 'Directory.Build.props'
 if (Test-Path -LiteralPath $propsPath) {
     $propsText = Get-Content -Raw -LiteralPath $propsPath

@@ -38,7 +38,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
     <!-- EF's transitive SQLitePCLRaw 2.1.11 bundle resolves an older native SQLite, so the
          direct bundle + SourceGear pins keep the native asset on the maintained 3.53.3 floor.
          The bundled native library compiles FTS5; defensive mode is enabled on every DB
@@ -50,8 +50,8 @@
          that release changes the transitive native package id and can orphan this pin.
          SqliteVersionTests pins both the runtime floor and the resolved native asset path. -->
     <PackageReference Include="SourceGear.sqlite3" Version="3.53.3" />
-    <PackageReference Include="System.Management" Version="10.0.11" />
-    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.11" />
+    <PackageReference Include="System.Management" Version="10.0.12" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.12" />
   </ItemGroup>
 
 </Project>
