@@ -20,7 +20,7 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <!-- Single-file publish leaves the loose copies above beside the exe, so the bare exe that
-         winget, Scoop, Chocolatey and a direct download deliver arrives without them. The
+         Scoop, Chocolatey and a direct download deliver arrives without them. The
          embedded copies are the last resort after the admin override and the loose file
          (BundledDataFileService). -->
     <EmbeddedResource Include="compat.json" LogicalName="NVMeDriverPatcher.compat.json" />

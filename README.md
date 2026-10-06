@@ -192,7 +192,6 @@ Some builds ship the two GUID SafeBoot keys themselves. On 24H2 26100.9550 and 2
 - **Driver Verifier harness** (`verifier-on` / `-off` / `-status`): dev/tester-mode wrapper around `verifier.exe` for kernel-level stress checks on the NVMe stack.
 - **GPO / ADMX templates** (`packaging/admx/`): pin Safe/Full profile, IncludeServerKey, IncludeStandaloneFuture, SkipWarnings, watchdog behavior, and telemetry across a fleet via `HKLM\SOFTWARE\Policies\SysAdminDoc\NVMeDriverPatcher`. Policy overrides local config.
 - **Intune source bundle** (`NVMeDriverPatcher.Intune-<version>.zip`): release builds package the MSI, the Win32 detection script and the Check/Remediate remediation pair with a versioned, per-file SHA-256 manifest before upload or `.intunewin` wrapping.
-- **winget manifest** (`packaging/winget/SysAdminDoc.NVMeDriverPatcher.yaml`): `winget install SysAdminDoc.NVMeDriverPatcher`.
 - **Non-admin status tray agent** (`NVMeDriverPatcher.Tray`): separate exe, no UAC. Shows patch state + watchdog verdict from the system tray; right-click → "Open Main App (elevated)" for the admin GUI.
 - **Rotating logs**: `crash.log`, `activity.log`, `watchdog.log`, `diagnostics.log` rotate at 5MB each with 5 generations retained.
 

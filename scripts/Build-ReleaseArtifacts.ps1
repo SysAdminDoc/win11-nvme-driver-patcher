@@ -35,11 +35,6 @@ if (-not (Test-Path -LiteralPath $powerShellPath -PathType Leaf)) {
     throw "Windows PowerShell was not found at '$powerShellPath'."
 }
 
-$wingetPath = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winget.exe'
-if (-not (Test-Path -LiteralPath $wingetPath -PathType Leaf)) {
-    throw "winget.exe was not found at '$wingetPath'. Install App Installer before building release artifacts."
-}
-
 & (Join-Path $PSScriptRoot 'Validate-LegacyPowerShellBoundary.ps1') `
     -ScriptPath (Join-Path $repoRoot 'NVMe_Driver_Patcher.ps1')
 
@@ -245,7 +240,6 @@ Invoke-Checked $powerShellPath @(
     '-OutputRoot',
     $publishRoot
 )
-Invoke-Checked $wingetPath @('validate', '--manifest', (Join-Path $publishRoot 'winget'))
 
 $chocoStage = Join-Path $publishRoot 'chocolatey-package'
 $nuspec = Join-Path $chocoStage 'nvme-driver-patcher.nuspec'

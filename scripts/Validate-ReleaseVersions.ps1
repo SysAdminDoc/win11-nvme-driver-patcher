@@ -46,59 +46,28 @@ if ($psd1 -match "ModuleVersion\s*=\s*'([^']+)'") {
     Check "packaging/powershell/NVMeDriverPatcher.psd1 ModuleVersion" $Matches[1] $canonical
 } else { $failures.Add("psd1: ModuleVersion line not found") }
 
-# 2. winget multi-file manifest — every file version and every architecture URL tag.
-$wingetRoot = Join-Path $repoRoot 'packaging/winget'
-$wingetFiles = @(
-    'SysAdminDoc.NVMeDriverPatcher.yaml',
-    'SysAdminDoc.NVMeDriverPatcher.installer.yaml',
-    'SysAdminDoc.NVMeDriverPatcher.locale.en-US.yaml'
-)
-foreach ($wingetFile in $wingetFiles) {
-    $wingetPath = Join-Path $wingetRoot $wingetFile
-    if (-not (Test-Path -LiteralPath $wingetPath)) {
-        $failures.Add("winget: required multi-file manifest is missing: $wingetFile")
-        continue
-    }
-    $wingetText = Get-Content -Raw $wingetPath
-    if ($wingetText -match "PackageVersion:\s*(\S+)") {
-        Check "winget $wingetFile PackageVersion" $Matches[1] $canonical
-    } else { $failures.Add("winget $wingetFile`: PackageVersion line not found") }
-}
-$wingetInstallerPath = Join-Path $wingetRoot 'SysAdminDoc.NVMeDriverPatcher.installer.yaml'
-if (Test-Path -LiteralPath $wingetInstallerPath) {
-    $wingetInstaller = Get-Content -Raw $wingetInstallerPath
-    $urlMatches = [regex]::Matches($wingetInstaller, "InstallerUrl:\s*\S*/download/v([0-9][^/]*)/")
-    if ($urlMatches.Count -ne 2) {
-        $failures.Add("winget installer manifest: expected two architecture URLs, found $($urlMatches.Count)")
-    } else {
-        foreach ($urlMatch in $urlMatches) {
-            Check "winget InstallerUrl tag segment" $urlMatch.Groups[1].Value $canonical
-        }
-    }
-}
-
-# 3. WiX MSI package version (4-part)
+# 2. WiX MSI package version (4-part)
 $wxsPath = Join-Path $repoRoot 'packaging/wix/NVMeDriverPatcher.wxs'
 $wxs = Get-Content -Raw $wxsPath
 if ($wxs -cmatch 'Version="([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"') {
     Check "packaging/wix/NVMeDriverPatcher.wxs Version" $Matches[1] "$canonical.0"
 } else { $failures.Add("wxs: Version attribute not found") }
 
-# 4. Intune detection script minimum version — must not lag the release
+# 3. Intune detection script minimum version — must not lag the release
 $intunePath = Join-Path $repoRoot 'packaging/intune/Detect-NVMeDriverPatcher.ps1'
 $intune = Get-Content -Raw $intunePath
 if ($intune -match "\`$minVersion\s*=\s*\[Version\]'([^']+)'") {
     Check "packaging/intune/Detect-NVMeDriverPatcher.ps1 minVersion" $Matches[1] $canonical
 } else { $failures.Add("intune: minVersion line not found") }
 
-# 5. AppConfig last-resort fallback literal
+# 4. AppConfig last-resort fallback literal
 $appConfigPath = Join-Path $repoRoot 'src/NVMeDriverPatcher.Core/Models/AppConfig.cs'
 $appConfig = Get-Content -Raw $appConfigPath
 if ($appConfig -match 'FallbackVersionLiteral\s*=\s*"([^"]+)"') {
     Check "AppConfig.cs FallbackVersionLiteral" $Matches[1] $canonical
 } else { $failures.Add("AppConfig.cs: FallbackVersionLiteral not found") }
 
-# 6. Chocolatey nuspec
+# 5. Chocolatey nuspec
 $nuspecPath = Join-Path $repoRoot 'packaging/chocolatey/nvme-driver-patcher.nuspec'
 if (Test-Path $nuspecPath) {
     $nuspec = [xml](Get-Content -Raw $nuspecPath)
@@ -107,7 +76,7 @@ if (Test-Path $nuspecPath) {
     else { $failures.Add("chocolatey nuspec: version element not found") }
 }
 
-# 7. Scoop manifest
+# 6. Scoop manifest
 $scoopPath = Join-Path $repoRoot 'packaging/scoop/nvme-driver-patcher.json'
 if (Test-Path $scoopPath) {
     $scoop = Get-Content -Raw $scoopPath | ConvertFrom-Json
@@ -115,12 +84,12 @@ if (Test-Path $scoopPath) {
     else { $failures.Add("scoop manifest: version field not found") }
 }
 
-# 8. Optional: tag-derived release version must match repo state
+# 7. Optional: tag-derived release version must match repo state
 if ($ReleaseVersion) {
     Check "release tag version" $ReleaseVersion.TrimStart('v') $canonical
 }
 
-# 9. Packaging markdown artifact examples must not lag the canonical package version.
+# 8. Packaging markdown artifact examples must not lag the canonical package version.
 # Use NVMeDriverPatcher-<version>.msi in docs that should survive routine bumps.
 $canonicalMajor = ([Version]$canonical).Major
 $artifactVersionPattern = 'NVMeDriverPatcher-(?<version><version>|[0-9]+\.[0-9]+\.[0-9]+|[0-9]+\.x\.y)(?=\.(?:exe|intunewin|msi|sha256|zip)\b)'
@@ -157,7 +126,7 @@ if (Test-Path $packagingDocsRoot) {
     }
 }
 
-# 10. Narrative docs must not lag the canonical version. Each is guarded by Test-Path so the
+# 9. Narrative docs must not lag the canonical version. Each is guarded by Test-Path so the
 # check is a no-op when the file is absent (e.g. minimal fixtures).
 function Check-Narrative {
     param([string]$RelPath, [string]$Pattern, [string]$Surface)

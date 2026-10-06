@@ -5,8 +5,6 @@
 #   - any required artifact is missing
 #   - any checksummed artifact lacks its per-asset .sha256 sidecar in publish/
 #   - SHA256SUMS.txt omits a checksummed artifact or carries a stale hash
-#   - the generated winget manifest's InstallerUrl tag/version or InstallerSha256 disagrees
-#     with the actual GUI exe and release version
 #   - a self-contained executable embeds an older .NET runtime than the release floor
 [CmdletBinding()]
 param(
@@ -206,13 +204,6 @@ foreach ($a in $contract.artifacts) {
         }
     }
 
-    if ($a.id -like 'winget-*-manifest') {
-        $yaml = Get-Content -Raw $full
-        if ($yaml -notmatch "PackageVersion:\s*$([regex]::Escape($Version))\b") {
-            $failures.Add("$($a.id) PackageVersion is not $Version")
-        }
-    }
-
     if ($a.id -eq 'intune-source') {
         try {
             Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -298,50 +289,6 @@ foreach ($a in $contract.artifacts) {
         }
         catch {
             $failures.Add("Intune source ZIP integrity validation failed: $($_.Exception.Message)")
-        }
-    }
-
-    if ($a.id -eq 'winget-installer-manifest') {
-        $yaml = Get-Content -Raw $full
-        $installers = @{}
-        $currentArchitecture = $null
-        foreach ($line in $yaml -split '\r?\n') {
-            if ($line -match '^\s*-\s*Architecture:\s*["'']?([^"''\s]+)') {
-                $currentArchitecture = $Matches[1].ToLowerInvariant()
-                if ($installers.ContainsKey($currentArchitecture)) {
-                    $failures.Add("winget manifest contains duplicate $currentArchitecture installer blocks")
-                    $currentArchitecture = $null
-                } else {
-                    $installers[$currentArchitecture] = @{ Url = $null; Hash = $null }
-                }
-            } elseif ($currentArchitecture -and $line -match '^\s*InstallerUrl:\s*(\S+)') {
-                $installers[$currentArchitecture].Url = $Matches[1]
-            } elseif ($currentArchitecture -and $line -match '^\s*InstallerSha256:\s*(\S+)') {
-                $installers[$currentArchitecture].Hash = $Matches[1]
-            }
-        }
-        $guiPath = Join-Path $repoRoot 'publish/gui/NVMeDriverPatcher.exe'
-        $arm64Path = Join-Path $repoRoot 'publish/NVMeDriverPatcher-win-arm64.exe'
-        foreach ($binding in @(
-            @{ Architecture = 'x64'; File = $guiPath; Asset = 'NVMeDriverPatcher.exe' },
-            @{ Architecture = 'arm64'; File = $arm64Path; Asset = 'NVMeDriverPatcher-win-arm64.exe' }
-        )) {
-            $architecture = $binding.Architecture
-            if (-not $installers.ContainsKey($architecture)) {
-                $failures.Add("winget manifest missing $architecture Architecture entry")
-                continue
-            }
-            $record = $installers[$architecture]
-            $expectedUrl = "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v$Version/$($binding.Asset)"
-            if ($record.Url -ne $expectedUrl) {
-                $failures.Add("winget manifest InstallerUrl ($architecture) is '$($record.Url)', expected '$expectedUrl'")
-            }
-            if (Test-Path $binding.File) {
-                $expectedHash = (Get-Sha256Hex $binding.File).ToUpperInvariant()
-                if ($record.Hash -ne $expectedHash) {
-                    $failures.Add("winget manifest InstallerSha256 ($architecture) does not match $($binding.Asset)")
-                }
-            }
         }
     }
 

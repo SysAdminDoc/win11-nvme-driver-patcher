@@ -5,7 +5,7 @@ using NVMeDriverPatcher.Services;
 namespace NVMeDriverPatcher.Tests;
 
 // The curated data files are published loose beside each single-file exe, so the bare exe that
-// winget, Scoop, Chocolatey and a direct download hand out arrives without them. These tests pin
+// Scoop, Chocolatey and a direct download hand out arrives without them. These tests pin
 // the embedded copy that keeps such an install on the shipped rules, IDs and compat list.
 public sealed class BundledDataFileTests : IDisposable
 {

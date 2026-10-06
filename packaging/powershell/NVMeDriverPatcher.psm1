@@ -118,9 +118,9 @@ function Get-CliPath {
 
     if ($rejected.Count -gt 0) {
         throw ("$($script:CliExeName) was found but refused because it could be replaced by a " +
-               "non-administrator: $($rejected -join '; '). Install via winget / MSI into Program Files.")
+               "non-administrator: $($rejected -join '; '). Install it with the MSI into Program Files.")
     }
-    throw "$($script:CliExeName) not found. Install via winget / MSI, or place it next to this module in a directory only administrators can write."
+    throw "$($script:CliExeName) not found. Install it with the MSI, or place it next to this module in a directory only administrators can write."
 }
 
 function Invoke-Cli {
