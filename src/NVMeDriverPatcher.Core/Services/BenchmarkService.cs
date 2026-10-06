@@ -570,18 +570,25 @@ public static class BenchmarkService
         {
             // The GUI, the CLI and the scheduled task all append here. The read-modify-write runs
             // under one machine-wide lock so a concurrent writer can't read the list before this
-            // entry lands and then publish a copy without it.
-            using var mutex = CrossPrivilegeMutex.Create(HistoryMutexName);
+            // entry lands and then publish a copy without it. A lock that can't be created or
+            // acquired doesn't lose the entry: the write goes ahead unlocked.
+            Mutex? mutex = null;
             var held = false;
-            try { held = mutex.WaitOne(HistoryLockTimeout); }
-            catch (AbandonedMutexException) { held = true; }
             try
             {
+                try
+                {
+                    mutex = CrossPrivilegeMutex.Create(HistoryMutexName);
+                    try { held = mutex.WaitOne(HistoryLockTimeout); }
+                    catch (AbandonedMutexException) { held = true; }
+                }
+                catch { }
                 AppendToHistoryFile(benchFile, result);
             }
             finally
             {
-                if (held) mutex.ReleaseMutex();
+                if (held) { try { mutex!.ReleaseMutex(); } catch { } }
+                mutex?.Dispose();
             }
         }
         catch { }

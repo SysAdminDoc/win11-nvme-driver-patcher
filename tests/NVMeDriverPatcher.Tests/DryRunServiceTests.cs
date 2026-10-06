@@ -209,6 +209,13 @@ public sealed class DryRunServiceTests
             ? new DryRunService.CurrentRegistryValue(true, 1)
             : new DryRunService.CurrentRegistryValue(false, null);
 
+    // The two extra flags set, the primary not: a script did that, this tool never does.
+    private static DryRunService.CurrentRegistryValue ExtrasOnly(string path, string valueName) =>
+        valueName is "1853569164" or AppConfig.StandaloneFutureFeatureID &&
+        path.EndsWith(@"FeatureManagement\Overrides", StringComparison.OrdinalIgnoreCase)
+            ? new DryRunService.CurrentRegistryValue(true, 1)
+            : new DryRunService.CurrentRegistryValue(false, null);
+
     private static List<RegistryValueBaseline> AbsentBaseline(string[] mirrors) =>
         MutationLedgerService.FeatureOverrideSubKeys(mirrors)
             .SelectMany(subKey => AppConfig.OwnedOverrideValueNames.Select(id =>
@@ -254,9 +261,55 @@ public sealed class DryRunServiceTests
 
         var deletes = report.Items.Where(i => i.Action == "DELETE").ToList();
         Assert.Equal(4, deletes.Count);   // 1853569164 and 156965516 in both Overrides keys
-        Assert.All(deletes, row => Assert.Contains("version before 5.1.0", row.Note, StringComparison.Ordinal));
+        Assert.All(deletes, row => Assert.Contains("presumed to be an older version's", row.Note, StringComparison.Ordinal));
         Assert.Equal(4, report.TotalDeletes);
         Assert.DoesNotContain(report.Items, i => i.Action == "KEEP" && i.Target.Contains("Overrides", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void FirstApplyOverAnOlderVersionsPatch_PreviewSaysWhatApplyWillDo()
+    {
+        // No ledger yet (v5.0.0 wrote none) but the primary flag is set: apply's fresh baseline
+        // will record it, and the mid-life rule will clear the extras. The preview must not show
+        // KEEP rows here; that was the review's finding.
+        var config = new AppConfig { PatchProfile = PatchProfile.Safe };
+        var report = DryRunService.PlanInstall(config, null, ["ControlSet002"], AfterFullApply, priorBaseline: null);
+
+        var deletes = report.Items.Where(i => i.Action == "DELETE").ToList();
+        Assert.Equal(4, deletes.Count);
+        Assert.All(deletes, row => Assert.Contains("presumed", row.Note, StringComparison.Ordinal));
+        Assert.DoesNotContain(report.Items, i => i.Action == "KEEP" && i.Target.Contains("Overrides", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ReusableLedger_WhileAnotherThreadHoldsTheLock_ReportsBusy()
+    {
+        using var holding = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var holder = new Thread(() =>
+        {
+            using var mutex = new Mutex(initiallyOwned: false, MutationLedgerService.LedgerMutexName);
+            try { mutex.WaitOne(); } catch (AbandonedMutexException) { }
+            holding.Set();
+            release.Wait();
+            mutex.ReleaseMutex();
+        });
+        holder.Start();
+        holding.Wait();
+        try
+        {
+            var config = new AppConfig { WorkingDir = Path.Combine(Path.GetTempPath(), "NVMeDriverPatcher.DryRun." + Guid.NewGuid().ToString("N")) };
+
+            var (ledger, busy) = DryRunService.ReusableLedger(config);
+
+            Assert.Null(ledger);
+            Assert.True(busy);
+        }
+        finally
+        {
+            release.Set();
+            holder.Join();
+        }
     }
 
     [Fact]
@@ -276,9 +329,10 @@ public sealed class DryRunServiceTests
     [Fact]
     public void ValuesThatPredateTheFirstApply_AreKeepRowsNotDeletes()
     {
-        // No ledger to reuse: apply captures a fresh baseline, so whatever is set now stays.
+        // No ledger to reuse and the primary flag isn't set: a script set the extras, apply's
+        // fresh baseline will record them as pre-existing, and they stay.
         var config = new AppConfig { PatchProfile = PatchProfile.Safe };
-        var report = DryRunService.PlanInstall(config, null, ["ControlSet002"], AfterFullApply, priorBaseline: null);
+        var report = DryRunService.PlanInstall(config, null, ["ControlSet002"], ExtrasOnly, priorBaseline: null);
 
         Assert.Equal(0, report.TotalDeletes);
         Assert.DoesNotContain("leftover", report.Summary, StringComparison.Ordinal);

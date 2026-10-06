@@ -445,7 +445,9 @@ public static class MutationLedgerService
     {
         using var lease = AcquireMutex(timeout);
         ledger = lease.Held ? LoadUnsafe(workingDir) : null;
-        return lease.Held;
+        // A ledger file that exists but can't be read (state folder refused, both copies corrupt)
+        // is not "no ledger": the caller mustn't plan as if a fresh baseline were coming.
+        return lease.Held && !(ledger is null && File.Exists(LedgerPath(workingDir)));
     }
 
     public static InterruptedMutationRecoveryResult RecoverInterrupted(

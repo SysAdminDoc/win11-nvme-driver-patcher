@@ -69,7 +69,7 @@ public static class DryRunService
     // The ledger apply will reuse, or null when apply would capture a fresh baseline. Busy means
     // the lock couldn't be had in time: the preview then knows nothing about the ledger and must
     // not pass "no ledger" off as "fresh baseline".
-    private static (MutationOperationLedger? Ledger, bool Busy) ReusableLedger(AppConfig config)
+    internal static (MutationOperationLedger? Ledger, bool Busy) ReusableLedger(AppConfig config)
     {
         try
         {
@@ -148,7 +148,7 @@ public static class DryRunService
                 After = item.WrittenByThisTool ? "(absent)" : before,
                 Note = item switch
                 {
-                    { BaselineCapturedMidLife: true } => "Set together with this tool's primary flag before the first ledger was captured, so a version before 5.1.0 wrote it. This profile doesn't include it, so apply clears it.",
+                    { BaselineCapturedMidLife: true } => "Already set alongside this tool's primary flag before any ledger existed, so it's presumed to be an older version's. This profile doesn't include it, so apply clears it; Remove restores it with the rest of the recorded baseline.",
                     { WrittenByThisTool: true } => "Written by an earlier apply of this tool. This profile doesn't include it, so apply clears it.",
                     _ => "Set before this tool's first apply. This profile doesn't write it, and apply and Remove leave it as is."
                 }

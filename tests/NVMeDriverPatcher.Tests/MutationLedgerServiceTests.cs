@@ -423,6 +423,21 @@ public sealed class MutationLedgerServiceTests
     }
 
     [Fact]
+    public void TryLoad_LedgerFileThatCannotBeRead_IsNotReportedAsNoLedger()
+    {
+        var dir = TempDir();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(MutationLedgerService.LedgerPath(dir), "{ not json");
+
+            Assert.False(MutationLedgerService.TryLoad(dir, TimeSpan.FromSeconds(5), out var ledger));
+            Assert.Null(ledger);
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
     public void RestoreOriginalState_WhileAnotherLiveProcessOwnsTheOperation_RefusesAndTouchesNothing()
     {
         var dir = TempDir();
