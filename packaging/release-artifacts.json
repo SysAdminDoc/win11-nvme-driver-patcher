@@ -13,6 +13,8 @@
     { "id": "intune-source", "path": "publish/NVMeDriverPatcher.Intune-{version}.zip", "required": true, "sign": false, "checksum": true, "upload": true, "channel": "intune" },
     { "id": "legacy-ps1", "path": "NVMe_Driver_Patcher.ps1",                          "required": true,  "sign": false, "checksum": true,  "upload": true,  "channel": "legacy", "note": "Read/recover-only: apply/reinstall/hot-swap is retired and exits 5." },
     { "id": "powershell-module", "path": "publish/NVMeDriverPatcher.PowerShell-{version}.zip", "required": true, "sign": false, "checksum": true, "upload": true, "channel": "powershell" },
+    { "id": "update-manifest", "path": "publish/update-manifest.json",            "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "update", "note": "Signed by New-UpdateManifest.ps1; the in-app updater refuses a release without it." },
+    { "id": "update-manifest-signature", "path": "publish/update-manifest.json.sig", "required": true, "sign": false, "checksum": false, "upload": true, "channel": "update" },
     { "id": "sha256sums", "path": "publish/SHA256SUMS.txt",                           "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "integrity" },
     { "id": "chocolatey-nupkg", "path": "publish/nvme-driver-patcher.{version}.nupkg", "required": true, "sign": false, "checksum": false, "upload": true, "channel": "chocolatey" },
     { "id": "scoop-manifest", "path": "publish/nvme-driver-patcher.json",              "required": true,  "sign": false, "checksum": false, "upload": true,  "channel": "scoop" }

@@ -13,7 +13,7 @@ public class AutoUpdateResult
     public string? RestartCommand { get; set; }
     /// <summary>True when content-level verification (SHA-256 sidecar or Authenticode) passed.</summary>
     public bool ContentVerified { get; set; }
-    /// <summary>Name of the verification signal that ran: "sha256", "authenticode", or "none".</summary>
+    /// <summary>Name of the verification signal that ran: "signed-manifest", "sha256", "authenticode", or "none".</summary>
     public string VerificationMethod { get; set; } = "none";
     /// <summary>Digest embedded into the post-exit swap command for a second verification.</summary>
     public string? ExpectedSha256 { get; set; }
@@ -44,7 +44,8 @@ public sealed class ReleaseAssetFetchResult
 }
 
 // Downloads a GitHub release asset into an Administrators/SYSTEM-only ProgramData folder,
-// verifies the allowlisted download host + SHA-256 sidecar, and emits a swap script. The swap
+// verifies the allowlisted download host, the SHA-256 sidecar and the release's signed update
+// manifest (UpdateManifestService), and emits a swap script. The swap
 // itself happens after the running exe exits, so that script re-hashes before copying and again
 // before launching the installed target.
 //
@@ -104,6 +105,21 @@ public static class AutoUpdaterService
 
         try
         {
+            if (!UpdateService.TryParseComparableVersion(Models.AppConfig.AppVersion, out var installed))
+            {
+                result.Summary = "The installed version couldn't be read, so the update manifest can't be checked.";
+                return result;
+            }
+            // The signed manifest comes first: without it nothing is downloaded or staged.
+            var manifest = await FetchVerifiedManifestAsync(
+                Http, uri, UpdateManifestService.TrustedPublicKeys, installed, DateTimeOffset.UtcNow, cancellationToken)
+                .ConfigureAwait(false);
+            if (manifest.ExpectedSha256 is null)
+            {
+                result.Summary = manifest.Summary;
+                return result;
+            }
+
             var stagingAccess = PrivilegedStateSecurityService.EnsureForUpdates();
             if (!stagingAccess.Success)
             {
@@ -127,21 +143,11 @@ public static class AutoUpdaterService
                 AllowAuthenticodeFallback = false
             };
 
-            var download = await VerifiedDownloader
-                .DownloadAsync(Http, uri, stagedPath, policy, cancellationToken)
-                .ConfigureAwait(false);
-
+            var download = await DownloadPinnedAsync(
+                Http, uri, stagedPath, policy, manifest.ExpectedSha256, cancellationToken).ConfigureAwait(false);
             if (!download.Success)
             {
                 result.Summary = download.Summary;
-                return result;
-            }
-
-            if (download.Signal != VerifiedDownloader.IntegritySignal.Sha256Sidecar ||
-                string.IsNullOrWhiteSpace(download.VerifiedSha256))
-            {
-                TryDelete(download.Path);
-                result.Summary = "Update staging did not retain a sidecar-verified SHA-256; refusing to emit a swap command.";
                 return result;
             }
 
@@ -167,14 +173,9 @@ public static class AutoUpdaterService
 
             result.Success = true;
             result.StagedPath = download.Path;
-            result.ContentVerified = download.Signal != VerifiedDownloader.IntegritySignal.None;
+            result.ContentVerified = true;
             result.ExpectedSha256 = protectedHash;
-            result.VerificationMethod = download.Signal switch
-            {
-                VerifiedDownloader.IntegritySignal.Sha256Sidecar => "sha256",
-                VerifiedDownloader.IntegritySignal.Authenticode => "authenticode",
-                _ => "none"
-            };
+            result.VerificationMethod = "signed-manifest";
 
             var currentExe = Environment.ProcessPath ?? "NVMeDriverPatcher.exe";
             result.RestartCommand = BuildRestartCommand(download.Path!, currentExe, protectedHash);
@@ -186,6 +187,94 @@ public static class AutoUpdaterService
             result.Summary = $"Staging failed: {ex.GetType().Name}: {ex.Message}";
         }
         return result;
+    }
+
+    /// <summary>
+    /// Downloads through <see cref="VerifiedDownloader"/> (which checks the release's .sha256
+    /// sidecar) and then requires the result to match the SHA-256 the signed manifest pins. A
+    /// sidecar replaced along with the exe still matches it; the manifest doesn't. The staged
+    /// file is deleted on any failure.
+    /// </summary>
+    internal static async Task<VerifiedDownloader.DownloadResult> DownloadPinnedAsync(
+        HttpClient client,
+        Uri uri,
+        string stagedPath,
+        VerifiedDownloader.DownloadPolicy policy,
+        string manifestSha256,
+        CancellationToken cancellationToken)
+    {
+        var download = await VerifiedDownloader
+            .DownloadAsync(client, uri, stagedPath, policy, cancellationToken)
+            .ConfigureAwait(false);
+        if (!download.Success)
+            return download;
+
+        if (download.Signal != VerifiedDownloader.IntegritySignal.Sha256Sidecar ||
+            string.IsNullOrWhiteSpace(download.VerifiedSha256))
+        {
+            TryDelete(download.Path);
+            return new VerifiedDownloader.DownloadResult
+            {
+                Summary = "Update staging did not retain a sidecar-verified SHA-256; refusing to emit a swap command."
+            };
+        }
+
+        if (!string.Equals(download.VerifiedSha256, manifestSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            TryDelete(download.Path);
+            return new VerifiedDownloader.DownloadResult
+            {
+                Summary = "The downloaded update matches its .sha256 file but not the signed update manifest; refusing it."
+            };
+        }
+        return download;
+    }
+
+    /// <summary>
+    /// Fetches <see cref="UpdateManifestService.ManifestFileName"/> and its signature from the
+    /// release folder beside <paramref name="assetUri"/>, verifies them, and checks the manifest
+    /// names the release tag in the URL and pins a SHA-256 for this asset. ExpectedSha256 is null
+    /// on any failure, with the reason in Summary.
+    /// </summary>
+    internal static async Task<(string Summary, string? ExpectedSha256)> FetchVerifiedManifestAsync(
+        HttpClient client,
+        Uri assetUri,
+        IReadOnlyList<string> trustedKeys,
+        Version installedVersion,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var segments = assetUri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        int download = Array.FindIndex(segments, s => s.Equals("download", StringComparison.OrdinalIgnoreCase));
+        if (download < 1 || !segments[download - 1].Equals("releases", StringComparison.OrdinalIgnoreCase) ||
+            segments.Length != download + 3)
+        {
+            return ("The update URL isn't a GitHub release download, so its signed manifest can't be found.", null);
+        }
+        var tag = Uri.UnescapeDataString(segments[download + 1]);
+        var assetName = Uri.UnescapeDataString(segments[download + 2]);
+
+        var manifestBytes = await VerifiedDownloader.TryFetchSmallFileAsync(
+            client, new Uri(assetUri, UpdateManifestService.ManifestFileName), AllowedHosts,
+            UpdateManifestService.MaxManifestBytes, cancellationToken).ConfigureAwait(false);
+        var signatureBytes = await VerifiedDownloader.TryFetchSmallFileAsync(
+            client, new Uri(assetUri, UpdateManifestService.SignatureFileName), AllowedHosts,
+            UpdateManifestService.MaxSignatureBytes, cancellationToken).ConfigureAwait(false);
+        if (manifestBytes is null || signatureBytes is null)
+            return ($"Release {tag} has no signed update manifest. Download it from the release page instead.", null);
+
+        var check = UpdateManifestService.Verify(
+            manifestBytes, System.Text.Encoding.ASCII.GetString(signatureBytes), trustedKeys, installedVersion, nowUtc);
+        if (!check.Success || check.Manifest is null)
+            return (check.Summary, null);
+
+        if (!UpdateService.TryParseComparableVersion(tag, out var tagVersion) || tagVersion != check.Manifest.Version)
+            return ($"The signed update manifest names {check.Manifest.Version}, but the download is from release {tag}.", null);
+
+        var expected = check.Manifest.Sha256For(assetName);
+        return expected is null
+            ? ($"The signed update manifest for {check.Manifest.Version} doesn't list {assetName}.", null)
+            : (check.Summary, expected);
     }
 
     // Test-facing surface. These delegate to VerifiedDownloader so the existing tests keep
