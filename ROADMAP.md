@@ -258,3 +258,104 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
   Touches: `tests/NVMeDriverPatcher.Tests/NVMeDriverPatcher.Tests.csproj` and the whole suite.
   Acceptance: The suite runs green on xunit.v3 with the same test count and no new environment side effects; the shared bounded-process helper uses the framework cancellation token.
   Complexity: L
+
+## Research-Driven Additions — 2026-10-06
+
+Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these repeats an item above; where one touches the same ground, the item says how they relate.
+
+### P1
+
+- [ ] P1 — Detect the StorPort native-stack overrides (`DisableNativeNVMeStack` and per-controller `EnableNVMeInterface`)
+  Why: Two independent write-ups (revoconner 2026-09-22, St1cky 2026-10-05) say `storport.sys` reads a per-controller `EnableNVMeInterface` after the feature decision and a global `DisableNativeNVMeStack` before it, so either one overrides every route this tool writes. Nothing in `src/` reads them. A leftover `DisableNativeNVMeStack=1` makes an apply look like a failed bind with no cause given, and a leftover `EnableNVMeInterface=1` keeps nvmedisk bound after Remove. Other tools now write both.
+  Evidence: https://github.com/St1ckyNew/25H2-NVMe-Native-Stack-Support; https://revoconner.com/writing/windows-nvme-driver-workaround; `grep -rn "EnableNVMeInterface\|DisableNativeNVMeStack" src` finds nothing (2026-10-06).
+  Touches: one shared reader next to the 3244671118 leftover detection, called from `PreflightService`, readiness/status, `DryRunService`, the `DiagnosticsService` support bundle and `PatchVerificationService`; CLI status JSON; tests.
+  Acceptance: With `HKLM\SYSTEM\CurrentControlSet\Control\StorPort\DisableNativeNVMeStack=1`, readiness and the post-reboot verdict name the value and its path. With `EnableNVMeInterface=1` under a controller's `Device Parameters\StorPort`, Remove's result names that controller and value as the reason nvmedisk is still bound. The support bundle lists both values per stornvme controller. This item only reads; it never writes or deletes either value. Unit tests cover missing, 0 and 1 for each.
+  Complexity: M
+
+- [ ] P1 — Test the per-controller StorPort route and the global kill switch in VMs
+  Why: Every current retail client build resolves to `none-known` in `windows_build_rules.json`, so the enable path is idle for nearly every user. The StorPort value is the only route reported working on 25H2 (26200.9168) and on 24H2 from 26100.8875. Separately, if `DisableNativeNVMeStack=1` forces the legacy path ahead of any feature decision, the recovery kit gets a one-value offline revert that works whatever route bound the drive.
+  Evidence: RESEARCH.md Executive Summary items 1 and 2, Open Questions 1 and 2; `windows_build_rules.json` (lastReviewed 2026-10-05); the 24H2 rig recipe in the project working notes.
+  Touches: VM work only (the 24H2 rig, plus retail-edition 25H2 26200.x and 26H2 26300.x guests). Results go into `windows_build_rules.json` and, if the route works, a new roadmap item.
+  Acceptance: An evidence table per build covering: bind after reboot on a secondary drive and then the boot drive (Class `NvmeDisk`, service `nvmedisk`, a `GenNvmeDisk` hardware ID), a Safe Mode boot, `DISM /ScanHealth` and SFC, survival across one cumulative update, revert by deleting the value, and revert by setting `DisableNativeNVMeStack=1` offline from WinRE (also on the 24H2 guest after a three-value bind). The build rules record each verdict with `lastReviewed`. A working route gets its own implementation item with the measured costs; a failed one gets a sentence in the rule summary.
+  Complexity: L
+
+- [ ] P1 — Ship on .NET 10.0.12 (SDK 10.0.401 band) and its servicing packages
+  Why: 10.0.12 (2026-09-08) fixes CVE-2026-69439, 71328, 69522, 69304, 58649 and 69806, and this app runs elevated. The 10.0.3xx SDK band that `global.json` pins never got a 10.0.12 SDK, so the floor can't move without moving bands.
+  Evidence: https://github.com/dotnet/core/blob/main/release-notes/10.0/10.0.12/10.0.12.md; https://devblogs.microsoft.com/dotnet/dotnet-and-dotnet-framework-september-2026-servicing-updates/; `Directory.Build.props:10`; `scripts/Validate-ReleaseAssets.ps1:24`; `global.json`.
+  Touches: `global.json`, `Directory.Build.props` (`MinimumEmbeddedRuntimeVersion`), `Validate-ReleaseAssets.ps1`, `NVMeDriverPatcher.Core.csproj` (EF Core Sqlite, System.Management, ServiceController), `NVMeDriverPatcher.Watchdog.csproj` (Hosting, Hosting.WindowsServices), docs that name 10.0.11.
+  Acceptance: Every published exe embeds 10.0.12 or later and the release gate fails below it; NuGet audit is clean; the full suite passes on the new SDK. If 10.0.13 is out by then (the next Patch Tuesday is 2026-10-13), take that instead.
+  Complexity: S
+
+### P2
+
+- [ ] P2 — Smart App Control: detect it, explain it, and test both download paths against it
+  Why: Since April 2026, 25H2 users can turn Smart App Control back on after turning it off. It blocks unsigned `.exe`, `.msi` and `.ps1` files that carry Mark of the Web, and the dialog has no override. The GUI exe is what most people download (1,072 of v5.6.0's downloads against 235 for the MSI), and nothing in the repo mentions SAC.
+  Evidence: https://textslashplain.com/2026/04/28/smart-app-control/; `grep -ri "Smart App Control" src scripts README.md` is empty (2026-10-06); v5.6.0 release download counts.
+  Touches: README install section; a SAC state read (`HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy\VerifiedAndReputablePolicyState`) in diagnostics and the support bundle; `AutoUpdaterService` messages.
+  Acceptance: On a SAC-enabled VM the browser-downloaded GUI exe, MSI and PowerShell module are each tried, and the README states what happens and the way through. The in-app updater's download is tried too, and its message matches the result. The support bundle records SAC state.
+  Complexity: M
+
+- [ ] P2 — Sign the release binaries with Azure Artifact Signing
+  Why: Unsigned files meet Smart App Control, SmartScreen and App Control for Business as unknown code, and fleet admins need a publisher rule to allow the CLI that the Intune scripts call. `Validate-ReleaseAssets.ps1 -ExpectSigned` exists, but nothing signs. Azure Artifact Signing works from a local `signtool` run; SignPath Foundation needs a CI build, which this repo doesn't have.
+  Evidence: https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options (updated 2026-08-29); https://docs.signpath.io/origin-verification; `scripts/Build-ReleaseArtifacts.ps1` (no signing step); `scripts/Validate-ReleaseAssets.ps1:198-205`.
+  Touches: `Build-ReleaseArtifacts.ps1` (a sign step for the exes, MSI, PowerShell module and scripts, gated on credentials being present), the `sign` flags in `packaging/release-artifacts.json`, README verification section.
+  Acceptance: A release built with credentials passes `Validate-ReleaseAssets.ps1 -ExpectSigned`. Without credentials the build still completes and says it's unsigned. The Azure account and identity validation need the owner's sign-in; everything else is code.
+  Complexity: M
+
+- [ ] P2 — Sign the update manifest so the updater doesn't rest on a same-release SHA-256 file
+  Why: `AutoUpdaterService` accepts only `IntegritySignal.Sha256Sidecar`, a hash file from the same release as the exe, so whoever can replace one can replace both. It already refuses equal or older versions (`UpdateService.cs:88`). A manifest signed with an offline key whose public half ships in the app closes the gap without a certificate. ECDSA P-256 is in the .NET base library, so it needs no new package.
+  Evidence: `src/NVMeDriverPatcher.Core/Services/AutoUpdaterService.cs:140`; `UpdateService.cs:86-88`; https://github.com/NetSparkleUpdater/NetSparkle (signed appcast model).
+  Touches: `Build-ReleaseArtifacts.ps1` (write and sign a manifest with version, SHA-256, minimum version and expiry), `UpdateService`, `AutoUpdaterService`, `release-artifacts.json`, `Validate-ReleaseAssets.ps1`, tests.
+  Acceptance: Tests show the updater refuses a replaced exe with a matching replaced sidecar, an expired manifest and a manifest naming an older version. Two embedded public keys allow a rotation overlap, and the README says how rotation works.
+  Complexity: M
+
+- [ ] P2 — Take the winget channel out of the release contract
+  Why: The owner's standing rule is no winget manifests and no submissions. The contract still builds and validates three winget YAML files, and v5.6.0 attached them as release assets. README line 195 tells users to run `winget install SysAdminDoc.NVMeDriverPatcher`, which can't work: `microsoft/winget-pkgs` has no SysAdminDoc folder (checked 2026-10-06).
+  Evidence: v5.6.0 asset list; `packaging/winget/`; `packaging/release-artifacts.json`; `scripts/Update-PackageManifests.ps1`; `scripts/Build-ReleaseArtifacts.ps1:38-40,248`; `scripts/Test-PackageSandbox.ps1`; `README.md:195`.
+  Touches: those files, plus the docs validators that count release assets.
+  Acceptance: A release build produces no winget YAML and no longer needs `winget.exe`, no script runs `winget validate`, the README doesn't offer winget, and the asset validators pass on the smaller contract.
+  Complexity: S
+
+- [ ] P2 — 24H2: find out whether cumulative updates still install while 156965516 is set
+  Why: On 26100.9550 the three-value set binds (VM, 2026-10-05), but binding needs 156965516, the value that makes DISM report component store corruption (#19). If servicing still works with it set, 24H2 can get an opt-in route with an honest warning. If a cumulative update fails or rolls back, the rule stays `none-known` and says why.
+  Evidence: `windows_build_rules.json` rule `24h2-client-unverified`; https://github.com/SysAdminDoc/win11-nvme-driver-patcher/issues/19; MDL posts #216 (2026-09-26) and #218 (2026-09-30).
+  Touches: VM only, then `windows_build_rules.json` and, if it passes, a new route item.
+  Acceptance: The 24H2 guest with the three-value set takes the 2026-10-13 cumulative update (or the next one). The rule summary records installed, failed or rolled back, DISM before and after, and whether nvmedisk is still bound afterward.
+  Complexity: M
+
+### P3
+
+- [ ] P3 — Record the DiskSpd version and flags with every benchmark result
+  Why: DiskSpd 2.3 (2026-09-04) changed two defaults (P-cores before E-cores, buffers separated by cache line) and added BypassIO and IoRing modes. The app pins v2.2 by hash, which is right, but results don't say which DiskSpd made them, so a later bump would put incomparable runs side by side.
+  Evidence: https://github.com/microsoft/diskspd/releases; `src/NVMeDriverPatcher.Core/Services/BenchmarkService.cs:28,39-45`.
+  Touches: `BenchmarkService` result model and SQLite history, the compare view, CLI benchmark JSON.
+  Acceptance: Each stored result carries the DiskSpd version, its SHA-256 and the full argument line. Comparing two results from different DiskSpd versions shows a warning instead of a percentage. Moving to 2.3 is its own decision, made only with `-aup -bsn` or a fresh baseline.
+  Complexity: S
+
+- [ ] P3 — Prove Identify and SMART reads still work under nvmedisk
+  Why: A driver teardown says nvmedisk doesn't clearly expose `IOCTL_STORAGE_PROTOCOL_COMMAND`, and users say vendor SSD tools stop seeing the drive. The app's health reads use the `IOCTL_STORAGE_QUERY_PROPERTY` protocol-specific path, which nobody has checked under nvmedisk. If it fails, the health view goes blank after the swap, exactly when people want it.
+  Evidence: https://borecraft.com/findings/Windows_Server_2025_NVMe_Driver.html; https://learn.microsoft.com/en-us/windows/win32/fileio/working-with-nvme-devices; `src/NVMeDriverPatcher.Core/Interop/StorageStructs.cs:15-19`; `Services/NvmeIdentifyService.cs`.
+  Touches: `NvmeIdentifyService`, the SMART reader, the support bundle (record which query path answered).
+  Acceptance: On the 24H2 guest with nvmedisk bound, Identify and SMART reads either work (recorded in the working notes) or the UI says plainly that the native driver doesn't answer them, instead of showing empty values.
+  Complexity: S
+
+- [ ] P3 — Ship one shared runtime in the MSI instead of four
+  Why: v5.6.0's MSI and Intune zip are 211 MB each, because the GUI (89 MB), Tray (57 MB), CLI (44 MB) and Watchdog (44 MB) each embed their own .NET runtime. An MDL user complained about the size. Publishing the four self-contained but not single-file into one shared directory keeps the no-prerequisite install with one runtime copy.
+  Evidence: v5.6.0 release asset sizes; MDL native NVMe thread (2026 size complaint); `src/NVMeDriverPatcher/NVMeDriverPatcher.csproj:17-18`; `src/NVMeDriverPatcher.Cli/NVMeDriverPatcher.Cli.csproj:11-12`.
+  Touches: `Build-ReleaseArtifacts.ps1` MSI staging, the WiX source, the service and scheduled-task registration paths, `Validate-ReleaseAssets.ps1`. The portable single-file exes stay as they are. Relates to the P3 "dll-hosted runs register `dotnet.exe`" item above: a shared directory must still register the apphost exe, not `dotnet.exe`.
+  Acceptance: MSI and Intune zip sizes measured before and after; install, upgrade over the 5.6.0 MSI, repair and uninstall all pass; the service and tray start from the new layout.
+  Complexity: M
+
+- [ ] P3 — CHANGELOG's 5.7.0 section describes a release that was never published
+  Why: The newest tag and GitHub release is v5.6.0, but the CHANGELOG has `## [5.7.0] - 2026-08-11` and the repo notes said 5.7.0 shipped. The existing tag item above covers 5.4.0, 5.5.0, 5.3.0 and `v.3.0.0`, not this one. Tagging an old commit as a release that never had artifacts would mislead, so fold it forward.
+  Evidence: `gh release list` (2026-10-06); `CHANGELOG.md:253`; bump commit `394e2b8`.
+  Touches: `CHANGELOG.md`, the next release's notes.
+  Acceptance: When the next release is cut, its notes carry every 5.7.0 bullet, and no CHANGELOG heading names a version without a matching tag.
+  Complexity: S
+
+- [ ] P3 — Dependency refresh: SourceGear.sqlite3 3.53.4, Microsoft.NET.Test.Sdk 18.10.1, SkiaSharp 4.153.1, wrangler 4.148.0
+  Why: All four have newer stable releases with no advisories against the pinned versions, and staying close makes the next security bump small. SkiaSharp needs a render check because 4.150 turned obsolete APIs into errors. SQLitePCLRaw stays on 3.0.4.
+  Evidence: NuGet flat-container lookups (2026-10-06); https://www.sqlite.org/changes.html; https://developers.cloudflare.com/workers/wrangler/migration/deprecations/.
+  Touches: `NVMeDriverPatcher.Core.csproj`, the test csproj, `NVMeDriverPatcher.csproj` (SkiaSharp family), `packaging/telemetry-receiver/package.json` and `wrangler.toml` `compatibility_date`.
+  Acceptance: The build is clean, the suite passes, the GUI charts render the same in all three themes, and `wrangler deploy --dry-run` passes for the receiver.
+  Complexity: S
