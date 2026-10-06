@@ -34,17 +34,25 @@ public class DryRunReport
 // anxious users can see the full change set before committing.
 public static class DryRunService
 {
+    /// <summary>How long the preview waits for the ledger lock. The mutating calls allow 30 s;
+    /// the GUI runs the preview on its UI thread, so it gives up early and says so.</summary>
+    internal static readonly TimeSpan LedgerLockTimeout = TimeSpan.FromSeconds(2);
+
+    internal const string LedgerBusyWarning =
+        "The mutation ledger is in use by another run of this tool (or couldn't be opened), so the preview can't tell which leftover override values an earlier apply wrote. Apply checks again when it runs.";
+
     public static DryRunReport PlanInstall(AppConfig config, PreflightResult? preflight = null)
     {
         // When apply will reuse an earlier ledger, it writes with that ledger's mirror set and
         // judges leftovers against its baseline, so the preview does the same.
-        var prior = ReusableLedger(config);
+        var (prior, ledgerBusy) = ReusableLedger(config);
         return PlanInstall(
             config,
             preflight,
             prior?.MirroredControlSets ?? ControlSetService.GetMirrorTargets(),
             ReadCurrentValue,
-            prior?.Baseline.RegistryValues);
+            prior?.Baseline.RegistryValues,
+            ledgerBusy);
     }
 
     /// <summary>
@@ -58,15 +66,18 @@ public static class DryRunService
         IReadOnlyList<string> mirrorControlSets) =>
         PlanInstall(config, preflight, mirrorControlSets, ReadCurrentValue);
 
-    // The ledger apply will reuse, or null when apply would capture a fresh baseline.
-    private static MutationOperationLedger? ReusableLedger(AppConfig config)
+    // The ledger apply will reuse, or null when apply would capture a fresh baseline. Busy means
+    // the lock couldn't be had in time: the preview then knows nothing about the ledger and must
+    // not pass "no ledger" off as "fresh baseline".
+    private static (MutationOperationLedger? Ledger, bool Busy) ReusableLedger(AppConfig config)
     {
         try
         {
-            var ledger = MutationLedgerService.Load(config.WorkingDir);
-            return MutationLedgerService.ShouldReuseBaseline(ledger) ? ledger : null;
+            if (!MutationLedgerService.TryLoad(config.WorkingDir, LedgerLockTimeout, out var ledger))
+                return (null, true);
+            return (MutationLedgerService.ShouldReuseBaseline(ledger) ? ledger : null, false);
         }
-        catch { return null; }
+        catch { return (null, true); }
     }
 
     /// <summary>
@@ -80,7 +91,8 @@ public static class DryRunService
         PreflightResult? preflight,
         IReadOnlyList<string> mirrorControlSets,
         Func<string, string, CurrentRegistryValue> readCurrent,
-        IReadOnlyList<RegistryValueBaseline>? priorBaseline = null)
+        IReadOnlyList<RegistryValueBaseline>? priorBaseline = null,
+        bool ledgerBusy = false)
     {
         var report = new DryRunReport
         {
@@ -113,12 +125,17 @@ public static class DryRunService
                 : SafeBootRow(mutation, current, mirrorNote));
         }
         // Apply clears the override values an earlier apply of this tool wrote that this one
-        // doesn't (#19, and Safe after Full), and keeps the ones that were there before.
-        var unplanned = PatchService.FindUnplannedOverrides(
-            MutationLedgerService.FeatureOverrideSubKeys(mirrorControlSets),
-            mutations,
-            (subKey, id) => readCurrent(subKey, id).Value is not null,
-            priorBaseline);
+        // doesn't (#19, and Safe after Full), and keeps the ones that were there before. With the
+        // ledger locked the preview can't tell the two apart, and says so instead of guessing.
+        if (ledgerBusy)
+            report.PreflightWarnings.Add(LedgerBusyWarning);
+        IReadOnlyList<PatchService.UnplannedOverride> unplanned = ledgerBusy
+            ? []
+            : PatchService.FindUnplannedOverrides(
+                MutationLedgerService.FeatureOverrideSubKeys(mirrorControlSets),
+                mutations,
+                (subKey, id) => readCurrent(subKey, id).Value is not null,
+                priorBaseline);
         foreach (var item in unplanned)
         {
             var before = Convert.ToString(readCurrent(item.SubKey, item.ValueName).Value, System.Globalization.CultureInfo.InvariantCulture) ?? "(absent)";
@@ -129,9 +146,12 @@ public static class DryRunService
                 ValueName = item.ValueName,
                 Before = before,
                 After = item.WrittenByThisTool ? "(absent)" : before,
-                Note = item.WrittenByThisTool
-                    ? "Written by an earlier apply of this tool. This profile doesn't include it, so apply clears it."
-                    : "Set before this tool's first apply. This profile doesn't write it, and apply and Remove leave it as is."
+                Note = item switch
+                {
+                    { BaselineCapturedMidLife: true } => "Set together with this tool's primary flag before the first ledger was captured, so a version before 5.1.0 wrote it. This profile doesn't include it, so apply clears it.",
+                    { WrittenByThisTool: true } => "Written by an earlier apply of this tool. This profile doesn't include it, so apply clears it.",
+                    _ => "Set before this tool's first apply. This profile doesn't write it, and apply and Remove leave it as is."
+                }
             });
         }
         report.TotalWrites = report.Items.Count(item => item.Action == "WRITE");

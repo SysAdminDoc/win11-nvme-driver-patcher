@@ -587,7 +587,7 @@ class Program
             Console.WriteLine($"  Low-power idle: {est.IdleStatesUsed switch { true => "Yes", false => "No", null => "Not reported" }}");
             if (est.ActivePowerWatts.HasValue) Console.WriteLine($"  Active power:   {est.ActivePowerWatts:F2}W");
             if (est.LowestIdlePowerWatts.HasValue) Console.WriteLine($"  Lowest idle:    {est.LowestIdlePowerWatts:F2}W");
-            if (est.EstimatedIdleSavingsWatts.HasValue) Console.WriteLine($"  Idle savings:   ~{est.EstimatedIdleSavingsWatts:F1}W (lost after patching)");
+            if (ApstInspectorService.IdleSavingsText(est) is { } savings) Console.WriteLine($"  Idle savings:   {savings}");
             Console.WriteLine($"  Impact:         {est.Impact}");
             Console.WriteLine($"  Recommendation: {est.Recommendation}");
         }

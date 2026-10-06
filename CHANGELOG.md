@@ -5,6 +5,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- Apply's leftover sweep now treats override values from a version before 5.1.0 as this tool's. The first ledger, captured over an older patch, recorded those flags as pre-existing, so a later Safe apply kept 1853569164 and 156965516 for good with a `[KEPT]` line. The primary flag in that baseline gives the older patch away, and the dry run's DELETE row says so.
+- A failure while checking for leftover overrides after apply is a warning now, not a rollback of a patch that was already written.
+- The install preview waits 2 seconds for the mutation ledger instead of 30, and when another run holds it the preview says so instead of listing leftover values as pre-existing.
+- The `apst` battery estimate prints "Idle savings" only when Windows idles the drive. When that isn't known it says the watts aren't confirmed instead of calling them lost after patching.
+- `NoLowPowerTransitions` and `AutonomousPowerStateTransitionEnabled` under stornvme no longer flip the idle verdict to off. Microsoft documents neither value and stornvme isn't known to read them, so the power plan decides and the value is reported next to the verdict.
 - The three toggles in Settings under Audit and alerts no longer clip at window widths below about 1300 px. They sat in two half-width columns, so "Auto-save activity log" and "Windows Event Log" were cut off. They're now one column.
 - `--json` output stays pure JSON when the CLI finishes recovering an interrupted change at startup. Those recovery messages used to land on stdout ahead of the envelope, and one of them carries a registry GUID in braces, which broke scripts that parse the output. They go to stderr now.
 - The sample telemetry receiver config now binds its KV store. The `kv_namespaces` line sat under `[vars]`, which TOML reads as part of that table, so a Worker deployed from it got a variable named `kv_namespaces`, no `COMPAT` binding, and every submission failed. It's a `[[kv_namespaces]]` table now, and `npm run check` lists the bindings so you can see it before deploying.

@@ -242,6 +242,38 @@ public sealed class DryRunServiceTests
     }
 
     [Fact]
+    public void ValuesAnOlderVersionWrote_AreDeleteRowsThatSaySo()
+    {
+        // A v5.1.0 baseline captured over a v5.0.0 Full patch holds all three flags.
+        string[] mirrors = ["ControlSet002"];
+        var baseline = AbsentBaseline(mirrors);
+        foreach (var entry in baseline.Where(b => AppConfig.FeatureIDs.Contains(b.ValueName)))
+            entry.Existed = true;
+        var config = new AppConfig { PatchProfile = PatchProfile.Safe };
+        var report = DryRunService.PlanInstall(config, null, mirrors, AfterFullApply, baseline);
+
+        var deletes = report.Items.Where(i => i.Action == "DELETE").ToList();
+        Assert.Equal(4, deletes.Count);   // 1853569164 and 156965516 in both Overrides keys
+        Assert.All(deletes, row => Assert.Contains("version before 5.1.0", row.Note, StringComparison.Ordinal));
+        Assert.Equal(4, report.TotalDeletes);
+        Assert.DoesNotContain(report.Items, i => i.Action == "KEEP" && i.Target.Contains("Overrides", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void LedgerLocked_PreviewWarnsInsteadOfGuessingWhoWroteTheLeftovers()
+    {
+        var config = new AppConfig { PatchProfile = PatchProfile.Safe };
+        var report = DryRunService.PlanInstall(config, null, ["ControlSet002"], AfterFullApply, priorBaseline: null, ledgerBusy: true);
+
+        Assert.Equal(0, report.TotalDeletes);
+        Assert.DoesNotContain(report.Items, i => i.Action == "KEEP" && i.Target.Contains("Overrides", StringComparison.Ordinal));
+        Assert.Contains(DryRunService.LedgerBusyWarning, report.PreflightWarnings);
+        Assert.Contains("1 warning(s)", report.Summary, StringComparison.Ordinal);
+        Assert.Contains("mutation ledger is in use", DryRunService.RenderMarkdown(report), StringComparison.Ordinal);
+        Assert.True(DryRunService.LedgerLockTimeout <= TimeSpan.FromSeconds(5), "a preview on the UI thread can't wait longer than that");
+    }
+
+    [Fact]
     public void ValuesThatPredateTheFirstApply_AreKeepRowsNotDeletes()
     {
         // No ledger to reuse: apply captures a fresh baseline, so whatever is set now stays.

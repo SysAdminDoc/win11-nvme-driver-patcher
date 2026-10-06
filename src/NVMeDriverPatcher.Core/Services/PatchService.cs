@@ -51,12 +51,19 @@ public static class PatchService
     /// first apply) has it absent, so an earlier apply of this tool wrote it. Otherwise it was there
     /// before the first apply and belongs to whoever set it.
     /// </summary>
-    internal sealed record UnplannedOverride(string SubKey, string ValueName, bool WrittenByThisTool);
+    /// <summary>A set override value this apply doesn't write. <paramref name="BaselineCapturedMidLife"/>
+    /// marks one the baseline recorded as present but presumed this tool's, because that baseline
+    /// also held the primary flag (see <see cref="FindUnplannedOverrides"/>).</summary>
+    internal sealed record UnplannedOverride(string SubKey, string ValueName, bool WrittenByThisTool, bool BaselineCapturedMidLife = false);
 
     /// <summary>
     /// #19 and profile switches: an earlier Full apply leaves 1853569164 and 156965516 set, which a
     /// later Safe or plain Full apply doesn't write. A null <paramref name="baseline"/> means a fresh
     /// one is about to be captured, which would record every value set now as already there.
+    /// The ledger arrived in v5.1.0, so a baseline captured over a v5.0.0 patch records that
+    /// version's flags as pre-existing. The primary flag gives that away: no apply of this tool
+    /// writes the other flags without it, so a baseline that holds it was captured mid-life and
+    /// the flags it holds are presumed this tool's.
     /// </summary>
     internal static IReadOnlyList<UnplannedOverride> FindUnplannedOverrides(
         IEnumerable<string> overrideSubKeys,
@@ -72,6 +79,8 @@ public static class PatchService
                 .Where(m => string.Equals(m.Path, subKey, StringComparison.OrdinalIgnoreCase))
                 .Select(m => m.ValueName)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            bool baselineMidLife = baseline is not null &&
+                                   BaselineRecord(baseline, subKey, AppConfig.PrimaryFeatureID)?.Existed == true;
             foreach (var id in AppConfig.OwnedOverrideValueNames)
             {
                 if (planned.Contains(id) || !isSet(subKey, id)) continue;
@@ -80,16 +89,22 @@ public static class PatchService
                     found.Add(new UnplannedOverride(subKey, id, WrittenByThisTool: false));
                     continue;
                 }
-                var before = baseline.FirstOrDefault(v =>
-                    string.Equals(v.KeyPath, subKey, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(v.ValueName, id, StringComparison.OrdinalIgnoreCase));
+                var before = BaselineRecord(baseline, subKey, id);
                 // A ledger with no record of this value can't say whose it is, so it stays.
                 if (before is null) continue;
-                found.Add(new UnplannedOverride(subKey, id, WrittenByThisTool: !before.Existed));
+                found.Add(new UnplannedOverride(
+                    subKey, id,
+                    WrittenByThisTool: !before.Existed || baselineMidLife,
+                    BaselineCapturedMidLife: before.Existed && baselineMidLife));
             }
         }
         return found;
     }
+
+    private static RegistryValueBaseline? BaselineRecord(IReadOnlyList<RegistryValueBaseline> baseline, string subKey, string valueName) =>
+        baseline.FirstOrDefault(v =>
+            string.Equals(v.KeyPath, subKey, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(v.ValueName, valueName, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Deletes the unplanned values an earlier apply of this tool wrote, so the machine matches the
@@ -114,7 +129,9 @@ public static class PatchService
             {
                 delete(item.SubKey, item.ValueName);
                 cleared++;
-                log?.Invoke($"  [CLEARED] {item.ValueName} under {item.SubKey}: an earlier apply of this tool wrote it, and this apply doesn't include it");
+                log?.Invoke(item.BaselineCapturedMidLife
+                    ? $"  [CLEARED] {item.ValueName} under {item.SubKey}: it was set together with this tool's primary flag when the first ledger was captured, so a version before 5.1.0 wrote it, and this apply doesn't include it"
+                    : $"  [CLEARED] {item.ValueName} under {item.SubKey}: an earlier apply of this tool wrote it, and this apply doesn't include it");
             }
             catch (Exception ex)
             {
@@ -122,6 +139,29 @@ public static class PatchService
             }
         }
         return cleared;
+    }
+
+    /// <summary>
+    /// The leftover sweep after a committed apply. A failure here is a warning, never a rollback:
+    /// the patch itself is written, and the sweep only tidies values this apply doesn't use.
+    /// </summary>
+    internal static int ClearLeftoverOverrides(
+        IEnumerable<string> overrideSubKeys,
+        IEnumerable<DurableRegistryMutation> plannedWrites,
+        IReadOnlyList<RegistryValueBaseline>? baseline,
+        Func<string, string, bool> isSet,
+        Action<string, string> delete,
+        Action<string>? log)
+    {
+        try
+        {
+            return ClearUnplannedOverrides(FindUnplannedOverrides(overrideSubKeys, plannedWrites, isSet, baseline), delete, log);
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"  [WARNING] Couldn't check for leftover overrides from an earlier apply: {ex.Message}. The patch itself is written; a dry run lists them.");
+            return 0;
+        }
     }
 
     internal static bool OverrideIsSet(string subKey, string valueName)
@@ -241,6 +281,9 @@ public static class PatchService
     /// ships the GUID keys that way with "NvmeDisk" as the default value. Windows already registers
     /// the driver for Safe Mode there and refuses the write even to SYSTEM, so apply leaves those
     /// keys alone and counts them as done instead of failing partway through the batch.
+    /// Ownership alone decides here, unlike the restore path's
+    /// <see cref="SafeBootStateService.IsAtBaselineOrWindowsOwned"/>: this asks whether the write
+    /// would be refused, that one whether a refused restore left this tool's value behind.
     /// </summary>
     internal static (IReadOnlyList<DurableRegistryMutation> Writes, IReadOnlyList<DurableRegistryMutation> LeftToWindows)
         SplitWindowsOwnedSafeBootWrites(IReadOnlyList<DurableRegistryMutation> mutations, Func<string, bool> isWindowsOwned)
@@ -441,12 +484,11 @@ public static class PatchService
             if (!registryBatch.Success)
                 throw new IOException(registryBatch.Summary);
 
-            ClearUnplannedOverrides(
-                FindUnplannedOverrides(
-                    MutationLedgerService.FeatureOverrideSubKeys(ledgerPreparation.Ledger.MirroredControlSets),
-                    plannedMutations,
-                    OverrideIsSet,
-                    ledgerPreparation.Ledger.Baseline.RegistryValues),
+            ClearLeftoverOverrides(
+                MutationLedgerService.FeatureOverrideSubKeys(ledgerPreparation.Ledger.MirroredControlSets),
+                plannedMutations,
+                ledgerPreparation.Ledger.Baseline.RegistryValues,
+                OverrideIsSet,
                 DeleteOverride,
                 log);
 
