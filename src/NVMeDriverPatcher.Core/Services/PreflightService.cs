@@ -714,13 +714,18 @@ public static class PreflightService
 
             using var proc = Process.Start(psi);
             if (proc is null) return null;
-            var stdout = proc.StandardOutput.ReadToEnd();
-            var stderr = proc.StandardError.ReadToEnd();
+            // Drain both pipes asynchronously, the way every other launcher here does. A sync
+            // ReadToEnd on stdout blocks until bcdedit exits, and bcdedit blocks once the stderr
+            // pipe fills, so the two would wait on each other and the timeout below never ran.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
             if (!proc.WaitForExit(10_000))
             {
                 try { proc.Kill(true); } catch { }
                 return null;
             }
+            var stdout = stdoutTask.GetAwaiter().GetResult();
+            var stderr = stderrTask.GetAwaiter().GetResult();
 
             return ParseBcdTestSigning(stdout + Environment.NewLine + stderr);
         }

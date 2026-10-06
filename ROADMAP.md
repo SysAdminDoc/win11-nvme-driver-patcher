@@ -40,16 +40,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Likely
   Effort: M
 
-- [ ] P3 — `DetectBcdTestSigningEnabled` drains process pipes synchronously and sequentially with no effective timeout
-  Category: reliability
-  Where: `src/NVMeDriverPatcher.Core/Services/PreflightService.cs:671-679` (`ReadToEnd()` stdout then stderr before `WaitForExit(10_000)`)
-  Problem: The exact hang shape the repo's own CLAUDE.md rule prohibits — a stderr-filling child deadlocks both processes and preflight hangs forever. Every other launcher in the safety path drains asynchronously. Practical trigger rare (bcdedit output small).
-  Evidence: Site read; contrast with PatchService/BitLockerRecoveryService launchers.
-  Fix: Use the async-drain + bounded-wait + kill-on-timeout helper the other services use.
-  Acceptance: Code matches the async pattern; the bare-pattern grep in review finds no sync `ReadToEnd` before `WaitForExit` in `src/`.
-  Confidence: Verified (pattern)
-  Effort: S
-
 - [ ] P3 — `MutationLedgerService.RestoreOriginalState` has no owner-active guard against a concurrent in-flight apply
   Category: reliability
   Where: `src/NVMeDriverPatcher.Core/Services/MutationLedgerService.cs:499-520` (restore), contrast `:189-195` (`Prepare` refuses on live owner)
