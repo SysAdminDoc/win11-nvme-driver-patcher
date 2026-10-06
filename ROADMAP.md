@@ -70,16 +70,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: S
 
-- [ ] P3 — `verify-payload --json` bypasses the versioned `CliEnvelope`; `bypassio --json --history` silently drops the history diff
-  Category: correctness
-  Where: `src/NVMeDriverPatcher.Cli/Program.cs:248-266` (hand-serialized anonymous object, no `schemaVersion`/`command` wrapper); `:488-493` (returns current snapshot before the `showHistory` branch)
-  Problem: Exactly one JSON command deviates from the documented envelope shape; and the JSON+history flag combination loses the pre/post diff that the text path prints.
-  Evidence: Both sites read; contrast with `CliJson.Serialize` usage elsewhere.
-  Fix: Route `verify-payload` through `CliJson.Serialize`; include the history diff in the bypassio JSON payload when `--history` is passed.
-  Acceptance: `CliJsonTests` cover both (envelope fields present; history array populated).
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — dll-hosted runs register `dotnet.exe` as the persistent binary for scheduled tasks and the service
   Category: correctness
   Where: `src/NVMeDriverPatcher.Cli/Program.cs:704` (`register-tasks`), `src/NVMeDriverPatcher.Watchdog/Program.cs:71` (`/install`) — both use `Environment.ProcessPath`

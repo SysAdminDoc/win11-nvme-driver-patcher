@@ -242,7 +242,7 @@ NVMeDriverPatcher.Cli persistence-guard --on --max=2       # Restore a patch Win
 
 # Recovery
 NVMeDriverPatcher.Cli recovery-kit                         # Generate WinRE recovery kit
-NVMeDriverPatcher.Cli verify-payload --input=<dir-or-zip>  # Verify the complete generated payload
+NVMeDriverPatcher.Cli verify-payload --input=<dir-or-zip> [--json]  # Verify the complete generated payload
 NVMeDriverPatcher.Cli winpe-freshness [--input=<tree>]     # Media integrity/freshness (exit: 0 fresh, 1 stale/missing, 2 unknown)
 NVMeDriverPatcher.Cli recovery-proof [--json]              # Prove recovery infrastructure + Windows recovery features
 NVMeDriverPatcher.Cli upgrade-safeboot                     # Add KB5079391 SafeBoot entries
@@ -255,7 +255,7 @@ NVMeDriverPatcher.Cli reliability                          # Reliability Monitor
 NVMeDriverPatcher.Cli minidump                             # NVMe-stack crash scan
 NVMeDriverPatcher.Cli controllers [--json]                 # Bound driver plus read-only candidate/rank evidence
 NVMeDriverPatcher.Cli bypassio                             # Per-volume BypassIO + named-game gaming impact
-NVMeDriverPatcher.Cli bypassio --history                   # Pre/post patch BypassIO comparison
+NVMeDriverPatcher.Cli bypassio --history [--json]          # Pre/post patch BypassIO comparison
 NVMeDriverPatcher.Cli apst                                 # how Windows idles the drive + battery estimate
 NVMeDriverPatcher.Cli identify                             # NVMe Identify Controller dump
 NVMeDriverPatcher.Cli bundle                               # Export support bundle (.zip)

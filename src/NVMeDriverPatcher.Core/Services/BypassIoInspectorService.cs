@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
+using NVMeDriverPatcher.Data;
 using NVMeDriverPatcher.Interop;
 
 namespace NVMeDriverPatcher.Services;
@@ -33,9 +34,53 @@ internal sealed record BypassIoDeviceEvidence(
 // BypassIO — this lets the user see exactly which volumes lost it. The state verdict is based on
 // the non-localized storport registry value and PnP DEVPKEY_Device_Service binding; fsutil is used
 // only for its locale-independent query exit code and retained as diagnostic output.
+/// <summary>One recorded BypassIO snapshot: every volume captured at the same moment.</summary>
+public sealed record BypassIoSnapshotGroup(DateTime TakenAt, IReadOnlyList<BypassIoHistoryRecord> Volumes);
+
+/// <summary>
+/// The latest pre-patch and post-patch snapshots side by side, and the volumes that had BypassIO
+/// before the patch and lost it after. Either snapshot is null when none was recorded.
+/// </summary>
+public sealed record BypassIoHistoryDiff(
+    BypassIoSnapshotGroup? Pre,
+    BypassIoSnapshotGroup? Post,
+    IReadOnlyList<string> LostAfterPatch)
+{
+    public bool Recorded => Pre is not null || Post is not null;
+}
+
 public static class BypassIoInspectorService
 {
     internal const string RegistrySubKey = @"SYSTEM\CurrentControlSet\Services\storport\Parameters";
+
+    /// <summary>
+    /// Pure: pairs the newest pre-patch snapshot with the newest post-patch one. The lists come
+    /// newest first (<see cref="DataService.GetBypassIoLatestPair"/>); a snapshot is the records
+    /// that share the first record's timestamp. The CLI's text and JSON output both come from this,
+    /// so the two can't drift.
+    /// </summary>
+    public static BypassIoHistoryDiff DiffLatestPair(
+        IReadOnlyList<BypassIoHistoryRecord> pre,
+        IReadOnlyList<BypassIoHistoryRecord> post)
+    {
+        var preGroup = Newest(pre);
+        var postGroup = Newest(post);
+        var lost = preGroup is null || postGroup is null
+            ? []
+            : preGroup.Volumes
+                .Where(p => p.Enabled && postGroup.Volumes.Any(q =>
+                    string.Equals(q.VolumeLetter, p.VolumeLetter, StringComparison.OrdinalIgnoreCase) && !q.Enabled))
+                .Select(p => p.VolumeLetter)
+                .ToList();
+        return new BypassIoHistoryDiff(preGroup, postGroup, lost);
+
+        static BypassIoSnapshotGroup? Newest(IReadOnlyList<BypassIoHistoryRecord> records)
+        {
+            if (records.Count == 0) return null;
+            var takenAt = records[0].Timestamp;
+            return new BypassIoSnapshotGroup(takenAt, records.Where(r => r.Timestamp == takenAt).ToList());
+        }
+    }
     internal const string RegistryValueName = "EnableBypassIO";
 
     private static readonly string[] StorageServicePriority =

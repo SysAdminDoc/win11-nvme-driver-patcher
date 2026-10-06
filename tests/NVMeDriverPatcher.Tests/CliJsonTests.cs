@@ -1,4 +1,5 @@
 using System.Text.Json;
+using NVMeDriverPatcher.Data;
 using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 
@@ -211,6 +212,90 @@ public sealed class CliJsonTests
         Assert.Equal("native stack", data.GetProperty("blockedBy").GetString());
         Assert.Equal("DirectStorage slower", data.GetProperty("warning").GetString());
         Assert.Equal("Ratchet impact", data.GetProperty("gamingImpact").GetString());
+        Assert.False(data.TryGetProperty("history", out _));   // only with --history
+    }
+
+    [Fact]
+    public void BypassIo_WithHistory_CarriesThePrePostDiff()
+    {
+        var before = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+        var after = before.AddHours(1);
+        List<BypassIoHistoryRecord> pre =
+        [
+            new() { Timestamp = before, VolumeLetter = "C:", Enabled = true, Stack = "stornvme", IsPrePatch = true },
+            new() { Timestamp = before, VolumeLetter = "D:", Enabled = true, Stack = "stornvme", IsPrePatch = true },
+        ];
+        List<BypassIoHistoryRecord> post =
+        [
+            new() { Timestamp = after, VolumeLetter = "C:", Enabled = true, Stack = "nvmedisk" },
+            new() { Timestamp = after, VolumeLetter = "D:", Enabled = false, Stack = "nvmedisk" },
+        ];
+        var diff = BypassIoInspectorService.DiffLatestPair(pre, post);
+
+        var history = Parse("bypassio", CliJson.BuildBypassIo(new BypassIOResult(), diff))
+            .GetProperty("data").GetProperty("history");
+
+        Assert.True(history.GetProperty("recorded").GetBoolean());
+        Assert.Equal(before, history.GetProperty("pre").GetProperty("takenAt").GetDateTime());
+        Assert.Equal(2, history.GetProperty("pre").GetProperty("volumes").GetArrayLength());
+        var postD = history.GetProperty("post").GetProperty("volumes")[1];
+        Assert.Equal("D:", postD.GetProperty("volume").GetString());
+        Assert.False(postD.GetProperty("enabled").GetBoolean());
+        Assert.Equal("nvmedisk", postD.GetProperty("stack").GetString());
+        var lost = Assert.Single(history.GetProperty("lostAfterPatch").EnumerateArray());
+        Assert.Equal("D:", lost.GetString());
+    }
+
+    [Fact]
+    public void BypassIo_WithHistoryButNoSnapshots_SaysNotRecorded()
+    {
+        var history = Parse("bypassio", CliJson.BuildBypassIo(new BypassIOResult(), BypassIoInspectorService.DiffLatestPair([], [])))
+            .GetProperty("data").GetProperty("history");
+
+        Assert.False(history.GetProperty("recorded").GetBoolean());
+        Assert.False(history.TryGetProperty("pre", out _));
+        Assert.False(history.TryGetProperty("post", out _));
+        Assert.Empty(history.GetProperty("lostAfterPatch").EnumerateArray());
+    }
+
+    [Fact]
+    public void VerifyPayload_UsesTheEnvelope_AndFieldNamesAreStable()
+    {
+        var result = new ArtifactIntegrityResult
+        {
+            PayloadPath = @"C:\kit",
+            PayloadType = "directory",
+            SchemaVersion = 2,
+            Issues = [new(ArtifactIntegrityIssueKind.HashMismatch, "recovery.reg", "sha256 differs")]
+        };
+
+        var root = Parse("verify-payload", CliJson.BuildPayloadVerification(result));
+
+        Assert.Equal(CliJson.SchemaVersion, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal("verify-payload", root.GetProperty("command").GetString());
+        var data = root.GetProperty("data");
+        Assert.False(data.GetProperty("success").GetBoolean());
+        Assert.Equal(@"C:\kit", data.GetProperty("payloadPath").GetString());
+        Assert.Equal("directory", data.GetProperty("payloadType").GetString());
+        Assert.Equal(2, data.GetProperty("manifestSchemaVersion").GetInt32());
+        Assert.Contains("1 issue", data.GetProperty("summary").GetString(), StringComparison.Ordinal);
+        var issue = Assert.Single(data.GetProperty("issues").EnumerateArray());
+        Assert.Equal("HashMismatch", issue.GetProperty("kind").GetString());
+        Assert.Equal("recovery.reg", issue.GetProperty("relativePath").GetString());
+        Assert.Equal("sha256 differs", issue.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public void VerifyPayload_CleanResult_HasNoIssuesAndSucceeds()
+    {
+        var data = Parse("verify-payload", CliJson.BuildPayloadVerification(new ArtifactIntegrityResult
+        {
+            PayloadPath = @"D:\kit.zip", PayloadType = "zip", SchemaVersion = 1
+        })).GetProperty("data");
+
+        Assert.True(data.GetProperty("success").GetBoolean());
+        Assert.Equal(0, data.GetProperty("issues").GetArrayLength());
+        Assert.StartsWith("Payload integrity verified", data.GetProperty("summary").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

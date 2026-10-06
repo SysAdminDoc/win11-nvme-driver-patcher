@@ -278,22 +278,7 @@ class Program
         var result = GeneratedArtifactManifestService.Verify(payloadPath);
         if (json)
         {
-            var body = new
-            {
-                success = result.Success,
-                payloadPath = result.PayloadPath,
-                payloadType = result.PayloadType,
-                schemaVersion = result.SchemaVersion,
-                summary = result.Summary,
-                issues = result.Issues.Select(i => new
-                {
-                    kind = i.Kind.ToString(),
-                    relativePath = i.RelativePath,
-                    detail = i.Detail
-                })
-            };
-            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(body,
-                new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine(CliJson.Serialize("verify-payload", CliJson.BuildPayloadVerification(result)));
         }
         else
         {
@@ -520,7 +505,13 @@ class Program
     {
         if (json)
         {
-            Console.WriteLine(CliJson.Serialize("bypassio", CliJson.BuildBypassIo(DriveService.GetBypassIOStatus())));
+            BypassIoHistoryDiff? history = null;
+            if (showHistory)
+            {
+                var (pre, post) = DataService.GetBypassIoLatestPair();
+                history = BypassIoInspectorService.DiffLatestPair(pre, post);
+            }
+            Console.WriteLine(CliJson.Serialize("bypassio", CliJson.BuildBypassIo(DriveService.GetBypassIOStatus(), history)));
             return 0;
         }
         Console.WriteLine("Current per-volume BypassIO state:");
@@ -538,32 +529,22 @@ class Program
             Console.WriteLine();
             Console.WriteLine("BypassIO history (pre/post patch snapshots):");
             var (pre, post) = DataService.GetBypassIoLatestPair();
-            if (pre.Count == 0 && post.Count == 0)
+            var diff = BypassIoInspectorService.DiffLatestPair(pre, post);
+            if (!diff.Recorded)
             {
                 Console.WriteLine("  No history recorded yet. Apply or remove the patch to capture snapshots.");
             }
             else
             {
-                if (pre.Count > 0)
+                foreach (var (label, group) in new[] { ("Pre-patch", diff.Pre), ("Post-patch", diff.Post) })
                 {
-                    Console.WriteLine($"  Pre-patch ({pre[0].Timestamp:u}):");
-                    foreach (var r in pre.Where(r => r.Timestamp == pre[0].Timestamp))
+                    if (group is null) continue;
+                    Console.WriteLine($"  {label} ({group.TakenAt:u}):");
+                    foreach (var r in group.Volumes)
                         Console.WriteLine($"    {r.VolumeLetter}  {(r.Enabled ? "[ON]" : "[OFF]")}  stack={r.Stack}");
                 }
-                if (post.Count > 0)
-                {
-                    Console.WriteLine($"  Post-patch ({post[0].Timestamp:u}):");
-                    foreach (var r in post.Where(r => r.Timestamp == post[0].Timestamp))
-                        Console.WriteLine($"    {r.VolumeLetter}  {(r.Enabled ? "[ON]" : "[OFF]")}  stack={r.Stack}");
-                }
-
-                var preVolumes = pre.Where(r => r.Timestamp == pre.FirstOrDefault()?.Timestamp).ToList();
-                var postVolumes = post.Where(r => r.Timestamp == post.FirstOrDefault()?.Timestamp).ToList();
-                var lost = preVolumes.Where(p => p.Enabled)
-                    .Where(p => postVolumes.Any(q => q.VolumeLetter == p.VolumeLetter && !q.Enabled))
-                    .Select(p => p.VolumeLetter).ToList();
-                if (lost.Count > 0)
-                    Console.WriteLine($"  Volumes that LOST BypassIO after patching: {string.Join(", ", lost)}");
+                if (diff.LostAfterPatch.Count > 0)
+                    Console.WriteLine($"  Volumes that LOST BypassIO after patching: {string.Join(", ", diff.LostAfterPatch)}");
             }
         }
 
