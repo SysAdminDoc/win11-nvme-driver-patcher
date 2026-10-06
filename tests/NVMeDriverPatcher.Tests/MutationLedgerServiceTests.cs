@@ -422,6 +422,74 @@ public sealed class MutationLedgerServiceTests
         finally { try { Directory.Delete(dir, true); } catch { } }
     }
 
+    [Fact]
+    public void RestoreOriginalState_WhileAnotherLiveProcessOwnsTheOperation_RefusesAndTouchesNothing()
+    {
+        var dir = TempDir();
+        try
+        {
+            var ledger = CreateLedger("in-flight", MutationOperationPhase.Applied);
+            ledger.OwnerProcessId = Environment.ProcessId + 100_000;   // some other process
+            ledger.OwnerProcessStartedUtc = DateTime.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+            Assert.True(MutationLedgerService.SaveForTest(dir, ledger, null, out var saveError), saveError);
+            int restoreCalls = 0;
+            var log = new List<string>();
+
+            var result = MutationLedgerService.RestoreOriginalState(
+                dir, (_, _) => { restoreCalls++; return MutationRestoreResult.Succeeded; }, _ => true, log.Add);
+
+            Assert.False(result.Success);
+            Assert.True(result.NothingChanged);
+            Assert.Equal(0, restoreCalls);
+            var reason = Assert.Single(result.Failures);
+            Assert.Contains("still running in process", reason, StringComparison.Ordinal);
+            Assert.Contains(log, line => line.StartsWith("[LEDGER] Mutation operation in-flight is still running", StringComparison.Ordinal));
+            Assert.Equal(MutationOperationPhase.Applied, MutationLedgerService.Load(dir)!.Phase);
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Theory]
+    [InlineData(true, true)]     // the owner rolling back its own apply
+    [InlineData(false, false)]   // the owner died: an interrupted apply, and restore is the right move
+    public void RestoreOriginalState_OwnerIsThisProcessOrGone_Restores(bool ownerIsThisProcess, bool ownerActive)
+    {
+        var dir = TempDir();
+        try
+        {
+            var ledger = CreateLedger("mine", MutationOperationPhase.Applied);
+            ledger.OwnerProcessId = ownerIsThisProcess ? Environment.ProcessId : Environment.ProcessId + 100_000;
+            ledger.OwnerProcessStartedUtc = DateTime.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+            Assert.True(MutationLedgerService.SaveForTest(dir, ledger, null, out var saveError), saveError);
+            int restoreCalls = 0;
+
+            var result = MutationLedgerService.RestoreOriginalState(
+                dir, (_, _) => { restoreCalls++; return MutationRestoreResult.Succeeded; }, _ => ownerActive, null);
+
+            Assert.True(result.Success);
+            Assert.False(result.NothingChanged);
+            Assert.Equal(1, restoreCalls);
+            Assert.Equal(MutationOperationPhase.Reverted, MutationLedgerService.Load(dir)!.Phase);
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
+    [Fact]
+    public void InFlightElsewhere_OnlyWhileAnotherLiveProcessIsBetweenPrepareAndReboot()
+    {
+        var ledger = CreateLedger("x", MutationOperationPhase.RebootPending);
+        ledger.OwnerProcessId = 4242;
+        Assert.Null(MutationLedgerService.InFlightElsewhere(ledger, _ => true, currentProcessId: 1));
+
+        ledger.Phase = MutationOperationPhase.Prepared;
+        Assert.NotNull(MutationLedgerService.InFlightElsewhere(ledger, _ => true, currentProcessId: 1));
+        Assert.Null(MutationLedgerService.InFlightElsewhere(ledger, _ => true, currentProcessId: 4242));
+        Assert.Null(MutationLedgerService.InFlightElsewhere(ledger, _ => false, currentProcessId: 1));
+
+        ledger.Phase = MutationOperationPhase.Verified;
+        Assert.Null(MutationLedgerService.InFlightElsewhere(ledger, _ => true, currentProcessId: 1));
+    }
+
     private static string TempDir() =>
         Path.Combine(Path.GetTempPath(), "NVMeDriverPatcher.Ledger." + Guid.NewGuid().ToString("N"));
 }
