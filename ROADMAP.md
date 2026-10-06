@@ -10,15 +10,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
-- [ ] P3 — `DryRunService.PlanUninstall` has no caller and previews a whole-key delete
-  Category: cleanup
-  Where: `DryRunService.PlanUninstall`
-  Problem: Nothing calls it. It lists any existing SafeBoot GUID key as `DELETE (subkey)` with `Storage Disks` as its value, the issue #13 pattern that removal no longer follows (journal restore, default-value-only fallback).
-  Fix: Delete it, or rebuild it on `SafeBootStateService.ManagedKeysFor` and `PlanRestore` if an uninstall preview is wanted.
-  Acceptance: No code path previews deleting a Windows-owned SafeBoot key.
-  Confidence: Confirmed
-  Effort: S
-
 - [ ] P3 — APST inspector says "APST disabled" from registry values stornvme doesn't write
   Category: correctness
   Where: `src/NVMeDriverPatcher.Core/Services/ApstInspectorService.cs` (`Inspect` reads `AutonomousPowerStateTransitionEnabled`, `ApstIdleTimeout`, `NoLowPowerTransitions` and `PowerState{i}_*` under `stornvme\Parameters\Device`)
