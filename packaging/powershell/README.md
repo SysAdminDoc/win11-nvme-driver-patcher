@@ -48,4 +48,4 @@ The module looks for `NVMeDriverPatcher.Cli.exe` in this order:
 1. Next to the module (`NVMeDriverPatcher.psm1` folder)
 2. On `$PATH` via `Get-Command`
 
-Ship the CLI exe alongside the module or rely on the winget / MSI install.
+Ship the CLI exe alongside the module or rely on the MSI install.

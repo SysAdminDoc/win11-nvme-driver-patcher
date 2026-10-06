@@ -1,9 +1,0 @@
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json
-# After generating real release hashes, validate/install the complete three-file directory:
-#   winget validate --manifest publish/winget
-#   winget install --manifest publish/winget
-PackageIdentifier: SysAdminDoc.NVMeDriverPatcher
-PackageVersion: 5.7.0
-DefaultLocale: en-US
-ManifestType: version
-ManifestVersion: 1.12.0

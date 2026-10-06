@@ -203,11 +203,8 @@ public sealed class SystemToolPathServiceTests
     /// Script lines the file itself executes, with comments and here-string bodies removed.
     /// </summary>
     /// <remarks>
-    /// A here-string is a string literal, not code this script runs. The one that matters here is
-    /// <c>Test-PackageSandbox.ps1</c>'s guest bootstrap, which is written into a Windows Sandbox
-    /// this script creates fresh from a clean image — there is no host <c>$PATH</c> to plant, and
-    /// <c>winget.exe</c> is an app-execution alias with no fixed absolute path to resolve to.
-    /// If a here-string ever becomes a host-side payload, that is the point to revisit this.
+    /// A here-string is a string literal, not code this script runs. If a here-string ever becomes
+    /// a host-side payload, that is the point to revisit this.
     /// </remarks>
     private static IEnumerable<(string line, int number)> ExecutableScriptLines(string[] lines)
     {

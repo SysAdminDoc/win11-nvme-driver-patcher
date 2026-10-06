@@ -295,13 +295,6 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
   Acceptance: Tests show the updater refuses a replaced exe with a matching replaced sidecar, an expired manifest and a manifest naming an older version. Two embedded public keys allow a rotation overlap, and the README says how rotation works.
   Complexity: M
 
-- [ ] P2 — Take the winget channel out of the release contract
-  Why: The owner's standing rule is no winget manifests and no submissions. The contract still builds and validates three winget YAML files, and v5.6.0 attached them as release assets. README line 195 tells users to run `winget install SysAdminDoc.NVMeDriverPatcher`, which can't work: `microsoft/winget-pkgs` has no SysAdminDoc folder (checked 2026-10-06).
-  Evidence: v5.6.0 asset list; `packaging/winget/`; `packaging/release-artifacts.json`; `scripts/Update-PackageManifests.ps1`; `scripts/Build-ReleaseArtifacts.ps1:38-40,248`; `scripts/Test-PackageSandbox.ps1`; `README.md:195`.
-  Touches: those files, plus the docs validators that count release assets.
-  Acceptance: A release build produces no winget YAML and no longer needs `winget.exe`, no script runs `winget validate`, the README doesn't offer winget, and the asset validators pass on the smaller contract.
-  Complexity: S
-
 ### P3
 
 - [ ] P3 — Record the DiskSpd version and flags with every benchmark result
@@ -337,4 +330,18 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
   Evidence: NuGet flat-container lookups (2026-10-06); https://www.sqlite.org/changes.html; https://developers.cloudflare.com/workers/wrangler/migration/deprecations/.
   Touches: `NVMeDriverPatcher.Core.csproj`, the test csproj, `NVMeDriverPatcher.csproj` (SkiaSharp family), `packaging/telemetry-receiver/package.json` and `wrangler.toml` `compatibility_date`.
   Acceptance: The build is clean, the suite passes, the GUI charts render the same in all three themes, and `wrangler deploy --dry-run` passes for the receiver.
+  Complexity: S
+
+- [ ] P3 — Smoke-test the MSI lifecycle in Windows Sandbox
+  Why: The winget sandbox smoke (`scripts/Test-PackageSandbox.ps1`) went with the winget channel, so nothing installs, queries and removes a built package in a clean guest anymore. The MSI is the install route admins and Intune use.
+  Evidence: removed `scripts/Test-PackageSandbox.ps1` (2026-10-06); `packaging/wix/NVMeDriverPatcher.wxs`; `scripts/Build-ReleaseArtifacts.ps1` MSI step.
+  Touches: a new `scripts/Test-MsiSandbox.ps1` that writes a `.wsb` with the publish folder mapped read-only, runs `msiexec /i` quietly, checks Program Files, the service and the scheduled task, runs `msiexec /x`, and checks nothing is left; a contract test that pins those steps.
+  Acceptance: On an x64 Windows 11 host with Windows Sandbox enabled, the script exits 0 and its guest log shows install, the installed CLI answering `--version`, uninstall, and no files, service or task left behind. Without Sandbox it fails fast with a clear message.
+  Complexity: S
+
+- [ ] P3 — The suite never runs the documentation-facts validator against the real repo
+  Why: Adding the StorPort readiness check (b5d915a) raised the preflight count to 29 while README still said 28, and all 1741 tests passed. `DocumentationFactsValidatorTests` only feeds the validator fixtures; the live check runs only inside `Validate-ReleaseVersions.ps1` at release time, so drift sits unnoticed until a release build.
+  Evidence: `tests/NVMeDriverPatcher.Tests/DocumentationFactsValidatorTests.cs`; `scripts/Validate-DocumentationFacts.ps1`; the README count fix of 2026-10-06.
+  Touches: one test that runs `Validate-DocumentationFacts.ps1 -RepoRoot <repo>` on the checkout, skipping the untracked `CLAUDE.md` checks when the file is absent so a clean clone still passes.
+  Acceptance: Changing the README preflight count by one makes the suite fail with the validator's message; a clean clone without CLAUDE.md passes.
   Complexity: S

@@ -7,7 +7,7 @@ namespace NVMeDriverPatcher.Services;
 /// <summary>
 /// The curated data files (build rules, feature IDs, firmware compat) ship twice: loose beside the
 /// executable, where the MSI installs them and an admin can read them, and embedded in Core. A
-/// single-file publish never bundles the loose copies, so the bare exe handed out by winget, Scoop,
+/// single-file publish never bundles the loose copies, so the bare exe handed out by Scoop,
 /// Chocolatey and a direct download would otherwise run with no build rules, an empty feature
 /// catalog and no compat list. Loaders keep their precedence (admin override, then the file beside
 /// the exe) and use the embedded copy only when neither is usable.

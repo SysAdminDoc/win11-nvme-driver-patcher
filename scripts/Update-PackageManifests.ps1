@@ -1,5 +1,5 @@
 # Update-PackageManifests.ps1
-# Single release-metadata generator for winget, Scoop, and Chocolatey. It binds each
+# Single release-metadata generator for Scoop and Chocolatey. It binds each
 # architecture block to the matching PE artifact and hash, then atomically publishes either
 # into the source packaging tree (legacy release workflow) or an isolated output directory.
 [CmdletBinding()]
@@ -64,66 +64,6 @@ function Write-Utf8Atomic {
     }
 }
 
-function Update-WingetManifest {
-    param(
-        [Parameter(Mandatory)] [string]$Text,
-        [Parameter(Mandatory)] [hashtable]$Urls,
-        [Parameter(Mandatory)] [hashtable]$Hashes
-    )
-
-    $lines = $Text -split '\r?\n'
-    $currentArchitecture = $null
-    $versionCount = 0
-    $urlCounts = @{ x64 = 0; arm64 = 0 }
-    $hashCounts = @{ x64 = 0; arm64 = 0 }
-    $architectureCounts = @{ x64 = 0; arm64 = 0 }
-
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match '^(\s*PackageVersion:\s*)\S+\s*$') {
-            $lines[$i] = $Matches[1] + $Version
-            $versionCount++
-            continue
-        }
-        if ($lines[$i] -match '^\s*-\s*Architecture:\s*["'']?([^"''\s]+)') {
-            $currentArchitecture = $Matches[1].ToLowerInvariant()
-            if ($architectureCounts.ContainsKey($currentArchitecture)) {
-                $architectureCounts[$currentArchitecture]++
-            }
-            continue
-        }
-        if ($currentArchitecture -and $Urls.ContainsKey($currentArchitecture) -and
-            $lines[$i] -match '^(\s*InstallerUrl:\s*)\S+\s*$') {
-            $lines[$i] = $Matches[1] + $Urls[$currentArchitecture]
-            $urlCounts[$currentArchitecture]++
-            continue
-        }
-        if ($currentArchitecture -and $Hashes.ContainsKey($currentArchitecture) -and
-            $lines[$i] -match '^(\s*InstallerSha256:\s*)\S+\s*$') {
-            $lines[$i] = $Matches[1] + $Hashes[$currentArchitecture].ToUpperInvariant()
-            $hashCounts[$currentArchitecture]++
-        }
-    }
-
-    if ($versionCount -ne 1) { throw "winget template must contain exactly one PackageVersion field (found $versionCount)." }
-    foreach ($architecture in @('x64', 'arm64')) {
-        if ($architectureCounts[$architecture] -ne 1 -or $urlCounts[$architecture] -ne 1 -or $hashCounts[$architecture] -ne 1) {
-            throw "winget template must contain one $architecture installer with one URL and hash."
-        }
-    }
-    return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
-}
-
-function Update-PackageVersion {
-    param([Parameter(Mandatory)] [string]$Text, [Parameter(Mandatory)] [string]$ManifestName)
-
-    $pattern = '(?m)^(\s*PackageVersion:\s*)\S+\s*$'
-    $matches = [regex]::Matches($Text, $pattern)
-    if ($matches.Count -ne 1) {
-        throw "$ManifestName must contain exactly one PackageVersion field (found $($matches.Count))."
-    }
-    return [regex]::Replace($Text, $pattern, "`${1}$Version")
-}
-
 $x64Machine = Get-PeMachine -Path $ExePath
 $arm64Machine = Get-PeMachine -Path $Arm64ExePath
 if ($x64Machine -ne 0x8664) { throw ('ExePath PE machine is 0x{0:X4}, expected x64 (0x8664).' -f $x64Machine) }
@@ -135,16 +75,6 @@ $x64Url = "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/dow
 $arm64Url = "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v$Version/NVMeDriverPatcher-win-arm64.exe"
 
 # Build and validate every payload in memory before mutating any destination.
-$wingetSourceRoot = Join-Path $repoRoot 'packaging/winget'
-$wingetVersionSource = Join-Path $wingetSourceRoot 'SysAdminDoc.NVMeDriverPatcher.yaml'
-$wingetInstallerSource = Join-Path $wingetSourceRoot 'SysAdminDoc.NVMeDriverPatcher.installer.yaml'
-$wingetLocaleSource = Join-Path $wingetSourceRoot 'SysAdminDoc.NVMeDriverPatcher.locale.en-US.yaml'
-$wingetVersionText = Update-PackageVersion -Text (Get-Content -Raw $wingetVersionSource) -ManifestName 'winget version manifest'
-$wingetInstallerText = Update-WingetManifest -Text (Get-Content -Raw $wingetInstallerSource) `
-    -Urls @{ x64 = $x64Url; arm64 = $arm64Url } `
-    -Hashes @{ x64 = $x64Hash; arm64 = $arm64Hash }
-$wingetLocaleText = Update-PackageVersion -Text (Get-Content -Raw $wingetLocaleSource) -ManifestName 'winget locale manifest'
-
 $scoopSource = Join-Path $repoRoot 'packaging/scoop/nvme-driver-patcher.json'
 $scoop = Get-Content -Raw $scoopSource | ConvertFrom-Json
 if ($null -eq $scoop.architecture.'64bit' -or $null -eq $scoop.architecture.arm64) {
@@ -179,24 +109,14 @@ if ($OutputRoot) {
     if (Test-Path -LiteralPath $chocoRoot) { Remove-Item -LiteralPath $chocoRoot -Recurse -Force }
     New-Item -ItemType Directory -Path $chocoRoot | Out-Null
     Copy-Item -Path (Join-Path $chocoSource '*') -Destination $chocoRoot -Recurse -Force
-    $wingetTargetRoot = Join-Path $outputRoot 'winget'
-    $wingetVersionTarget = Join-Path $wingetTargetRoot 'SysAdminDoc.NVMeDriverPatcher.yaml'
-    $wingetInstallerTarget = Join-Path $wingetTargetRoot 'SysAdminDoc.NVMeDriverPatcher.installer.yaml'
-    $wingetLocaleTarget = Join-Path $wingetTargetRoot 'SysAdminDoc.NVMeDriverPatcher.locale.en-US.yaml'
     $scoopTarget = Join-Path $outputRoot 'nvme-driver-patcher.json'
 } else {
     $chocoRoot = $chocoSource
-    $wingetVersionTarget = $wingetVersionSource
-    $wingetInstallerTarget = $wingetInstallerSource
-    $wingetLocaleTarget = $wingetLocaleSource
     $scoopTarget = $scoopSource
 }
 
-Write-Utf8Atomic -Path $wingetVersionTarget -Content $wingetVersionText
-Write-Utf8Atomic -Path $wingetInstallerTarget -Content $wingetInstallerText
-Write-Utf8Atomic -Path $wingetLocaleTarget -Content $wingetLocaleText
 Write-Utf8Atomic -Path $scoopTarget -Content $scoopText
 Write-Utf8Atomic -Path (Join-Path $chocoRoot 'tools/chocolateyInstall.ps1') -Content $chocoInstallText
 Write-Utf8Atomic -Path (Join-Path $chocoRoot 'nvme-driver-patcher.nuspec') -Content $nuspecText
 
-Write-Host "Generated architecture-bound winget, Scoop, and Chocolatey metadata for v$Version (x64 $x64Hash, arm64 $arm64Hash)." -ForegroundColor Green
+Write-Host "Generated architecture-bound Scoop and Chocolatey metadata for v$Version (x64 $x64Hash, arm64 $arm64Hash)." -ForegroundColor Green
