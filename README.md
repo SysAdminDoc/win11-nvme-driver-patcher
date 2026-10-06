@@ -151,7 +151,7 @@ Some builds ship the two GUID SafeBoot keys themselves. On 24H2 26100.9550 and 2
 **Diagnostics & Benchmarking**
 - **Automated verification**: 1,000+ discovered test cases cover mutation safety, recovery, packaging, CLI, accessibility, and update integrity; release validation derives the live count from the test project
 - **Built-in DiskSpd benchmark**: high-QD (t4/o16 ≈ QD64) plus desktop QD1 4K random read/write profiles with before/after comparison (auto-downloads [Microsoft DiskSpd](https://github.com/microsoft/diskspd))
-- **Up to 28 preflight checks** run on a background thread without freezing the GUI. Some only show up when they apply, like a pending reboot or a laptop on Modern Standby
+- **Up to 29 preflight checks** run on a background thread without freezing the GUI. Some only show up when they apply, like a pending reboot or a laptop on Modern Standby
 - **Windows recovery status in every report**: the readiness summary, CLI JSON, GUI recovery tab, diagnostics report and support bundle all carry the Point-in-Time Restore and Quick Machine Recovery snapshot, and missing data from Windows never becomes a new hard block
 - **NVMe health badges**: temperature, wear %, firmware, power-on hours, media errors (hover for SMART details)
 - **Per-drive NATIVE/LEGACY badges**: shows whether each NVMe drive migrated to `nvmedisk.sys` or remains on `stornvme.sys`
