@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = if ($RepoRoot) { (Resolve-Path $RepoRoot).Path } else { (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
 
-$minimumSdk = [Version]'10.0.303'
+$minimumSdk = [Version]'10.0.401'
 $dotnetPath = $null
 $dotnetCandidates = @()
 if ($env:DOTNET_ROOT) { $dotnetCandidates += Join-Path $env:DOTNET_ROOT 'dotnet.exe' }

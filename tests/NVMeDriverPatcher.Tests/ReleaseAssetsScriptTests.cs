@@ -39,18 +39,20 @@ public sealed class ReleaseAssetsScriptTests
     [Fact]
     public void Validate_RuntimeMetadataRejectsOlderEmbeddedRuntime()
     {
-        using var repo = AssetsFixture.Create(runtime: "win-x64", peMachine: 0x8664, embeddedRuntime: "10.0.10");
+        var floor = RuntimeFloor();
+        var older = $"{floor.Major}.{floor.Minor}.{floor.Build - 1}";
+        using var repo = AssetsFixture.Create(runtime: "win-x64", peMachine: 0x8664, embeddedRuntime: older);
         var result = RunScript(repo.Path, expectSigned: false);
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Contains("embedded .NET runtime", result.StdOut, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("10.0.10", result.StdOut, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(older, result.StdOut, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void Validate_RuntimeMetadataAcceptsReleaseFloor()
     {
-        using var repo = AssetsFixture.Create(runtime: "win-x64", peMachine: 0x8664, embeddedRuntime: "10.0.11");
+        using var repo = AssetsFixture.Create(runtime: "win-x64", peMachine: 0x8664, embeddedRuntime: RuntimeFloor().ToString());
         var result = RunScript(repo.Path, expectSigned: false);
 
         Assert.True(result.ExitCode == 0, $"expected pass; stdout: {result.StdOut}\nstderr: {result.StdErr}");
@@ -84,6 +86,26 @@ public sealed class ReleaseAssetsScriptTests
 
         Assert.True(result.ExitCode == 0, $"expected pass; stdout: {result.StdOut}\nstderr: {result.StdErr}");
     }
+
+    [Fact]
+    public void ScriptDefaultFloor_MatchesDirectoryBuildProps()
+    {
+        // Fixture repos have no Directory.Build.props, so the script falls back to its own
+        // constant. That constant has to move with the props floor or the fixtures test a stale one.
+        var script = File.ReadAllText(Path.Combine(RepoRoot(), "scripts", "Validate-ReleaseAssets.ps1"));
+        Assert.Contains($"$minimumEmbeddedRuntime = [Version]'{RuntimeFloor()}'", script, StringComparison.Ordinal);
+    }
+
+    private static Version RuntimeFloor()
+    {
+        var props = File.ReadAllText(Path.Combine(RepoRoot(), "Directory.Build.props"));
+        var match = System.Text.RegularExpressions.Regex.Match(props, "<MinimumEmbeddedRuntimeVersion>([^<]+)</MinimumEmbeddedRuntimeVersion>");
+        Assert.True(match.Success, "Directory.Build.props has no MinimumEmbeddedRuntimeVersion");
+        return Version.Parse(match.Groups[1].Value.Trim());
+    }
+
+    private static string RepoRoot([CallerFilePath] string sourceFile = "") =>
+        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFile)!, "..", ".."));
 
     private static ScriptResult RunScript(string repoRoot, bool expectSigned) =>
         RunScript(repoRoot, expectSigned, publishedTag: null, publishedAssetsPath: null);
@@ -139,7 +161,7 @@ public sealed class ReleaseAssetsScriptTests
         private AssetsFixture(string path) => Path = path;
         public string Path { get; }
 
-        public static AssetsFixture Create(string? runtime = null, ushort? peMachine = null, string embeddedRuntime = "10.0.11")
+        public static AssetsFixture Create(string? runtime = null, ushort? peMachine = null, string? embeddedRuntime = null)
         {
             var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"NVMeDriverPatcher.AssetsScript.Tests.{Guid.NewGuid():N}");
             Directory.CreateDirectory(System.IO.Path.Combine(root, "publish"));
@@ -153,7 +175,7 @@ public sealed class ReleaseAssetsScriptTests
             if (runtime is not null)
             {
                 var runtimeConfig = $$$"""
-                    {"runtimeOptions":{"includedFrameworks":[{"name":"Microsoft.NETCore.App","version":"{{{embeddedRuntime}}}"}]}}
+                    {"runtimeOptions":{"includedFrameworks":[{"name":"Microsoft.NETCore.App","version":"{{{embeddedRuntime ?? RuntimeFloor().ToString()}}}"}]}}
                     """;
                 artifactBytes = artifactBytes.Concat(System.Text.Encoding.UTF8.GetBytes(runtimeConfig)).ToArray();
             }

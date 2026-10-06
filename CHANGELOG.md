@@ -192,8 +192,11 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   next cut actually uploads its sidecars.
 
 ### Security
-- Release publishing now requires SDK 10.0.303 or newer, embeds .NET runtime 10.0.11 or newer
+- Release publishing now requires SDK 10.0.401 or newer, embeds .NET runtime 10.0.12 or newer
   in every self-contained executable, and rejects older runtime payloads from the release gate.
+  10.0.12 (2026-09-08) fixes CVE-2026-69439, 71328, 69522, 69304, 58649 and 69806. The 10.0.3xx
+  SDK band never got a 10.0.12 build, so the SDK floor moved to the 4xx band with it. EF Core
+  Sqlite, System.Management, ServiceController and the two Hosting packages moved to 10.0.12 too.
 - Packaging and documentation validation now reject PATH/CWD tool resolution hidden behind
   `Invoke-Checked` or extensionless names; release tools are resolved to absolute paths first.
 

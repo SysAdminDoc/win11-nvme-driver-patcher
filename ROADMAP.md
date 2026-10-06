@@ -272,13 +272,6 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
   Acceptance: An evidence table per build covering: bind after reboot on a secondary drive and then the boot drive (Class `NvmeDisk`, service `nvmedisk`, a `GenNvmeDisk` hardware ID), a Safe Mode boot, `DISM /ScanHealth` and SFC, survival across one cumulative update, revert by deleting the value, and revert by setting `DisableNativeNVMeStack=1` offline from WinRE (also on the 24H2 guest after a three-value bind). The build rules record each verdict with `lastReviewed`. A working route gets its own implementation item with the measured costs; a failed one gets a sentence in the rule summary.
   Complexity: L
 
-- [ ] P1 — Ship on .NET 10.0.12 (SDK 10.0.401 band) and its servicing packages
-  Why: 10.0.12 (2026-09-08) fixes CVE-2026-69439, 71328, 69522, 69304, 58649 and 69806, and this app runs elevated. The 10.0.3xx SDK band that `global.json` pins never got a 10.0.12 SDK, so the floor can't move without moving bands.
-  Evidence: https://github.com/dotnet/core/blob/main/release-notes/10.0/10.0.12/10.0.12.md; https://devblogs.microsoft.com/dotnet/dotnet-and-dotnet-framework-september-2026-servicing-updates/; `Directory.Build.props:10`; `scripts/Validate-ReleaseAssets.ps1:24`; `global.json`.
-  Touches: `global.json`, `Directory.Build.props` (`MinimumEmbeddedRuntimeVersion`), `Validate-ReleaseAssets.ps1`, `NVMeDriverPatcher.Core.csproj` (EF Core Sqlite, System.Management, ServiceController), `NVMeDriverPatcher.Watchdog.csproj` (Hosting, Hosting.WindowsServices), docs that name 10.0.11.
-  Acceptance: Every published exe embeds 10.0.12 or later and the release gate fails below it; NuGet audit is clean; the full suite passes on the new SDK. If 10.0.13 is out by then (the next Patch Tuesday is 2026-10-13), take that instead.
-  Complexity: S
-
 ### P2
 
 - [ ] P2 — Smart App Control: detect it, explain it, and test both download paths against it
