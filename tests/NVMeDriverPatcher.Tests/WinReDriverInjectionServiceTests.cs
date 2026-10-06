@@ -287,11 +287,12 @@ public sealed class WinReDriverInjectionServiceTests
     }
 
     [Fact]
-    public async Task ApplyAsync_ThirdApply_LeavesTheOriginalAndTheNewestBackup()
+    public async Task ApplyAsync_RepeatedApply_LeavesTheOriginalTheNewestEarlierAndTheNewBackup()
     {
         // Every --apply used to add another full copy of winre.wim (0.5 to 1 GB) with no cap. Each
         // run backs up an image the earlier runs already changed, so the oldest copy is the only
-        // way back to the recovery image Windows shipped, and it stays.
+        // way back to the recovery image Windows shipped, and it stays. The newest earlier copy
+        // undoes the last injection and the one just made undoes this one; the rest go.
         var root = CreateTempDir();
         try
         {
@@ -302,10 +303,11 @@ public sealed class WinReDriverInjectionServiceTests
             var backups = Directory.CreateDirectory(Path.Combine(root, "backups")).FullName;
             var original = Path.Combine(backups, "winre.wim.20260101-000000.bak");
             var second = Path.Combine(backups, "winre.wim.20260201-000000.bak");
+            var third = Path.Combine(backups, "winre.wim.20260301-000000.bak");
             var otherImage = Path.Combine(backups, "custom.wim.20250101-000000.bak");
             var notOurs = Path.Combine(backups, "winre.wim.bak");
             var stalePartial = Path.Combine(backups, "winre.wim.20260215-000000.bak.partial");
-            foreach (var path in new[] { original, second, otherImage, notOurs, stalePartial })
+            foreach (var path in new[] { original, second, third, otherImage, notOurs, stalePartial })
                 File.WriteAllText(path, "older");
             var plan = WinReDriverInjectionService.BuildPlan(image, Path.Combine(root, "mount"), inf);
             var log = new List<string>();
@@ -316,9 +318,11 @@ public sealed class WinReDriverInjectionServiceTests
             Assert.True(result.Success, result.Summary);
             Assert.True(File.Exists(original));
             Assert.False(File.Exists(second));
+            // The newest earlier copy undoes the last injection and stays beside the one just made.
+            Assert.True(File.Exists(third));
             Assert.True(File.Exists(result.BackupPath));
             Assert.EndsWith(".bak", result.BackupPath, StringComparison.Ordinal);
-            Assert.Equal(2, WinReDriverInjectionService.ListBackups(backups).Count(b => b.ImageName == "winre.wim"));
+            Assert.Equal(3, WinReDriverInjectionService.ListBackups(backups).Count(b => b.ImageName == "winre.wim"));
             // Another image's backup and a file that only looks similar aren't this run's to delete.
             Assert.True(File.Exists(otherImage));
             Assert.True(File.Exists(notOurs));
@@ -348,8 +352,10 @@ public sealed class WinReDriverInjectionServiceTests
             File.WriteAllText(inf, "fake driver inf");
             var backups = Directory.CreateDirectory(Path.Combine(root, "backups")).FullName;
             var original = Path.Combine(backups, "winre.wim.20260101-000000.bak");
+            var middle = Path.Combine(backups, "winre.wim.20260201-000000.bak");
             File.WriteAllText(original, "older");
-            File.WriteAllText(Path.Combine(backups, "winre.wim.20260201-000000.bak"), "older");
+            File.WriteAllText(middle, "older");
+            File.WriteAllText(Path.Combine(backups, "winre.wim.20260301-000000.bak"), "older");
             var plan = WinReDriverInjectionService.BuildPlan(image, Path.Combine(root, "mount"), inf);
 
             var result = await WinReDriverInjectionService.ApplyAsync(plan, root, (_, args, _, _) =>
@@ -360,7 +366,8 @@ public sealed class WinReDriverInjectionServiceTests
             Assert.False(result.Success);
             Assert.True(File.Exists(result.BackupPath));
             Assert.True(File.Exists(original));
-            Assert.Equal(2, WinReDriverInjectionService.ListBackups(backups).Count);
+            Assert.False(File.Exists(middle));
+            Assert.Equal(3, WinReDriverInjectionService.ListBackups(backups).Count);
         }
         finally
         {
@@ -372,8 +379,9 @@ public sealed class WinReDriverInjectionServiceTests
     public void PruneBackups_KeepsTheBackupJustMade_EvenWhenTheClockWentBackwards()
     {
         // A dead CMOS battery can stamp the new backup years before the ones already there. It
-        // then looks like the oldest, so it would stay anyway; the point is that the real oldest
-        // and newest stay beside it and only the middle one goes.
+        // used to take the "oldest" slot, which pushed the real original (the recovery image from
+        // before the first injection) out. The one just made sits outside the ordering now, so the
+        // real oldest and newest stay beside it and only the middle one goes.
         var root = CreateTempDir();
         try
         {
@@ -386,10 +394,10 @@ public sealed class WinReDriverInjectionServiceTests
 
             int removed = WinReDriverInjectionService.PruneBackups(root, @"C:\Recovery\WindowsRE\Winre.wim", justMade);
 
-            Assert.Equal(2, removed);
+            Assert.Equal(1, removed);
             Assert.True(File.Exists(justMade));
             Assert.True(File.Exists(newest));
-            Assert.False(File.Exists(oldest));
+            Assert.True(File.Exists(oldest));
             Assert.False(File.Exists(middle));
         }
         finally
@@ -412,6 +420,53 @@ public sealed class WinReDriverInjectionServiceTests
             keep.Order(StringComparer.OrdinalIgnoreCase));
         Assert.Equal(new[] { @"C:\b\winre.wim.20260101-000000.bak" }, WinReDriverInjectionService.BackupsToKeep(new[] { At("20260101-000000") }));
         Assert.Empty(WinReDriverInjectionService.BackupsToKeep(Array.Empty<WinReBackup>()));
+
+        // Stamped years back by a clock that went backwards, the copy just made still can't take
+        // the oldest slot from the real original.
+        var backwards = WinReDriverInjectionService.BackupsToKeep(
+            backups.Append(At("20190101-000000")), justMade: @"C:\b\winre.wim.20190101-000000.bak");
+        Assert.Equal(
+            new[] { @"C:\b\winre.wim.20190101-000000.bak", @"C:\b\winre.wim.20260101-000000.bak", @"C:\b\winre.wim.20260301-000000.bak" },
+            backwards.Order(StringComparer.OrdinalIgnoreCase));
+
+        // Paths come back in full form, so a lookup by full path finds a backup listed by a relative one.
+        var relative = WinReDriverInjectionService.BackupsToKeep(
+            new[] { At("20260101-000000") with { Path = @"b\..\b\winre.wim.20260101-000000.bak" } });
+        Assert.Contains(Path.GetFullPath(@"b\winre.wim.20260101-000000.bak"), relative);
+    }
+
+    [Fact]
+    public async Task PublishBackupAsync_WaitsOutAShortLock_ThenGivesUpOnALongOne()
+    {
+        // Defender reads every new file, and a 1 GB copy takes it a moment; the rename used to
+        // fail on the first try and end the run with a bare IOException.
+        var root = CreateTempDir();
+        try
+        {
+            var partial = Path.Combine(root, "winre.wim.20260101-000000.bak.partial");
+            var target = Path.Combine(root, "winre.wim.20260101-000000.bak");
+            File.WriteAllText(partial, "copy");
+
+            var holder = new FileStream(partial, FileMode.Open, FileAccess.Read, FileShare.None);
+            var release = Task.Run(async () => { await Task.Delay(150); holder.Dispose(); });
+            await WinReDriverInjectionService.PublishBackupAsync(partial, target, TimeSpan.FromSeconds(5));
+            await release;
+
+            Assert.True(File.Exists(target));
+            Assert.False(File.Exists(partial));
+
+            File.WriteAllText(partial, "copy");
+            using (new FileStream(partial, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                await Assert.ThrowsAsync<IOException>(() =>
+                    WinReDriverInjectionService.PublishBackupAsync(partial, Path.Combine(root, "other.bak"), TimeSpan.FromMilliseconds(200)));
+            }
+            Assert.True(File.Exists(partial));
+        }
+        finally
+        {
+            TryDeleteDir(root);
+        }
     }
 
     [Fact]

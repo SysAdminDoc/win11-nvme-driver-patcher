@@ -177,6 +177,7 @@ internal static class AppDatabaseUpgradeService
         if (!backup.Success || backup.SnapshotPath is null)
             return Unavailable(detectedVersion, "Pre-upgrade database backup failed validation.", null);
 
+        var originalVersion = detectedVersion;
         try
         {
             using var connection = Open(path, SqliteOpenMode.ReadWrite);
@@ -186,7 +187,6 @@ internal static class AppDatabaseUpgradeService
             if (currentDetected != detectedVersion)
                 throw new InvalidOperationException("Database schema changed while the upgrade lock was held.");
 
-            var originalVersion = detectedVersion;
             if (detectedVersion == 1)
             {
                 UpgradeV1ToV2(connection, transaction);
@@ -209,15 +209,6 @@ internal static class AppDatabaseUpgradeService
             ApplyPersistentPragmas(connection);
             ValidateQuickCheck(connection);
             ValidateCurrentSchema(connection);
-            // The upgrade went through, so older pre-upgrade copies are no longer a recovery
-            // path anyone needs. A failed upgrade leaves every backup in place.
-            PruneUpgradeBackups(Path.GetDirectoryName(backup.SnapshotPath)!, UpgradeBackupRetention, backup.SnapshotPath);
-            return new AppDatabaseState(
-                AppDatabaseAvailability.Available,
-                CurrentSchemaVersion,
-                $"Upgraded history database from v{originalVersion} to v{CurrentSchemaVersion}; backup and integrity checks passed.",
-                "No recovery action is required.",
-                backup.SnapshotPath);
         }
         catch (Exception ex)
         {
@@ -226,6 +217,17 @@ internal static class AppDatabaseUpgradeService
                 $"History database upgrade failed ({ex.GetType().Name}: {ex.Message}).",
                 backup.SnapshotPath);
         }
+
+        // The upgrade went through, so older pre-upgrade copies are no longer a recovery path
+        // anyone needs. A failed upgrade leaves every backup in place, and this housekeeping sits
+        // outside the try above so a problem here can't report a committed upgrade as failed.
+        PruneUpgradeBackups(Path.GetDirectoryName(backup.SnapshotPath)!, UpgradeBackupRetention, backup.SnapshotPath);
+        return new AppDatabaseState(
+            AppDatabaseAvailability.Available,
+            CurrentSchemaVersion,
+            $"Upgraded history database from v{originalVersion} to v{CurrentSchemaVersion}; backup and integrity checks passed.",
+            "No recovery action is required.",
+            backup.SnapshotPath);
     }
 
     private static void UpgradeV1ToV2(SqliteConnection connection, SqliteTransaction transaction)
@@ -417,10 +419,13 @@ internal static class AppDatabaseUpgradeService
         return connection;
     }
 
-    private static string BuildBackupPath(string path, int sourceVersion)
+    internal static string BuildBackupPath(string path, int sourceVersion)
     {
         var directory = Path.Combine(Path.GetDirectoryName(path)!, "database-backups");
-        var file = $"nvmepatcher-preupgrade-v{sourceVersion}-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.db";
+        // RxBackupName parses the stamp back and the prune sorts it as text, so it has to be the
+        // Gregorian date in plain digits whatever calendar the user's regional format uses.
+        var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+        var file = $"nvmepatcher-preupgrade-v{sourceVersion}-{stamp}-{Guid.NewGuid():N}.db";
         return Path.Combine(directory, file);
     }
 
@@ -439,13 +444,22 @@ internal static class AppDatabaseUpgradeService
     internal static int PruneUpgradeBackups(string directory, int keep, string? justMade)
     {
         if (!Directory.Exists(directory)) return 0;
-        var backups = Directory.EnumerateFiles(directory, "*.db")
-            .Select(file => (Path: file, Match: RxBackupName.Match(Path.GetFileName(file))))
-            .Where(entry => entry.Match.Success)
-            .OrderByDescending(entry => entry.Match.Groups["stamp"].Value, StringComparer.Ordinal)
-            .ThenByDescending(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
-            .Select(entry => entry.Path)
-            .ToList();
+        List<string> backups;
+        try
+        {
+            backups = Directory.EnumerateFiles(directory, "*.db")
+                .Select(file => (Path: file, Match: RxBackupName.Match(Path.GetFileName(file))))
+                .Where(entry => entry.Match.Success)
+                .OrderByDescending(entry => entry.Match.Groups["stamp"].Value, StringComparer.Ordinal)
+                .ThenByDescending(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+                .Select(entry => entry.Path)
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The folder went away or can't be listed; the copies stay for the next upgrade to try.
+            return 0;
+        }
 
         var removed = 0;
         var kept = justMade is not null && backups.Contains(justMade, StringComparer.OrdinalIgnoreCase) ? 1 : 0;

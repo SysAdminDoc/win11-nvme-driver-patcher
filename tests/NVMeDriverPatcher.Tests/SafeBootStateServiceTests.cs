@@ -477,4 +477,87 @@ public sealed class SafeBootStateServiceTests
         }
         finally { try { Directory.Delete(dir, recursive: true); } catch { } }
     }
+
+    [Fact]
+    public void Journal_WrittenBeforeSchema2_IsComparedInItsOwnEncoding()
+    {
+        // Before schema 2 the journal kept GetValue(name)?.ToString(): expanded REG_EXPAND_SZ text
+        // and "System.String[]" for a REG_MULTI_SZ. Read against today's byte-for-byte snapshot, a
+        // key nobody touched looked changed, so Remove reported residue on it and a refused write
+        // to a write-protected key counted as a failure.
+        var dir = Path.Combine(Path.GetTempPath(), $"NVMeDriverPatcher.SafeBoot.{Guid.NewGuid():N}");
+        try
+        {
+            var expanded = Environment.ExpandEnvironmentVariables(@"%SystemRoot%\system32");
+            var legacy = new SafeBootJournal
+            {
+                SchemaVersion = 1,
+                CapturedUtc = "2026-01-01T00:00:00Z",
+                Entries =
+                [
+                    new SafeBootJournalEntry
+                    {
+                        Path = AppConfig.SafeBootMinimalPath,
+                        ExpectedDefault = ExpectedDefault,
+                        Existed = true,
+                        Values =
+                        [
+                            new SafeBootValueSnapshot("ImagePath", (int)RegistryValueKind.ExpandString, expanded),
+                            new SafeBootValueSnapshot("Groups", (int)RegistryValueKind.MultiString, "System.String[]")
+                        ]
+                    }
+                ]
+            };
+            Assert.True(SafeBootStateService.SaveJournal(dir, legacy));
+
+            var loaded = SafeBootStateService.LoadJournal(dir);
+            var entry = Assert.Single(loaded!.Entries);
+            Assert.True(entry.LegacyValueEncoding);
+
+            var live = new SafeBootKeySnapshot
+            {
+                Existed = true,
+                Values =
+                [
+                    new SafeBootValueSnapshot("ImagePath", (int)RegistryValueKind.ExpandString, @"%SystemRoot%\system32"),
+                    new SafeBootValueSnapshot("Groups", (int)RegistryValueKind.MultiString, "a\0b")
+                ]
+            };
+            Assert.True(SafeBootStateService.IsAtBaselineOrWindowsOwned(entry, live));
+            // A value that did change is still a difference.
+            var changed = live with { Values = [.. live.Values, new SafeBootValueSnapshot("", 1, ExpectedDefault)] };
+            Assert.False(SafeBootStateService.IsAtBaselineOrWindowsOwned(entry, changed));
+            // And a refused restore of the unchanged key is harmless, as it is for schema 2.
+            var reg = new FakeSafeBootRegistry();
+            reg.Set(AppConfig.SafeBootMinimalPath, live);
+            reg.WriteProtected.Add(AppConfig.SafeBootMinimalPath);
+            var log = new List<string>();
+            Assert.Empty(SafeBootStateService.RestoreFromJournal(reg, loaded, log.Add));
+            Assert.Contains(log, line => line.Contains("already at its pre-apply state", StringComparison.Ordinal));
+        }
+        finally { try { Directory.Delete(dir, recursive: true); } catch { } }
+    }
+
+    [Fact]
+    public void Journal_CapturedNow_IsSchema2AndComparesRawData()
+    {
+        var reg = new FakeSafeBootRegistry();
+        reg.Set(AppConfig.SafeBootMinimalPath, new SafeBootKeySnapshot
+        {
+            Existed = true,
+            Values = [new SafeBootValueSnapshot("ImagePath", (int)RegistryValueKind.ExpandString, @"%SystemRoot%\system32")]
+        });
+
+        var journal = SafeBootStateService.CaptureJournal(reg, "2026-07-14T00:00:00Z");
+
+        Assert.Equal(SafeBootJournal.CurrentSchemaVersion, journal.SchemaVersion);
+        var entry = journal.Entries.First(e => e.Path == AppConfig.SafeBootMinimalPath);
+        Assert.False(entry.LegacyValueEncoding);
+        Assert.True(SafeBootStateService.IsAtBaselineOrWindowsOwned(entry, reg.Read(AppConfig.SafeBootMinimalPath)));
+        var expandedLive = reg.Read(AppConfig.SafeBootMinimalPath) with
+        {
+            Values = [new SafeBootValueSnapshot("ImagePath", (int)RegistryValueKind.ExpandString, Environment.ExpandEnvironmentVariables(@"%SystemRoot%\system32"))]
+        };
+        Assert.False(SafeBootStateService.IsAtBaselineOrWindowsOwned(entry, expandedLive));
+    }
 }

@@ -28,7 +28,7 @@ public static class CleanDataService
         "backups",   // Pre_*_Backup_*.reg, and all but the newest backups\<image>.<stamp>.bak
         "db",        // nvmepatcher.db*
         "bundles",   // support_bundle_*.zip
-        "staging"    // tools\staging\, compat_report.json, anon_id.txt
+        "staging"    // tools\staging\, compat_report.json, anon_id.txt, staging files a killed run left
     };
 
     public static CleanDataResult Clean(AppConfig config, IEnumerable<string>? targets = null)
@@ -82,6 +82,8 @@ public static class CleanDataService
                 var p = Path.Combine(dir, f);
                 if (File.Exists(p)) TryDelete(p, result);
             }
+            // <file>.<pid>.<guid>.tmp: the half of an atomic write a killed process never renamed.
+            Sweep(AtomicFile.StaleStagingFiles(dir, TimeSpan.Zero), result);
         }
 
         result.Success = result.Errors.Count == 0;

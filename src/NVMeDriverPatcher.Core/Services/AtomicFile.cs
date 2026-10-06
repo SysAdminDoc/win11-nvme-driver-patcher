@@ -18,6 +18,74 @@ internal static class AtomicFile
     /// <summary>A staging name no other process or call can pick.</summary>
     internal static string StagingPath(string path) => $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
 
+    private static readonly System.Text.RegularExpressions.Regex RxStagingName = new(
+        @"\.\d+\.[0-9a-f]{32}\.tmp$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>True for a name <see cref="StagingPath"/> produced. The SafeBoot journal stages
+    /// under the same naming.</summary>
+    internal static bool IsStagingName(string fileName) => RxStagingName.IsMatch(fileName);
+
+    /// <summary>
+    /// Staging files under <paramref name="directory"/> and its subdirectories that an earlier run
+    /// left behind: a process killed between the write and the rename. Only this naming counts,
+    /// and only files whose last write is older than <paramref name="olderThan"/>, so a write in
+    /// flight in another process is never listed. A directory that can't be read is skipped, and
+    /// junctions aren't followed.
+    /// </summary>
+    internal static IReadOnlyList<string> StaleStagingFiles(string directory, TimeSpan olderThan)
+    {
+        var stale = new List<string>();
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return stale;
+        var cutoff = DateTime.UtcNow - olderThan;
+        var pending = new Stack<string>();
+        pending.Push(directory);
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            try
+            {
+                foreach (var path in Directory.EnumerateFiles(current, "*.tmp", SearchOption.TopDirectoryOnly))
+                {
+                    if (!IsStagingName(Path.GetFileName(path))) continue;
+                    if (File.GetLastWriteTimeUtc(path) > cutoff) continue;
+                    stale.Add(path);
+                }
+                foreach (var sub in Directory.EnumerateDirectories(current))
+                {
+                    if ((File.GetAttributes(sub) & FileAttributes.ReparsePoint) != 0) continue;
+                    pending.Push(sub);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Unreadable directory: skipped, as the summary says.
+            }
+        }
+        return stale;
+    }
+
+    /// <summary>Deletes what <see cref="StaleStagingFiles"/> lists. Returns how many went; a file
+    /// that can't be deleted is logged and left.</summary>
+    internal static int SweepStale(string directory, TimeSpan olderThan, Action<string>? log = null)
+    {
+        int removed = 0;
+        foreach (var path in StaleStagingFiles(directory, olderThan))
+        {
+            try
+            {
+                File.Delete(path);
+                removed++;
+                log?.Invoke($"[INFO] Removed a staging file an earlier run left behind: {path}");
+            }
+            catch (Exception ex)
+            {
+                log?.Invoke($"[WARN] Couldn't remove the staging file {path}: {ex.Message}");
+            }
+        }
+        return removed;
+    }
+
     /// <summary>
     /// Writes <paramref name="content"/> and publishes it at <paramref name="path"/>. The staging
     /// file is removed on any failure, and the failure is rethrown for the caller to log or swallow

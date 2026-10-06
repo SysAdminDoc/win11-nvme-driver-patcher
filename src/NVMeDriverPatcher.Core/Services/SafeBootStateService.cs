@@ -2,6 +2,7 @@ using System.IO;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Win32;
 using NVMeDriverPatcher.Models;
 
@@ -74,6 +75,26 @@ internal static class SafeBootValueCodec
         _ => raw.ToString()
     };
 
+    /// <summary>
+    /// What a journal from before schema 2 (<see cref="SafeBootJournal.CurrentSchemaVersion"/>)
+    /// holds for a value whose live data is <paramref name="data"/>. Those journals kept
+    /// <c>GetValue(name)?.ToString()</c>: REG_EXPAND_SZ text with its environment names expanded,
+    /// "System.String[]" for every REG_MULTI_SZ and "System.Byte[]" for every REG_BINARY. A live
+    /// key has to be put through the same lens before it's compared with one of them, or a key
+    /// nobody touched reads as residue.
+    /// </summary>
+    public static string? LegacyEncode(int kind, string? data)
+    {
+        if (data is null) return null;
+        return (RegistryValueKind)kind switch
+        {
+            RegistryValueKind.ExpandString => Environment.ExpandEnvironmentVariables(data),
+            RegistryValueKind.MultiString => "System.String[]",
+            RegistryValueKind.Binary or RegistryValueKind.None or RegistryValueKind.Unknown => "System.Byte[]",
+            _ => data
+        };
+    }
+
     /// <summary>The value and kind to hand <c>RegistryKey.SetValue</c>. Data that doesn't parse as
     /// its recorded kind is written as the string it was recorded as, which is what the old code
     /// did for everything.</summary>
@@ -121,6 +142,12 @@ public sealed class SafeBootJournalEntry
     public bool WindowsOwned { get; set; }
     public List<SafeBootValueSnapshot> Values { get; set; } = new();
 
+    /// <summary>Set when the journal was read from schema 1, whose value data is encoded the way
+    /// <see cref="SafeBootValueCodec.LegacyEncode"/> describes. Not stored: the journal's
+    /// <see cref="SafeBootJournal.SchemaVersion"/> is what says it.</summary>
+    [JsonIgnore]
+    public bool LegacyValueEncoding { get; set; }
+
     public SafeBootKeySnapshot ToSnapshot() => new()
     {
         Path = Path,
@@ -131,11 +158,24 @@ public sealed class SafeBootJournalEntry
     };
 }
 
-public sealed class SafeBootJournal
+public sealed class SafeBootJournal : IJsonOnDeserialized
 {
+    /// <summary>Schema 2 records value data with <see cref="SafeBootValueCodec"/>; schema 1 held
+    /// <c>GetValue(name)?.ToString()</c>. The property's default stays 1 so a journal written
+    /// before the property existed reads as what it is.</summary>
+    public const int CurrentSchemaVersion = 2;
+
     public int SchemaVersion { get; set; } = 1;
     public string CapturedUtc { get; set; } = string.Empty;
     public List<SafeBootJournalEntry> Entries { get; set; } = new();
+
+    /// <summary>Runs for the journal file and for the copy inside the mutation ledger alike, so
+    /// every entry read from an older schema knows how its values are encoded.</summary>
+    void IJsonOnDeserialized.OnDeserialized()
+    {
+        if (SchemaVersion >= CurrentSchemaVersion) return;
+        foreach (var entry in Entries) entry.LegacyValueEncoding = true;
+    }
 }
 
 /// <summary>
@@ -224,7 +264,7 @@ public static class SafeBootStateService
         string capturedUtc,
         IReadOnlyList<string>? mirrorControlSets)
     {
-        var journal = new SafeBootJournal { CapturedUtc = capturedUtc };
+        var journal = new SafeBootJournal { SchemaVersion = SafeBootJournal.CurrentSchemaVersion, CapturedUtc = capturedUtc };
         foreach (var (path, expected) in ManagedKeysFor(mirrorControlSets))
         {
             var snap = registry.Read(path);
@@ -287,7 +327,7 @@ public static class SafeBootStateService
             var live = registry.Read(entry.Path);
             // Journals written before ownership was recorded still list Windows-owned keys. A
             // refused write to a key that already matches its baseline had nothing to undo.
-            if (SnapshotsMatch(entry.ToSnapshot(), live))
+            if (SnapshotsMatch(entry.ToSnapshot(), AsRecorded(entry, live)))
                 return "write-protected and already at its pre-apply state";
             // Servicing can create or take over the key after the patch was applied (26100.9550
             // ships its own). Ownership alone isn't enough: a key that still holds this tool's
@@ -303,7 +343,15 @@ public static class SafeBootStateService
     /// now and it doesn't hold this tool's value. Remove's verification uses this so a key
     /// servicing took over doesn't read as residue.</summary>
     internal static bool IsAtBaselineOrWindowsOwned(SafeBootJournalEntry baseline, SafeBootKeySnapshot live) =>
-        SnapshotsMatch(baseline.ToSnapshot(), live) || IsWindowsOwnedWithoutThisToolsValue(baseline, live);
+        SnapshotsMatch(baseline.ToSnapshot(), AsRecorded(baseline, live)) || IsWindowsOwnedWithoutThisToolsValue(baseline, live);
+
+    /// <summary>The live key as a journal of the baseline's schema would have recorded it. A schema 1
+    /// baseline encoded REG_EXPAND_SZ, REG_MULTI_SZ and REG_BINARY data differently from today's
+    /// read, so compared with a live read as is, a key nobody touched counted as residue.</summary>
+    internal static SafeBootKeySnapshot AsRecorded(SafeBootJournalEntry baseline, SafeBootKeySnapshot live) =>
+        baseline.LegacyValueEncoding
+            ? live with { Values = live.Values.Select(v => v with { StringData = SafeBootValueCodec.LegacyEncode(v.Kind, v.StringData) }).ToList() }
+            : live;
 
     private static bool IsWindowsOwnedWithoutThisToolsValue(SafeBootJournalEntry entry, SafeBootKeySnapshot live) =>
         live.WindowsOwned &&
