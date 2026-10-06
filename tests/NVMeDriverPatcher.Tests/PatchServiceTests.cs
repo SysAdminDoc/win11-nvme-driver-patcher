@@ -263,11 +263,100 @@ public sealed class PatchServiceTests
 
         var unplanned = PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), baseline);
 
-        Assert.All(unplanned, u => Assert.False(u.WrittenByThisTool));
+        // Full without the opt-in leaves 156965516 unplanned in both keys, and both stay.
+        Assert.Equal(Overrides.Count, unplanned.Count);
+        Assert.All(unplanned, u =>
+        {
+            Assert.Equal(AppConfig.StandaloneFutureFeatureID, u.ValueName);
+            Assert.False(u.WrittenByThisTool);
+            Assert.False(u.BaselineCapturedMidLife);
+        });
         // No ledger to reuse: apply captures a fresh baseline, which would call it pre-existing too.
-        Assert.All(PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), baseline: null), u => Assert.False(u.WrittenByThisTool));
+        var fresh = PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), baseline: null);
+        Assert.Equal(Overrides.Count, fresh.Count);
+        Assert.All(fresh, u => Assert.False(u.WrittenByThisTool));
         // A ledger with no record of the value can't say whose it is.
         Assert.Empty(PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), []));
+    }
+
+    [Fact]
+    public void FindUnplannedOverrides_BaselineCapturedOverAnOlderVersionsPatch_CallsItsFlagsThisTools()
+    {
+        // v5.0.0 Full wrote all three flags without a ledger; the v5.1.0 baseline then recorded
+        // them as pre-existing. The primary flag in that baseline gives the older patch away.
+        var baseline = AbsentBaseline();
+        foreach (var entry in baseline.Where(b => AppConfig.FeatureIDs.Contains(b.ValueName)))
+        {
+            entry.Existed = true;
+            entry.Kind = 4;
+            entry.IntegerData = 1;
+        }
+        var planned = PatchService.BuildRequiredRegistryMutations(PatchProfile.Safe, false, ["ControlSet002"], false);
+
+        var unplanned = PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), baseline);
+
+        Assert.Equal(Overrides.Count * 2, unplanned.Count);   // 1853569164 and 156965516 in each key
+        Assert.All(unplanned, u =>
+        {
+            Assert.True(u.WrittenByThisTool);
+            Assert.True(u.BaselineCapturedMidLife);
+        });
+    }
+
+    [Fact]
+    public void FindUnplannedOverrides_MidLifeRule_NeedsThePrimaryFlagInTheSameKey()
+    {
+        // Only the live control set's baseline holds the primary flag, so the mirror's extra
+        // flag still reads as pre-existing there.
+        var baseline = AbsentBaseline();
+        var live = Overrides.Single(subKey => subKey.Contains("CurrentControlSet", StringComparison.OrdinalIgnoreCase));
+        foreach (var entry in baseline.Where(b => b.ValueName == AppConfig.PrimaryFeatureID && b.KeyPath == live))
+            entry.Existed = true;
+        foreach (var entry in baseline.Where(b => b.ValueName == AppConfig.StandaloneFutureFeatureID))
+            entry.Existed = true;
+        var planned = PatchService.BuildRequiredRegistryMutations(PatchProfile.Full, false, ["ControlSet002"], false);
+
+        var unplanned = PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), baseline);
+
+        Assert.Equal(Overrides.Count, unplanned.Count);
+        Assert.True(unplanned.Single(u => u.SubKey == live).WrittenByThisTool);
+        Assert.False(unplanned.Single(u => u.SubKey != live).WrittenByThisTool);
+    }
+
+    [Fact]
+    public void ClearUnplannedOverrides_SaysWhenAnOlderVersionWroteTheValue()
+    {
+        var deleted = new List<string>();
+        var log = new List<string>();
+
+        int cleared = PatchService.ClearUnplannedOverrides(
+            [new PatchService.UnplannedOverride(Overrides[0], "156965516", WrittenByThisTool: true, BaselineCapturedMidLife: true)],
+            (_, id) => deleted.Add(id),
+            log.Add);
+
+        Assert.Equal(1, cleared);
+        Assert.Equal(["156965516"], deleted);
+        var line = Assert.Single(log);
+        Assert.Contains("[CLEARED] 156965516", line, StringComparison.Ordinal);
+        Assert.Contains("version before 5.1.0", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ClearLeftoverOverrides_RegistryReadFailure_IsAWarningNotARollback()
+    {
+        var log = new List<string>();
+        var planned = PatchService.BuildRequiredRegistryMutations(PatchProfile.Safe, false, ["ControlSet002"], false);
+
+        int cleared = PatchService.ClearLeftoverOverrides(
+            Overrides, planned, AbsentBaseline(),
+            (_, _) => throw new UnauthorizedAccessException("no handle"),
+            (_, _) => throw new InvalidOperationException("must not be reached"),
+            log.Add);
+
+        Assert.Equal(0, cleared);
+        var warning = Assert.Single(log);
+        Assert.Contains("[WARNING] Couldn't check for leftover overrides", warning, StringComparison.Ordinal);
+        Assert.Contains("no handle", warning, StringComparison.Ordinal);
     }
 
     [Fact]

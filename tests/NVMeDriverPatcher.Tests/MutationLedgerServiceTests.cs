@@ -371,6 +371,57 @@ public sealed class MutationLedgerServiceTests
         }
     };
 
+    [Fact]
+    public void TryLoad_WhileAnotherThreadHoldsTheLedgerLock_GivesUpWithinTheTimeout()
+    {
+        var dir = TempDir();
+        using var holding = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var holder = new Thread(() =>
+        {
+            using var mutex = new Mutex(initiallyOwned: false, MutationLedgerService.LedgerMutexName);
+            try { mutex.WaitOne(); } catch (AbandonedMutexException) { }
+            holding.Set();
+            release.Wait();
+            mutex.ReleaseMutex();
+        });
+        holder.Start();
+        holding.Wait();
+        try
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            bool held = MutationLedgerService.TryLoad(dir, TimeSpan.FromMilliseconds(250), out var ledger);
+            sw.Stop();
+
+            Assert.False(held);
+            Assert.Null(ledger);
+            Assert.InRange(sw.Elapsed, TimeSpan.FromMilliseconds(200), TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            release.Set();
+            holder.Join();
+        }
+    }
+
+    [Fact]
+    public void TryLoad_WhenTheLockIsFree_ReadsTheLedgerAndTellsNoLedgerFromLocked()
+    {
+        var dir = TempDir();
+        try
+        {
+            var ledger = CreateLedger("free", MutationOperationPhase.Verified);
+            Assert.True(MutationLedgerService.SaveForTest(dir, ledger, null, out var saveError), saveError);
+
+            Assert.True(MutationLedgerService.TryLoad(dir, TimeSpan.FromSeconds(5), out var loaded));
+            Assert.Equal("free", loaded!.OperationId);
+
+            Assert.True(MutationLedgerService.TryLoad(TempDir(), TimeSpan.FromSeconds(5), out var none));
+            Assert.Null(none);
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+
     private static string TempDir() =>
         Path.Combine(Path.GetTempPath(), "NVMeDriverPatcher.Ledger." + Guid.NewGuid().ToString("N"));
 }

@@ -24,11 +24,21 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Category: correctness
   Where: `PreflightService.cs:199` ("APST broken"), `DryRunService.cs:125`, `MainViewModel.cs:483`, `:1147`, `:1318`, CLI `Program.cs:1300`, `DiagnosticsService.cs:594`, `ApstInspectorService.ModernStandbyApstWarning`, README "Laptop/power warning" and the risk table, `TuningProfile` keys `NoLowPowerTransitions` and `ApstIdleTimeout`
   Problem: Microsoft's StorNVMe power management page says StorNVMe doesn't use the drive's APST; it picks non-operational states itself from the power plan's NVMe idle timeouts and latency tolerances. The warnings say nvmedisk "breaks" or "disables" APST, and the tuning profile carries two stornvme values Microsoft doesn't document and no machine we've read has. The ~15% battery figure has no cited source in the repo.
-  Evidence: Found while rebuilding the APST inspector on the power plan settings (it now reads "Windows idles this drive to PS3 after 200 ms and PS4 after 2000 ms" on a Samsung PM9C1b under stornvme).
+  Evidence: Found while rebuilding the APST inspector on the power plan settings (it now reads "Windows idles this drive to PS3 after 200 ms and PS4 after 2000 ms" on a Samsung PM9C1b under stornvme). A string dump of stornvme.sys (djdallmann/GamingPCSetup, registrykeys_stornvme.txt) lists the Parameters\Device values the driver reads: the power ones are `IdlePowerMode`, `MedPowerResumeLatency`, `MedPowerFxIdleTimeout`, `MedPowerD3IdleTimeout`, `LowestPowerResumeLatency`, `LowestPowerFxIdleTimeout` and `LowestPowerD3IdleTimeout`. `NoLowPowerTransitions`, `AutonomousPowerStateTransitionEnabled`, `ApstIdleTimeout` and `PowerState<N>_IdleTimeUs` aren't in it, so the tuning profile's two keys and the inspector's per-state reads name values stornvme never looks at. The inspector no longer lets the two "off" values decide the verdict; the tuning profile still writes them.
   Fix: Reword the laptop warnings around what's known (stornvme's idle states come from the power plan; how nvmedisk idles the drive isn't documented), cite or drop the 15% figure, and either source the two tuning keys or stop writing them.
   Acceptance: No user-facing text says nvmedisk breaks or disables APST; every battery figure shown has a source; the tuning profile writes only documented stornvme values or says it can't confirm them.
   Confidence: Likely
   Effort: S
+
+- [ ] P3 — Remove restores a baseline captured over a v5.0.0 patch, leaving that version's flags set
+  Category: correctness
+  Where: `PatchService.Uninstall` (ledger branch, `MutationLedgerService.RestoreOriginalState`), `MutationLedgerService.RestoreOriginalStateCore`
+  Problem: The ledger arrived in v5.1.0. A machine patched by v5.0.0 Full and then upgraded gets a baseline that records 735209102, 1853569164 and 156965516 as pre-existing, so Remove's "exact pre-mutation state" writes all three back, logs "[Registry] Registry override residue: 3 value(s) remain" from `InspectLiveRegistryOverrideOwnership`, and still reports REMOVED and verified. Apply's leftover sweep now presumes those flags are this tool's when the baseline also holds the primary flag (`PatchService.FindUnplannedOverrides`, mid-life rule); Remove doesn't.
+  Evidence: Code reading during the round-3 review of the leftover sweep; the residue summary and the SUCCESS line come from the same Uninstall branch.
+  Fix: Apply the mid-life rule in the ledger restore too: when the baseline holds the primary flag for a subkey, delete this tool's override values there instead of writing them back, say so in the log, and make the REMOVED verdict depend on `InspectLiveRegistryOverrideOwnership` finding none of this tool's values.
+  Acceptance: A ledger whose baseline records all three flags as present, restored against a fake registry, ends with the owned values absent and a log line saying why; a baseline without the primary flag still restores the extras exactly; Remove reports PARTIAL, not REMOVED, while any owned value remains.
+  Confidence: Likely
+  Effort: M
 
 - [ ] P3 — `DetectBcdTestSigningEnabled` drains process pipes synchronously and sequentially with no effective timeout
   Category: reliability

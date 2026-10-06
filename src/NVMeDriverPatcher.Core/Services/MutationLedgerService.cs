@@ -110,7 +110,7 @@ public sealed record InterruptedMutationRecoveryResult(
 public static class MutationLedgerService
 {
     public const string LedgerFileName = "mutation_ledger.json";
-    private const string LedgerMutexName = @"Global\NVMeDriverPatcher.MutationLedger";
+    internal const string LedgerMutexName = @"Global\NVMeDriverPatcher.MutationLedger";
     private static readonly TimeSpan MutexTimeout = TimeSpan.FromSeconds(30);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -432,6 +432,18 @@ public static class MutationLedgerService
     {
         using var lease = AcquireMutex();
         return lease.Held ? LoadUnsafe(workingDir) : null;
+    }
+
+    /// <summary>
+    /// Loads the ledger when the lock can be had within <paramref name="timeout"/>. False when it
+    /// can't: a read-only caller on a UI thread (the dry run) shouldn't sit out the 30 s the
+    /// mutating calls allow, and it needs "locked" told apart from "no ledger".
+    /// </summary>
+    public static bool TryLoad(string workingDir, TimeSpan timeout, out MutationOperationLedger? ledger)
+    {
+        using var lease = AcquireMutex(timeout);
+        ledger = lease.Held ? LoadUnsafe(workingDir) : null;
+        return lease.Held;
     }
 
     public static InterruptedMutationRecoveryResult RecoverInterrupted(
@@ -942,14 +954,14 @@ public static class MutationLedgerService
         catch { return DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture); }
     }
 
-    private static MutexLease AcquireMutex()
+    private static MutexLease AcquireMutex(TimeSpan? timeout = null)
     {
         Mutex? mutex = null;
         bool held = false;
         try
         {
             mutex = new Mutex(initiallyOwned: false, LedgerMutexName);
-            try { held = mutex.WaitOne(MutexTimeout); }
+            try { held = mutex.WaitOne(timeout ?? MutexTimeout); }
             catch (AbandonedMutexException) { held = true; }
             return new MutexLease(mutex, held);
         }

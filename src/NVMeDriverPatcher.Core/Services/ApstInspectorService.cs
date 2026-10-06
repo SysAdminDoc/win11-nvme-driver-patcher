@@ -48,11 +48,16 @@ public class ApstInspectionReport
     public int? PrimaryIdleState { get; set; }
     public int? SecondaryIdleState { get; set; }
 
-    // stornvme\Parameters\Device values. Microsoft doesn't document these, and neither a 24H2
-    // install nor a retail PC had them, so they only count as overrides when present.
+    // stornvme\Parameters\Device values. Microsoft doesn't document these, they aren't among the
+    // parameters stornvme is known to read, and neither a 24H2 install nor a retail PC had them.
+    // They're reported when present and never decide the idle verdict; the power plan does.
     public bool? ApstEnabledOverride { get; set; }
     public int? ApstIdleTimeout { get; set; }
     public bool NoLowPowerTransitions { get; set; }
+
+    /// <summary>The undocumented value that claims to turn idle off, when one is set
+    /// ("NoLowPowerTransitions=1" or "AutonomousPowerStateTransitionEnabled=0").</summary>
+    public string? UndocumentedIdleOverride { get; set; }
 
     public List<ApstPowerState> States { get; set; } = new();
     public string Summary { get; set; } = string.Empty;
@@ -241,15 +246,19 @@ public static class ApstInspectorService
         string source = onBattery ? "on battery" : "on AC power";
         string stateCount = report.States.Count == 1 ? "1 power state" : $"{report.States.Count} power states";
 
-        if (report.NoLowPowerTransitions || report.ApstEnabledOverride == false)
-        {
-            report.IdleStatesUsed = false;
-            string value = report.NoLowPowerTransitions ? "NoLowPowerTransitions=1" : "AutonomousPowerStateTransitionEnabled=0";
-            report.Summary = $"Low-power idle is turned off by a stornvme registry value ({value}). {stateCount}.";
-            return;
-        }
+        // Community tweaks set these to "turn APST off", but Microsoft documents neither value for
+        // stornvme and the driver isn't known to read them, so the power plan still decides. The
+        // value is reported so nobody wonders why the verdict ignores it.
+        report.UndocumentedIdleOverride = report.NoLowPowerTransitions ? "NoLowPowerTransitions=1"
+            : report.ApstEnabledOverride == false ? "AutonomousPowerStateTransitionEnabled=0"
+            : null;
+        ApplyPowerPlanPolicy(report, onBattery ? dc : ac, source, stateCount);
+        if (report.UndocumentedIdleOverride is { } undocumented)
+            report.Summary += $" The stornvme registry value {undocumented} is set, but Microsoft doesn't document it and stornvme isn't known to read it, so it isn't counted on to turn idle off.";
+    }
 
-        var settings = onBattery ? dc : ac;
+    private static void ApplyPowerPlanPolicy(ApstInspectionReport report, NvmeIdleSettings? settings, string source, string stateCount)
+    {
         if (settings is null)
         {
             report.IdleStatesUsed = null;
@@ -302,6 +311,19 @@ public static class ApstInspectorService
     }
 
     private static string Ms(int milliseconds) => milliseconds.ToString(CultureInfo.InvariantCulture) + " ms";
+
+    /// <summary>The CLI's "Idle savings" line, or null when there's nothing honest to print: the
+    /// watts the drive's power table promises mean nothing when Windows never idles it there.</summary>
+    public static string? IdleSavingsText(ApstBatteryEstimate est)
+    {
+        if (est.EstimatedIdleSavingsWatts is not double watts) return null;
+        return est.IdleStatesUsed switch
+        {
+            true => $"~{watts:F1}W (lost after patching)",
+            false => null,
+            null => $"up to ~{watts:F1}W, if Windows idles this drive (not confirmed)"
+        };
+    }
 
     internal static ApstBatteryEstimate EstimateBatteryImpact(ApstInspectionReport report)
     {

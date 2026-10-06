@@ -254,17 +254,62 @@ public sealed class ApstBatteryEstimateTests
     [Theory]
     [InlineData(true, null, "NoLowPowerTransitions=1")]
     [InlineData(false, false, "AutonomousPowerStateTransitionEnabled=0")]
-    public void ApplyIdlePolicy_RegistryOverrideThatTurnsItOff_Wins(bool noLowPower, bool? apstOverride, string named)
+    public void ApplyIdlePolicy_UndocumentedRegistryValue_IsReportedButThePowerPlanStillDecides(bool noLowPower, bool? apstOverride, string named)
     {
+        // Microsoft documents neither value for stornvme and the driver isn't known to read them,
+        // so they can't be trusted to turn idle off. The verdict stays with the power plan.
         var report = ReportWithPowerTable();
         report.NoLowPowerTransitions = noLowPower;
         report.ApstEnabledOverride = apstOverride;
 
         ApstInspectorService.ApplyIdlePolicy(report, BalancedAc, BalancedDc, onBattery: false);
 
-        Assert.False(report.IdleStatesUsed);
-        Assert.Contains(named, report.Summary, StringComparison.Ordinal);
-        Assert.False(ApstInspectorService.EstimateBatteryImpact(report).IdleStatesUsed);
+        Assert.True(report.IdleStatesUsed);
+        Assert.Equal(named, report.UndocumentedIdleOverride);
+        Assert.Contains("PS3 after 200 ms and PS4 after 2000 ms on AC power", report.Summary, StringComparison.Ordinal);
+        Assert.Contains($"{named} is set, but Microsoft doesn't document it", report.Summary, StringComparison.Ordinal);
+        Assert.True(ApstInspectorService.EstimateBatteryImpact(report).IdleStatesUsed);
+    }
+
+    [Fact]
+    public void ApplyIdlePolicy_UndocumentedValue_WithNoPowerPlan_StillSaysNotReported()
+    {
+        var report = ReportWithPowerTable();
+        report.NoLowPowerTransitions = true;
+
+        ApstInspectorService.ApplyIdlePolicy(report, ac: null, dc: null, onBattery: false);
+
+        Assert.Null(report.IdleStatesUsed);
+        Assert.StartsWith("Low-power idle wasn't reported", report.Summary, StringComparison.Ordinal);
+        Assert.EndsWith("so it isn't counted on to turn idle off.", report.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ApplyIdlePolicy_NoUndocumentedValue_LeavesTheSummaryAlone()
+    {
+        var report = ReportWithPowerTable();
+        report.ApstEnabledOverride = true;   // its "on" value claims nothing
+
+        ApstInspectorService.ApplyIdlePolicy(report, BalancedAc, BalancedDc, onBattery: false);
+
+        Assert.Null(report.UndocumentedIdleOverride);
+        Assert.DoesNotContain("doesn't document", report.Summary, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true, "~5.9W (lost after patching)")]
+    [InlineData(null, "up to ~5.9W, if Windows idles this drive (not confirmed)")]
+    public void IdleSavingsText_FollowsTheVerdict(bool? idleStatesUsed, string expected)
+    {
+        var est = new ApstBatteryEstimate { IdleStatesUsed = idleStatesUsed, EstimatedIdleSavingsWatts = 5.9 };
+        Assert.Equal(expected, ApstInspectorService.IdleSavingsText(est));
+    }
+
+    [Fact]
+    public void IdleSavingsText_NothingToSay_WhenWindowsNeverIdlesTheDriveOrTheWattsAreUnknown()
+    {
+        Assert.Null(ApstInspectorService.IdleSavingsText(new ApstBatteryEstimate { IdleStatesUsed = false, EstimatedIdleSavingsWatts = 5.9 }));
+        Assert.Null(ApstInspectorService.IdleSavingsText(new ApstBatteryEstimate { IdleStatesUsed = true, EstimatedIdleSavingsWatts = null }));
     }
 
     [Fact]
