@@ -360,9 +360,9 @@ public static class CliCommandRegistry
         sb.AppendLine("  --safe                     Safe Mode: write primary flag only (735209102), recommended");
         sb.AppendLine("  --full                     Full Mode: write the primary flag plus 1853569164 (higher perf, higher risk)");
         sb.AppendLine("  --standalone-future        With --full, also write 156965516 (DISM reports store corruption while it's set)");
-        sb.AppendLine("  --no-standalone-future     Force 156965516 off for this run");
-        sb.AppendLine("  --include-server-key       Force the optional Server 2025 key on for this run");
-        sb.AppendLine("  --no-server-key            Force the optional Server 2025 key off for this run");
+        sb.AppendLine("  --no-standalone-future     Turn 156965516 off (remembered after an apply)");
+        sb.AppendLine("  --include-server-key       Turn the optional Server 2025 key on (remembered after an apply)");
+        sb.AppendLine("  --no-server-key            Turn the optional Server 2025 key off (remembered after an apply)");
         sb.AppendLine("  --dry-run, --preview       Preview changes without applying them (works with 'apply')");
         sb.AppendLine("  --unattended               No prompts, auto-reboot, non-zero exit on any blocker");
         sb.AppendLine("  --json                     Emit machine-readable JSON (status, preflight, recovery-proof, watchdog, reliability,");

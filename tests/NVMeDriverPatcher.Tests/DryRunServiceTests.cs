@@ -198,4 +198,55 @@ public sealed class DryRunServiceTests
         Assert.DoesNotContain("MISMATCH", DryRunService.RenderMarkdown(report), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("55369237", DryRunService.RenderMarkdown(report));
     }
+
+    // A machine an older Full install patched: 156965516 = 1 in every Overrides key, nothing else.
+    private static DryRunService.CurrentRegistryValue LeftoverStandaloneFuture(string path, string valueName) =>
+        valueName == AppConfig.StandaloneFutureFeatureID && path.EndsWith(@"FeatureManagement\Overrides", StringComparison.OrdinalIgnoreCase)
+            ? new DryRunService.CurrentRegistryValue(true, 1)
+            : new DryRunService.CurrentRegistryValue(false, null);
+
+    [Theory]
+    [InlineData(PatchProfile.Safe, false)]
+    [InlineData(PatchProfile.Safe, true)]   // the opt-in only counts with Full
+    [InlineData(PatchProfile.Full, false)]
+    public void LeftoverStandaloneFuture_ThisApplyDoesNotWrite_IsADeleteRowPerOverridesKey(PatchProfile profile, bool optIn)
+    {
+        string[] mirrors = ["ControlSet002"];
+        var config = new AppConfig { PatchProfile = profile, IncludeStandaloneFuture = optIn };
+        var report = DryRunService.PlanInstall(config, null, mirrors, LeftoverStandaloneFuture);
+
+        var deletes = report.Items.Where(i => i.Action == "DELETE").ToList();
+        Assert.Equal(
+            MutationLedgerService.FeatureOverrideSubKeys(mirrors).Select(subKey => $@"HKEY_LOCAL_MACHINE\{subKey}"),
+            deletes.Select(i => i.Target));
+        Assert.All(deletes, row =>
+        {
+            Assert.Equal(AppConfig.StandaloneFutureFeatureID, row.ValueName);
+            Assert.Equal("1", row.Before);
+            Assert.Equal("(absent)", row.After);
+        });
+        Assert.Equal(2, report.TotalDeletes);
+        Assert.Contains("2 leftover value(s) cleared", report.Summary, StringComparison.Ordinal);
+        Assert.Contains("DELETE", DryRunService.RenderMarkdown(report), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LeftoverStandaloneFuture_FullWithTheOptIn_IsKeptNotDeleted()
+    {
+        var config = new AppConfig { PatchProfile = PatchProfile.Full, IncludeStandaloneFuture = true };
+        var report = DryRunService.PlanInstall(config, null, ["ControlSet002"], LeftoverStandaloneFuture);
+
+        Assert.DoesNotContain(report.Items, i => i.Action == "DELETE");
+        Assert.Equal(0, report.TotalDeletes);
+        Assert.DoesNotContain("leftover", report.Summary, StringComparison.Ordinal);
+        Assert.Contains(report.Items, i => i.ValueName == AppConfig.StandaloneFutureFeatureID && i.Before == "1");
+    }
+
+    [Fact]
+    public void CleanMachine_HasNoDeleteRows()
+    {
+        var report = DryRunService.PlanInstall(new AppConfig { PatchProfile = PatchProfile.Full }, null, ["ControlSet002"], CleanMachine);
+        Assert.Equal(0, report.TotalDeletes);
+        Assert.DoesNotContain("leftover", report.Summary, StringComparison.Ordinal);
+    }
 }

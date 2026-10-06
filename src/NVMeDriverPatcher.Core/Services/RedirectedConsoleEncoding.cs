@@ -1,12 +1,13 @@
 using System.Text;
 
-namespace NVMeDriverPatcher.Cli;
+namespace NVMeDriverPatcher.Services;
 
-// Redirected output used to go out in the OEM code page, which has no arrow, so `dry-run > plan.md`
-// printed "Before  After". Redirected streams now get UTF-8 without a BOM. The writers are swapped
-// rather than setting Console.OutputEncoding, because that calls SetConsoleOutputCP and would leave
-// the parent shell's console on a different code page after the CLI exits.
-public static class CliConsoleEncoding
+// Redirected output used to go out in the OEM code page, which has no arrow, so the CLI's
+// `dry-run > plan.md` printed "Before  After". The CLI and the Watchdog exe call this first thing,
+// and redirected streams get UTF-8 without a BOM. The writers are swapped rather than setting
+// Console.OutputEncoding, because that calls SetConsoleOutputCP and would leave the parent shell's
+// console on a different code page after the process exits.
+public static class RedirectedConsoleEncoding
 {
     public static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 

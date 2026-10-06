@@ -32,6 +32,39 @@ public sealed class FirmwareUpdateWorkflowServiceTests : IDisposable
     }
 
     [Fact]
+    public void Marker_RecordsTheOptionalKeys_AndReEnablePutsThemBack()
+    {
+        // Disable ran with the Server key and 156965516 on. If the settings changed during the
+        // firmware update, re-enable still writes the set that was disabled.
+        _config.IncludeServerKey = true;
+        _config.IncludeStandaloneFuture = true;
+        FirmwareUpdateWorkflowService.WriteMarker(_config, PatchProfile.Full, "2026-10-05T00:00:00Z");
+        _config.IncludeServerKey = false;
+        _config.IncludeStandaloneFuture = false;
+
+        var marker = FirmwareUpdateWorkflowService.ReadMarker(_config);
+        Assert.True(marker!.IncludeServerKey);
+        Assert.True(marker.IncludeStandaloneFuture);
+
+        FirmwareUpdateWorkflowService.RestoreMarkedOptions(marker, _config);
+        Assert.True(_config.IncludeServerKey);
+        Assert.True(_config.IncludeStandaloneFuture);
+    }
+
+    [Fact]
+    public void RestoreMarkedOptions_OlderMarkerWithoutThem_LeavesTheConfigAlone()
+    {
+        _config.IncludeServerKey = true;
+        _config.IncludeStandaloneFuture = false;
+
+        FirmwareUpdateWorkflowService.RestoreMarkedOptions(new FirmwareUpdatePendingState { Profile = "Full" }, _config);
+        FirmwareUpdateWorkflowService.RestoreMarkedOptions(null, _config);
+
+        Assert.True(_config.IncludeServerKey);
+        Assert.False(_config.IncludeStandaloneFuture);
+    }
+
+    [Fact]
     public void ClearMarker_RemovesFile()
     {
         FirmwareUpdateWorkflowService.WriteMarker(_config, PatchProfile.Safe, "x");

@@ -206,4 +206,48 @@ public sealed class PatchServiceTests
         Assert.Equal(0, result.AppliedCount);
         Assert.Null(result.FeatureStoreResetSummary);
     }
+
+    [Fact]
+    public void ClearUnplannedStandaloneFuture_DeletesOnlyWhereSetAndKeepsGoingPastAFailure()
+    {
+        // #19: an older Full install wrote 156965516 everywhere. Re-applying without the opt-in
+        // takes it out of each Overrides key that still has it, and one refusal doesn't stop the rest.
+        var subKeys = MutationLedgerService.FeatureOverrideSubKeys(["ControlSet001", "ControlSet002"]);
+        Assert.Equal(3, subKeys.Count);
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { subKeys[0], subKeys[1], subKeys[2] };
+        var deleted = new List<string>();
+        var log = new List<string>();
+
+        int cleared = PatchService.ClearUnplannedStandaloneFuture(
+            subKeys,
+            set.Contains,
+            subKey =>
+            {
+                if (subKey == subKeys[1]) throw new UnauthorizedAccessException("Access denied");
+                deleted.Add(subKey);
+                set.Remove(subKey);
+            },
+            log.Add);
+
+        Assert.Equal(2, cleared);
+        Assert.Equal([subKeys[0], subKeys[2]], deleted);
+        Assert.Equal(2, log.Count(line => line.Contains("[CLEARED] 156965516", StringComparison.Ordinal)));
+        var warning = Assert.Single(log, line => line.Contains("[WARNING]", StringComparison.Ordinal));
+        Assert.Contains(subKeys[1], warning, StringComparison.Ordinal);
+        Assert.Contains("Remove the patch to clear it", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ClearUnplannedStandaloneFuture_NothingSet_TouchesNothing()
+    {
+        var log = new List<string>();
+        int cleared = PatchService.ClearUnplannedStandaloneFuture(
+            MutationLedgerService.FeatureOverrideSubKeys(null),
+            _ => false,
+            _ => throw new InvalidOperationException("delete must not run"),
+            log.Add);
+
+        Assert.Equal(0, cleared);
+        Assert.Empty(log);
+    }
 }

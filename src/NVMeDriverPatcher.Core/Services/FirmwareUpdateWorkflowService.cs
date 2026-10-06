@@ -9,6 +9,9 @@ public sealed class FirmwareUpdatePendingState
 {
     public string Profile { get; set; } = nameof(PatchProfile.Safe);
     public string DisabledAt { get; set; } = string.Empty;
+    // Null in markers written before these were recorded; re-enable then keeps the config's values.
+    public bool? IncludeServerKey { get; set; }
+    public bool? IncludeStandaloneFuture { get; set; }
 }
 
 // Guides the "temporarily disable for firmware update" workflow. Vendor SSD tools (Samsung
@@ -33,7 +36,13 @@ public static class FirmwareUpdateWorkflowService
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
-        var state = new FirmwareUpdatePendingState { Profile = profile.ToString(), DisabledAt = disabledAtIso };
+        var state = new FirmwareUpdatePendingState
+        {
+            Profile = profile.ToString(),
+            DisabledAt = disabledAtIso,
+            IncludeServerKey = config.IncludeServerKey,
+            IncludeStandaloneFuture = config.IncludeStandaloneFuture
+        };
         var json = JsonSerializer.Serialize(state, JsonOptions);
         var tmp = path + ".tmp";
         using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -80,6 +89,13 @@ public static class FirmwareUpdateWorkflowService
             && Enum.IsDefined(typeof(PatchProfile), parsed))
             return (parsed, true);
         return (config.PatchProfile, false);
+    }
+
+    /// <summary>Puts back the optional keys recorded at disable time, so re-enable writes the same set.</summary>
+    public static void RestoreMarkedOptions(FirmwareUpdatePendingState? marker, AppConfig config)
+    {
+        if (marker?.IncludeServerKey is bool server) config.IncludeServerKey = server;
+        if (marker?.IncludeStandaloneFuture is bool future) config.IncludeStandaloneFuture = future;
     }
 
     /// <summary>

@@ -46,6 +46,55 @@ public static class PatchService
         bool includeServer) => BuildRequiredRegistryMutations(profile, includeServer, mirrorControlSets: null);
 
     /// <summary>
+    /// #19: installs from before 156965516 became an opt-in wrote it with Full. When this apply
+    /// doesn't include it, take it out so the machine matches the profile and DISM stops flagging
+    /// the component store. Every Overrides subkey is in the ledger baseline, so remove still puts
+    /// back whatever was there before the first apply. A failure here is reported, not fatal: the
+    /// patch itself is already written and verified.
+    /// </summary>
+    internal static int ClearUnplannedStandaloneFuture(
+        IEnumerable<string> overrideSubKeys,
+        Func<string, bool> isSet,
+        Action<string> delete,
+        Action<string>? log)
+    {
+        int cleared = 0;
+        foreach (var subKey in overrideSubKeys)
+        {
+            try
+            {
+                if (!isSet(subKey)) continue;
+                delete(subKey);
+                cleared++;
+                log?.Invoke($"  [CLEARED] {AppConfig.StandaloneFutureFeatureID} under {subKey}: an earlier Full install wrote it, and this apply doesn't include it");
+            }
+            catch (Exception ex)
+            {
+                log?.Invoke($"  [WARNING] Couldn't clear {AppConfig.StandaloneFutureFeatureID} under {subKey} ({ex.Message}). Remove the patch to clear it.");
+            }
+        }
+        return cleared;
+    }
+
+    private static bool StandaloneFutureIsSet(string subKey)
+    {
+        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+        using var key = hklm.OpenSubKey(subKey);
+        return key?.GetValue(AppConfig.StandaloneFutureFeatureID) is not null;
+    }
+
+    private static void DeleteStandaloneFuture(string subKey)
+    {
+        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+        using var key = hklm.OpenSubKey(subKey, writable: true)
+            ?? throw new IOException("the key disappeared");
+        key.DeleteValue(AppConfig.StandaloneFutureFeatureID, throwOnMissingValue: false);
+        key.Flush();
+        if (key.GetValue(AppConfig.StandaloneFutureFeatureID) is not null)
+            throw new IOException("the value was still there after the delete");
+    }
+
+    /// <summary>
     /// The canonical write set. When <paramref name="mirrorControlSets"/> is non-empty every
     /// CurrentControlSet-scoped write is duplicated into those control sets so that a boot-recovery
     /// promotion of a spare set cannot silently drop the patch (issue #15). Mirrors never count
@@ -342,6 +391,13 @@ public static class PatchService
             successCount = registryBatch.CountedCommitted + leftToWindows.Count(mutation => mutation.CountsTowardPatchTotal);
             if (!registryBatch.Success)
                 throw new IOException(registryBatch.Summary);
+
+            if (!includeStandaloneFuture)
+                ClearUnplannedStandaloneFuture(
+                    MutationLedgerService.FeatureOverrideSubKeys(ledgerPreparation.Ledger.MirroredControlSets),
+                    StandaloneFutureIsSet,
+                    DeleteStandaloneFuture,
+                    log);
 
             // Step 3: Validate
             ReportProgress(progress, 95, "Validating...");

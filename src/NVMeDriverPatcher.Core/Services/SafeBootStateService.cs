@@ -211,12 +211,9 @@ public static class SafeBootStateService
                      : plan.DeleteAppDefaultValue ? "removed app default value, kept pre-existing key/values"
                      : $"restored prior default '{plan.RestorePriorDefault}'"));
             }
-            catch (Exception ex) when (IsRefusedButUnchanged(registry, entry, ex))
+            catch (Exception ex) when (HarmlessRefusal(registry, entry, ex) is string reason)
             {
-                // Journals written before ownership was recorded still list Windows-owned keys.
-                // A refused write to a key that already matches its baseline restored nothing
-                // because nothing had changed.
-                log?.Invoke($"  [SafeBoot] Left {entry.Path} as is: write-protected and already at its pre-apply state");
+                log?.Invoke($"  [SafeBoot] Left {entry.Path} as is: {reason}");
             }
             catch (Exception ex)
             {
@@ -227,12 +224,30 @@ public static class SafeBootStateService
         return failures;
     }
 
-    private static bool IsRefusedButUnchanged(ISafeBootRegistry registry, SafeBootJournalEntry entry, Exception ex)
+    /// <summary>Why a refused restore left nothing to undo, or null when the refusal is a real failure.</summary>
+    private static string? HarmlessRefusal(ISafeBootRegistry registry, SafeBootJournalEntry entry, Exception ex)
     {
-        if (ex is not (UnauthorizedAccessException or System.Security.SecurityException)) return false;
-        try { return SnapshotsMatch(entry.ToSnapshot(), registry.Read(entry.Path)); }
-        catch { return false; }
+        if (ex is not (UnauthorizedAccessException or System.Security.SecurityException)) return null;
+        try
+        {
+            var live = registry.Read(entry.Path);
+            // Journals written before ownership was recorded still list Windows-owned keys. A
+            // refused write to a key that already matches its baseline had nothing to undo.
+            if (SnapshotsMatch(entry.ToSnapshot(), live))
+                return "write-protected and already at its pre-apply state";
+            // Servicing can create or take over the key after the patch was applied (26100.9550
+            // ships its own). This tool's writes never leave a TrustedInstaller-owned key behind.
+            if (live.WindowsOwned)
+                return "Windows took it over after the patch was applied and write-protects it";
+            return null;
+        }
+        catch { return null; }
     }
+
+    /// <summary>True when a live key needs no restore: it matches its baseline, or Windows owns it
+    /// now. Remove's verification uses this so a key servicing took over doesn't read as residue.</summary>
+    internal static bool IsAtBaselineOrWindowsOwned(SafeBootKeySnapshot baseline, SafeBootKeySnapshot live) =>
+        SnapshotsMatch(baseline, live) || live.WindowsOwned;
 
     /// <summary>Same existence, readability and values, in any value order. Ownership isn't
     /// compared: older journals never recorded it.</summary>
