@@ -269,6 +269,7 @@ public partial class MainViewModel
             "Compatibility" => "Compatibility",
             "SystemProtection" => "System protection",
             "BypassIO" => "BypassIO",
+            "StorPortOverrides" => "StorPort override",
             _ => key
         };
     }

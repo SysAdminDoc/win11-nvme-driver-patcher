@@ -37,6 +37,10 @@ public class PatchOperationResult
     // removal was PARTIAL: Success is false, the watchdog stays armed, and the CLI exits non-zero.
     // Surfaced to the activity log and (via snapshots) to support bundles as structured evidence.
     public List<string> Residue { get; set; } = new();
+
+    // StorPort per-controller overrides (EnableNVMeInterface) that keep nvmedisk bound after a
+    // removal. Another tool's values, never this one's; Remove names them and leaves them.
+    public IReadOnlyList<string> StorPortNotes { get; set; } = Array.Empty<string>();
 }
 
 public static class PatchService
@@ -877,6 +881,7 @@ public static class PatchService
 
                 result.RegistryOverrideOwnership = InspectLiveRegistryOverrideOwnership();
                 log?.Invoke($"  [Registry] {result.RegistryOverrideOwnership.Summary}");
+                ReportStorPortOverrides(result, log);
 
                 if (result.Success)
                 {
@@ -1005,6 +1010,7 @@ public static class PatchService
             result.AppliedCount = removedCount;
             result.RegistryOverrideOwnership = InspectRegistryOverrideOwnership(hklm);
             log?.Invoke($"  [Registry] {result.RegistryOverrideOwnership.Summary}");
+            ReportStorPortOverrides(result, log);
             result.Residue = ProbeRemovalResidue(hklm, workingDir, result.RegistryOverrideOwnership, log);
             result.Success = result.Residue.Count == 0;
             result.NeedsRestart = removedCount > 0 || result.NeedsRestart;
@@ -1181,6 +1187,14 @@ public static class PatchService
         {
             overrides?.Dispose();
         }
+    }
+
+    private static void ReportStorPortOverrides(PatchOperationResult result, Action<string>? log)
+    {
+        try { result.StorPortNotes = StorPortOverrideService.DescribeAfterRemoval(StorPortOverrideService.ReadSnapshot()); }
+        catch { result.StorPortNotes = Array.Empty<string>(); }
+        foreach (var note in result.StorPortNotes)
+            log?.Invoke($"  [StorPort] {note}");
     }
 
     private static RegistryOverrideOwnershipReport InspectLiveRegistryOverrideOwnership()

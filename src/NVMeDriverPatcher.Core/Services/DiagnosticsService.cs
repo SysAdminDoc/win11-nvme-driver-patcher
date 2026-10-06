@@ -690,6 +690,14 @@ public static class DiagnosticsService
         sb.AppendLine($"Components: {status.Count}/{status.Total}");
         sb.AppendLine($"Applied Keys: {string.Join(", ", status.Keys)}");
 
+        sb.AppendLine().AppendLine("STORPORT NATIVE-STACK OVERRIDES").AppendLine("-------------------------------");
+        try
+        {
+            foreach (var line in StorPortOverrideService.FormatForReport(StorPortOverrideService.ReadSnapshot()))
+                sb.AppendLine($"  {line}");
+        }
+        catch (Exception ex) { sb.AppendLine($"  Unavailable: {ex.Message}"); }
+
         sb.AppendLine().AppendLine("ETW NVMe DRIVER WATCHDOG EVIDENCE").AppendLine("---------------------------------");
         var etwEvidence = EtwTraceService.GetLatestProviderEvidence(workingDir);
         if (etwEvidence is null)

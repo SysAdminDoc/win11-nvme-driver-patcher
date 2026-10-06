@@ -124,6 +124,15 @@ public static class PreflightService
         }
         catch { /* advisory */ }
 
+        // StorPort's own switches outrank every feature override: a global kill switch, and a
+        // per-controller value other tools write to force either path. Advisory, and only when set.
+        try
+        {
+            var storPort = StorPortOverrideService.Classify(StorPortOverrideService.ReadSnapshot());
+            if (storPort is not null) checks["StorPortOverrides"] = storPort;
+        }
+        catch { /* advisory */ }
+
         // SafeBoot upgrade state (RD-002): patches applied before v4.6.1 wrote only the
         // GUID-class SafeBoot entries; KB5079391 made 25H2 Safe Mode require the
         // service-name entries too. Only surfaces when an upgrade is actually needed.

@@ -265,13 +265,6 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
 
 ### P1
 
-- [ ] P1 — Detect the StorPort native-stack overrides (`DisableNativeNVMeStack` and per-controller `EnableNVMeInterface`)
-  Why: Two independent write-ups (revoconner 2026-09-22, St1cky 2026-10-05) say `storport.sys` reads a per-controller `EnableNVMeInterface` after the feature decision and a global `DisableNativeNVMeStack` before it, so either one overrides every route this tool writes. Nothing in `src/` reads them. A leftover `DisableNativeNVMeStack=1` makes an apply look like a failed bind with no cause given, and a leftover `EnableNVMeInterface=1` keeps nvmedisk bound after Remove. Other tools now write both.
-  Evidence: https://github.com/St1ckyNew/25H2-NVMe-Native-Stack-Support; https://revoconner.com/writing/windows-nvme-driver-workaround; `grep -rn "EnableNVMeInterface\|DisableNativeNVMeStack" src` finds nothing (2026-10-06).
-  Touches: one shared reader next to the 3244671118 leftover detection, called from `PreflightService`, readiness/status, `DryRunService`, the `DiagnosticsService` support bundle and `PatchVerificationService`; CLI status JSON; tests.
-  Acceptance: With `HKLM\SYSTEM\CurrentControlSet\Control\StorPort\DisableNativeNVMeStack=1`, readiness and the post-reboot verdict name the value and its path. With `EnableNVMeInterface=1` under a controller's `Device Parameters\StorPort`, Remove's result names that controller and value as the reason nvmedisk is still bound. The support bundle lists both values per stornvme controller. This item only reads; it never writes or deletes either value. Unit tests cover missing, 0 and 1 for each.
-  Complexity: M
-
 - [ ] P1 — Test the per-controller StorPort route and the global kill switch in VMs
   Why: Every current retail client build resolves to `none-known` in `windows_build_rules.json`, so the enable path is idle for nearly every user. The StorPort value is the only route reported working on 25H2 (26200.9168) and on 24H2 from 26100.8875. Separately, if `DisableNativeNVMeStack=1` forces the legacy path ahead of any feature decision, the recovery kit gets a one-value offline revert that works whatever route bound the drive.
   Evidence: RESEARCH.md Executive Summary items 1 and 2, Open Questions 1 and 2; `windows_build_rules.json` (lastReviewed 2026-10-05); the 24H2 rig recipe in the project working notes.
