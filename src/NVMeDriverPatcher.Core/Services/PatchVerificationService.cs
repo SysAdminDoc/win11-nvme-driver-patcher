@@ -165,6 +165,10 @@ public static class PatchVerificationService
 
         var (outcome, summary, detail) = ClassifyPostRebootState(
             native.IsActive, native.ActiveDriver, status.Count, fallbackEvidence);
+        string? storPort;
+        try { storPort = StorPortOverrideService.DescribeForVerdict(StorPortOverrideService.ReadSnapshot(), native.IsActive); }
+        catch { storPort = null; }
+        if (storPort is not null) detail += " " + storPort;
         report.Outcome = outcome;
         report.Summary = summary;
         report.Detail = AppendBuildRuleDetail(detail, WindowsBuildRulesService.MatchCurrent());
