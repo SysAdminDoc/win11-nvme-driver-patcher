@@ -48,7 +48,61 @@ public enum SafeBootKeyDisposition
     WindowsOwned
 }
 
-public sealed record SafeBootRestorePlan(bool DeleteEntireKey, bool DeleteAppDefaultValue, string? RestorePriorDefault);
+/// <summary>What removal does to one key. <paramref name="RestorePriorDefaultKind"/> is the
+/// registry kind the prior default had (a <see cref="RegistryValueKind"/>), so a REG_EXPAND_SZ or
+/// REG_DWORD default goes back as what it was rather than as a string.</summary>
+public sealed record SafeBootRestorePlan(
+    bool DeleteEntireKey,
+    bool DeleteAppDefaultValue,
+    string? RestorePriorDefault,
+    int RestorePriorDefaultKind = (int)RegistryValueKind.String);
+
+/// <summary>
+/// Text form of a SafeBoot value's data, by kind, so a snapshot round-trips byte for byte.
+/// Strings keep their raw text (environment names unexpanded), numbers are invariant decimal,
+/// multi-strings are joined with NUL as the registry stores them, and bytes are hex.
+/// </summary>
+internal static class SafeBootValueCodec
+{
+    public static string? Encode(RegistryValueKind kind, object? raw) => raw switch
+    {
+        null => null,
+        string text => text,
+        string[] parts => string.Join('\0', parts),
+        byte[] bytes => Convert.ToHexString(bytes),
+        int or long or uint or ulong => Convert.ToString(raw, System.Globalization.CultureInfo.InvariantCulture),
+        _ => raw.ToString()
+    };
+
+    /// <summary>The value and kind to hand <c>RegistryKey.SetValue</c>. Data that doesn't parse as
+    /// its recorded kind is written as the string it was recorded as, which is what the old code
+    /// did for everything.</summary>
+    public static (object Value, RegistryValueKind Kind) Decode(int kind, string data)
+    {
+        var valueKind = (RegistryValueKind)kind;
+        switch (valueKind)
+        {
+            case RegistryValueKind.ExpandString:
+                return (data, valueKind);
+            case RegistryValueKind.MultiString:
+                return (data.Length == 0 ? Array.Empty<string>() : data.Split('\0'), valueKind);
+            case RegistryValueKind.DWord:
+                if (int.TryParse(data, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var dword))
+                    return (dword, valueKind);
+                break;
+            case RegistryValueKind.QWord:
+                if (long.TryParse(data, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var qword))
+                    return (qword, valueKind);
+                break;
+            case RegistryValueKind.Binary:
+            case RegistryValueKind.None:
+                try { return (Convert.FromHexString(data), valueKind); }
+                catch (FormatException) { }
+                break;
+        }
+        return (data, RegistryValueKind.String);
+    }
+}
 
 /// <summary>Read/write seam over the SafeBoot registry so the transaction logic is unit-testable
 /// with an in-memory fake and never has to touch the live boot-critical keys in tests.</summary>
@@ -132,10 +186,10 @@ public static class SafeBootStateService
         if (!priorState.Existed)
             return new SafeBootRestorePlan(DeleteEntireKey: true, DeleteAppDefaultValue: false, RestorePriorDefault: null);
 
-        var priorDefault = priorState.DefaultValue;
-        return priorDefault is null
+        var prior = priorState.Values.FirstOrDefault(v => v.Name.Length == 0);
+        return prior?.StringData is null
             ? new SafeBootRestorePlan(DeleteEntireKey: false, DeleteAppDefaultValue: true, RestorePriorDefault: null)
-            : new SafeBootRestorePlan(DeleteEntireKey: false, DeleteAppDefaultValue: false, RestorePriorDefault: priorDefault);
+            : new SafeBootRestorePlan(DeleteEntireKey: false, DeleteAppDefaultValue: false, RestorePriorDefault: prior.StringData, RestorePriorDefaultKind: prior.Kind);
     }
 
     /// <summary>Capture the prior state of every managed key.</summary>
@@ -403,23 +457,7 @@ public sealed class RealSafeBootRegistry : ISafeBootRegistry
         {
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
             using var key = hklm.OpenSubKey(path, writable: false);
-            if (key is null)
-                return new SafeBootKeySnapshot { Path = path, Existed = false };
-
-            var values = new List<SafeBootValueSnapshot>();
-            foreach (var name in key.GetValueNames())
-            {
-                var kind = key.GetValueKind(name);
-                var raw = key.GetValue(name);
-                values.Add(new SafeBootValueSnapshot(name, (int)kind, raw?.ToString()));
-            }
-            return new SafeBootKeySnapshot
-            {
-                Path = path,
-                Existed = true,
-                WindowsOwned = SafeBootStateService.IsTrustedInstallerOwned(key),
-                Values = values
-            };
+            return ReadKey(key, path);
         }
         catch (System.Security.SecurityException)
         {
@@ -429,6 +467,29 @@ public sealed class RealSafeBootRegistry : ISafeBootRegistry
         {
             return new SafeBootKeySnapshot { Path = path, Existed = true, AccessDenied = true };
         }
+    }
+
+    /// <summary>Snapshot of an opened key (null means absent). Environment names in
+    /// REG_EXPAND_SZ data stay as written, so the journal holds what the registry holds.</summary>
+    internal static SafeBootKeySnapshot ReadKey(RegistryKey? key, string path)
+    {
+        if (key is null)
+            return new SafeBootKeySnapshot { Path = path, Existed = false };
+
+        var values = new List<SafeBootValueSnapshot>();
+        foreach (var name in key.GetValueNames())
+        {
+            var kind = key.GetValueKind(name);
+            var raw = key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+            values.Add(new SafeBootValueSnapshot(name, (int)kind, SafeBootValueCodec.Encode(kind, raw)));
+        }
+        return new SafeBootKeySnapshot
+        {
+            Path = path,
+            Existed = true,
+            WindowsOwned = SafeBootStateService.IsTrustedInstallerOwned(key),
+            Values = values
+        };
     }
 
     public void ApplyRestore(string path, SafeBootRestorePlan plan)
@@ -445,14 +506,20 @@ public sealed class RealSafeBootRegistry : ISafeBootRegistry
 
         using var key = hklm.OpenSubKey(path, writable: true);
         if (key is null) return; // nothing to restore into
+        RestoreDefault(key, plan);
+    }
 
+    /// <summary>The default-value half of a restore, against an opened writable key.</summary>
+    internal static void RestoreDefault(RegistryKey key, SafeBootRestorePlan plan)
+    {
         if (plan.DeleteAppDefaultValue)
         {
             try { key.DeleteValue("", throwOnMissingValue: false); } catch { }
         }
         else if (plan.RestorePriorDefault is not null)
         {
-            key.SetValue("", plan.RestorePriorDefault, RegistryValueKind.String);
+            var (value, kind) = SafeBootValueCodec.Decode(plan.RestorePriorDefaultKind, plan.RestorePriorDefault);
+            key.SetValue("", value, kind);
         }
         try { key.Flush(); } catch { }
     }
