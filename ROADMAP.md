@@ -302,13 +302,6 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
   Acceptance: A release build produces no winget YAML and no longer needs `winget.exe`, no script runs `winget validate`, the README doesn't offer winget, and the asset validators pass on the smaller contract.
   Complexity: S
 
-- [ ] P2 — 24H2: find out whether cumulative updates still install while 156965516 is set
-  Why: On 26100.9550 the three-value set binds (VM, 2026-10-05), but binding needs 156965516, the value that makes DISM report component store corruption (#19). If servicing still works with it set, 24H2 can get an opt-in route with an honest warning. If a cumulative update fails or rolls back, the rule stays `none-known` and says why.
-  Evidence: `windows_build_rules.json` rule `24h2-client-unverified`; https://github.com/SysAdminDoc/win11-nvme-driver-patcher/issues/19; MDL posts #216 (2026-09-26) and #218 (2026-09-30).
-  Touches: VM only, then `windows_build_rules.json` and, if it passes, a new route item.
-  Acceptance: The 24H2 guest with the three-value set takes the 2026-10-13 cumulative update (or the next one). The rule summary records installed, failed or rolled back, DISM before and after, and whether nvmedisk is still bound afterward.
-  Complexity: M
-
 ### P3
 
 - [ ] P3 — Record the DiskSpd version and flags with every benchmark result
