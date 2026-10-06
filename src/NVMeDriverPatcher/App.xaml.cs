@@ -94,6 +94,9 @@ public partial class App : Application
         {
             var tempConfig = new Models.AppConfig { WorkingDir = Models.AppConfig.GetWorkingDir() };
             Services.LogRotationService.RotateAll(tempConfig);
+            // Staging files a killed run never renamed. An hour clears anything in flight in the
+            // CLI, the tray or the scheduled task, whose writes take milliseconds.
+            Services.AtomicFile.SweepStale(tempConfig.WorkingDir, TimeSpan.FromHours(1));
         }
         catch { }
 

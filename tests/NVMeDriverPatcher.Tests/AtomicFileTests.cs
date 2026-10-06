@@ -115,6 +115,47 @@ public sealed class AtomicFileTests : IDisposable
         Assert.NotEqual(a, b);
     }
 
+    [Fact]
+    public void SweepStale_RemovesOldStagingLeftovers_AndNothingElse()
+    {
+        // A process killed between the write and the rename leaves its staging file behind, and
+        // nothing ever removed those. Only this naming goes, only once it's old, and a staging
+        // file another process is writing this instant is left for its rename.
+        var sub = Directory.CreateDirectory(Path.Combine(_dir, "state")).FullName;
+        var stale = Path.Combine(_dir, "config.json.4242." + new string('a', 32) + ".tmp");
+        var staleInSub = Path.Combine(sub, "safeboot_journal.json.77." + new string('b', 32) + ".tmp");
+        var fresh = Path.Combine(_dir, "results.json.4243." + new string('c', 32) + ".tmp");
+        var notOurs = Path.Combine(_dir, "notes.tmp");
+        var target = Path.Combine(_dir, "config.json");
+        foreach (var path in new[] { stale, staleInSub, fresh, notOurs, target }) File.WriteAllText(path, "x");
+        var old = DateTime.UtcNow.AddHours(-3);
+        File.SetLastWriteTimeUtc(stale, old);
+        File.SetLastWriteTimeUtc(staleInSub, old);
+        File.SetLastWriteTimeUtc(notOurs, old);
+        var log = new List<string>();
+
+        var removed = AtomicFile.SweepStale(_dir, TimeSpan.FromHours(1), log.Add);
+
+        Assert.Equal(2, removed);
+        Assert.False(File.Exists(stale));
+        Assert.False(File.Exists(staleInSub));
+        Assert.True(File.Exists(fresh));
+        Assert.True(File.Exists(notOurs));
+        Assert.True(File.Exists(target));
+        Assert.Equal(2, log.Count(line => line.StartsWith("[INFO] Removed a staging file", StringComparison.Ordinal)));
+        Assert.Equal(0, AtomicFile.SweepStale(Path.Combine(_dir, "missing"), TimeSpan.Zero));
+    }
+
+    [Fact]
+    public void IsStagingName_MatchesThisNamingOnly()
+    {
+        Assert.True(AtomicFile.IsStagingName(Path.GetFileName(AtomicFile.StagingPath(@"C:\x\y.json"))));
+        Assert.True(AtomicFile.IsStagingName("safeboot_journal.json.1234." + new string('f', 32) + ".tmp"));
+        Assert.False(AtomicFile.IsStagingName("y.json.tmp"));
+        Assert.False(AtomicFile.IsStagingName("download.exe.part"));
+        Assert.False(AtomicFile.IsStagingName("y.json.1234.abc.tmp"));
+    }
+
     // --- The read-modify-write of benchmark_results.json ---
 
     [Fact]

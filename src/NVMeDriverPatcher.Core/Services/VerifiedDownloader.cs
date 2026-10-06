@@ -85,8 +85,10 @@ public static class VerifiedDownloader
         if (!IsAllowedHost(initialUri.Host, policy.AllowedHosts))
             return Failure($"Download host '{initialUri.Host}' is not in the allowlist.");
 
-        var partPath = destinationPath + ".part";
-        TryDelete(partPath);
+        // A name only this call knows. Two downloads of one destination (the GUI's update check
+        // and the CLI's, say) used to share `<destination>.part`, where the second truncated the
+        // first one's bytes mid-download, and a leftover another process still held blocked both.
+        var partPath = AtomicFile.StagingPath(destinationPath);
 
         try
         {

@@ -259,7 +259,19 @@ public static class WinReDriverInjectionService
                 Write("[ERROR] " + result.Summary);
                 return result;
             }
-            File.Move(partial, result.BackupPath);
+            try
+            {
+                await PublishBackupAsync(partial, result.BackupPath, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The verified copy stays under its partial name, where the next run sweeps it;
+                // nothing has been mounted yet, so there's nothing to undo.
+                result.BackupPath = null;
+                result.Summary = $"WinRE backup was copied and verified but couldn't be renamed into place ({ex.Message}); injection aborted before mounting.";
+                Write("[ERROR] " + result.Summary);
+                return result;
+            }
 
             // Each backup is a full copy of the image (0.5 to 1 GB). Older ones go only now that
             // the new one is verified, and whatever DISM does next.
@@ -349,25 +361,57 @@ public static class WinReDriverInjectionService
     /// <summary>A copy still being made, or cut short. Never a backup until it's verified and renamed.</summary>
     internal const string PartialSuffix = ".partial";
 
+    /// <summary>
+    /// Renames the verified copy from its partial name to its backup name. The rename fails for a
+    /// moment while a scanner (Defender reads every new file, and this one is 0.5 to 1 GB) or a
+    /// backup agent still has the copy open, so it's retried for up to <paramref name="patience"/>
+    /// (two seconds by default) before the failure is handed back to the caller.
+    /// </summary>
+    internal static async Task PublishBackupAsync(
+        string partial,
+        string backupPath,
+        TimeSpan? patience = null,
+        CancellationToken cancellationToken = default)
+    {
+        var deadline = Environment.TickCount64 + (long)(patience ?? TimeSpan.FromSeconds(2)).TotalMilliseconds;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Move(partial, backupPath);
+                return;
+            }
+            catch (Exception ex) when (Environment.TickCount64 < deadline && ex is IOException or UnauthorizedAccessException)
+            {
+                await Task.Delay(Math.Min(25 * attempt, 250), cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
     private const string BackupStampFormat = "yyyyMMdd-HHmmss";
 
     /// <summary>
     /// Pure: which of one image's backups stay. The oldest is the image from before this tool's
-    /// first injection, the only way back to the recovery image Windows shipped; the newest undoes
-    /// the last injection. Anything between is a state nobody needs. The backup just made always
-    /// stays, even when a clock that went backwards makes it look like the oldest.
+    /// first injection, the only way back to the recovery image Windows shipped; the newest of
+    /// the earlier ones undoes the last injection. Anything between is a state nobody needs. The
+    /// backup just made is kept out of that ordering and always stays, so a clock that went
+    /// backwards can't make it the "oldest" and push the real original out. Paths come back in
+    /// full form, the way <see cref="PruneBackups"/> looks them up.
     /// </summary>
     internal static HashSet<string> BackupsToKeep(IEnumerable<WinReBackup> backups, string? justMade = null)
     {
+        var justMadeFull = justMade is null ? null : Path.GetFullPath(justMade);
         var ordered = backups
+            .Where(backup => justMadeFull is null ||
+                             !string.Equals(Path.GetFullPath(backup.Path), justMadeFull, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(backup => backup.TakenUtc)
             .ThenByDescending(backup => backup.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
         var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (justMadeFull is not null) keep.Add(justMadeFull);
         if (ordered.Count == 0) return keep;
-        keep.Add(ordered[0].Path);
-        keep.Add(ordered[^1].Path);
-        if (justMade is not null) keep.Add(Path.GetFullPath(justMade));
+        keep.Add(Path.GetFullPath(ordered[0].Path));
+        keep.Add(Path.GetFullPath(ordered[^1].Path));
         return keep;
     }
 
@@ -428,7 +472,10 @@ public static class WinReDriverInjectionService
             {
                 File.Delete(old.Path);
                 removed++;
-                log?.Invoke($"[INFO] Removed WinRE backup {old.Path} ({old.Bytes / 1024.0 / 1024.0:F0} MB). The oldest (from before the first injection) and the newest stay.");
+                log?.Invoke($"[INFO] Removed WinRE backup {old.Path} ({old.Bytes / 1024.0 / 1024.0:F0} MB). " +
+                    (justMade is null
+                        ? "The oldest (from before the first injection) and the newest stay."
+                        : "The oldest (from before the first injection), the newest earlier one and the copy just made stay."));
             }
             catch (Exception ex)
             {

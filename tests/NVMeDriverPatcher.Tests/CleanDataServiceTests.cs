@@ -65,6 +65,23 @@ public sealed class CleanDataServiceTests : IDisposable
     }
 
     [Fact]
+    public void Staging_SweepsTheStagingFilesAKilledRunLeft_AndLeavesOtherTmpFiles()
+    {
+        var leftover = Path.Combine(_dir, "nvmepatcher.cfg.4242." + new string('a', 32) + ".tmp");
+        var inSubdir = Path.Combine(Directory.CreateDirectory(Path.Combine(_dir, "state")).FullName, "safeboot_journal.json.7." + new string('b', 32) + ".tmp");
+        var someoneElses = Path.Combine(_dir, "notes.tmp");
+        foreach (var path in new[] { leftover, inSubdir, someoneElses }) File.WriteAllText(path, "x");
+
+        var result = CleanDataService.Clean(_config, new[] { "staging" });
+
+        Assert.True(result.Success);
+        Assert.Equal(2, result.FilesRemoved);
+        Assert.False(File.Exists(leftover));
+        Assert.False(File.Exists(inSubdir));
+        Assert.True(File.Exists(someoneElses));
+    }
+
+    [Fact]
     public void Backups_SweepTheMiddleWinReCopiesAndKeepTheOriginalAndTheNewest()
     {
         // `winre-inject --apply` leaves full copies of winre.wim under backups\, the largest files

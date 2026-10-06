@@ -217,7 +217,6 @@ public sealed class VerifiedDownloaderTests
         finally
         {
             TryDelete(destination);
-            TryDelete(destination + ".part");
         }
     }
 
@@ -257,7 +256,37 @@ public sealed class VerifiedDownloaderTests
         finally
         {
             TryDelete(destination);
-            TryDelete(destination + ".part");
+        }
+    }
+
+    [Fact]
+    public async Task DownloadAsync_StagesUnderItsOwnName_SoALeftoverPartFileAnotherProcessHoldsCannotBlockIt()
+    {
+        var payload = Encoding.ASCII.GetBytes(new string('C', 2048));
+        var hash = Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
+        var original = new Uri("https://github.com/owner/repo/releases/download/v1/NVMeDriverPatcher.exe");
+        var final = new Uri("https://release-assets.githubusercontent.com/github-production-release-asset/1/asset.exe?sp=r");
+        var handler = new RedirectSidecarHandler(original, final, payload, originalSidecarHash: hash, finalSidecarHash: null);
+        using var client = new HttpClient(handler);
+        var destination = Path.Combine(Path.GetTempPath(), $"nvme-patcher-test-{Guid.NewGuid():N}.exe");
+        var legacyPart = destination + ".part";
+
+        try
+        {
+            File.WriteAllText(legacyPart, "an older version's half download");
+            using (new FileStream(legacyPart, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                var result = await VerifiedDownloader.DownloadAsync(client, original, destination, TestDownloadPolicy(), CancellationToken.None);
+
+                Assert.True(result.Success, result.Summary);
+            }
+            Assert.Equal(payload, File.ReadAllBytes(destination));
+            Assert.Empty(Directory.GetFiles(Path.GetTempPath(), Path.GetFileName(destination) + ".*.tmp"));
+        }
+        finally
+        {
+            TryDelete(destination);
+            TryDelete(legacyPart);
         }
     }
 

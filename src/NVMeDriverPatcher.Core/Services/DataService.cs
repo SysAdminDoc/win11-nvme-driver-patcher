@@ -388,12 +388,16 @@ public static class DataService
         }
     }
 
+    /// <summary>Rows BypassIoHistory keeps. The readers look at the newest 100 rows and the newest
+    /// 20 of each pre/post kind, so 500 keeps everything they use.</summary>
+    public const int BypassIoHistoryRetention = 500;
+
     /// <summary>
     /// Removes BypassIO history rows beyond a retention cap. Every install and uninstall adds two
-    /// rows per volume, and this was the one table nothing ever trimmed. The readers look at the
-    /// newest 100 rows and the newest 20 of each pre/post kind, so 500 keeps everything they use.
+    /// rows per volume, and this was the one table nothing ever trimmed. The GUI calls this at
+    /// startup; SaveBypassIoSnapshot trims as it writes, for the CLI and the scheduled task.
     /// </summary>
-    public static int PruneBypassIoHistory(int keepNewest = 500)
+    public static int PruneBypassIoHistory(int keepNewest = BypassIoHistoryRetention)
     {
         if (keepNewest < 100) keepNewest = 100;
         if (!EnsureDatabaseAvailable()) return 0;
@@ -429,26 +433,35 @@ public static class DataService
         try
         {
             using var db = new AppDbContext();
-            var now = DateTime.UtcNow;
-            foreach (var v in volumes)
-            {
-                db.BypassIoHistory.Add(new BypassIoHistoryRecord
-                {
-                    Timestamp = now,
-                    VolumeLetter = v.Letter ?? string.Empty,
-                    Enabled = v.Enabled,
-                    Stack = v.Stack ?? string.Empty,
-                    Description = description ?? string.Empty,
-                    IsPrePatch = isPrePatch
-                });
-            }
-            db.SaveChanges();
+            SaveBypassIoSnapshot(db, volumes, description, isPrePatch, DateTime.UtcNow);
         }
         catch (Exception ex)
         {
             RecordStructuralFailure("Saving BypassIO history", ex);
             System.Diagnostics.Debug.WriteLine($"[DataService] SaveBypassIoSnapshot failed: {ex.Message}");
         }
+    }
+
+    /// <summary>Adds one row per volume under one time stamp, then trims the table to
+    /// <see cref="BypassIoHistoryRetention"/>. Only the GUI pruned, at startup, so a machine that
+    /// ran installs from the CLI or the scheduled task grew this table without bound. Returns how
+    /// many old rows went.</summary>
+    internal static int SaveBypassIoSnapshot(AppDbContext db, IEnumerable<BypassIoVolumeInfo> volumes, string description, bool isPrePatch, DateTime now)
+    {
+        foreach (var v in volumes)
+        {
+            db.BypassIoHistory.Add(new BypassIoHistoryRecord
+            {
+                Timestamp = now,
+                VolumeLetter = v.Letter ?? string.Empty,
+                Enabled = v.Enabled,
+                Stack = v.Stack ?? string.Empty,
+                Description = description ?? string.Empty,
+                IsPrePatch = isPrePatch
+            });
+        }
+        db.SaveChanges();
+        return PruneBypassIoHistory(db, BypassIoHistoryRetention);
     }
 
     public static List<BypassIoHistoryRecord> GetBypassIoHistory(int limit = 100)

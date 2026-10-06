@@ -100,6 +100,29 @@ public sealed class AppDatabaseUpgradeServiceTests : IDisposable
     }
 
     [Fact]
+    public void InjectedUpgradeFailure_LeavesEveryOlderBackupInPlace()
+    {
+        // Pruning is for a committed upgrade. After a failed one every copy is still a recovery
+        // path, and the failure reported is the upgrade's.
+        var path = Path.Combine(_root, "rollback-keep.db");
+        CreateV1Fixture(path);
+        var backups = Directory.CreateDirectory(Path.Combine(_root, "database-backups")).FullName;
+        var older = Enumerable.Range(1, 4)
+            .Select(i => Path.Combine(backups, $"nvmepatcher-preupgrade-v1-2026010{i}-000000-{new string((char)('a' + i), 32)}.db"))
+            .ToList();
+        foreach (var file in older) File.WriteAllText(file, "old copy");
+
+        var result = AppDatabaseUpgradeService.Upgrade(
+            path,
+            beforeCommit: (_, _) => throw new IOException("simulated commit barrier failure"),
+            mutexName: MutexName());
+
+        Assert.Equal(AppDatabaseAvailability.Unavailable, result.Availability);
+        Assert.All(older, file => Assert.True(File.Exists(file), file));
+        Assert.Equal(5, Directory.GetFiles(backups, "nvmepatcher-preupgrade-*.db").Length);
+    }
+
+    [Fact]
     public void CorruptDatabase_IsUnavailableAndNeverReplacedWithEmptyHistory()
     {
         var path = Path.Combine(_root, "corrupt.db");
@@ -210,6 +233,75 @@ public sealed class AppDatabaseUpgradeServiceTests : IDisposable
         Assert.Equal("row 30", left[0]);
         Assert.Equal("row 129", left[^1]);
         Assert.Equal(0, NVMeDriverPatcher.Services.DataService.PruneBypassIoHistory(db, 100));
+    }
+
+    [Fact]
+    public void SaveBypassIoSnapshot_TrimsTheTableAsItWrites()
+    {
+        // Only the GUI pruned, at startup. A machine that applied and removed from the CLI or the
+        // scheduled task for years grew this table without bound.
+        var path = Path.Combine(_root, "history-save.db");
+        Assert.True(Upgrade(path).IsAvailable);
+        using (var seed = new AppDbContext(path))
+        {
+            for (var i = 0; i < NVMeDriverPatcher.Services.DataService.BypassIoHistoryRetention - 1; i++)
+            {
+                seed.BypassIoHistory.Add(new BypassIoHistoryRecord
+                {
+                    Timestamp = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(i),
+                    VolumeLetter = "C:",
+                    Stack = "stornvme.sys",
+                    Description = "row " + i,
+                });
+            }
+            seed.SaveChanges();
+        }
+
+        using var db = new AppDbContext(path);
+        var volumes = new[]
+        {
+            new NVMeDriverPatcher.Services.BypassIoVolumeInfo { Letter = "C:", Enabled = true, Stack = "nvmedisk.sys" },
+            new NVMeDriverPatcher.Services.BypassIoVolumeInfo { Letter = "D:", Enabled = false, Stack = "stornvme.sys" },
+            new NVMeDriverPatcher.Services.BypassIoVolumeInfo { Letter = "E:", Enabled = true, Stack = "nvmedisk.sys" },
+        };
+        var removed = NVMeDriverPatcher.Services.DataService.SaveBypassIoSnapshot(
+            db, volumes, "After patch install", isPrePatch: false, new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(2, removed);
+        var rows = db.BypassIoHistory.OrderBy(b => b.Timestamp).ThenBy(b => b.Id).ToList();
+        Assert.Equal(NVMeDriverPatcher.Services.DataService.BypassIoHistoryRetention, rows.Count);
+        Assert.Equal("row 2", rows[0].Description);
+        Assert.Equal(new[] { "C:", "D:", "E:" }, rows.TakeLast(3).Select(r => r.VolumeLetter));
+        Assert.All(rows.TakeLast(3), r => Assert.Equal("After patch install", r.Description));
+    }
+
+    [Fact]
+    public void BuildBackupPath_StampsTheGregorianDate_WhateverCalendarTheRegionalFormatUses()
+    {
+        // The stamp is sorted as text and parsed by the prune. Formatted in the user's culture, a
+        // Thai regional format wrote the Buddhist year (2569 for 2026), which sorted every copy
+        // made there after copies from a Gregorian machine.
+        var thai = System.Globalization.CultureInfo.GetCultureInfo("th-TH");
+        Assert.IsType<System.Globalization.ThaiBuddhistCalendar>(thai.DateTimeFormat.Calendar);
+        var saved = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = thai;
+            // Positive control: the culture is in effect, and the old interpolation gave the wrong year.
+            Assert.NotEqual(DateTime.UtcNow.Year.ToString(System.Globalization.CultureInfo.InvariantCulture), $"{DateTime.UtcNow:yyyy}");
+
+            var path = AppDatabaseUpgradeService.BuildBackupPath(Path.Combine(_root, "nvmepatcher.db"), 2);
+
+            var match = System.Text.RegularExpressions.Regex.Match(
+                Path.GetFileName(path), @"^nvmepatcher-preupgrade-v2-(\d{4})\d{4}-\d{6}-[0-9a-f]{32}\.db$");
+            Assert.True(match.Success, path);
+            Assert.Equal(DateTime.UtcNow.Year, int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture));
+            Assert.Equal(Path.Combine(_root, "database-backups"), Path.GetDirectoryName(path));
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = saved;
+        }
     }
 
     private AppDatabaseState Upgrade(string path) =>
