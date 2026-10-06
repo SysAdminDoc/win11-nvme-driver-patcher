@@ -77,12 +77,14 @@ public partial class MainViewModel
     partial void OnIncludeServerKeyChanged(bool value)
     {
         UpdateChangePlan();
+        RefreshOptionalFlagRows();
         DebouncedSaveSettings();
     }
 
     partial void OnIncludeStandaloneFutureChanged(bool value)
     {
         UpdateChangePlan();
+        RefreshOptionalFlagRows();
         DebouncedSaveSettings();
     }
 

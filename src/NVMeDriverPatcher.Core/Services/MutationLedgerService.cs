@@ -600,7 +600,7 @@ public static class MutationLedgerService
             try
             {
                 var actual = safeBoot.Read(expected.Path);
-                if (!SafeBootStateService.IsAtBaselineOrWindowsOwned(expected.ToSnapshot(), actual))
+                if (!SafeBootStateService.IsAtBaselineOrWindowsOwned(expected, actual))
                     differences.Add("SafeBoot key differs from baseline: " + expected.Path);
             }
             catch (Exception ex)

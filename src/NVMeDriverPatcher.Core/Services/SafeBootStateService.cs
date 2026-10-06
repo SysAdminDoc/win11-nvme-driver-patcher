@@ -236,8 +236,9 @@ public static class SafeBootStateService
             if (SnapshotsMatch(entry.ToSnapshot(), live))
                 return "write-protected and already at its pre-apply state";
             // Servicing can create or take over the key after the patch was applied (26100.9550
-            // ships its own). This tool's writes never leave a TrustedInstaller-owned key behind.
-            if (live.WindowsOwned)
+            // ships its own). Ownership alone isn't enough: a key that still holds this tool's
+            // value is residue whoever owns it now.
+            if (IsWindowsOwnedWithoutThisToolsValue(entry, live))
                 return "Windows took it over after the patch was applied and write-protects it";
             return null;
         }
@@ -245,9 +246,14 @@ public static class SafeBootStateService
     }
 
     /// <summary>True when a live key needs no restore: it matches its baseline, or Windows owns it
-    /// now. Remove's verification uses this so a key servicing took over doesn't read as residue.</summary>
-    internal static bool IsAtBaselineOrWindowsOwned(SafeBootKeySnapshot baseline, SafeBootKeySnapshot live) =>
-        SnapshotsMatch(baseline, live) || live.WindowsOwned;
+    /// now and it doesn't hold this tool's value. Remove's verification uses this so a key
+    /// servicing took over doesn't read as residue.</summary>
+    internal static bool IsAtBaselineOrWindowsOwned(SafeBootJournalEntry baseline, SafeBootKeySnapshot live) =>
+        SnapshotsMatch(baseline.ToSnapshot(), live) || IsWindowsOwnedWithoutThisToolsValue(baseline, live);
+
+    private static bool IsWindowsOwnedWithoutThisToolsValue(SafeBootJournalEntry entry, SafeBootKeySnapshot live) =>
+        live.WindowsOwned &&
+        !string.Equals(live.DefaultValue, entry.ExpectedDefault, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Same existence, readability and values, in any value order. Ownership isn't
     /// compared: older journals never recorded it.</summary>

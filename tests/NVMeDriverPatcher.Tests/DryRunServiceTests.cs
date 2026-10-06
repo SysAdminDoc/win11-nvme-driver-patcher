@@ -201,53 +201,81 @@ public sealed class DryRunServiceTests
         Assert.Contains("55369237", DryRunService.RenderMarkdown(report));
     }
 
-    // A machine an older Full install patched: 156965516 = 1 in every Overrides key, nothing else.
-    private static DryRunService.CurrentRegistryValue LeftoverStandaloneFuture(string path, string valueName) =>
-        valueName == AppConfig.StandaloneFutureFeatureID && path.EndsWith(@"FeatureManagement\Overrides", StringComparison.OrdinalIgnoreCase)
+    // A machine an earlier Full apply of this tool patched: its three values set in every Overrides
+    // key, with a reusable ledger baseline that had them absent.
+    private static DryRunService.CurrentRegistryValue AfterFullApply(string path, string valueName) =>
+        valueName is AppConfig.PrimaryFeatureID or "1853569164" or AppConfig.StandaloneFutureFeatureID &&
+        path.EndsWith(@"FeatureManagement\Overrides", StringComparison.OrdinalIgnoreCase)
             ? new DryRunService.CurrentRegistryValue(true, 1)
             : new DryRunService.CurrentRegistryValue(false, null);
 
+    private static List<RegistryValueBaseline> AbsentBaseline(string[] mirrors) =>
+        MutationLedgerService.FeatureOverrideSubKeys(mirrors)
+            .SelectMany(subKey => AppConfig.OwnedOverrideValueNames.Select(id =>
+                new RegistryValueBaseline { KeyPath = subKey, ValueName = id, Existed = false }))
+            .ToList();
+
     [Theory]
-    [InlineData(PatchProfile.Safe, false)]
-    [InlineData(PatchProfile.Safe, true)]   // the opt-in only counts with Full
-    [InlineData(PatchProfile.Full, false)]
-    public void LeftoverStandaloneFuture_ThisApplyDoesNotWrite_IsADeleteRowPerOverridesKey(PatchProfile profile, bool optIn)
+    [InlineData(PatchProfile.Safe, false, new[] { "1853569164", "156965516" })]   // Safe after Full
+    [InlineData(PatchProfile.Safe, true, new[] { "1853569164", "156965516" })]    // the opt-in only counts with Full
+    [InlineData(PatchProfile.Full, false, new[] { "156965516" })]                 // #19
+    public void ValuesAnEarlierApplyWrote_ThisApplyDoesNotWrite_AreDeleteRows(PatchProfile profile, bool optIn, string[] cleared)
     {
         string[] mirrors = ["ControlSet002"];
         var config = new AppConfig { PatchProfile = profile, IncludeStandaloneFuture = optIn };
-        var report = DryRunService.PlanInstall(config, null, mirrors, LeftoverStandaloneFuture);
+        var report = DryRunService.PlanInstall(config, null, mirrors, AfterFullApply, AbsentBaseline(mirrors));
 
         var deletes = report.Items.Where(i => i.Action == "DELETE").ToList();
         Assert.Equal(
-            MutationLedgerService.FeatureOverrideSubKeys(mirrors).Select(subKey => $@"HKEY_LOCAL_MACHINE\{subKey}"),
-            deletes.Select(i => i.Target));
+            MutationLedgerService.FeatureOverrideSubKeys(mirrors)
+                .SelectMany(subKey => cleared.Select(id => $@"HKEY_LOCAL_MACHINE\{subKey}|{id}")).Order(),
+            deletes.Select(i => $"{i.Target}|{i.ValueName}").Order());
         Assert.All(deletes, row =>
         {
-            Assert.Equal(AppConfig.StandaloneFutureFeatureID, row.ValueName);
             Assert.Equal("1", row.Before);
             Assert.Equal("(absent)", row.After);
         });
-        Assert.Equal(2, report.TotalDeletes);
-        Assert.Contains("2 leftover value(s) cleared", report.Summary, StringComparison.Ordinal);
+        int expected = cleared.Length * 2;
+        Assert.Equal(expected, report.TotalDeletes);
+        Assert.Contains($"{expected} leftover value(s) cleared", report.Summary, StringComparison.Ordinal);
         Assert.Contains("DELETE", DryRunService.RenderMarkdown(report), StringComparison.Ordinal);
     }
 
     [Fact]
-    public void LeftoverStandaloneFuture_FullWithTheOptIn_IsKeptNotDeleted()
+    public void ValuesThatPredateTheFirstApply_AreKeepRowsNotDeletes()
     {
-        var config = new AppConfig { PatchProfile = PatchProfile.Full, IncludeStandaloneFuture = true };
-        var report = DryRunService.PlanInstall(config, null, ["ControlSet002"], LeftoverStandaloneFuture);
+        // No ledger to reuse: apply captures a fresh baseline, so whatever is set now stays.
+        var config = new AppConfig { PatchProfile = PatchProfile.Safe };
+        var report = DryRunService.PlanInstall(config, null, ["ControlSet002"], AfterFullApply, priorBaseline: null);
 
-        Assert.DoesNotContain(report.Items, i => i.Action == "DELETE");
         Assert.Equal(0, report.TotalDeletes);
         Assert.DoesNotContain("leftover", report.Summary, StringComparison.Ordinal);
+        var keeps = report.Items.Where(i => i.Action == "KEEP" && i.Target.Contains("Overrides", StringComparison.Ordinal)).ToList();
+        Assert.Equal(4, keeps.Count);   // 1853569164 and 156965516 in both Overrides keys
+        Assert.All(keeps, row =>
+        {
+            Assert.Equal("1", row.After);
+            Assert.Contains("before this tool's first apply", row.Note, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void FullWithTheOptIn_WritesInsteadOfClearing()
+    {
+        string[] mirrors = ["ControlSet002"];
+        var config = new AppConfig { PatchProfile = PatchProfile.Full, IncludeStandaloneFuture = true };
+        var report = DryRunService.PlanInstall(config, null, mirrors, AfterFullApply, AbsentBaseline(mirrors));
+
+        Assert.DoesNotContain(report.Items, i => i.Action is "DELETE" or "KEEP" && i.Target.Contains("Overrides", StringComparison.Ordinal));
+        Assert.Equal(0, report.TotalDeletes);
         Assert.Contains(report.Items, i => i.ValueName == AppConfig.StandaloneFutureFeatureID && i.Before == "1");
     }
 
     [Fact]
     public void CleanMachine_HasNoDeleteRows()
     {
-        var report = DryRunService.PlanInstall(new AppConfig { PatchProfile = PatchProfile.Full }, null, ["ControlSet002"], CleanMachine);
+        string[] mirrors = ["ControlSet002"];
+        var report = DryRunService.PlanInstall(new AppConfig { PatchProfile = PatchProfile.Full }, null, mirrors, CleanMachine, AbsentBaseline(mirrors));
         Assert.Equal(0, report.TotalDeletes);
         Assert.DoesNotContain("leftover", report.Summary, StringComparison.Ordinal);
     }

@@ -51,6 +51,43 @@ public sealed class FirmwareUpdateWorkflowServiceTests : IDisposable
         Assert.True(_config.IncludeStandaloneFuture);
     }
 
+    [Theory]
+    [InlineData(new[] { "735209102" }, false, PatchProfile.Safe, false, false)]
+    [InlineData(new[] { "735209102", "1853569164" }, false, PatchProfile.Full, false, false)]
+    [InlineData(new[] { "735209102", "1853569164", "156965516" }, true, PatchProfile.Full, true, true)]
+    // 156965516 without 1853569164 isn't something Full writes; re-enable shouldn't add Full for it.
+    [InlineData(new[] { "735209102", "156965516" }, false, PatchProfile.Safe, false, false)]
+    public void InstalledSelection_ComesFromWhatIsSetNotFromTheSettings(
+        string[] setValues, bool serverSet, PatchProfile profile, bool server, bool standaloneFuture)
+    {
+        // Settings say the opposite of what's installed: the GUI saved a click without an apply.
+        var config = new AppConfig { PatchProfile = PatchProfile.Safe, IncludeServerKey = !server, IncludeStandaloneFuture = !standaloneFuture };
+
+        var installed = FirmwareUpdateWorkflowService.InstalledSelection(setValues, serverSet, config);
+
+        Assert.Equal((profile, server, standaloneFuture), installed);
+    }
+
+    [Fact]
+    public void InstalledSelection_NothingInstalled_FallsBackToTheSettings()
+    {
+        var config = new AppConfig { PatchProfile = PatchProfile.Full, IncludeServerKey = true, IncludeStandaloneFuture = true };
+
+        Assert.Equal((PatchProfile.Full, true, true), FirmwareUpdateWorkflowService.InstalledSelection([], false, config));
+    }
+
+    [Fact]
+    public void Marker_RecordsTheInstalledSelectionOverTheSettings()
+    {
+        _config.IncludeServerKey = true;
+        _config.IncludeStandaloneFuture = true;
+        FirmwareUpdateWorkflowService.WriteMarker(_config, PatchProfile.Full, "2026-10-05T00:00:00Z", includeServerKey: false, includeStandaloneFuture: false);
+
+        var marker = FirmwareUpdateWorkflowService.ReadMarker(_config);
+        Assert.False(marker!.IncludeServerKey);
+        Assert.False(marker.IncludeStandaloneFuture);
+    }
+
     [Fact]
     public void RestoreMarkedOptions_OlderMarkerWithoutThem_LeavesTheConfigAlone()
     {

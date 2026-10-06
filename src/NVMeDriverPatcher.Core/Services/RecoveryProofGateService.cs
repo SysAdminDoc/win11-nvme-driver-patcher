@@ -166,16 +166,19 @@ public static class RecoveryProofGateService
         try
         {
             var sb = SafeBootUpgradeService.Evaluate();
-            var registry = new RealSafeBootRegistry();
-            bool windowsOwnsGuidKeys = registry.Read(AppConfig.SafeBootMinimalPath).WindowsOwned &&
-                                       registry.Read(AppConfig.SafeBootNetworkPath).WindowsOwned;
-            return ClassifySafeBootEntries(sb.GuidEntriesPresent, sb.ServiceEntriesComplete, windowsOwnsGuidKeys);
+            return ClassifySafeBootEntries(sb.GuidEntriesPresent, sb.ServiceEntriesComplete, WindowsOwnsBothGuidKeys(new RealSafeBootRegistry()));
         }
         catch (Exception ex)
         {
             return new() { Label = "SafeBoot entries", Passed = false, Detail = $"Check failed: {ex.Message}" };
         }
     }
+
+    /// <summary>Windows' own GUID entries stand in for this tool's only when it owns both of them;
+    /// with one missing, Safe Mode Network or Minimal still lacks the entry.</summary>
+    internal static bool WindowsOwnsBothGuidKeys(ISafeBootRegistry registry) =>
+        registry.Read(AppConfig.SafeBootMinimalPath).WindowsOwned &&
+        registry.Read(AppConfig.SafeBootNetworkPath).WindowsOwned;
 
     /// <summary>Pure: the gate's SafeBoot verdict. <paramref name="guidEntriesPresent"/> means this
     /// tool's GUID entries; Windows-owned GUID keys (24H2 26100.9550) are left as they are.</summary>
@@ -193,7 +196,9 @@ public static class RecoveryProofGateService
             Label = "SafeBoot entries",
             Passed = true,
             Detail = !windowsOwnsGuidKeys
-                ? "No SafeBoot entries from this tool yet. Apply creates them"
+                ? serviceEntriesComplete
+                    ? "The service-name entries are present, but this tool's GUID entries aren't. Apply adds them"
+                    : "No SafeBoot entries from this tool yet. Apply creates them"
                 : serviceEntriesComplete
                     ? "Windows' own GUID entries are in place and stay as they are, and the service-name entries are present"
                     : "Windows' own GUID entries are in place and stay as they are. Apply adds the service-name entries"

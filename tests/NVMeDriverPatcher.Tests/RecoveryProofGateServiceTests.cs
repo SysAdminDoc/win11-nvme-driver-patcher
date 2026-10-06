@@ -118,6 +118,8 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
     // Already patched on that build: the service-name entries are there, so don't say apply adds them.
     [InlineData(false, true, true, true, "and the service-name entries are present")]
     [InlineData(false, false, false, true, "No SafeBoot entries from this tool yet")]
+    // Service-name entries there but not the GUID ones (one GUID key Windows-owned, the other absent).
+    [InlineData(false, true, false, true, "The service-name entries are present, but this tool's GUID entries aren't")]
     public void SafeBootEntries_DescribeWhatIsActuallyThere(
         bool guidEntriesPresent, bool serviceEntriesComplete, bool windowsOwnsGuidKeys, bool passed, string detail)
     {
@@ -125,6 +127,31 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
 
         Assert.Equal(passed, item.Passed);
         Assert.Contains(detail, item.Detail, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]   // Network key missing: Safe Mode with Networking has no entry
+    [InlineData(false, true, false)]
+    [InlineData(false, false, false)]
+    public void WindowsOwnsBothGuidKeys_NeedsBothKeys(bool minimalOwned, bool networkOwned, bool expected)
+    {
+        var registry = new OwnershipRegistry(new Dictionary<string, bool>
+        {
+            [AppConfig.SafeBootMinimalPath] = minimalOwned,
+            [AppConfig.SafeBootNetworkPath] = networkOwned
+        });
+
+        Assert.Equal(expected, RecoveryProofGateService.WindowsOwnsBothGuidKeys(registry));
+    }
+
+    private sealed class OwnershipRegistry(Dictionary<string, bool> owned) : ISafeBootRegistry
+    {
+        public SafeBootKeySnapshot Read(string path) =>
+            owned.TryGetValue(path, out var isOwned) && isOwned
+                ? new() { Path = path, Existed = true, WindowsOwned = true }
+                : new() { Path = path, Existed = false };
+        public void ApplyRestore(string path, SafeBootRestorePlan plan) => throw new InvalidOperationException("read only");
     }
 
     [Fact]
