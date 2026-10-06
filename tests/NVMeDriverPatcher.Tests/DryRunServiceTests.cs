@@ -105,6 +105,8 @@ public sealed class DryRunServiceTests
             Assert.Equal("NvmeDisk", row.After);
             Assert.Contains("Windows owns and write-protects this key", row.Note, StringComparison.Ordinal);
         }
+        // The old uninstall preview listed these keys as whole-key deletes (the #13 pattern).
+        Assert.DoesNotContain(report.Items, i => i.Action == "DELETE" && i.Target.Contains(@"\SafeBoot\", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(1, report.TotalWrites);   // the override only
         Assert.Equal(2, report.TotalCreates);  // the two nvmedisk service-name keys
     }
