@@ -10,15 +10,15 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
-- [ ] P3 — APST inspector says "APST disabled" from registry values stornvme doesn't write
+- [ ] P3 — Laptop warnings blame APST, which StorNVMe doesn't use
   Category: correctness
-  Where: `src/NVMeDriverPatcher.Core/Services/ApstInspectorService.cs` (`Inspect` reads `AutonomousPowerStateTransitionEnabled`, `ApstIdleTimeout`, `NoLowPowerTransitions` and `PowerState{i}_*` under `stornvme\Parameters\Device`)
-  Problem: None of those values exist on this PC (stornvme, Samsung PM9C1b and KIOXIA BG6 with five power states each) or in the 26100.9550 VM, so the inspector always reports APST as disabled and the battery estimate says "APST honored: No". Whether stornvme reads these names at all is unverified. The state the controller actually runs with is Get Features 0x0C (Autonomous Power State Transition).
-  Evidence: Found while fixing NVMe Identify; Identify now fills the power table, but the enabled flag and idle times still come from the empty registry key.
-  Fix: Read APST enablement and the transition table from Get Features FID 0x0C through `IOCTL_STORAGE_QUERY_PROPERTY` (`StorageDeviceProtocolSpecificProperty`, `NVMeDataTypeFeature`), keep the registry values as overrides only when present, and say "not reported" rather than "disabled" when neither answers.
-  Acceptance: On a stornvme machine with APST on, the inspector says enabled and shows idle times per state; a missing registry value never reads as disabled.
+  Where: `PreflightService.cs:199` ("APST broken"), `DryRunService.cs:125`, `MainViewModel.cs:483`, `:1147`, `:1318`, CLI `Program.cs:1300`, `DiagnosticsService.cs:594`, `ApstInspectorService.ModernStandbyApstWarning`, README "Laptop/power warning" and the risk table, `TuningProfile` keys `NoLowPowerTransitions` and `ApstIdleTimeout`
+  Problem: Microsoft's StorNVMe power management page says StorNVMe doesn't use the drive's APST; it picks non-operational states itself from the power plan's NVMe idle timeouts and latency tolerances. The warnings say nvmedisk "breaks" or "disables" APST, and the tuning profile carries two stornvme values Microsoft doesn't document and no machine we've read has. The ~15% battery figure has no cited source in the repo.
+  Evidence: Found while rebuilding the APST inspector on the power plan settings (it now reads "Windows idles this drive to PS3 after 200 ms and PS4 after 2000 ms" on a Samsung PM9C1b under stornvme).
+  Fix: Reword the laptop warnings around what's known (stornvme's idle states come from the power plan; how nvmedisk idles the drive isn't documented), cite or drop the 15% figure, and either source the two tuning keys or stop writing them.
+  Acceptance: No user-facing text says nvmedisk breaks or disables APST; every battery figure shown has a source; the tuning profile writes only documented stornvme values or says it can't confirm them.
   Confidence: Likely
-  Effort: M
+  Effort: S
 
 - [ ] P3 — WinRE `winre.wim` backups (0.5–1 GB each) accumulate unboundedly and no cleanup path knows about them
   Category: reliability

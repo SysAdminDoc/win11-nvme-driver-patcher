@@ -1,4 +1,7 @@
+using System.Globalization;
+using System.Runtime.InteropServices;
 using Microsoft.Win32;
+using NVMeDriverPatcher.Interop;
 
 namespace NVMeDriverPatcher.Services;
 
@@ -15,7 +18,8 @@ public class ApstPowerState
 public class ApstBatteryEstimate
 {
     public bool IsLaptop { get; set; }
-    public bool ApstHonored { get; set; }
+    /// <summary>True when Windows idles the drive into a low-power state, null when that wasn't reported.</summary>
+    public bool? IdleStatesUsed { get; set; }
     public double? ActivePowerWatts { get; set; }
     public double? LowestIdlePowerWatts { get; set; }
     public double? EstimatedIdleSavingsWatts { get; set; }
@@ -23,59 +27,62 @@ public class ApstBatteryEstimate
     public string Recommendation { get; set; } = string.Empty;
 }
 
+/// <summary>The four NVMe idle settings of the active power plan for one power source, in milliseconds.</summary>
+public sealed record NvmeIdleSettings(
+    int PrimaryIdleTimeoutMs,
+    int PrimaryLatencyToleranceMs,
+    int SecondaryIdleTimeoutMs,
+    int SecondaryLatencyToleranceMs);
+
 public class ApstInspectionReport
 {
-    public bool ApstEnabled { get; set; }
+    /// <summary>
+    /// True when Windows moves the drive into a non-operational power state once it's idle, false
+    /// when it can't (no state fits the power plan, or a registry override turns it off), and null
+    /// when nothing reported it. A missing value never reads as off.
+    /// </summary>
+    public bool? IdleStatesUsed { get; set; }
+    public NvmeIdleSettings? PowerPlanAc { get; set; }
+    public NvmeIdleSettings? PowerPlanDc { get; set; }
+    public bool OnBattery { get; set; }
+    public int? PrimaryIdleState { get; set; }
+    public int? SecondaryIdleState { get; set; }
+
+    // stornvme\Parameters\Device values. Microsoft doesn't document these, and neither a 24H2
+    // install nor a retail PC had them, so they only count as overrides when present.
+    public bool? ApstEnabledOverride { get; set; }
     public int? ApstIdleTimeout { get; set; }
     public bool NoLowPowerTransitions { get; set; }
+
     public List<ApstPowerState> States { get; set; } = new();
     public string Summary { get; set; } = string.Empty;
     public ApstBatteryEstimate? BatteryEstimate { get; set; }
 }
 
-// Inspects Autonomous Power State Transition (APST) settings under stornvme per-drive
-// parameters. Lets laptop users see the tradeoff the Native NVMe patch forces (APST gets
-// disabled) and optionally restore custom idle timeouts. Closes ROADMAP §3.2.
+// Shows how Windows idles the NVMe drive, so laptop users can see the power tradeoff before
+// patching. StorNVMe doesn't use the drive's own APST: once the power plan's Primary or Secondary
+// NVMe Idle Timeout runs out, it moves the drive into the deepest non-operational state whose
+// ENLAT + EXLAT fits that tier's latency tolerance (Microsoft Learn, "NVMe" power management for
+// storage devices). This reads those power plan settings and the drive's Identify power table.
 public static class ApstInspectorService
 {
     private const string ParametersRoot = @"SYSTEM\CurrentControlSet\Services\stornvme\Parameters\Device";
+
+    private static readonly Guid DiskSubgroup = new("0012ee47-9041-4b5d-9b77-535fba8b1442");
+    private static readonly Guid PrimaryIdleTimeoutSetting = new("d639518a-e56d-4345-8af2-b9f32fb26109");
+    private static readonly Guid PrimaryLatencyToleranceSetting = new("fc95af4d-40e7-4b6d-835a-56d131dbc80e");
+    private static readonly Guid SecondaryIdleTimeoutSetting = new("d3d55efd-c1ff-424e-9dc3-441be7833010");
+    private static readonly Guid SecondaryLatencyToleranceSetting = new("dbc9e238-6de9-49e3-92cd-8c2b4946b472");
 
     public static ApstInspectionReport Inspect()
     {
         var report = new ApstInspectionReport();
         try
         {
-            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-            using var key = hklm.OpenSubKey(ParametersRoot);
-            if (key is null)
-            {
-                report.Summary = "stornvme Device parameters key is absent.";
-                return report;
-            }
-
-            report.ApstEnabled = (key.GetValue("AutonomousPowerStateTransitionEnabled") is int apst && apst != 0);
-            if (key.GetValue("ApstIdleTimeout") is int timeout) report.ApstIdleTimeout = timeout;
-            report.NoLowPowerTransitions = (key.GetValue("NoLowPowerTransitions") is int nl && nl != 0);
-
-            for (int i = 0; i < 32; i++)
-            {
-                var psKey = key.GetValue($"PowerState{i}_IdleTimeUs");
-                if (psKey is not int idle) continue;
-                var state = new ApstPowerState { PowerStateNumber = i, IdleTimeMicroseconds = idle };
-                if (key.GetValue($"PowerState{i}_EntryLatencyUs") is int entry) state.EntryLatencyUs = entry;
-                if (key.GetValue($"PowerState{i}_ExitLatencyUs") is int exit) state.ExitLatencyUs = exit;
-                if (key.GetValue($"PowerState{i}_NonOperational") is int no) state.NonOperational = no != 0;
-                report.States.Add(state);
-            }
-
-            // The stornvme registry profile stores transition timing, but not the NVMe Identify
-            // Controller MPS wattage. Use the first successfully identified NVMe controller to
-            // populate the same power-state indices; without this bridge the battery estimate can
-            // never produce an idle-savings number.
+            ReadRegistryOverrides(report);
             ApplyIdentifyPowerStates(report, QueryIdentifyPowerStates());
-            report.Summary = report.ApstEnabled
-                ? $"APST enabled with idle timeout {report.ApstIdleTimeout?.ToString() ?? "default"}. {report.States.Count} power-state entries."
-                : "APST disabled. Drives stay at active power state (higher battery drain on laptops).";
+            var (ac, dc) = ReadPowerPlan();
+            ApplyIdlePolicy(report, ac, dc, IsOnBattery());
             report.BatteryEstimate = EstimateBatteryImpact(report);
         }
         catch (Exception ex)
@@ -83,6 +90,27 @@ public static class ApstInspectorService
             report.Summary = $"APST inspection failed: {ex.Message}";
         }
         return report;
+    }
+
+    private static void ReadRegistryOverrides(ApstInspectionReport report)
+    {
+        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+        using var key = hklm.OpenSubKey(ParametersRoot);
+        if (key is null) return;
+
+        if (key.GetValue("AutonomousPowerStateTransitionEnabled") is int apst) report.ApstEnabledOverride = apst != 0;
+        if (key.GetValue("ApstIdleTimeout") is int timeout) report.ApstIdleTimeout = timeout;
+        report.NoLowPowerTransitions = key.GetValue("NoLowPowerTransitions") is int nl && nl != 0;
+
+        for (int i = 0; i < 32; i++)
+        {
+            if (key.GetValue($"PowerState{i}_IdleTimeUs") is not int idle) continue;
+            var state = new ApstPowerState { PowerStateNumber = i, IdleTimeMicroseconds = idle };
+            if (key.GetValue($"PowerState{i}_EntryLatencyUs") is int entry) state.EntryLatencyUs = entry;
+            if (key.GetValue($"PowerState{i}_ExitLatencyUs") is int exit) state.ExitLatencyUs = exit;
+            if (key.GetValue($"PowerState{i}_NonOperational") is int no) state.NonOperational = no != 0;
+            report.States.Add(state);
+        }
     }
 
     private static IReadOnlyList<NvmePowerStateDescriptor> QueryIdentifyPowerStates()
@@ -101,22 +129,65 @@ public static class ApstInspectorService
         return Array.Empty<NvmePowerStateDescriptor>();
     }
 
+    private static (NvmeIdleSettings? Ac, NvmeIdleSettings? Dc) ReadPowerPlan()
+    {
+        try
+        {
+            if (NativeMethods.PowerGetActiveScheme(IntPtr.Zero, out var schemePtr) != 0 || schemePtr == IntPtr.Zero)
+                return (null, null);
+            try
+            {
+                var scheme = Marshal.PtrToStructure<Guid>(schemePtr);
+                return (ReadIdleSettings(scheme, ac: true), ReadIdleSettings(scheme, ac: false));
+            }
+            finally { NativeMethods.LocalFree(schemePtr); }
+        }
+        catch { return (null, null); }
+    }
+
+    private static NvmeIdleSettings? ReadIdleSettings(Guid scheme, bool ac)
+    {
+        int? Read(Guid setting)
+        {
+            uint value;
+            uint rc = ac
+                ? NativeMethods.PowerReadACValueIndex(IntPtr.Zero, scheme, DiskSubgroup, setting, out value)
+                : NativeMethods.PowerReadDCValueIndex(IntPtr.Zero, scheme, DiskSubgroup, setting, out value);
+            return rc == 0 ? (int)Math.Min(value, int.MaxValue) : null;
+        }
+
+        return Read(PrimaryIdleTimeoutSetting) is int primaryIdle &&
+               Read(PrimaryLatencyToleranceSetting) is int primaryLatency &&
+               Read(SecondaryIdleTimeoutSetting) is int secondaryIdle &&
+               Read(SecondaryLatencyToleranceSetting) is int secondaryLatency
+            ? new NvmeIdleSettings(primaryIdle, primaryLatency, secondaryIdle, secondaryLatency)
+            : null;
+    }
+
+    private static bool IsOnBattery()
+    {
+        try { return NativeMethods.GetSystemPowerStatus(out var status) && status.ACLineStatus == 0; }
+        catch { return false; }
+    }
+
     internal static void ApplyIdentifyPowerStates(
         ApstInspectionReport report,
         IEnumerable<NvmePowerStateDescriptor>? identifyStates)
     {
         if (report is null || identifyStates is null) return;
 
+        // MP = 0 is a real reading (the NVMe spec gives it no "unreported" meaning), and StorNVMe
+        // picks idle states by latency, so a 0 W state stays in the list.
         var valid = identifyStates
             .Where(state => state is not null && state.Index >= 0 &&
-                            double.IsFinite(state.MaxPowerWatts) && state.MaxPowerWatts > 0)
+                            double.IsFinite(state.MaxPowerWatts) && state.MaxPowerWatts >= 0)
             .GroupBy(state => state.Index)
             .Select(group => group.First())
             .OrderBy(state => state.Index)
             .ToList();
 
         // stornvme rarely has per-state registry entries, so the controller's own table is the
-        // list when the registry gave none. Idle times stay unknown; only the registry has them.
+        // list when the registry gave none.
         if (report.States.Count == 0)
         {
             foreach (var state in valid)
@@ -142,6 +213,96 @@ public static class ApstInspectorService
         }
     }
 
+    /// <summary>
+    /// StorNVMe's documented choice once an idle timeout runs out: the deepest (lowest power)
+    /// non-operational state whose entry plus exit latency fits the latency tolerance.
+    /// </summary>
+    internal static ApstPowerState? PickIdleState(IEnumerable<ApstPowerState> states, int latencyToleranceMs)
+    {
+        double budgetUs = latencyToleranceMs * 1000.0;
+        return states
+            .Where(s => s.NonOperational == true &&
+                        s.EntryLatencyUs is double entry && s.ExitLatencyUs is double exit &&
+                        entry + exit <= budgetUs)
+            .OrderBy(s => s.MaxPowerWatts ?? double.MaxValue)
+            .ThenByDescending(s => s.PowerStateNumber)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Works out which states Windows idles the drive into with the power plan's settings for the
+    /// current power source, fills in their idle times, and writes the summary.
+    /// </summary>
+    internal static void ApplyIdlePolicy(ApstInspectionReport report, NvmeIdleSettings? ac, NvmeIdleSettings? dc, bool onBattery)
+    {
+        report.PowerPlanAc = ac;
+        report.PowerPlanDc = dc;
+        report.OnBattery = onBattery;
+        string source = onBattery ? "on battery" : "on AC power";
+        string stateCount = report.States.Count == 1 ? "1 power state" : $"{report.States.Count} power states";
+
+        if (report.NoLowPowerTransitions || report.ApstEnabledOverride == false)
+        {
+            report.IdleStatesUsed = false;
+            string value = report.NoLowPowerTransitions ? "NoLowPowerTransitions=1" : "AutonomousPowerStateTransitionEnabled=0";
+            report.Summary = $"Low-power idle is turned off by a stornvme registry value ({value}). {stateCount}.";
+            return;
+        }
+
+        var settings = onBattery ? dc : ac;
+        if (settings is null)
+        {
+            report.IdleStatesUsed = null;
+            report.Summary = $"Low-power idle wasn't reported: the power plan's NVMe idle settings couldn't be read. {stateCount}.";
+            return;
+        }
+
+        string plan = $"The power plan idles NVMe drives after {Ms(settings.PrimaryIdleTimeoutMs)} (up to {Ms(settings.PrimaryLatencyToleranceMs)} wake latency) " +
+                      $"and {Ms(settings.SecondaryIdleTimeoutMs)} (up to {Ms(settings.SecondaryLatencyToleranceMs)}) {source}";
+        if (settings.PrimaryIdleTimeoutMs == 0 && settings.SecondaryIdleTimeoutMs == 0)
+        {
+            report.IdleStatesUsed = null;
+            report.Summary = $"The power plan sets both NVMe idle timeouts to 0 ms {source}, which Microsoft doesn't document. {stateCount}.";
+            return;
+        }
+        if (!report.States.Any(s => s.NonOperational is not null && s.EntryLatencyUs is not null && s.ExitLatencyUs is not null))
+        {
+            report.IdleStatesUsed = null;
+            report.Summary = $"{plan}, but the drive's power table wasn't readable, so the states it idles into aren't known.";
+            return;
+        }
+
+        var primary = settings.PrimaryIdleTimeoutMs > 0 ? PickIdleState(report.States, settings.PrimaryLatencyToleranceMs) : null;
+        var secondary = settings.SecondaryIdleTimeoutMs > 0 ? PickIdleState(report.States, settings.SecondaryLatencyToleranceMs) : null;
+        report.PrimaryIdleState = primary?.PowerStateNumber;
+        report.SecondaryIdleState = secondary?.PowerStateNumber;
+        if (primary is not null)
+            primary.IdleTimeMicroseconds ??= settings.PrimaryIdleTimeoutMs * 1000;
+        if (secondary is not null && !ReferenceEquals(secondary, primary))
+            secondary.IdleTimeMicroseconds ??= settings.SecondaryIdleTimeoutMs * 1000;
+
+        report.IdleStatesUsed = primary is not null || secondary is not null;
+        if (primary is null && secondary is null)
+        {
+            report.Summary = report.States.Any(s => s.NonOperational == true)
+                ? $"{plan}. None of this drive's non-operational states wakes that fast, so it stays in an operational state. {stateCount}."
+                : $"{plan}, but this drive reports no non-operational power states, so it stays in an operational state. {stateCount}.";
+            return;
+        }
+
+        string steps = (primary, secondary) switch
+        {
+            ({ } p, { } s) when p.PowerStateNumber != s.PowerStateNumber =>
+                $"PS{p.PowerStateNumber} after {Ms(settings.PrimaryIdleTimeoutMs)} and PS{s.PowerStateNumber} after {Ms(settings.SecondaryIdleTimeoutMs)}",
+            ({ } p, _) => $"PS{p.PowerStateNumber} after {Ms(settings.PrimaryIdleTimeoutMs)}",
+            (null, { } s) => $"PS{s.PowerStateNumber} after {Ms(settings.SecondaryIdleTimeoutMs)}",
+            _ => string.Empty
+        };
+        report.Summary = $"Windows idles this drive to {steps} {source}, using the power plan's NVMe settings. {stateCount}.";
+    }
+
+    private static string Ms(int milliseconds) => milliseconds.ToString(CultureInfo.InvariantCulture) + " ms";
+
     internal static ApstBatteryEstimate EstimateBatteryImpact(ApstInspectionReport report)
     {
         var est = new ApstBatteryEstimate();
@@ -151,14 +312,21 @@ public static class ApstInspectorService
         }
         catch { }
 
-        est.ApstHonored = report.ApstEnabled && !report.NoLowPowerTransitions;
+        est.IdleStatesUsed = report.IdleStatesUsed;
 
         if (report.States.Count > 0)
         {
             var activeState = report.States.FirstOrDefault(s => s.PowerStateNumber == 0);
             est.ActivePowerWatts = activeState?.MaxPowerWatts;
 
-            var lowestIdle = report.States
+            // The deepest state Windows actually uses when that's known; otherwise the drive's
+            // lowest non-operational state.
+            var used = report.States
+                .Where(s => (s.PowerStateNumber == report.PrimaryIdleState || s.PowerStateNumber == report.SecondaryIdleState) &&
+                            s.MaxPowerWatts.HasValue)
+                .OrderBy(s => s.MaxPowerWatts!.Value)
+                .FirstOrDefault();
+            var lowestIdle = used ?? report.States
                 .Where(s => s.NonOperational == true && s.MaxPowerWatts.HasValue)
                 .OrderBy(s => s.MaxPowerWatts!.Value)
                 .FirstOrDefault();
@@ -170,21 +338,26 @@ public static class ApstInspectorService
 
         if (!est.IsLaptop)
         {
-            est.Impact = "Desktop system. APST has no battery impact.";
+            est.Impact = "Desktop system. Idle power states have no battery impact.";
             est.Recommendation = "No action needed.";
         }
-        else if (est.ApstHonored)
+        else if (est.IdleStatesUsed == true)
         {
             var savingsText = est.EstimatedIdleSavingsWatts.HasValue
                 ? $" (up to ~{est.EstimatedIdleSavingsWatts:F1}W idle savings)"
                 : "";
-            est.Impact = $"APST is active{savingsText}. The native NVMe driver (nvmedisk.sys) will ignore these transitions.";
+            est.Impact = $"Windows idles this drive into a low-power state{savingsText}. The native NVMe driver (nvmedisk.sys) will ignore these transitions.";
             est.Recommendation = "Expect ~10-15% shorter battery life on idle workloads after patching. Consider keeping the OS drive on stornvme.sys if battery life is critical.";
+        }
+        else if (est.IdleStatesUsed == false)
+        {
+            est.Impact = "This drive doesn't idle into a low-power state now, so patching adds no battery regression.";
+            est.Recommendation = "No additional impact from the native NVMe patch.";
         }
         else
         {
-            est.Impact = "APST is already disabled or blocked. No additional battery regression from patching.";
-            est.Recommendation = "No additional impact from the native NVMe patch.";
+            est.Impact = "Windows didn't report how it idles this drive, so the battery impact can't be estimated.";
+            est.Recommendation = "Check the power plan's NVMe idle settings with powercfg /qh before patching a laptop.";
         }
 
         return est;
@@ -220,30 +393,5 @@ public static class ApstInspectorService
                "firmware is too optimistic about wake-up timing. Mitigations before patching: disable Fast " +
                "Startup (powercfg /h off, or Control Panel > Power Options), and set PCIe Link State Power " +
                "Management to Off in the active power plan.";
-    }
-
-    /// <summary>
-    /// Writes a conservative APST idle timeout override to the stornvme parameters key.
-    /// Timeout is clamped to 250µs–60s. Does not touch NoLowPowerTransitions (too dangerous
-    /// to flip without a per-drive test).
-    /// </summary>
-    public static bool OverrideIdleTimeout(int microseconds, Action<string>? log = null)
-    {
-        int clamped = Math.Clamp(microseconds, 250, 60_000_000);
-        try
-        {
-            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-            using var key = hklm.CreateSubKey(ParametersRoot, writable: true);
-            if (key is null) { log?.Invoke("[ERROR] Could not open stornvme Device key."); return false; }
-            key.SetValue("ApstIdleTimeout", clamped, RegistryValueKind.DWord);
-            key.Flush();
-            log?.Invoke($"[OK] ApstIdleTimeout set to {clamped}µs. Reboot required.");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            log?.Invoke($"[ERROR] Could not write ApstIdleTimeout: {ex.Message}");
-            return false;
-        }
     }
 }
