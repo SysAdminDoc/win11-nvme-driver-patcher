@@ -148,7 +148,7 @@ public static class CliJson
         Summary = evidence.Summary,
     };
 
-    public static BypassIoJson BuildBypassIo(BypassIOResult result) => new()
+    public static BypassIoJson BuildBypassIo(BypassIOResult result, BypassIoHistoryDiff? history = null) => new()
     {
         Supported = result.Supported,
         StorageType = result.StorageType,
@@ -156,6 +156,39 @@ public static class CliJson
         BlockedBy = result.BlockedBy,
         Warning = result.Warning,
         GamingImpact = result.GamingImpact,
+        History = history is null ? null : new BypassIoHistoryJson
+        {
+            Recorded = history.Recorded,
+            Pre = Snapshot(history.Pre),
+            Post = Snapshot(history.Post),
+            LostAfterPatch = history.LostAfterPatch.ToList(),
+        },
+    };
+
+    private static BypassIoSnapshotJson? Snapshot(BypassIoSnapshotGroup? group) => group is null ? null : new()
+    {
+        TakenAt = group.TakenAt,
+        Volumes = group.Volumes.Select(v => new BypassIoVolumeJson
+        {
+            Volume = v.VolumeLetter,
+            Enabled = v.Enabled,
+            Stack = v.Stack,
+        }).ToList(),
+    };
+
+    public static PayloadVerificationJson BuildPayloadVerification(ArtifactIntegrityResult result) => new()
+    {
+        Success = result.Success,
+        PayloadPath = result.PayloadPath,
+        PayloadType = result.PayloadType,
+        ManifestSchemaVersion = result.SchemaVersion,
+        Summary = result.Summary,
+        Issues = result.Issues.Select(i => new PayloadIssueJson
+        {
+            Kind = i.Kind,
+            RelativePath = i.RelativePath,
+            Detail = i.Detail,
+        }).ToList(),
     };
 
     public static ControllersJson BuildControllers(PerControllerAuditReport report) => new()
@@ -413,6 +446,48 @@ public sealed class BypassIoJson
     public string BlockedBy { get; set; } = string.Empty;
     public string Warning { get; set; } = string.Empty;
     public string GamingImpact { get; set; } = string.Empty;
+    /// <summary>Present only with --history.</summary>
+    public BypassIoHistoryJson? History { get; set; }
+}
+
+public sealed class BypassIoHistoryJson
+{
+    /// <summary>False until an apply or remove has captured a snapshot; pre and post are then absent.</summary>
+    public bool Recorded { get; set; }
+    public BypassIoSnapshotJson? Pre { get; set; }
+    public BypassIoSnapshotJson? Post { get; set; }
+    public List<string> LostAfterPatch { get; set; } = [];
+}
+
+public sealed class BypassIoSnapshotJson
+{
+    public DateTime TakenAt { get; set; }
+    public List<BypassIoVolumeJson> Volumes { get; set; } = [];
+}
+
+public sealed class BypassIoVolumeJson
+{
+    public string Volume { get; set; } = string.Empty;
+    public bool Enabled { get; set; }
+    public string Stack { get; set; } = string.Empty;
+}
+
+public sealed class PayloadVerificationJson
+{
+    public bool Success { get; set; }
+    public string PayloadPath { get; set; } = string.Empty;
+    public string? PayloadType { get; set; }
+    /// <summary>The ARTIFACT-MANIFEST.json schema, not the envelope's.</summary>
+    public int? ManifestSchemaVersion { get; set; }
+    public string Summary { get; set; } = string.Empty;
+    public List<PayloadIssueJson> Issues { get; set; } = [];
+}
+
+public sealed class PayloadIssueJson
+{
+    public ArtifactIntegrityIssueKind Kind { get; set; }
+    public string RelativePath { get; set; } = string.Empty;
+    public string Detail { get; set; } = string.Empty;
 }
 
 public sealed class ControllerJson
