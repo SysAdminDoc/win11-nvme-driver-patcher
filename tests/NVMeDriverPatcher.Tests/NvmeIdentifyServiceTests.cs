@@ -108,6 +108,7 @@ public sealed class NvmeIdentifyServiceTests
     [InlineData(40, 512, RealBytesReturned)]    // less than a full Identify page
     [InlineData(4000, 4096, RealBytesReturned)] // offset that would read past the buffer
     [InlineData(-64, 4096, RealBytesReturned)]  // negative offset from a broken driver
+    [InlineData(48, 4096, 8192)]                // claims more bytes than the request holds: only the buffer bound stops it
     public void ParseResponse_DataRangeOutsideTheReply_IsAFailureEvenWithPlausibleData(int offset, int length, int bytesReturned)
     {
         var buffer = Response(withIdentity: true, offset: offset, length: length);
@@ -121,6 +122,30 @@ public sealed class NvmeIdentifyServiceTests
             Assert.Contains("not a full Identify page", result.Summary, StringComparison.Ordinal);
             Assert.Equal(string.Empty, result.ModelNumber);
             Assert.Empty(result.PowerStates);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    [Theory]
+    [InlineData(40, 48)]   // an older or different descriptor layout
+    [InlineData(48, 40)]
+    public void ParseResponse_UnexpectedDescriptorWithValidRange_IsAFailure(int version, int size)
+    {
+        var buffer = Response(withIdentity: true);
+        try
+        {
+            Marshal.WriteInt32(buffer, 0, version);
+            Marshal.WriteInt32(buffer, 4, size);
+            var result = new NvmeIdentifyResult();
+
+            NvmeIdentifyService.ParseResponse(buffer, RealBytesReturned, result);
+
+            Assert.False(result.Success, result.Summary);
+            Assert.Contains("unexpected descriptor", result.Summary, StringComparison.Ordinal);
+            Assert.Equal(string.Empty, result.ModelNumber);
         }
         finally
         {

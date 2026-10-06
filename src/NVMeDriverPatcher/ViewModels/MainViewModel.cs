@@ -235,6 +235,7 @@ public partial class MainViewModel : ObservableObject
         Config.PatchProfile = PatchProfile.Safe;
         if (!_suppressConfigWrites) { try { ConfigService.Save(Config); } catch { } }
         RefreshPatchProfileHelpText();
+        RefreshOptionalFlagRows();
     }
 
     partial void OnIsFullModeSelectedChanged(bool value)
@@ -244,6 +245,7 @@ public partial class MainViewModel : ObservableObject
         Config.PatchProfile = PatchProfile.Full;
         if (!_suppressConfigWrites) { try { ConfigService.Save(Config); } catch { } }
         RefreshPatchProfileHelpText();
+        RefreshOptionalFlagRows();
     }
 
     private void RefreshPatchProfileHelpText()
@@ -822,21 +824,8 @@ public partial class MainViewModel : ObservableObject
         var status = RegistryService.GetPatchStatus();
 
         foreach (var id in AppConfig.FeatureIDs)
-        {
-            bool isSet = status.Keys.Contains(id);
-            string name = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn.Split('(')[0].Trim() : "Unknown";
-            bool planned = Config.PatchProfile == PatchProfile.Full && Config.IncludeStandaloneFuture;
-            bool optional = id == AppConfig.StandaloneFutureFeatureID && !planned && !isSet;
-            RegistryFlags.Add(new RegistryFlagVM { Id = id, Name = optional ? $"{name} (optional)" : name, IsSet = isSet, IsOptional = optional });
-        }
-
-        // Server key
-        bool serverSet = RegistryService.IsServerKeyApplied();
-        RegistryFlags.Add(new RegistryFlagVM
-        {
-            Id = AppConfig.ServerFeatureID, Name = "Server 2025 (optional)",
-            IsSet = serverSet, IsOptional = !Config.IncludeServerKey && !serverSet
-        });
+            RegistryFlags.Add(BuildFlagRow(id, status.Keys.Contains(id), Config.PatchProfile, IncludeStandaloneFuture, IncludeServerKey));
+        RegistryFlags.Add(BuildFlagRow(AppConfig.ServerFeatureID, RegistryService.IsServerKeyApplied(), Config.PatchProfile, IncludeStandaloneFuture, IncludeServerKey));
 
         SafeBootFlags.Add(new RegistryFlagVM
         {
@@ -848,6 +837,31 @@ public partial class MainViewModel : ObservableObject
             Id = "SafeBoot/Net", Name = "Network: Safe Mode with Networking",
             IsSet = status.Keys.Contains("SafeBootNetwork")
         });
+    }
+
+    /// <summary>One feature flag row. The two opt-in values read "(optional)" unless the current
+    /// selection writes them or they're already set.</summary>
+    internal static RegistryFlagVM BuildFlagRow(string id, bool isSet, PatchProfile profile, bool includeStandaloneFuture, bool includeServerKey)
+    {
+        if (id == AppConfig.ServerFeatureID)
+            return new RegistryFlagVM { Id = id, Name = "Server 2025 (optional)", IsSet = isSet, IsOptional = !includeServerKey && !isSet };
+
+        string name = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn.Split('(')[0].Trim() : "Unknown";
+        bool planned = profile == PatchProfile.Full && includeStandaloneFuture;
+        bool optional = id == AppConfig.StandaloneFutureFeatureID && !planned && !isSet;
+        return new RegistryFlagVM { Id = id, Name = optional ? $"{name} (optional)" : name, IsSet = isSet, IsOptional = optional };
+    }
+
+    /// <summary>Re-labels the opt-in rows after a profile or checkbox change, from the values
+    /// already read. The rows used to keep the old label until the next registry refresh.</summary>
+    private void RefreshOptionalFlagRows()
+    {
+        for (int i = 0; i < RegistryFlags.Count; i++)
+        {
+            var row = RegistryFlags[i];
+            if (row.Id is AppConfig.StandaloneFutureFeatureID or AppConfig.ServerFeatureID)
+                RegistryFlags[i] = BuildFlagRow(row.Id, row.IsSet, Config.PatchProfile, IncludeStandaloneFuture, IncludeServerKey);
+        }
     }
 
     private void UpdateStatusDisplay()

@@ -263,11 +263,41 @@ public sealed class SafeBootStateServiceTests
     [Fact]
     public void BaselineCheck_AcceptsAWindowsOwnedKeyButNotThisToolsLeftover()
     {
-        Assert.True(SafeBootStateService.IsAtBaselineOrWindowsOwned(Absent(), WindowsOwnedNvmeDisk()));
-        Assert.True(SafeBootStateService.IsAtBaselineOrWindowsOwned(WithDefault("NvmeDisk"), WithDefault("NvmeDisk")));
-        Assert.False(SafeBootStateService.IsAtBaselineOrWindowsOwned(Absent(), WithDefault(ExpectedDefault)));
-        Assert.False(SafeBootStateService.IsAtBaselineOrWindowsOwned(WithDefault("NvmeDisk"), WithDefault(ExpectedDefault)));
+        Assert.True(SafeBootStateService.IsAtBaselineOrWindowsOwned(Baseline(Absent()), WindowsOwnedNvmeDisk()));
+        Assert.True(SafeBootStateService.IsAtBaselineOrWindowsOwned(Baseline(WithDefault("NvmeDisk")), WithDefault("NvmeDisk")));
+        Assert.False(SafeBootStateService.IsAtBaselineOrWindowsOwned(Baseline(Absent()), WithDefault(ExpectedDefault)));
+        Assert.False(SafeBootStateService.IsAtBaselineOrWindowsOwned(Baseline(WithDefault("NvmeDisk")), WithDefault(ExpectedDefault)));
+        // Owner reset to TrustedInstaller while the key still holds this tool's value: still residue,
+        // in any letter case.
+        Assert.False(SafeBootStateService.IsAtBaselineOrWindowsOwned(Baseline(Absent()), WithDefault(ExpectedDefault) with { WindowsOwned = true }));
+        Assert.False(SafeBootStateService.IsAtBaselineOrWindowsOwned(Baseline(Absent()), WithDefault("storage disks") with { WindowsOwned = true }));
     }
+
+    [Fact]
+    public void Restore_WindowsOwnedKeyStillHoldingThisToolsValue_IsAFailure()
+    {
+        // Ownership can change without the content changing. Remove mustn't call that clean.
+        var reg = new FakeSafeBootRegistry();
+        var journal = SafeBootStateService.CaptureJournal(reg, "2026-10-05T00:00:00Z");
+        reg.Set(AppConfig.SafeBootMinimalPath, WithDefault(ExpectedDefault) with { WindowsOwned = true });
+        reg.WriteProtected.Add(AppConfig.SafeBootMinimalPath);
+        var log = new List<string>();
+
+        var failures = SafeBootStateService.RestoreFromJournal(reg, journal, log.Add);
+
+        Assert.Contains(failures, f => f.StartsWith(AppConfig.SafeBootMinimalPath, StringComparison.Ordinal));
+        Assert.DoesNotContain(log, line => line.Contains("Windows took it over", StringComparison.Ordinal));
+    }
+
+    private static SafeBootJournalEntry Baseline(SafeBootKeySnapshot snapshot) => new()
+    {
+        Path = AppConfig.SafeBootMinimalPath,
+        ExpectedDefault = ExpectedDefault,
+        Existed = snapshot.Existed,
+        AccessDenied = snapshot.AccessDenied,
+        WindowsOwned = snapshot.WindowsOwned,
+        Values = snapshot.Values.ToList()
+    };
 
     [Fact]
     public void Journal_KeepsOwnershipThroughDisk()

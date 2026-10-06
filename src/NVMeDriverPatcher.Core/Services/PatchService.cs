@@ -46,51 +46,99 @@ public static class PatchService
         bool includeServer) => BuildRequiredRegistryMutations(profile, includeServer, mirrorControlSets: null);
 
     /// <summary>
-    /// #19: installs from before 156965516 became an opt-in wrote it with Full. When this apply
-    /// doesn't include it, take it out so the machine matches the profile and DISM stops flagging
-    /// the component store. Every Overrides subkey is in the ledger baseline, so remove still puts
-    /// back whatever was there before the first apply. A failure here is reported, not fatal: the
-    /// patch itself is already written and verified.
+    /// One override value this tool owns that the current apply doesn't write, in one Overrides
+    /// key. <paramref name="WrittenByThisTool"/> means the ledger baseline (captured before the
+    /// first apply) has it absent, so an earlier apply of this tool wrote it. Otherwise it was there
+    /// before the first apply and belongs to whoever set it.
     /// </summary>
-    internal static int ClearUnplannedStandaloneFuture(
+    internal sealed record UnplannedOverride(string SubKey, string ValueName, bool WrittenByThisTool);
+
+    /// <summary>
+    /// #19 and profile switches: an earlier Full apply leaves 1853569164 and 156965516 set, which a
+    /// later Safe or plain Full apply doesn't write. A null <paramref name="baseline"/> means a fresh
+    /// one is about to be captured, which would record every value set now as already there.
+    /// </summary>
+    internal static IReadOnlyList<UnplannedOverride> FindUnplannedOverrides(
         IEnumerable<string> overrideSubKeys,
-        Func<string, bool> isSet,
-        Action<string> delete,
+        IEnumerable<DurableRegistryMutation> plannedWrites,
+        Func<string, string, bool> isSet,
+        IReadOnlyList<RegistryValueBaseline>? baseline)
+    {
+        var writes = plannedWrites.ToList();
+        var found = new List<UnplannedOverride>();
+        foreach (var subKey in overrideSubKeys)
+        {
+            var planned = writes
+                .Where(m => string.Equals(m.Path, subKey, StringComparison.OrdinalIgnoreCase))
+                .Select(m => m.ValueName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var id in AppConfig.OwnedOverrideValueNames)
+            {
+                if (planned.Contains(id) || !isSet(subKey, id)) continue;
+                if (baseline is null)
+                {
+                    found.Add(new UnplannedOverride(subKey, id, WrittenByThisTool: false));
+                    continue;
+                }
+                var before = baseline.FirstOrDefault(v =>
+                    string.Equals(v.KeyPath, subKey, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(v.ValueName, id, StringComparison.OrdinalIgnoreCase));
+                // A ledger with no record of this value can't say whose it is, so it stays.
+                if (before is null) continue;
+                found.Add(new UnplannedOverride(subKey, id, WrittenByThisTool: !before.Existed));
+            }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Deletes the unplanned values an earlier apply of this tool wrote, so the machine matches the
+    /// profile (and DISM stops flagging the component store over 156965516). Values that were set
+    /// before the first apply are left alone. Remove restores the baseline either way. A failure
+    /// here is reported, not fatal: the patch itself is already written.
+    /// </summary>
+    internal static int ClearUnplannedOverrides(
+        IEnumerable<UnplannedOverride> unplanned,
+        Action<string, string> delete,
         Action<string>? log)
     {
         int cleared = 0;
-        foreach (var subKey in overrideSubKeys)
+        foreach (var item in unplanned)
         {
+            if (!item.WrittenByThisTool)
+            {
+                log?.Invoke($"  [KEPT] {item.ValueName} under {item.SubKey}: it was set before this tool's first apply, so it's left as is");
+                continue;
+            }
             try
             {
-                if (!isSet(subKey)) continue;
-                delete(subKey);
+                delete(item.SubKey, item.ValueName);
                 cleared++;
-                log?.Invoke($"  [CLEARED] {AppConfig.StandaloneFutureFeatureID} under {subKey}: an earlier Full install wrote it, and this apply doesn't include it");
+                log?.Invoke($"  [CLEARED] {item.ValueName} under {item.SubKey}: an earlier apply of this tool wrote it, and this apply doesn't include it");
             }
             catch (Exception ex)
             {
-                log?.Invoke($"  [WARNING] Couldn't clear {AppConfig.StandaloneFutureFeatureID} under {subKey} ({ex.Message}). Remove the patch to clear it.");
+                log?.Invoke($"  [WARNING] Couldn't clear {item.ValueName} under {item.SubKey} ({ex.Message}). Remove the patch to clear it.");
             }
         }
         return cleared;
     }
 
-    private static bool StandaloneFutureIsSet(string subKey)
+    internal static bool OverrideIsSet(string subKey, string valueName)
     {
         using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
         using var key = hklm.OpenSubKey(subKey);
-        return key?.GetValue(AppConfig.StandaloneFutureFeatureID) is not null;
+        return key?.GetValue(valueName) is not null;
     }
 
-    private static void DeleteStandaloneFuture(string subKey)
+    private static void DeleteOverride(string subKey, string valueName)
     {
         using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
         using var key = hklm.OpenSubKey(subKey, writable: true)
             ?? throw new IOException("the key disappeared");
-        key.DeleteValue(AppConfig.StandaloneFutureFeatureID, throwOnMissingValue: false);
+        key.DeleteValue(valueName, throwOnMissingValue: false);
         key.Flush();
-        if (key.GetValue(AppConfig.StandaloneFutureFeatureID) is not null)
+        if (key.GetValue(valueName) is not null)
             throw new IOException("the value was still there after the delete");
     }
 
@@ -378,9 +426,10 @@ public static class PatchService
             // Use the ledger's mirror set, not the freshly enumerated one: when an earlier clean
             // baseline is reused, that baseline is what bounds the restorable write surface.
             var safeBootRegistry = new RealSafeBootRegistry();
+            var plannedMutations = BuildRequiredRegistryMutations(
+                profile, includeServer, ledgerPreparation.Ledger.MirroredControlSets, includeStandaloneFuture);
             var (writes, leftToWindows) = SplitWindowsOwnedSafeBootWrites(
-                BuildRequiredRegistryMutations(
-                    profile, includeServer, ledgerPreparation.Ledger.MirroredControlSets, includeStandaloneFuture),
+                plannedMutations,
                 path => safeBootRegistry.Read(path).WindowsOwned);
             foreach (var left in leftToWindows)
                 log?.Invoke($"  [KEPT] {left.Label}: Windows owns and write-protects this key and already registers the driver for Safe Mode in it");
@@ -392,12 +441,14 @@ public static class PatchService
             if (!registryBatch.Success)
                 throw new IOException(registryBatch.Summary);
 
-            if (!includeStandaloneFuture)
-                ClearUnplannedStandaloneFuture(
+            ClearUnplannedOverrides(
+                FindUnplannedOverrides(
                     MutationLedgerService.FeatureOverrideSubKeys(ledgerPreparation.Ledger.MirroredControlSets),
-                    StandaloneFutureIsSet,
-                    DeleteStandaloneFuture,
-                    log);
+                    plannedMutations,
+                    OverrideIsSet,
+                    ledgerPreparation.Ledger.Baseline.RegistryValues),
+                DeleteOverride,
+                log);
 
             // Step 3: Validate
             ReportProgress(progress, 95, "Validating...");

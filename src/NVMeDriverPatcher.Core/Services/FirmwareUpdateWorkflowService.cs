@@ -30,7 +30,12 @@ public static class FirmwareUpdateWorkflowService
         return Path.Combine(dir, MarkerFile);
     }
 
-    public static void WriteMarker(AppConfig config, PatchProfile profile, string disabledAtIso)
+    public static void WriteMarker(
+        AppConfig config,
+        PatchProfile profile,
+        string disabledAtIso,
+        bool? includeServerKey = null,
+        bool? includeStandaloneFuture = null)
     {
         var path = MarkerPath(config);
         var dir = Path.GetDirectoryName(path);
@@ -40,8 +45,8 @@ public static class FirmwareUpdateWorkflowService
         {
             Profile = profile.ToString(),
             DisabledAt = disabledAtIso,
-            IncludeServerKey = config.IncludeServerKey,
-            IncludeStandaloneFuture = config.IncludeStandaloneFuture
+            IncludeServerKey = includeServerKey ?? config.IncludeServerKey,
+            IncludeStandaloneFuture = includeStandaloneFuture ?? config.IncludeStandaloneFuture
         };
         var json = JsonSerializer.Serialize(state, JsonOptions);
         var tmp = path + ".tmp";
@@ -89,6 +94,22 @@ public static class FirmwareUpdateWorkflowService
             && Enum.IsDefined(typeof(PatchProfile), parsed))
             return (parsed, true);
         return (config.PatchProfile, false);
+    }
+
+    /// <summary>
+    /// What's installed right now, read from the override values that are set. Settings can change
+    /// after an apply without another apply (the GUI saves a checkbox on click), so the marker
+    /// records this instead. With the primary value absent there's nothing installed to go by,
+    /// and the settings are the best answer.
+    /// </summary>
+    public static (PatchProfile Profile, bool IncludeServerKey, bool IncludeStandaloneFuture) InstalledSelection(
+        IReadOnlyCollection<string> setValueNames, bool serverKeySet, AppConfig config)
+    {
+        if (!setValueNames.Contains(AppConfig.PrimaryFeatureID))
+            return (config.PatchProfile, config.IncludeServerKey, config.IncludeStandaloneFuture);
+        bool full = setValueNames.Contains(AppConfig.ExtendedFeatureIDs[0]);
+        return (full ? PatchProfile.Full : PatchProfile.Safe, serverKeySet,
+                full && setValueNames.Contains(AppConfig.StandaloneFutureFeatureID));
     }
 
     /// <summary>Puts back the optional keys recorded at disable time, so re-enable writes the same set.</summary>

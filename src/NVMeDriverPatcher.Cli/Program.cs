@@ -1473,9 +1473,12 @@ class Program
 
     static int DisableForUpdateCommand(AppConfig config, bool noRestart)
     {
-        // Remember the active profile BEFORE removing, so re-enable restores it exactly even if
-        // the user later edits config. The marker also records that a re-enable is expected.
-        FirmwareUpdateWorkflowService.WriteMarker(config, config.PatchProfile, DateTime.UtcNow.ToString("o"));
+        // Remember what's installed BEFORE removing, so re-enable restores it exactly even if the
+        // settings changed since the apply. The marker also records that a re-enable is expected.
+        var installed = FirmwareUpdateWorkflowService.InstalledSelection(
+            RegistryService.GetPatchStatus().Keys, RegistryService.IsServerKeyApplied(), config);
+        FirmwareUpdateWorkflowService.WriteMarker(
+            config, installed.Profile, DateTime.UtcNow.ToString("o"), installed.IncludeServerKey, installed.IncludeStandaloneFuture);
         Console.WriteLine("Temporarily disabling Native NVMe for a firmware update...");
 
         var rc = RemoveCommand(config, noRestart);

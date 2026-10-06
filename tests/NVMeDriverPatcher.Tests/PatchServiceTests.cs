@@ -207,44 +207,108 @@ public sealed class PatchServiceTests
         Assert.Null(result.FeatureStoreResetSummary);
     }
 
-    [Fact]
-    public void ClearUnplannedStandaloneFuture_DeletesOnlyWhereSetAndKeepsGoingPastAFailure()
+    // Overrides keys an earlier Full apply wrote everything into, with a ledger baseline that had
+    // them all absent (captured before that first apply).
+    private static readonly IReadOnlyList<string> Overrides =
+        MutationLedgerService.FeatureOverrideSubKeys(["ControlSet002"]);
+
+    private static List<RegistryValueBaseline> AbsentBaseline() =>
+        Overrides.SelectMany(subKey => AppConfig.OwnedOverrideValueNames.Select(id =>
+            new RegistryValueBaseline { KeyPath = subKey, ValueName = id, Existed = false })).ToList();
+
+    private static Func<string, string, bool> SetAfterFull(params string[] extraIds)
     {
-        // #19: an older Full install wrote 156965516 everywhere. Re-applying without the opt-in
-        // takes it out of each Overrides key that still has it, and one refusal doesn't stop the rest.
-        var subKeys = MutationLedgerService.FeatureOverrideSubKeys(["ControlSet001", "ControlSet002"]);
-        Assert.Equal(3, subKeys.Count);
-        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { subKeys[0], subKeys[1], subKeys[2] };
-        var deleted = new List<string>();
+        var set = new HashSet<string>(["735209102", "1853569164", "156965516", .. extraIds]);
+        return (_, id) => set.Contains(id);
+    }
+
+    [Theory]
+    [InlineData(PatchProfile.Safe, false, new[] { "1853569164", "156965516" })]   // Safe after Full
+    [InlineData(PatchProfile.Full, false, new[] { "156965516" })]                 // #19: Full without the opt-in
+    [InlineData(PatchProfile.Full, true, new string[0])]
+    public void FindUnplannedOverrides_ListsWhatThisApplyDoesNotWrite(PatchProfile profile, bool optIn, string[] expected)
+    {
+        var planned = PatchService.BuildRequiredRegistryMutations(profile, includeServer: false, ["ControlSet002"], optIn);
+
+        var unplanned = PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), AbsentBaseline());
+
+        Assert.Equal(
+            Overrides.SelectMany(subKey => expected.Select(id => (subKey, id))).OrderBy(x => x.subKey).ThenBy(x => x.id),
+            unplanned.Select(u => (u.SubKey, u.ValueName)).OrderBy(x => x.SubKey).ThenBy(x => x.ValueName));
+        Assert.All(unplanned, u => Assert.True(u.WrittenByThisTool));
+    }
+
+    [Fact]
+    public void FindUnplannedOverrides_ServerKeyFromAnEarlierApply_IsUnplannedWhenTheBoxIsOff()
+    {
+        var planned = PatchService.BuildRequiredRegistryMutations(PatchProfile.Full, includeServer: false, ["ControlSet002"], true);
+
+        var unplanned = PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(AppConfig.ServerFeatureID), AbsentBaseline());
+
+        Assert.Equal(Overrides.Count, unplanned.Count(u => u.ValueName == AppConfig.ServerFeatureID && u.WrittenByThisTool));
+    }
+
+    [Fact]
+    public void FindUnplannedOverrides_ValueThatPredatesTheFirstApply_BelongsToWhoeverSetIt()
+    {
+        // A community script wrote 156965516 before this tool's first apply.
+        var baseline = AbsentBaseline();
+        foreach (var entry in baseline.Where(b => b.ValueName == AppConfig.StandaloneFutureFeatureID))
+        {
+            entry.Existed = true;
+            entry.Kind = 4;
+            entry.IntegerData = 1;
+        }
+        var planned = PatchService.BuildRequiredRegistryMutations(PatchProfile.Full, false, ["ControlSet002"], false);
+
+        var unplanned = PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), baseline);
+
+        Assert.All(unplanned, u => Assert.False(u.WrittenByThisTool));
+        // No ledger to reuse: apply captures a fresh baseline, which would call it pre-existing too.
+        Assert.All(PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), baseline: null), u => Assert.False(u.WrittenByThisTool));
+        // A ledger with no record of the value can't say whose it is.
+        Assert.Empty(PatchService.FindUnplannedOverrides(Overrides, planned, SetAfterFull(), []));
+    }
+
+    [Fact]
+    public void ClearUnplannedOverrides_DeletesOnlyThisToolsValuesAndKeepsGoingPastAFailure()
+    {
+        var unplanned = new List<PatchService.UnplannedOverride>
+        {
+            new(Overrides[0], "156965516", WrittenByThisTool: true),
+            new(Overrides[1], "156965516", WrittenByThisTool: true),
+            new(Overrides[0], "1853569164", WrittenByThisTool: true),
+            new(Overrides[1], "1853569164", WrittenByThisTool: false)
+        };
+        var deleted = new List<(string, string)>();
         var log = new List<string>();
 
-        int cleared = PatchService.ClearUnplannedStandaloneFuture(
-            subKeys,
-            set.Contains,
-            subKey =>
+        int cleared = PatchService.ClearUnplannedOverrides(
+            unplanned,
+            (subKey, id) =>
             {
-                if (subKey == subKeys[1]) throw new UnauthorizedAccessException("Access denied");
-                deleted.Add(subKey);
-                set.Remove(subKey);
+                if (subKey == Overrides[1]) throw new UnauthorizedAccessException("Access denied");
+                deleted.Add((subKey, id));
             },
             log.Add);
 
         Assert.Equal(2, cleared);
-        Assert.Equal([subKeys[0], subKeys[2]], deleted);
-        Assert.Equal(2, log.Count(line => line.Contains("[CLEARED] 156965516", StringComparison.Ordinal)));
+        Assert.Equal([(Overrides[0], "156965516"), (Overrides[0], "1853569164")], deleted);
+        Assert.Equal(2, log.Count(line => line.Contains("[CLEARED]", StringComparison.Ordinal)));
         var warning = Assert.Single(log, line => line.Contains("[WARNING]", StringComparison.Ordinal));
-        Assert.Contains(subKeys[1], warning, StringComparison.Ordinal);
+        Assert.Contains(Overrides[1], warning, StringComparison.Ordinal);
         Assert.Contains("Remove the patch to clear it", warning, StringComparison.Ordinal);
+        var kept = Assert.Single(log, line => line.Contains("[KEPT]", StringComparison.Ordinal));
+        Assert.Contains("before this tool's first apply", kept, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ClearUnplannedStandaloneFuture_NothingSet_TouchesNothing()
+    public void ClearUnplannedOverrides_NothingUnplanned_TouchesNothing()
     {
         var log = new List<string>();
-        int cleared = PatchService.ClearUnplannedStandaloneFuture(
-            MutationLedgerService.FeatureOverrideSubKeys(null),
-            _ => false,
-            _ => throw new InvalidOperationException("delete must not run"),
+        int cleared = PatchService.ClearUnplannedOverrides(
+            [],
+            (_, _) => throw new InvalidOperationException("delete must not run"),
             log.Add);
 
         Assert.Equal(0, cleared);

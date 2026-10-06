@@ -34,8 +34,18 @@ public class DryRunReport
 // anxious users can see the full change set before committing.
 public static class DryRunService
 {
-    public static DryRunReport PlanInstall(AppConfig config, PreflightResult? preflight = null) =>
-        PlanInstall(config, preflight, ControlSetService.GetMirrorTargets());
+    public static DryRunReport PlanInstall(AppConfig config, PreflightResult? preflight = null)
+    {
+        // When apply will reuse an earlier ledger, it writes with that ledger's mirror set and
+        // judges leftovers against its baseline, so the preview does the same.
+        var prior = ReusableLedger(config);
+        return PlanInstall(
+            config,
+            preflight,
+            prior?.MirroredControlSets ?? ControlSetService.GetMirrorTargets(),
+            ReadCurrentValue,
+            prior?.Baseline.RegistryValues);
+    }
 
     /// <summary>
     /// Overload taking an explicit mirror set so the preview can be verified on any host. A
@@ -48,6 +58,17 @@ public static class DryRunService
         IReadOnlyList<string> mirrorControlSets) =>
         PlanInstall(config, preflight, mirrorControlSets, ReadCurrentValue);
 
+    // The ledger apply will reuse, or null when apply would capture a fresh baseline.
+    private static MutationOperationLedger? ReusableLedger(AppConfig config)
+    {
+        try
+        {
+            var ledger = MutationLedgerService.Load(config.WorkingDir);
+            return MutationLedgerService.ShouldReuseBaseline(ledger) ? ledger : null;
+        }
+        catch { return null; }
+    }
+
     /// <summary>
     /// The rows come from <see cref="PatchService.BuildRequiredRegistryMutations(PatchProfile, bool, IReadOnlyList{string}?)"/>,
     /// the same list apply commits, so the preview can't drift from the real write set. The
@@ -58,7 +79,8 @@ public static class DryRunService
         AppConfig config,
         PreflightResult? preflight,
         IReadOnlyList<string> mirrorControlSets,
-        Func<string, string, CurrentRegistryValue> readCurrent)
+        Func<string, string, CurrentRegistryValue> readCurrent,
+        IReadOnlyList<RegistryValueBaseline>? priorBaseline = null)
     {
         var report = new DryRunReport
         {
@@ -90,23 +112,27 @@ public static class DryRunService
                 ? OverrideRow(mutation, current, mirrorNote)
                 : SafeBootRow(mutation, current, mirrorNote));
         }
-        // #19: apply clears a 156965516 left by an earlier Full install when this one doesn't write it.
-        if (!report.IncludeStandaloneFuture)
+        // Apply clears the override values an earlier apply of this tool wrote that this one
+        // doesn't (#19, and Safe after Full), and keeps the ones that were there before.
+        var unplanned = PatchService.FindUnplannedOverrides(
+            MutationLedgerService.FeatureOverrideSubKeys(mirrorControlSets),
+            mutations,
+            (subKey, id) => readCurrent(subKey, id).Value is not null,
+            priorBaseline);
+        foreach (var item in unplanned)
         {
-            foreach (var subKey in MutationLedgerService.FeatureOverrideSubKeys(mirrorControlSets))
+            var before = Convert.ToString(readCurrent(item.SubKey, item.ValueName).Value, System.Globalization.CultureInfo.InvariantCulture) ?? "(absent)";
+            report.Items.Add(new DryRunPlanItem
             {
-                var current = readCurrent(subKey, AppConfig.StandaloneFutureFeatureID);
-                if (current.Value is null) continue;
-                report.Items.Add(new DryRunPlanItem
-                {
-                    Action = "DELETE",
-                    Target = $@"HKEY_LOCAL_MACHINE\{subKey}",
-                    ValueName = AppConfig.StandaloneFutureFeatureID,
-                    Before = Convert.ToString(current.Value, System.Globalization.CultureInfo.InvariantCulture) ?? "(absent)",
-                    After = "(absent)",
-                    Note = "Left by an earlier Full install. This profile doesn't include it, so apply clears it."
-                });
-            }
+                Action = item.WrittenByThisTool ? "DELETE" : "KEEP",
+                Target = $@"HKEY_LOCAL_MACHINE\{item.SubKey}",
+                ValueName = item.ValueName,
+                Before = before,
+                After = item.WrittenByThisTool ? "(absent)" : before,
+                Note = item.WrittenByThisTool
+                    ? "Written by an earlier apply of this tool. This profile doesn't include it, so apply clears it."
+                    : "Set before this tool's first apply. This profile doesn't write it, and apply and Remove leave it as is."
+            });
         }
         report.TotalWrites = report.Items.Count(item => item.Action == "WRITE");
         report.TotalCreates = report.Items.Count(item => item.Action == "CREATE");
