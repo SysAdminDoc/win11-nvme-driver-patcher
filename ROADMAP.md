@@ -281,13 +281,6 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
   Acceptance: On a SAC-enabled VM the browser-downloaded GUI exe, MSI and PowerShell module are each tried, and the README states what happens and the way through. The in-app updater's download is tried too, and its message matches the result. The support bundle records SAC state.
   Complexity: M
 
-- [ ] P2 — Sign the release binaries with Azure Artifact Signing
-  Why: Unsigned files meet Smart App Control, SmartScreen and App Control for Business as unknown code, and fleet admins need a publisher rule to allow the CLI that the Intune scripts call. `Validate-ReleaseAssets.ps1 -ExpectSigned` exists, but nothing signs. Azure Artifact Signing works from a local `signtool` run; SignPath Foundation needs a CI build, which this repo doesn't have.
-  Evidence: https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options (updated 2026-08-29); https://docs.signpath.io/origin-verification; `scripts/Build-ReleaseArtifacts.ps1` (no signing step); `scripts/Validate-ReleaseAssets.ps1:198-205`.
-  Touches: `Build-ReleaseArtifacts.ps1` (a sign step for the exes, MSI, PowerShell module and scripts, gated on credentials being present), the `sign` flags in `packaging/release-artifacts.json`, README verification section.
-  Acceptance: A release built with credentials passes `Validate-ReleaseAssets.ps1 -ExpectSigned`. Without credentials the build still completes and says it's unsigned. The Azure account and identity validation need the owner's sign-in; everything else is code.
-  Complexity: M
-
 - [ ] P2 — Sign the update manifest so the updater doesn't rest on a same-release SHA-256 file
   Why: `AutoUpdaterService` accepts only `IntegritySignal.Sha256Sidecar`, a hash file from the same release as the exe, so whoever can replace one can replace both. It already refuses equal or older versions (`UpdateService.cs:88`). A manifest signed with an offline key whose public half ships in the app closes the gap without a certificate. ECDSA P-256 is in the .NET base library, so it needs no new package.
   Evidence: `src/NVMeDriverPatcher.Core/Services/AutoUpdaterService.cs:140`; `UpdateService.cs:86-88`; https://github.com/NetSparkleUpdater/NetSparkle (signed appcast model).
