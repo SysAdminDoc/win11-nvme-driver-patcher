@@ -812,6 +812,14 @@ public static class PatchService
             {
                 bool hadMutation = mutationLedger.Phase != MutationOperationPhase.Reverted;
                 var restored = MutationLedgerService.RestoreOriginalState(workingDir, log);
+                if (restored.NothingChanged)
+                {
+                    // Another process is mid-apply. Nothing was restored, so this isn't residue
+                    // and no reboot is owed; it's a removal that didn't start.
+                    result.Residue = restored.Failures.ToList();
+                    log?.Invoke("[BLOCKED] Removal did not start: " + string.Join("; ", restored.Failures));
+                    return result;
+                }
                 result.AppliedCount = mutationLedger.Baseline.RegistryValues.Count +
                                       mutationLedger.Baseline.SafeBoot.Entries.Count +
                                       (mutationLedger.FeatureStoreTouched ? mutationLedger.Baseline.FeatureStore.Count : 0);

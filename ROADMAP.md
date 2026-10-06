@@ -40,16 +40,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Likely
   Effort: M
 
-- [ ] P3 — `MutationLedgerService.RestoreOriginalState` has no owner-active guard against a concurrent in-flight apply
-  Category: reliability
-  Where: `src/NVMeDriverPatcher.Core/Services/MutationLedgerService.cs:499-520` (restore), contrast `:189-195` (`Prepare` refuses on live owner)
-  Problem: A second elevated process running `remove` (or fallback-failure recovery) restores the baseline while the owning process is between `PrepareRegistryPatch` and `CommitAll`, interleaving writes on boot-critical keys. End state converges (non-monotonic phase check refuses the writer's `MarkApplied`), but the interleaving window on SafeBoot/control-set keys is avoidable. (This is the still-live remnant of RESEARCH.md's `:26` process-lock claim.)
-  Evidence: Both paths read.
-  Fix: Check `IsOwnerActive` in `RestoreOriginalState`/`Uninstall` and refuse with a "another operation is in flight" error, or hold the ledger mutex across the Install write phase.
-  Acceptance: Unit test with a fake live-owner ledger: restore refuses.
-  Confidence: Verified (requires deliberate concurrent mutation)
-  Effort: S
-
 - [ ] P3 — GUI: large dead ViewModel surface still computed every refresh; user-facing features silently vanished in the redesign
   Category: maintainability
   Where: `src/NVMeDriverPatcher/ViewModels/`: `ReadinessChecks`/`LeftChecks`/`RightChecks` + `PreflightCheckVM` tooltips (`MainViewModel.cs:467-506`), `Drives`/`DriveRowVM` (`RowViewModels.cs:63-106`), `RegistryFlags`/`SafeBootFlags` (`:804-836`), `AttentionNotes` cluster (`:1089-1167`), `DirectStorageImpactText/Severity/PanelVisible` (`:156-159, 1046-1087`), `SkipWarnings` (no toggle anywhere yet described by `OptionsSummaryText`, `MainViewModel.Settings.cs:22-24`), `ChangePlanSteps`, `RiskSummaryColor`, `ActionReadinessText/Color` (bound only inside collapsed XAML)

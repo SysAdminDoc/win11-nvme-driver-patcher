@@ -92,7 +92,9 @@ public sealed record MutationPreparationResult(
     MutationOperationLedger? Ledger = null,
     bool ReusedBaseline = false);
 
-public sealed record MutationRestoreResult(bool Success, IReadOnlyList<string> Failures)
+/// <summary><paramref name="NothingChanged"/> marks a refusal: the restore didn't start, so no
+/// key was touched and nothing needs a reboot.</summary>
+public sealed record MutationRestoreResult(bool Success, IReadOnlyList<string> Failures, bool NothingChanged = false)
 {
     public static MutationRestoreResult Succeeded { get; } = new(true, Array.Empty<string>());
 }
@@ -515,7 +517,14 @@ public static class MutationLedgerService
         prior.SchemaVersion == 1 &&
         prior.Phase != MutationOperationPhase.Reverted;
 
-    public static MutationRestoreResult RestoreOriginalState(string workingDir, Action<string>? log = null)
+    public static MutationRestoreResult RestoreOriginalState(string workingDir, Action<string>? log = null) =>
+        RestoreOriginalState(workingDir, RestoreOriginalStateCore, IsOwnerActive, log);
+
+    internal static MutationRestoreResult RestoreOriginalState(
+        string workingDir,
+        Func<MutationOperationLedger, Action<string>?, MutationRestoreResult> restore,
+        Func<MutationOperationLedger, bool> ownerActive,
+        Action<string>? log)
     {
         using var lease = AcquireMutex();
         if (!lease.Held)
@@ -524,8 +533,13 @@ public static class MutationLedgerService
         var ledger = LoadUnsafe(workingDir);
         if (ledger is null)
             return new(false, new[] { "No mutation ledger is available." });
+        if (InFlightElsewhere(ledger, ownerActive, Environment.ProcessId) is string inFlight)
+        {
+            log?.Invoke("[LEDGER] " + inFlight);
+            return new(false, new[] { inFlight }, NothingChanged: true);
+        }
 
-        var restored = RestoreOriginalStateCore(ledger, log);
+        var restored = restore(ledger, log);
         if (!restored.Success)
             return restored;
 
@@ -546,11 +560,34 @@ public static class MutationLedgerService
         var ledger = LoadUnsafe(workingDir);
         if (ledger is null || !ledger.FeatureStoreTouched || !ledger.Baseline.FeatureStoreCaptureComplete)
             return new(false, new[] { "No complete FeatureStore baseline is available." });
+        if (InFlightElsewhere(ledger, IsOwnerActive, Environment.ProcessId) is string inFlight)
+        {
+            log?.Invoke("[LEDGER] " + inFlight);
+            return new(false, new[] { inFlight }, NothingChanged: true);
+        }
 
         var failures = FeatureStoreWriterService.RestoreConfigurations(ledger.Baseline.FeatureStore, log);
         return failures.Count == 0
             ? MutationRestoreResult.Succeeded
             : new(false, failures);
+    }
+
+    /// <summary>
+    /// Why a restore must not run now, or null. The operation is Prepared or Applied and the
+    /// process that owns it is alive and isn't this one: restoring under it would interleave
+    /// baseline writes with its writes on boot-critical keys. Prepare refuses on the same ground.
+    /// The owner's own rollback and the recovery of a dead owner both pass.
+    /// </summary>
+    internal static string? InFlightElsewhere(
+        MutationOperationLedger ledger,
+        Func<MutationOperationLedger, bool> ownerActive,
+        int currentProcessId)
+    {
+        if (ledger.Phase is not (MutationOperationPhase.Prepared or MutationOperationPhase.Applied)) return null;
+        if (ledger.OwnerProcessId == currentProcessId) return null;
+        if (!ownerActive(ledger)) return null;
+        return $"Mutation operation {ledger.OperationId} is still running in process {ledger.OwnerProcessId}; " +
+               "restoring under it would interleave writes on boot-critical keys. Nothing was changed; retry after it completes.";
     }
 
     private static MutationRestoreResult RestoreOriginalStateCore(MutationOperationLedger ledger) =>
