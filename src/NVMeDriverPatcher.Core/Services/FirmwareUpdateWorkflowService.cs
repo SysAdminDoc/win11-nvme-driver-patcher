@@ -48,16 +48,7 @@ public static class FirmwareUpdateWorkflowService
             IncludeServerKey = includeServerKey ?? config.IncludeServerKey,
             IncludeStandaloneFuture = includeStandaloneFuture ?? config.IncludeStandaloneFuture
         };
-        var json = JsonSerializer.Serialize(state, JsonOptions);
-        var tmp = path + ".tmp";
-        using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
-        using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
-        {
-            sw.Write(json);
-            sw.Flush();
-            fs.Flush(flushToDisk: true);
-        }
-        File.Move(tmp, path, overwrite: true);
+        AtomicFile.WriteAllText(path, JsonSerializer.Serialize(state, JsonOptions));
     }
 
     public static FirmwareUpdatePendingState? ReadMarker(AppConfig config)

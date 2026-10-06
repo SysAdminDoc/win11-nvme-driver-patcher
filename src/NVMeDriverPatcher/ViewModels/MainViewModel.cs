@@ -1262,15 +1262,7 @@ public partial class MainViewModel : ObservableObject
 
             // Atomic write: a power loss between WriteAllText and disk flush could leave a
             // zero-byte state file, which would break the next post-reboot detection silently.
-            var tempFile = stateFile + ".tmp";
-            using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (var sw = new StreamWriter(fs, new System.Text.UTF8Encoding(false)))
-            {
-                sw.Write(JsonSerializer.Serialize(currentState));
-                sw.Flush();
-                fs.Flush(flushToDisk: true);
-            }
-            File.Move(tempFile, stateFile, overwrite: true);
+            AtomicFile.WriteAllText(stateFile, JsonSerializer.Serialize(currentState));
         }
         catch { }
     }
@@ -1481,15 +1473,7 @@ public partial class MainViewModel : ObservableObject
                     // Atomic write — OnClosing runs during process/system shutdown, where a
                     // plain File.WriteAllLines can be killed mid-write and leave a truncated log.
                     // Temp + flush-to-disk + rename matches every other write in the codebase.
-                    var tempPath = path + ".tmp";
-                    using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                    using (var sw = new StreamWriter(fs, new System.Text.UTF8Encoding(false)))
-                    {
-                        foreach (var line in snapshot) sw.WriteLine(line);
-                        sw.Flush();
-                        fs.Flush(flushToDisk: true);
-                    }
-                    File.Move(tempPath, path, overwrite: true);
+                    AtomicFile.WriteAllLines(path, snapshot);
                 }
                 catch { }
             }

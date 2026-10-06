@@ -50,9 +50,7 @@ public static class MaintenanceWindowService
             var path = WindowPath(config);
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            var tmp = path + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(window, JsonOptions));
-            File.Move(tmp, path, overwrite: true);
+            AtomicFile.WriteAllText(path, JsonSerializer.Serialize(window, JsonOptions));
         }
         catch { }
     }

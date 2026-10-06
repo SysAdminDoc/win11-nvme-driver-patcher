@@ -36,9 +36,7 @@ public static class ConfigImportExportService
         var json = JsonSerializer.Serialize(bundle, JsonOptions);
         var dir = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-        var tmp = outputPath + ".tmp";
-        File.WriteAllText(tmp, json, new UTF8Encoding(false));
-        File.Move(tmp, outputPath, overwrite: true);
+        AtomicFile.WriteAllText(outputPath, json);
         return outputPath;
     }
 

@@ -30,16 +30,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Likely
   Effort: S
 
-- [ ] P3 — Fixed-name `.tmp` sibling writes race across the four processes in five services; `SaveBaseline` additionally propagates unhandled
-  Category: reliability
-  Where: `src/NVMeDriverPatcher.Core/Services/AutoBenchmarkService.cs:49-57`; `BenchmarkService.cs:522-530`; `MaintenanceWindowService.cs:53-55`; `CompatTelemetryService.cs:147-149`; `TuningProfileIoService.cs:31-33`
-  Problem: All use `path + ".tmp"` with exclusive create; concurrent GUI + SYSTEM scheduled-CLI writers collide — one update silently lost (most sites swallow the IOException), and `SaveBaseline` throws to its caller and can strand the `.tmp`. The correct pattern (PID+GUID temp + global mutex) exists in `ConfigDurabilityService`/`EventLogWatchdogService`. `benchmark_results.json` also does an unlocked read-modify-write that can drop a concurrent entry.
-  Evidence: All five sites read; contrast pattern confirmed.
-  Fix: Switch the five to PID+GUID temp names; wrap `benchmark_results.json` read-modify-write in the config mutex (or a dedicated one); add try/catch to `SaveBaseline` with a logged failure.
-  Acceptance: Concurrency test (parallel writers) never loses both writes nor leaves `.tmp` residue.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — `BypassIoHistory` is the only DB table with no prune; schema-upgrade DB backups also accumulate
   Category: reliability
   Where: `src/NVMeDriverPatcher.Core/Services/DataService.cs:379-406` (writer; prunes at `:304-377` cover Telemetry/Snapshots/Benchmarks only); `src/NVMeDriverPatcher/App.xaml.cs:84-86`; `AppDatabaseUpgradeService.BuildBackupPath` (`database-backups\*.db`, unbounded per upgrade)

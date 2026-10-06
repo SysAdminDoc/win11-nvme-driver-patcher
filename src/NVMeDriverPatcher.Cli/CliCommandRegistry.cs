@@ -208,9 +208,9 @@ public static class CliCommandRegistry
         new("firmware", ["compat"], CommandGroup.StoragePerformance,
             "List bundled controller/firmware compat entries (compat.json)"),
         new("benchmark", [], CommandGroup.StoragePerformance,
-            "Run high-QD and desktop QD1 4K random DiskSpd profiles (--json for machine-readable output)"),
+            "Run high-QD and desktop QD1 4K random DiskSpd profiles (--json for machine-readable output); the first run becomes the compare-benchmarks baseline"),
         new("compare-benchmarks", [], CommandGroup.StoragePerformance,
-            "Compare before/after benchmark JSON (--threshold=N%, default 15)"),
+            "Compare the latest benchmark (or --current=<file>) against the baseline (--threshold=N%, default 15)"),
         new("compat-checksum", [], CommandGroup.StoragePerformance,
             "Compute and display compat.json integrity checksum"),
 

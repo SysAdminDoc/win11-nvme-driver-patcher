@@ -682,11 +682,17 @@ class Program
         }
 
         BenchmarkService.SaveResults(config.WorkingDir, result);
+        // compare-benchmarks needs a baseline and nothing else ever wrote one, so the first
+        // completed benchmark becomes it. Later runs are the "current" side of the comparison.
+        var savedBaseline = AutoBenchmarkService.LoadBaseline(config) is null
+            && AutoBenchmarkService.SaveBaseline(config, AutoBenchmarkService.FromResult(result), Console.Error.WriteLine);
         if (json)
         {
             Console.WriteLine(CliJson.Serialize("benchmark", result));
             return 0;
         }
+        if (savedBaseline)
+            Console.WriteLine("Saved this run as the benchmark baseline for compare-benchmarks.");
 
         Console.WriteLine("Benchmark complete:");
         Console.WriteLine($"  High-QD (t4/o16 ≈ QD64) read:  {result.Read.IOPS:N0} IOPS ({result.Read.ThroughputMBs:N2} MB/s)");
