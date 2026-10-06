@@ -10,6 +10,8 @@ public class CleanDataResult
     public int FilesRemoved { get; set; }
     public string Summary { get; set; } = string.Empty;
     public List<string> Errors { get; set; } = new();
+    /// <summary>Files a selected target left in place on purpose (the newest WinRE image backup).</summary>
+    public List<string> Kept { get; set; } = new();
 }
 
 // Purges the app working directory (logs, watchdog state, ETL captures, snapshot
@@ -23,7 +25,7 @@ public static class CleanDataService
     {
         "logs",      // *.log, *.log.1..5 in working dir
         "etl",       // etl\*.etl
-        "backups",   // Pre_*_Backup_*.reg
+        "backups",   // Pre_*_Backup_*.reg, and all but the newest backups\<image>.<stamp>.bak
         "db",        // nvmepatcher.db*
         "bundles",   // support_bundle_*.zip
         "staging"    // tools\staging\, compat_report.json, anon_id.txt
@@ -61,8 +63,12 @@ public static class CleanDataService
             if (Directory.Exists(etl))
                 SweepTree(etl, result);
         }
+        long winReBytesKept = 0;
         if (selected.Contains("backups"))
+        {
             Sweep(Directory.EnumerateFiles(dir, "Pre_*_Backup_*.reg", SearchOption.TopDirectoryOnly), result);
+            winReBytesKept = SweepWinReBackups(Path.Combine(dir, "backups"), result);
+        }
         if (selected.Contains("db"))
             Sweep(Directory.EnumerateFiles(dir, "nvmepatcher.db*", SearchOption.TopDirectoryOnly), result);
         if (selected.Contains("bundles"))
@@ -80,7 +86,31 @@ public static class CleanDataService
 
         result.Success = result.Errors.Count == 0;
         result.Summary = $"Removed {result.FilesRemoved} file(s), freed {result.BytesFreed / 1024.0 / 1024.0:F2} MB from {dir}.";
+        if (result.Kept.Count > 0)
+        {
+            result.Summary += result.Kept.Count == 1
+                ? $" Kept the newest WinRE image backup ({winReBytesKept / 1024.0 / 1024.0:F0} MB): {result.Kept[0]}. It's the only copy of the recovery image from before the last driver injection, so delete it by hand once you're sure you won't need it."
+                : $" Kept the newest backup of each WinRE image ({winReBytesKept / 1024.0 / 1024.0:F0} MB in all): {string.Join(", ", result.Kept)}. They're the only copies of those recovery images from before the last driver injection, so delete them by hand once you're sure you won't need them.";
+        }
         return result;
+    }
+
+    // WinRE image backups are full copies of winre.wim (0.5 to 1 GB each) that `winre-inject
+    // --apply` leaves under backups\. The newest one per image stays: nothing else can put the
+    // recovery image back the way it was before the last injection.
+    private static long SweepWinReBackups(string backupDir, CleanDataResult result)
+    {
+        long bytesKept = 0;
+        foreach (var image in WinReDriverInjectionService.ListBackups(backupDir)
+                     .GroupBy(backup => backup.ImageName, StringComparer.OrdinalIgnoreCase))
+        {
+            var newest = image.First();   // ListBackups returns newest first
+            result.Kept.Add(newest.Path);
+            bytesKept += newest.Bytes;
+            foreach (var older in image.Skip(1))
+                TryDelete(older.Path, result);
+        }
+        return bytesKept;
     }
 
     /// <summary>

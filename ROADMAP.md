@@ -10,6 +10,16 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
+- [ ] P3 — `winre-inject --apply` adds the same stornvme package again on every run
+  Category: correctness
+  Where: `WinReDriverInjectionService.BuildPlan` (the `/Add-Driver` step), `ApplyAsync`
+  Problem: Every apply runs `dism /Add-Driver` with the Driver Store stornvme package, and DISM stages it as a new `oem<N>.inf` each time even when the image already carries that exact DriverVer. On the 24H2 rig three runs grew `winre.wim` from 510 MB to 515 MB to 517 MB, and a fourth would grow it again. The second and later runs also take a full backup and a mount for nothing.
+  Evidence: VM run of three consecutive applies (2026-10-05): sizes 510, 515, 517 MB; `dism /Get-Drivers` on the image shows `oem0.inf` after the first injection.
+  Fix: Before mounting for real, read the image's driver list (`dism /Image:<mount> /Get-Drivers` after a read-only mount, or `/Get-ImageInfo` plus the package list) and compare the stornvme DriverVer against the Driver Store package. Same or newer in the image: report "already current" and stop without a backup or commit. Older: inject, and remove the superseded `oem<N>.inf` copy (`/Remove-Driver`) so the image keeps one copy.
+  Acceptance: Two applies in a row leave the image's size and SHA-256 unchanged after the first; the second run says the image is current; a staged newer package replaces the older copy rather than sitting beside it.
+  Confidence: Verified
+  Effort: M
+
 - [ ] P3 — Laptop warnings blame APST, which StorNVMe doesn't use
   Category: correctness
   Where: `PreflightService.cs:199` ("APST broken"), `DryRunService.cs:125`, `MainViewModel.cs:483`, `:1147`, `:1318`, CLI `Program.cs:1300`, `DiagnosticsService.cs:594`, `ApstInspectorService.ModernStandbyApstWarning`, README "Laptop/power warning" and the risk table, `TuningProfile` keys `NoLowPowerTransitions` and `ApstIdleTimeout`
@@ -18,16 +28,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Fix: Reword the laptop warnings around what's known (stornvme's idle states come from the power plan; how nvmedisk idles the drive isn't documented), cite or drop the 15% figure, and either source the two tuning keys or stop writing them.
   Acceptance: No user-facing text says nvmedisk breaks or disables APST; every battery figure shown has a source; the tuning profile writes only documented stornvme values or says it can't confirm them.
   Confidence: Likely
-  Effort: S
-
-- [ ] P3 — WinRE `winre.wim` backups (0.5–1 GB each) accumulate unboundedly and no cleanup path knows about them
-  Category: reliability
-  Where: `src/NVMeDriverPatcher.Core/Services/WinReDriverInjectionService.cs:180-195` (writes `workingDir\backups\winre.wim.<stamp>.bak`); `src/NVMeDriverPatcher.Core/Services/CleanDataService.cs:22-79` (no target matches the `backups\` subdirectory)
-  Problem: Each `winre-inject --apply` adds a timestamped multi-GB backup with no retention cap; even "purge everything" `CleanDataService.Clean` leaves them (its summary then under-reports what remains). Largest artifact the app writes, outside every retention mechanism.
-  Evidence: Both services read; `CleanDataService` targets enumerated (logs/etl/db/bundles/staging/`Pre_*_Backup_*.reg` only).
-  Fix: Keep the most recent N (2) WinRE backups with a prune in the injection service; add a `backups` target to `CleanDataService` that preserves the newest.
-  Acceptance: Third `--apply` leaves ≤ 2 `.bak` files; `clean-data` reports and sweeps the directory.
-  Confidence: Verified
   Effort: S
 
 - [ ] P3 — Fixed-name `.tmp` sibling writes race across the four processes in five services; `SaveBaseline` additionally propagates unhandled

@@ -55,7 +55,7 @@ public sealed class NvmeIdentifyServiceTests
     {
         // winioctl.h: CTL_CODE(IOCTL_STORAGE_BASE, 0x0500, METHOD_BUFFERED, FILE_ANY_ACCESS). Any
         // access is what lets the query run on a handle opened with no rights.
-        Assert.Equal(CtlCode(0x2D, 0x500, method: 0, access: 0), NvmeIdentifyService.IOCTL_STORAGE_QUERY_PROPERTY);
+        Assert.Equal(NvmeIdentifyService.IOCTL_STORAGE_QUERY_PROPERTY, CtlCode(0x2D, 0x500, method: 0, access: 0));
         Assert.Equal(48 + 4096, NvmeIdentifyService.RequestSize);
 
         var buffer = Marshal.AllocHGlobal(NvmeIdentifyService.RequestSize);

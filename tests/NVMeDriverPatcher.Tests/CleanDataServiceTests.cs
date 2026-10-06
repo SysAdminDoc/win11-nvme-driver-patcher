@@ -65,6 +65,67 @@ public sealed class CleanDataServiceTests : IDisposable
     }
 
     [Fact]
+    public void Backups_SweepOlderWinReImagesAndKeepTheNewest()
+    {
+        // `winre-inject --apply` leaves full copies of winre.wim under backups\, the largest files
+        // the app writes. clean-data never looked there.
+        var backups = Directory.CreateDirectory(Path.Combine(_dir, "backups")).FullName;
+        var oldest = Path.Combine(backups, "winre.wim.20260101-000000.bak");
+        var middle = Path.Combine(backups, "winre.wim.20260201-000000.bak");
+        var newest = Path.Combine(backups, "winre.wim.20260301-000000.bak");
+        var unrelated = Path.Combine(backups, "notes.txt");
+        File.WriteAllText(oldest, "12345");
+        File.WriteAllText(middle, "1234567");
+        File.WriteAllText(newest, "123");
+        File.WriteAllText(unrelated, "keep me");
+
+        var result = CleanDataService.Clean(_config);
+
+        Assert.True(result.Success);
+        Assert.False(File.Exists(oldest));
+        Assert.False(File.Exists(middle));
+        Assert.True(File.Exists(newest));
+        Assert.True(File.Exists(unrelated));
+        Assert.Equal(2, result.FilesRemoved);
+        Assert.Equal(12, result.BytesFreed);
+        Assert.Equal([newest], result.Kept);
+        // The summary used to say everything was gone while gigabytes stayed behind.
+        Assert.Contains("Kept the newest WinRE image backup", result.Summary, StringComparison.Ordinal);
+        Assert.Contains(newest, result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Backups_KeepTheNewestOfEachImage()
+    {
+        var backups = Directory.CreateDirectory(Path.Combine(_dir, "backups")).FullName;
+        File.WriteAllText(Path.Combine(backups, "winre.wim.20260101-000000.bak"), "x");
+        File.WriteAllText(Path.Combine(backups, "winre.wim.20260301-000000.bak"), "x");
+        File.WriteAllText(Path.Combine(backups, "custom.wim.20250101-000000.bak"), "x");
+
+        var result = CleanDataService.Clean(_config, new[] { "backups" });
+
+        Assert.Equal(1, result.FilesRemoved);
+        Assert.Equal(
+            new[] { "custom.wim.20250101-000000.bak", "winre.wim.20260301-000000.bak" },
+            result.Kept.Select(Path.GetFileName).Order());
+        Assert.Contains("Kept the newest backup of each WinRE image", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Backups_NotSelected_LeavesWinReImagesAlone()
+    {
+        var backups = Directory.CreateDirectory(Path.Combine(_dir, "backups")).FullName;
+        File.WriteAllText(Path.Combine(backups, "winre.wim.20260101-000000.bak"), "x");
+        File.WriteAllText(Path.Combine(backups, "winre.wim.20260301-000000.bak"), "x");
+
+        var result = CleanDataService.Clean(_config, new[] { "logs" });
+
+        Assert.Equal(2, Directory.GetFiles(backups).Length);
+        Assert.Empty(result.Kept);
+        Assert.DoesNotContain("Kept", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void UnrelatedFiles_AreNotTouched()
     {
         File.WriteAllText(Path.Combine(_dir, "user_notes.md"), "keep me");
