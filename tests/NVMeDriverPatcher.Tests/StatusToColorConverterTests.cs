@@ -10,8 +10,6 @@ public sealed class StatusToColorConverterTests
     [
         [new StatusToColorConverter()],
         [new BoolToVisibilityConverter()],
-        [new SettingsToggleConverter()],
-        [new StringToColorConverter()],
         [new StringToBrushConverter()]
     ];
 

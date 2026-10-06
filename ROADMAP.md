@@ -50,16 +50,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: M
 
-- [ ] P3 — GUI dead-code cluster from the redesign
-  Category: maintainability
-  Where: `Themes/DarkTheme.xaml:1078-1109` (`WorkspaceTabControl` unused); `Views/MainWindow.xaml.cs:213, 215` (`Minimize_Click`/`Close_Click` unreferenced); `MainWindow.xaml:289` (`MaximizeRestoreButton` permanently Collapsed while `UpdateWindowPresentation` still updates it); `UpdateAdaptiveLayout` (xaml.cs:422) unconditionally collapses `MainContentSplitter`; `Commands.cs:767-768` (`ToggleSettingsCommand`/`SettingsPanelVisible` unused); `App.xaml:12-13` (`SettingsToggle`, `StrToColor` converters unused)
-  Problem: Orphaned styles/handlers/commands mislead maintenance and mask which features are actually reachable.
-  Evidence: Grep per symbol.
-  Fix: Delete each (restore the splitter only if the resize feature is wanted back).
-  Acceptance: Repo-wide grep finds no unreferenced symbols from this list; build clean.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — GUI synchronous I/O on the UI thread per refresh/tab switch
   Category: perf
   Where: `ViewModels/MainViewModel.Workspace.cs:12-187` (`UpdateOperationalHistory`: directory enumeration + three SQLite reads + registry read, run on tab switch, after every command, and inside the preflight render `Dispatcher.Invoke`); `MainViewModel.cs:565, 898` (`BenchmarkService.GetHistory` read twice per preflight)

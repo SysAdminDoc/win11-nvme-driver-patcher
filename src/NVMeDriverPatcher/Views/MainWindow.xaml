@@ -283,11 +283,6 @@
                                         FontSize="{StaticResource FontSizeBodyLarge}"
                                         AutomationProperties.Name="Toggle theme"
                                         Click="ThemeToggle_Click"/>
-                                <Button x:Name="MaximizeRestoreButton"
-                                        Content="&#x25A1;"
-                                        Visibility="Collapsed"
-                                        AutomationProperties.Name="Maximize window"
-                                        Click="MaximizeRestore_Click"/>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -735,33 +730,7 @@
                     </Border>
 
                     <Grid x:Name="MainContentGrid" Grid.Row="2" Margin="20,12,20,0">
-                        <Grid.RowDefinitions>
-                            <RowDefinition x:Name="MainContentPrimaryRow" Height="*"/>
-                            <RowDefinition x:Name="MainContentSecondaryRow" Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.02*"/>
-                            <ColumnDefinition x:Name="MainContentSpacerColumn" Width="14"/>
-                            <ColumnDefinition Width="0.98*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <GridSplitter x:Name="MainContentSplitter"
-                                      Grid.Row="0"
-                                      Grid.Column="1"
-                                      Width="6"
-                                      Focusable="True"
-                                      HorizontalAlignment="Center"
-                                      VerticalAlignment="Stretch"
-                                      AutomationProperties.Name="Resize overview and validation panels"
-                                      Background="Transparent"
-                                      Visibility="Collapsed"
-                                      Cursor="SizeWE"
-                                      ShowsPreview="True"/>
-
                         <Border x:Name="WorkspaceSurface"
-                                Grid.Row="0"
-                                Grid.Column="0"
-                                Grid.ColumnSpan="3"
                                 Style="{StaticResource SurfaceCard}">
                             <Grid>
                                 <Grid.RowDefinitions>

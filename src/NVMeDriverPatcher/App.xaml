@@ -9,8 +9,6 @@
                 <ResourceDictionary Source="Themes/DarkTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <conv:BoolToVisibilityConverter x:Key="BoolVis"/>
-            <conv:SettingsToggleConverter x:Key="SettingsToggle"/>
-            <conv:StringToColorConverter x:Key="StrToColor"/>
             <conv:StringToBrushConverter x:Key="StrToBrush"/>
         </ResourceDictionary>
     </Application.Resources>
