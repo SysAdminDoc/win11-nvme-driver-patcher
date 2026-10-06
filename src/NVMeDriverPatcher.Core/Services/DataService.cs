@@ -388,6 +388,40 @@ public static class DataService
         }
     }
 
+    /// <summary>
+    /// Removes BypassIO history rows beyond a retention cap. Every install and uninstall adds two
+    /// rows per volume, and this was the one table nothing ever trimmed. The readers look at the
+    /// newest 100 rows and the newest 20 of each pre/post kind, so 500 keeps everything they use.
+    /// </summary>
+    public static int PruneBypassIoHistory(int keepNewest = 500)
+    {
+        if (keepNewest < 100) keepNewest = 100;
+        if (!EnsureDatabaseAvailable()) return 0;
+        try
+        {
+            using var db = new AppDbContext();
+            return PruneBypassIoHistory(db, keepNewest);
+        }
+        catch (Exception ex)
+        {
+            RecordStructuralFailure("Pruning BypassIO history", ex);
+            System.Diagnostics.Debug.WriteLine($"[DataService] PruneBypassIoHistory failed: {ex.Message}");
+            return 0;
+        }
+    }
+
+    internal static int PruneBypassIoHistory(AppDbContext db, int keepNewest)
+    {
+        var idsToDelete = db.BypassIoHistory
+            .OrderByDescending(b => b.Timestamp)
+            .ThenByDescending(b => b.Id)
+            .Skip(keepNewest)
+            .Select(b => b.Id)
+            .ToList();
+        if (idsToDelete.Count == 0) return 0;
+        return db.BypassIoHistory.Where(b => idsToDelete.Contains(b.Id)).ExecuteDelete();
+    }
+
     public static void SaveBypassIoSnapshot(IEnumerable<BypassIoVolumeInfo> volumes, string description, bool isPrePatch)
     {
         if (volumes is null) return;

@@ -30,16 +30,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Likely
   Effort: S
 
-- [ ] P3 — `BypassIoHistory` is the only DB table with no prune; schema-upgrade DB backups also accumulate
-  Category: reliability
-  Where: `src/NVMeDriverPatcher.Core/Services/DataService.cs:379-406` (writer; prunes at `:304-377` cover Telemetry/Snapshots/Benchmarks only); `src/NVMeDriverPatcher/App.xaml.cs:84-86`; `AppDatabaseUpgradeService.BuildBackupPath` (`database-backups\*.db`, unbounded per upgrade)
-  Problem: Documented retention design covers three of four tables; `BypassIoHistory` grows forever (low rate today — 2×volume-count rows per install/uninstall — but any future writer inherits the leak). Upgrade backups have no retention either.
-  Evidence: Prune sites enumerated; startup prune calls read.
-  Fix: Add a `PruneBypassIoHistory` (retain N latest per volume or M days) called with the other three; cap `database-backups` at the newest 3.
-  Acceptance: Startup prune trims a seeded oversized `BypassIoHistory`; upgrade leaves ≤ 3 backups.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — SafeBoot journal restore re-types non-REG_SZ defaults and expands REG_EXPAND_SZ, breaking the byte-for-byte claim
   Category: correctness
   Where: `src/NVMeDriverPatcher.Core/Services/SafeBootStateService.cs:325-330` (`Read` uses `key.GetValue(name)` — expands), `:362-365` (`ApplyRestore` always writes `RegistryValueKind.String`)

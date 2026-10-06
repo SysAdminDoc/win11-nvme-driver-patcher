@@ -80,10 +80,11 @@ public partial class App : Application
                 WriteCrashEntry("HistoryDatabase", new InvalidDataException(
                     databaseState.Summary + " " + databaseState.RecoveryAction));
             // Lazy GC of stale rows so the SQLite file doesn't grow without bound for users
-            // who keep the app installed for years. Both calls are best-effort.
+            // who keep the app installed for years. Every call is best-effort.
             try { Services.DataService.PruneTelemetry(TimeSpan.FromDays(90)); } catch { }
             try { Services.DataService.PruneSnapshots(500); } catch { }
             try { Services.DataService.PruneBenchmarks(500); } catch { }
+            try { Services.DataService.PruneBypassIoHistory(500); } catch { }
         }
         catch (Exception ex) { WriteCrashEntry("HistoryDatabaseStartup", ex); }
 
