@@ -377,7 +377,16 @@ public static class PreflightService
                 try { fallbackEvidence = FeatureStoreWriterService.HasFallbackEvidence(); }
                 catch { fallbackEvidence = false; }
                 if (PatchVerificationService.IsUntrackedDriverActivation(true, keyCount, fallbackEvidence))
-                    checks["DriverActivation"] = new(CheckStatus.Info, PatchVerificationService.UntrackedDriverActivationNote);
+                {
+                    // A StorPort EnableNVMeInterface value is a third source; its revert is deleting
+                    // the value, not Device Manager.
+                    bool storPortForced;
+                    try { storPortForced = StorPortOverrideService.ForcesNativeAnywhere(StorPortOverrideService.ReadSnapshot()); }
+                    catch { storPortForced = false; }
+                    checks["DriverActivation"] = new(CheckStatus.Info, storPortForced
+                        ? StorPortOverrideService.ForcedNativeActivationNote
+                        : PatchVerificationService.UntrackedDriverActivationNote);
+                }
             }
         }
         catch { /* informational only */ }

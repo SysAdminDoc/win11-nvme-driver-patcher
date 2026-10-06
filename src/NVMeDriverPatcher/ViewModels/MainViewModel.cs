@@ -398,6 +398,19 @@ public partial class MainViewModel : ObservableObject
                     ConfigService.Save(Config);
                     // Dialog itself is deferred — see HandlePendingVerificationDialogAsync below.
                     break;
+                case VerificationOutcome.StorPortHeldLegacy:
+                    Log("[WARNING] " + pendingVerification.Summary, "WARNING");
+                    Log(pendingVerification.Detail, "WARNING");
+                    EventLogService.Write(pendingVerification.Summary + ": " + pendingVerification.Detail,
+                        System.Diagnostics.EventLogEntryType.Warning, 2103);
+                    ToastService.Show("StorPort Setting Keeps the Legacy Driver",
+                        "A StorPort registry value another tool wrote keeps Windows on stornvme.sys. See the Activity log.",
+                        ToastType.Warning, Config.EnableToasts);
+                    PatchVerificationService.Clear(Config, pendingVerification);
+                    // The fallback wouldn't get past the same StorPort value, so don't offer it.
+                    ShowViVeToolFallbackBadge = false;
+                    ConfigService.Save(Config);
+                    break;
                 case VerificationOutcome.Reverted:
                     Log("Post-reboot verification: previous patch is no longer present.", "INFO");
                     PatchVerificationService.Clear(Config, pendingVerification);
@@ -624,6 +637,19 @@ public partial class MainViewModel : ObservableObject
                 Application.Current?.Dispatcher.BeginInvoke(
                     System.Windows.Threading.DispatcherPriority.Background,
                     new Action(() => _ = HandlePendingVerificationDialogAsync()));
+            }
+            catch { /* Dispatcher gone during shutdown */ }
+        }
+        else if (pendingVerification is { Outcome: VerificationOutcome.StorPortHeldLegacy } storPortHeld)
+        {
+            try
+            {
+                Application.Current?.Dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Background,
+                    new Action(() => InfoDialog?.Invoke(
+                        "A StorPort Setting Keeps the Legacy Driver",
+                        storPortHeld.Detail,
+                        DialogIcon.Warning)));
             }
             catch { /* Dispatcher gone during shutdown */ }
         }

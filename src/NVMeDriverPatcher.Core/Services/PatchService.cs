@@ -1024,7 +1024,9 @@ public static class PatchService
             if (result.Success)
             {
                 log?.Invoke($"[SUCCESS] Patch Status: REMOVED, removed {removedCount} components (zero residue verified)");
-                if (result.NeedsRestart)
+                if (result.NeedsRestart && result.StorPortNotes.Count > 0)
+                    log?.Invoke("[INFO] After reboot: drives return to stornvme.sys except where a StorPort value keeps nvmedisk (see [StorPort] above)");
+                else if (result.NeedsRestart)
                     log?.Invoke("[INFO] After reboot: Drives will return to 'Disk drives' using stornvme.sys");
                 else
                     log?.Invoke("[INFO] No patch components were present. No reboot needed.");
