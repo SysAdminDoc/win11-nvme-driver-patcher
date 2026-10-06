@@ -65,40 +65,63 @@ public sealed class CleanDataServiceTests : IDisposable
     }
 
     [Fact]
-    public void Backups_SweepOlderWinReImagesAndKeepTheNewest()
+    public void Backups_SweepTheMiddleWinReCopiesAndKeepTheOriginalAndTheNewest()
     {
         // `winre-inject --apply` leaves full copies of winre.wim under backups\, the largest files
-        // the app writes. clean-data never looked there.
+        // the app writes. clean-data never looked there. The oldest copy is the image from before
+        // the first injection and the newest is from before the last; the ones between go.
         var backups = Directory.CreateDirectory(Path.Combine(_dir, "backups")).FullName;
         var oldest = Path.Combine(backups, "winre.wim.20260101-000000.bak");
         var middle = Path.Combine(backups, "winre.wim.20260201-000000.bak");
+        var later = Path.Combine(backups, "winre.wim.20260215-000000.bak");
         var newest = Path.Combine(backups, "winre.wim.20260301-000000.bak");
+        var partial = Path.Combine(backups, "winre.wim.20260302-000000.bak.partial");
         var unrelated = Path.Combine(backups, "notes.txt");
         File.WriteAllText(oldest, "12345");
         File.WriteAllText(middle, "1234567");
+        File.WriteAllText(later, "12");
         File.WriteAllText(newest, "123");
+        File.WriteAllText(partial, "half a copy");
         File.WriteAllText(unrelated, "keep me");
 
         var result = CleanDataService.Clean(_config);
 
         Assert.True(result.Success);
-        Assert.False(File.Exists(oldest));
+        Assert.True(File.Exists(oldest));
         Assert.False(File.Exists(middle));
+        Assert.False(File.Exists(later));
         Assert.True(File.Exists(newest));
+        Assert.False(File.Exists(partial));
         Assert.True(File.Exists(unrelated));
-        Assert.Equal(2, result.FilesRemoved);
-        Assert.Equal(12, result.BytesFreed);
-        Assert.Equal([newest], result.Kept);
+        Assert.Equal(3, result.FilesRemoved);
+        Assert.Equal(7 + 2 + 11, result.BytesFreed);
+        Assert.Equal([oldest, newest], result.Kept);
         // The summary used to say everything was gone while gigabytes stayed behind.
-        Assert.Contains("Kept the newest WinRE image backup", result.Summary, StringComparison.Ordinal);
+        Assert.Contains("Kept the WinRE image backups from before the first and the last driver injection", result.Summary, StringComparison.Ordinal);
+        Assert.Contains(oldest, result.Summary, StringComparison.Ordinal);
         Assert.Contains(newest, result.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Backups_KeepTheNewestOfEachImage()
+    public void Backups_OneCopyPerImage_StaysAndIsNamed()
+    {
+        var backups = Directory.CreateDirectory(Path.Combine(_dir, "backups")).FullName;
+        var only = Path.Combine(backups, "winre.wim.20260301-000000.bak");
+        File.WriteAllText(only, "x");
+
+        var result = CleanDataService.Clean(_config, new[] { "backups" });
+
+        Assert.Equal(0, result.FilesRemoved);
+        Assert.Equal([only], result.Kept);
+        Assert.Contains("Kept the one WinRE image backup", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Backups_PolicyAppliesPerImage()
     {
         var backups = Directory.CreateDirectory(Path.Combine(_dir, "backups")).FullName;
         File.WriteAllText(Path.Combine(backups, "winre.wim.20260101-000000.bak"), "x");
+        File.WriteAllText(Path.Combine(backups, "winre.wim.20260201-000000.bak"), "x");
         File.WriteAllText(Path.Combine(backups, "winre.wim.20260301-000000.bak"), "x");
         File.WriteAllText(Path.Combine(backups, "custom.wim.20250101-000000.bak"), "x");
 
@@ -106,9 +129,8 @@ public sealed class CleanDataServiceTests : IDisposable
 
         Assert.Equal(1, result.FilesRemoved);
         Assert.Equal(
-            new[] { "custom.wim.20250101-000000.bak", "winre.wim.20260301-000000.bak" },
+            new[] { "custom.wim.20250101-000000.bak", "winre.wim.20260101-000000.bak", "winre.wim.20260301-000000.bak" },
             result.Kept.Select(Path.GetFileName).Order());
-        Assert.Contains("Kept the newest backup of each WinRE image", result.Summary, StringComparison.Ordinal);
     }
 
     [Fact]

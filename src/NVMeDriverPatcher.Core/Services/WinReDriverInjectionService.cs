@@ -236,30 +236,34 @@ public static class WinReDriverInjectionService
             var backupDir = Path.Combine(workingDir, "backups");
             Directory.CreateDirectory(backupDir);
 
+            SweepPartialBackups(backupDir, Write);
             result.OriginalSha256 = await ComputeSha256Async(plan.WinReImagePath, cancellationToken).ConfigureAwait(false);
             result.BackupPath = BuildBackupPath(backupDir, plan.WinReImagePath, DateTimeOffset.UtcNow);
             Write($"[INFO] WinRE image SHA-256 before injection: {result.OriginalSha256}");
             Write($"[INFO] Backing up WinRE image to {result.BackupPath}");
-            File.Copy(plan.WinReImagePath, result.BackupPath, overwrite: false);
+            // The copy runs under a partial name until its checksum is verified, so a copy cut short
+            // (console closed, power loss) never sits under a name the retention trusts.
+            var partial = result.BackupPath + PartialSuffix;
+            File.Copy(plan.WinReImagePath, partial, overwrite: false);
             // Winre.wim is Hidden and System, and the copy inherits both, which would hide the backup
             // from Explorer in the one folder the summary points people at.
-            File.SetAttributes(result.BackupPath, FileAttributes.Normal);
-            result.BackupSha256 = await ComputeSha256Async(result.BackupPath, cancellationToken).ConfigureAwait(false);
+            File.SetAttributes(partial, FileAttributes.Normal);
+            result.BackupSha256 = await ComputeSha256Async(partial, cancellationToken).ConfigureAwait(false);
             Write($"[INFO] Backup SHA-256: {result.BackupSha256}");
             if (!string.Equals(result.OriginalSha256, result.BackupSha256, StringComparison.OrdinalIgnoreCase))
             {
-                // A copy that doesn't match the image can't restore it. Left in place it would count
-                // as one of the kept backups on the next run and push a good one out.
-                if (DiscardUnverifiedBackup(result.BackupPath, Write))
-                    result.BackupPath = null;
+                // A copy that doesn't match the image can't restore it.
+                DiscardUnverifiedBackup(partial, Write);
+                result.BackupPath = null;
                 result.Summary = "WinRE backup checksum mismatch; injection aborted before mounting.";
                 Write("[ERROR] " + result.Summary);
                 return result;
             }
+            File.Move(partial, result.BackupPath);
 
             // Each backup is a full copy of the image (0.5 to 1 GB). Older ones go only now that
             // the new one is verified, and whatever DISM does next.
-            PruneBackups(backupDir, plan.WinReImagePath, BackupRetention, result.BackupPath, Write);
+            PruneBackups(backupDir, plan.WinReImagePath, result.BackupPath, Write);
 
             Write("[INFO] Mounting WinRE image...");
             dismStarted = true;
@@ -342,10 +346,30 @@ public static class WinReDriverInjectionService
         return Path.Combine(backupDir, $"{name}.{stamp}.bak");
     }
 
-    /// <summary>How many backups of one image stay after a new one is verified.</summary>
-    internal const int BackupRetention = 2;
+    /// <summary>A copy still being made, or cut short. Never a backup until it's verified and renamed.</summary>
+    internal const string PartialSuffix = ".partial";
 
     private const string BackupStampFormat = "yyyyMMdd-HHmmss";
+
+    /// <summary>
+    /// Pure: which of one image's backups stay. The oldest is the image from before this tool's
+    /// first injection, the only way back to the recovery image Windows shipped; the newest undoes
+    /// the last injection. Anything between is a state nobody needs. The backup just made always
+    /// stays, even when a clock that went backwards makes it look like the oldest.
+    /// </summary>
+    internal static HashSet<string> BackupsToKeep(IEnumerable<WinReBackup> backups, string? justMade = null)
+    {
+        var ordered = backups
+            .OrderByDescending(backup => backup.TakenUtc)
+            .ThenByDescending(backup => backup.Path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (ordered.Count == 0) return keep;
+        keep.Add(ordered[0].Path);
+        keep.Add(ordered[^1].Path);
+        if (justMade is not null) keep.Add(Path.GetFullPath(justMade));
+        return keep;
+    }
 
     /// <summary>Pure: splits a name <see cref="BuildBackupPath"/> produced into its image name and time.</summary>
     internal static bool TryParseBackupName(string fileName, out string imageName, out DateTime takenUtc)
@@ -386,34 +410,51 @@ public static class WinReDriverInjectionService
     }
 
     /// <summary>
-    /// Deletes this image's backups beyond the newest <paramref name="keep"/>. The backup just made
-    /// always stays, even when a clock that went backwards makes it look like the oldest. A file
-    /// that can't be deleted is a warning; the injection carries on.
+    /// Deletes this image's backups that <see cref="BackupsToKeep"/> doesn't keep. A file that can't
+    /// be deleted is a warning; the injection carries on.
     /// </summary>
-    internal static int PruneBackups(string backupDir, string imagePath, int keep, string? justMade, Action<string>? log = null)
+    internal static int PruneBackups(string backupDir, string imagePath, string? justMade, Action<string>? log = null)
     {
         var imageName = Path.GetFileName(imagePath);
         var mine = ListBackups(backupDir)
             .Where(backup => string.Equals(backup.ImageName, imageName, StringComparison.OrdinalIgnoreCase))
             .ToList();
-        var kept = mine
-            .OrderByDescending(backup => justMade is not null &&
-                                         string.Equals(Path.GetFullPath(backup.Path), Path.GetFullPath(justMade), StringComparison.OrdinalIgnoreCase))
-            .Take(Math.Max(keep, 1))
-            .ToHashSet();
+        var kept = BackupsToKeep(mine, justMade);
 
         int removed = 0;
-        foreach (var old in mine.Where(backup => !kept.Contains(backup)))
+        foreach (var old in mine.Where(backup => !kept.Contains(Path.GetFullPath(backup.Path))))
         {
             try
             {
                 File.Delete(old.Path);
                 removed++;
-                log?.Invoke($"[INFO] Removed older WinRE backup {old.Path} ({old.Bytes / 1024.0 / 1024.0:F0} MB). The newest {kept.Count} stay.");
+                log?.Invoke($"[INFO] Removed WinRE backup {old.Path} ({old.Bytes / 1024.0 / 1024.0:F0} MB). The oldest (from before the first injection) and the newest stay.");
             }
             catch (Exception ex)
             {
                 log?.Invoke($"[WARN] Couldn't remove older WinRE backup {old.Path}: {ex.Message}");
+            }
+        }
+        return removed;
+    }
+
+    /// <summary>Removes copies an earlier run left half made. They never count as backups, but
+    /// at 0.5 to 1 GB each they shouldn't sit there either.</summary>
+    internal static int SweepPartialBackups(string backupDir, Action<string>? log = null)
+    {
+        if (string.IsNullOrWhiteSpace(backupDir) || !Directory.Exists(backupDir)) return 0;
+        int removed = 0;
+        foreach (var path in Directory.EnumerateFiles(backupDir, "*.bak" + PartialSuffix, SearchOption.TopDirectoryOnly))
+        {
+            try
+            {
+                File.Delete(path);
+                removed++;
+                log?.Invoke($"[INFO] Removed an unfinished WinRE backup left by an earlier run: {path}");
+            }
+            catch (Exception ex)
+            {
+                log?.Invoke($"[WARN] Couldn't remove the unfinished WinRE backup {path}: {ex.Message}");
             }
         }
         return removed;
