@@ -11,7 +11,7 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
     [Fact]
     public void Evaluate_ReturnsExpectedItemCount()
     {
-        var config = new AppConfig();
+        var config = new AppConfig { WorkingDir = _tempRoot };
         var report = RecoveryProofGateService.Evaluate(config);
         Assert.Equal(5, report.TotalCount);
     }
@@ -19,7 +19,7 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
     [Fact]
     public void Evaluate_AllItemsHaveLabelsAndDetails()
     {
-        var config = new AppConfig();
+        var config = new AppConfig { WorkingDir = _tempRoot };
         var report = RecoveryProofGateService.Evaluate(config);
         foreach (var item in report.Items)
         {
@@ -31,7 +31,7 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
     [Fact]
     public void Evaluate_MissingRecoveryKit_FailsRecoveryKitCheck()
     {
-        var config = new AppConfig { LastRecoveryKitPath = null };
+        var config = new AppConfig { WorkingDir = _tempRoot, LastRecoveryKitPath = null };
         var report = RecoveryProofGateService.Evaluate(config);
         var kitItem = report.Items.First(i => i.Label == "Recovery kit");
         Assert.False(kitItem.Passed);
@@ -41,7 +41,7 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
     [Fact]
     public void Evaluate_NonexistentKitPath_FailsRecoveryKitCheck()
     {
-        var config = new AppConfig { LastRecoveryKitPath = @"C:\NONEXISTENT_PATH_99999" };
+        var config = new AppConfig { WorkingDir = _tempRoot, LastRecoveryKitPath = @"C:\NONEXISTENT_PATH_99999" };
         var report = RecoveryProofGateService.Evaluate(config);
         var kitItem = report.Items.First(i => i.Label == "Recovery kit");
         Assert.False(kitItem.Passed);
@@ -50,7 +50,7 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
     [Fact]
     public void Summary_ContainsPassedAndTotal()
     {
-        var config = new AppConfig();
+        var config = new AppConfig { WorkingDir = _tempRoot };
         var report = RecoveryProofGateService.Evaluate(config);
         Assert.Contains($"{report.PassedCount}/{report.TotalCount}", report.Summary);
     }
@@ -212,7 +212,7 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
 
         Assert.False(item.Passed);
         Assert.Contains("configured operation directory", item.Detail, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(AppConfig.GetWorkingDir(), item.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(AppConfig.GetSharedWorkingDirPath() ?? "NVMePatcher-default-dir", item.Detail, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -62,6 +62,32 @@ public sealed class RegistryOverrideOwnershipTests : IDisposable
     }
 
     [Fact]
+    public void ResidueEntries_AreFormattedAsValueNameAndOwnerAccess()
+    {
+        // The live-HKLM probe test is vacuous on a clean host; this pins the entry shape instead.
+        using var root = BuildOverrides(AppConfig.PrimaryFeatureID);
+
+        var residue = PatchService.ProbeRemovalResidue(root, workingDir: null, log: null);
+
+        var entry = Assert.Single(residue.Where(r => r.StartsWith("Feature override value", StringComparison.Ordinal)));
+        Assert.Matches(
+            $@"^Feature override value {AppConfig.PrimaryFeatureID} remains \(owner .+; current user can rewrite\)$",
+            entry);
+    }
+
+    [Fact]
+    public void AbsentOverridesKey_LeavesNoFeatureOverrideResidue()
+    {
+        using var root = Registry.CurrentUser.CreateSubKey(_root, writable: true)!;
+
+        var residue = PatchService.ProbeRemovalResidue(root, workingDir: null, log: null);
+
+        Assert.DoesNotContain(residue, r => r.StartsWith("Feature override", StringComparison.Ordinal));
+        Assert.DoesNotContain(residue, r => r.Contains("unverifiable", StringComparison.OrdinalIgnoreCase)
+            && r.StartsWith("Feature overrides key", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void OwnedValueNames_MatchWhatRemovalAndTheRecoveryKitDelete()
     {
         Assert.Equal(AppConfig.FeatureIDs.Append(AppConfig.ServerFeatureID), AppConfig.OwnedOverrideValueNames);
