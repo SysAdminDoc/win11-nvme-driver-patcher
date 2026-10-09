@@ -253,11 +253,11 @@ public sealed class CriticalEnvironmentProbeServiceTests
 
     [Theory]
     [InlineData(SafeBootKeyDisposition.WindowsOwned, SafeBootKeyDisposition.WindowsOwned,
-        "Windows owns the SafeBoot Minimal and Network keys for this driver and write-protects them", "leaves them as they are")]
+        "Windows owns the Safe Boot Minimal and Network keys for this driver and write-protects them", "leaves them as they are")]
     [InlineData(SafeBootKeyDisposition.WindowsOwned, SafeBootKeyDisposition.WritableAbsent,
-        "Windows owns the SafeBoot Minimal key for this driver and write-protects it", "leaves it as it is")]
+        "Windows owns the Safe Boot Minimal key for this driver and write-protects it", "leaves it as it is")]
     [InlineData(SafeBootKeyDisposition.AlreadyCorrect, SafeBootKeyDisposition.WindowsOwned,
-        "Windows owns the SafeBoot Network key for this driver and write-protects it", "leaves it as it is")]
+        "Windows owns the Safe Boot Network key for this driver and write-protects it", "leaves it as it is")]
     public void Evaluate_WindowsOwnedSafeBootKeys_PassAndAreNamed(
         SafeBootKeyDisposition minimal, SafeBootKeyDisposition network, string named, string outcome)
     {

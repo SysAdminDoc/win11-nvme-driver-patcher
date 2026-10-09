@@ -230,28 +230,28 @@ public static class PatchService
             string.Empty,
             AppConfig.SafeBootValue,
             RegistryValueKind.String,
-            "SafeBoot Minimal Support",
+            "Safe Boot Minimal Support",
             CountsTowardPatchTotal: true));
         mutations.Add(new DurableRegistryMutation(
             AppConfig.SafeBootNetworkPath,
             string.Empty,
             AppConfig.SafeBootValue,
             RegistryValueKind.String,
-            "SafeBoot Network Support",
+            "Safe Boot Network Support",
             CountsTowardPatchTotal: true));
         mutations.Add(new DurableRegistryMutation(
             AppConfig.SafeBootMinimalServicePath,
             string.Empty,
             AppConfig.SafeBootServiceValue,
             RegistryValueKind.String,
-            "SafeBoot Minimal (service name, 25H2 compatibility)",
+            "Safe Boot Minimal (service name, 25H2 compatibility)",
             CountsTowardPatchTotal: false));
         mutations.Add(new DurableRegistryMutation(
             AppConfig.SafeBootNetworkServicePath,
             string.Empty,
             AppConfig.SafeBootServiceValue,
             RegistryValueKind.String,
-            "SafeBoot Network (service name, 25H2 compatibility)",
+            "Safe Boot Network (service name, 25H2 compatibility)",
             CountsTowardPatchTotal: false));
 
         if (mirrorControlSets is { Count: > 0 })
@@ -417,7 +417,7 @@ public static class PatchService
                 log,
                 preserveExistingBaseline: ledgerPreparation.ReusedBaseline))
         {
-            log?.Invoke("[ERROR] BLOCKED: SafeBoot baseline could not be persisted before mutation.");
+            log?.Invoke("[ERROR] BLOCKED: Safe Boot baseline could not be persisted before mutation.");
             // Nothing was written in this run, so close the prepared ledger rather than
             // restoring the baseline: on a re-apply that baseline is the first clean
             // pre-patch state, and writing it back would silently revert the patch the
@@ -964,7 +964,7 @@ public static class PatchService
                 overrides?.Dispose();
             }
 
-            ReportProgress(progress, 60, "Restoring SafeBoot keys...");
+            ReportProgress(progress, 60, "Restoring Safe Boot keys...");
 
             // Restore SafeBoot keys to their pre-apply state from the journal captured at install.
             // This deletes ONLY keys/values the app created and preserves any OS-owned state (e.g.
@@ -984,7 +984,7 @@ public static class PatchService
                 else
                 {
                     foreach (var f in restoreFailures)
-                        log?.Invoke($"  [FAIL] SafeBoot restore incomplete: {f}");
+                        log?.Invoke($"  [FAIL] Safe Boot restore incomplete: {f}");
                     // Leave the journal in place so a re-run can retry the restore.
                 }
             }
@@ -993,11 +993,11 @@ public static class PatchService
                 // No journal (patch predates journalling): fall back to a SAFE delete that removes
                 // the app's GUID key ONLY when it has no OS-owned named values. Never blow away a
                 // key that Windows populated (issue #13).
-                RemoveOwnedSafeBootKey(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal", AppConfig.SafeBootGuid, "SafeBoot Minimal", ref removedCount, log);
-                RemoveOwnedSafeBootKey(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network", AppConfig.SafeBootGuid, "SafeBoot Network", ref removedCount, log);
+                RemoveOwnedSafeBootKey(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal", AppConfig.SafeBootGuid, "Safe Boot Minimal", ref removedCount, log);
+                RemoveOwnedSafeBootKey(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network", AppConfig.SafeBootGuid, "Safe Boot Network", ref removedCount, log);
                 int svc = 0;
-                RemoveOwnedSafeBootKey(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal", AppConfig.SafeBootServiceName, "SafeBoot Minimal (service name)", ref svc, log);
-                RemoveOwnedSafeBootKey(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network", AppConfig.SafeBootServiceName, "SafeBoot Network (service name)", ref svc, log);
+                RemoveOwnedSafeBootKey(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal", AppConfig.SafeBootServiceName, "Safe Boot Minimal (service name)", ref svc, log);
+                RemoveOwnedSafeBootKey(hklm, @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network", AppConfig.SafeBootServiceName, "Safe Boot Network (service name)", ref svc, log);
             }
 
             // Undo the native FeatureStore / ViVeTool fallback enablement too. The registry
@@ -1387,7 +1387,7 @@ public static class PatchService
             bool priorHadOurValue = prior is not null && prior.Existed &&
                 string.Equals(prior.DefaultValue, AppConfig.SafeBootValue, StringComparison.OrdinalIgnoreCase);
             if (!priorHadOurValue)
-                found.Add($"SafeBoot default value at {path}");
+                found.Add($"Safe Boot default value at {path}");
         }
         return found;
     }
@@ -1454,7 +1454,7 @@ public static class PatchService
                         if (priorEntry is not null)
                         {
                             reg.ApplyRestore(path, SafeBootStateService.PlanRestore(priorEntry.ToSnapshot()));
-                            log?.Invoke($"  [ROLLBACK] SafeBoot {id} restored to pre-apply state");
+                            log?.Invoke($"  [ROLLBACK] Safe Boot {id} restored to pre-apply state");
                         }
                         else
                         {
@@ -1463,12 +1463,12 @@ public static class PatchService
                                 ? @"SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal"
                                 : @"SYSTEM\CurrentControlSet\Control\SafeBoot\Network";
                             int dummy = 0;
-                            RemoveOwnedSafeBootKey(hklm, parentPath, AppConfig.SafeBootGuid, $"SafeBoot {id}", ref dummy, log);
+                            RemoveOwnedSafeBootKey(hklm, parentPath, AppConfig.SafeBootGuid, $"Safe Boot {id}", ref dummy, log);
                         }
                     }
                     catch (Exception ex)
                     {
-                        log?.Invoke($"  [ROLLBACK FAIL] SafeBoot {id}: {ex.Message}");
+                        log?.Invoke($"  [ROLLBACK FAIL] Safe Boot {id}: {ex.Message}");
                         allReversed = false;
                     }
                 }

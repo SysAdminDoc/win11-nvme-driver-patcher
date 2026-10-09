@@ -68,7 +68,7 @@ public static class RecoverySafetyGateService
             return new RecoverySafetyState(
                 MutationAllowed: false,
                 Summary: "Startup recovery is unresolved. " + exactFailures +
-                         " Apply, reinstall, fallback, SafeBoot upgrade, and hot-swap actions " +
+                         " Apply, reinstall, fallback, Safe Boot upgrade, and hot-swap actions " +
                          "remain disabled. Remove the patch or export diagnostics/recovery material, " +
                          "then restart the app after recovery succeeds.",
                 Failures: failures);

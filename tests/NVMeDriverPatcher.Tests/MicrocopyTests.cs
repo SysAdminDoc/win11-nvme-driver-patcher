@@ -53,10 +53,12 @@ public sealed class MicrocopyTests
         Assert.Empty(ProseHits("Id = \"SafeBoot/Net\", Name = \"Network\","));
 
         var root = RepoRoot();
-        var sources = Directory.EnumerateFiles(Path.Combine(root, "src", "NVMeDriverPatcher"), "*.cs", SearchOption.AllDirectories)
-            .Where(f => !IsBuildOutput(f))
-            // The upgrade service's results are the body of the GUI's upgrade toast and dialog.
-            .Append(Path.Combine(root, "src", "NVMeDriverPatcher.Core", "Services", "SafeBootUpgradeService.cs"));
+        // Core and the CLI hold the readiness list, gate labels, dry-run text, component names and
+        // help text that reach the GUI and the terminal next to the GUI's own wording.
+        var sources = new[] { "NVMeDriverPatcher", "NVMeDriverPatcher.Core", "NVMeDriverPatcher.Cli" }
+            .SelectMany(project => Directory.EnumerateFiles(
+                Path.Combine(root, "src", project), "*.cs", SearchOption.AllDirectories))
+            .Where(f => !IsBuildOutput(f));
 
         var offenders = new List<string>();
         foreach (var file in sources)

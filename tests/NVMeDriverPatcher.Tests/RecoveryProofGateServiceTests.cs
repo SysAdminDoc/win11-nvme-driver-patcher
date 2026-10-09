@@ -117,7 +117,7 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
     [InlineData(false, false, true, true, "Windows' own GUID entries are in place and stay as they are. Apply adds")]
     // Already patched on that build: the service-name entries are there, so don't say apply adds them.
     [InlineData(false, true, true, true, "and the service-name entries are present")]
-    [InlineData(false, false, false, true, "No SafeBoot entries from this tool yet")]
+    [InlineData(false, false, false, true, "No Safe Boot entries from this tool yet")]
     // Service-name entries there but not the GUID ones (one GUID key Windows-owned, the other absent).
     [InlineData(false, true, false, true, "The service-name entries are present, but this tool's GUID entries aren't")]
     public void SafeBootEntries_DescribeWhatIsActuallyThere(
@@ -159,7 +159,7 @@ public sealed class RecoveryProofGateServiceTests : IDisposable
     {
         var item = RecoveryProofGateService.EvaluateSafeBootEntries();
         Assert.NotNull(item);
-        Assert.Equal("SafeBoot entries", item.Label);
+        Assert.Equal("Safe Boot entries", item.Label);
         Assert.False(string.IsNullOrWhiteSpace(item.Detail));
     }
 

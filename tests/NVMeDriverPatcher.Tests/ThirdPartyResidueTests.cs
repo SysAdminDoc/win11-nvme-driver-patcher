@@ -26,10 +26,10 @@ public sealed class ThirdPartyResidueTests
         Assert.NotNull(check);
         Assert.Equal(CheckStatus.Warning, check.Status);
         Assert.False(check.Critical);
-        Assert.Contains("SafeBoot Minimal and Network entries", check.Message, StringComparison.Ordinal);
+        Assert.Contains("Safe Boot Minimal and Network entries", check.Message, StringComparison.Ordinal);
         Assert.Contains("no NVMe override is", check.Message, StringComparison.Ordinal);
         Assert.Contains("Remove clears them", check.Message, StringComparison.Ordinal);
-        Assert.Contains("run the SafeBoot upgrade first", check.Message, StringComparison.Ordinal);
+        Assert.Contains("run the Safe Boot upgrade first", check.Message, StringComparison.Ordinal);
         Assert.Contains(@"Policies\Microsoft registry tree is gone", check.Message, StringComparison.Ordinal);
         Assert.Contains("gpupdate /force", check.Message, StringComparison.Ordinal);
     }
@@ -46,7 +46,7 @@ public sealed class ThirdPartyResidueTests
         });
 
         Assert.NotNull(check);
-        Assert.Contains("SafeBoot Minimal entry", check.Message, StringComparison.Ordinal);
+        Assert.Contains("Safe Boot Minimal entry", check.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("Policies", check.Message, StringComparison.Ordinal);
     }
 

@@ -55,7 +55,7 @@ Download [`NVMe_Driver_Patcher.ps1`](https://github.com/SysAdminDoc/win11-nvme-d
 > | Capability | Legacy script | GUI / CLI |
 > |---|---|---|
 > | Status, patch removal, diagnostics, verification/recovery exports | ✅ | ✅ |
-> | Apply/reinstall + SafeBoot provisioning | ❌ | ✅ |
+> | Apply/reinstall + Safe Boot provisioning | ❌ | ✅ |
 > | Native FeatureStore fallback for post-block builds (ViVeTool only after native failure) | ❌ | ✅ |
 > | Post-reboot bind verification (honest status) | ❌ | ✅ |
 > | Watchdog auto-revert, minidump triage, reliability correlation | ❌ | ✅ |
@@ -134,10 +134,10 @@ Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the 
 | Registry override `735209102` | NativeNVMeStackForGeClient (primary driver enable) |
 | Registry override `1853569164` | UxAccOptimization (extended functionality) |
 | Registry override `156965516` | Standalone_Future (performance optimizations) |
-| SafeBoot Minimal Key | Prevents INACCESSIBLE_BOOT_DEVICE BSOD in Safe Mode |
-| SafeBoot Network Key | Safe Mode with Networking support |
+| Safe Boot Minimal Key | Prevents INACCESSIBLE_BOOT_DEVICE BSOD in Safe Mode |
+| Safe Boot Network Key | Safe Mode with Networking support |
 
-The Safe profile (the default) writes `735209102` and the two SafeBoot keys. The Full profile adds `1853569164`. `156965516` is a separate opt-in on top of Full (the "Also write 156965516" box in Settings, or `--standalone-future` in the CLI) because while it's set, `DISM /ScanHealth` reports component store corruption on 24H2 (see [Troubleshooting](#dism-scanhealth-reports-component-store-corruption)). Remove always clears all three.
+The Safe profile (the default) writes `735209102` and the two Safe Boot keys. The Full profile adds `1853569164`. `156965516` is a separate opt-in on top of Full (the "Also write 156965516" box in Settings, or `--standalone-future` in the CLI) because while it's set, `DISM /ScanHealth` reports component store corruption on 24H2 (see [Troubleshooting](#dism-scanhealth-reports-component-store-corruption)). Remove always clears all three.
 
 Optional: Feature Flag `1176759950` (Microsoft Official Server 2025 key) can be included via checkbox. **Recommended**: without it, the new I/O scheduler may not activate and results can be inconsistent.
 
@@ -153,24 +153,24 @@ ID, source URL, and velocity-dump default-state class. `Disabled By Default` row
 only when the curated row explicitly permits application; `Always Enabled` rows stay probe-only,
 and an `Always Disabled` row is reported as a known no-route result rather than as unknown data.
 
-Since v4.6.1 the patch also writes two **service-name** SafeBoot entries for KB5079391 / 25H2
+Since v4.6.1 the patch also writes two **service-name** Safe Boot entries for KB5079391 / 25H2
 (`SafeBoot\Minimal\nvmedisk` and `SafeBoot\Network\nvmedisk`). They are not counted in the five
 components above, but removal must delete them too. The Recovery Kit and `remove` both do.
 `NVMeDriverPatcher.Cli upgrade-safeboot` adds them to a machine patched before v4.6.1.
 
-Some builds ship the two GUID SafeBoot keys themselves. On 24H2 26100.9550 and 25H2 26200 they're owned by TrustedInstaller with `NvmeDisk` as the value, and not even SYSTEM can write them. Windows already registers the driver for Safe Mode there, so the patch leaves those keys as they are and counts them as done. Preflight and `dry-run` say when that's the case, and `remove` leaves them alone too.
+Some builds ship the two GUID Safe Boot keys themselves. On 24H2 26100.9550 and 25H2 26200 they're owned by TrustedInstaller with `NvmeDisk` as the value, and not even SYSTEM can write them. Windows already registers the driver for Safe Mode there, so the patch leaves those keys as they are and counts them as done. Preflight and `dry-run` say when that's the case, and `remove` leaves them alone too.
 
-> **Important:** The SafeBoot keys are critical. Without them, your system cannot boot into Safe Mode after enabling Native NVMe. Many manual guides omit these keys; this tool includes them automatically.
+> **Important:** The Safe Boot keys are critical. Without them, your system cannot boot into Safe Mode after enabling Native NVMe. Many manual guides omit these keys; this tool includes them automatically.
 
 ## Features
 
 **Safety & Compatibility**
 - **VeraCrypt hard block**: detects system encryption and refuses to patch ([breaks boot entirely](https://github.com/veracrypt/VeraCrypt/issues/1640))
-- **Typed critical environment gate**: administrator, VeraCrypt, Intel RST/VMD, BitLocker, and SafeBoot probes return `Pass`, `Fail`, or `Unknown` with reason code, native error, evidence, and timestamp; `Fail`/`Unknown` cannot be forced past
+- **Typed critical environment gate**: administrator, VeraCrypt, Intel RST/VMD, BitLocker, and Safe Boot probes return `Pass`, `Fail`, or `Unknown` with reason code, native error, evidence, and timestamp; `Fail`/`Unknown` cannot be forced past
 - **Proved BitLocker recovery + suspension**: requires a numerical recovery-password protector, surfaces only its safe-to-match ID, refreshes AD/Entra escrow on joined devices, and WMI-confirms an exact one-reboot suspension before mutation
-- **Crash-consistent, access-controlled mutation ledger**: durably captures the first clean registry, SafeBoot, and FeatureStore baseline before mutation under `%ProgramData%\NVMePatcher\State`; the protected administrator/SYSTEM-only DACL, owner/reparse/hard-link checks, and atomic publication prevent standard-user pre-creation or replacement. Interrupted work and uninstall restore that exact state, and restart is not offered until the reboot checkpoint is durable
-- **Fail-closed startup recovery**: an incomplete interrupted-ledger restore, FeatureStore recovery, or watchdog auto-revert disables Apply, reinstall, fallback, SafeBoot upgrade, and hot-swap for the rest of the process. Removal, recovery exports, verification, and diagnostics remain available with the exact failure recorded in support evidence
-- **Durable registry commit proof**: every feature override and SafeBoot value must complete `SetValue`, a successful `Flush`, and readback through a newly opened HKLM64 handle before the ledger can advance to Applied or a restart can be offered; any failed key restores the exact baseline
+- **Crash-consistent, access-controlled mutation ledger**: durably captures the first clean registry, Safe Boot, and FeatureStore baseline before mutation under `%ProgramData%\NVMePatcher\State`; the protected administrator/SYSTEM-only DACL, owner/reparse/hard-link checks, and atomic publication prevent standard-user pre-creation or replacement. Interrupted work and uninstall restore that exact state, and restart is not offered until the reboot checkpoint is durable
+- **Fail-closed startup recovery**: an incomplete interrupted-ledger restore, FeatureStore recovery, or watchdog auto-revert disables Apply, reinstall, fallback, Safe Boot upgrade, and hot-swap for the rest of the process. Removal, recovery exports, verification, and diagnostics remain available with the exact failure recorded in support evidence
+- **Durable registry commit proof**: every feature override and Safe Boot value must complete `SetValue`, a successful `Flush`, and readback through a newly opened HKLM64 handle before the ledger can advance to Applied or a restart can be offered; any failed key restores the exact baseline
 - **Versioned history database upgrades**: legacy v1 and formerly-unversioned v2 SQLite files are detected from their real schema, quick-checked, copied through SQLite Online Backup, upgraded transactionally, and revalidated before history is served. Corrupt, incomplete, or newer schemas remain untouched and surface an exact backup/recovery path instead of appearing as empty history
 - **Durable shared configuration**: GUI, CLI, Tray, and Watchdog configuration access fails closed on cross-process lock contention; validated, flushed staging files publish atomically while retaining a validated `config.json.bak`, and corrupt primary/backup evidence is preserved before safe defaults are used
 - **Authenticated ViVeTool fallback**: the native FeatureStore path is primary and ViVeTool is a secondary cross-check only; the signed app embeds exact v0.3.4 x64/ARM64 archive and member hashes. That trusted upstream release was published on 2025-03-10 and is dormant, so its dictionary may not cover current Windows builds. An unlisted release, wrong architecture, missing/extra/nested file, modified companion DLL/data file, or tampered cache is rejected before installation and rechecked before every elevated launch
@@ -280,7 +280,7 @@ NVMeDriverPatcher.Cli recovery-kit                         # Generate WinRE reco
 NVMeDriverPatcher.Cli verify-payload --input=<dir-or-zip> [--json]  # Verify the complete generated payload
 NVMeDriverPatcher.Cli winpe-freshness [--input=<tree>]     # Media integrity/freshness (exit: 0 fresh, 1 stale/missing, 2 unknown)
 NVMeDriverPatcher.Cli recovery-proof [--json]              # Prove recovery infrastructure + Windows recovery features
-NVMeDriverPatcher.Cli upgrade-safeboot                     # Add KB5079391 SafeBoot entries
+NVMeDriverPatcher.Cli upgrade-safeboot                     # Add KB5079391 Safe Boot entries
 
 # Diagnostics
 NVMeDriverPatcher.Cli preflight [--json]                   # Typed critical probes + Windows recovery features
@@ -463,7 +463,7 @@ Advanced hardening: `NVMeDriverPatcher.Cli.exe winre-inject` previews the DISM p
 ### Switching from another NVMe script
 Readiness flags what other NVMe scripts leave behind under **ThirdPartyResidue** in the activity log. Override `3244671118` comes from scripts such as FR33THY Ultimate. This tool doesn't write it, so Remove leaves it alone, and you can delete it yourself if you want it gone.
 
-SafeBoot entries with no NVMe override behind them mean something removed the overrides and left the entries. They do nothing on their own, and Remove clears them. If the whole `HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft` key is gone as well, a script's revert deleted it. Run `gpupdate /force` if Group Policy puts Known Issue Rollback settings there.
+Safe Boot entries with no NVMe override behind them mean something removed the overrides and left the entries. They do nothing on their own, and Remove clears them. If the whole `HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft` key is gone as well, a script's revert deleted it. Run `gpupdate /force` if Group Policy puts Known Issue Rollback settings there.
 
 ### System won't boot after patch
 
@@ -496,13 +496,13 @@ reg unload HKLM\OFFLINE
 ```
 4. Restart
 
-> The SafeBoot lines use `/ve`, which clears only the key's default value (the one this tool writes)
+> The Safe Boot lines use `/ve`, which clears only the key's default value (the one this tool writes)
 > and leaves the key itself alone. Recent Windows builds (26200.8737 and later, and current 24H2 builds
 > such as 26100.9550) create that same `{75416E63-...}` key themselves, and deleting the whole key
 > takes Windows' Safe Mode disk registration with it. On 24H2, Windows keeps its own `NvmeDisk` text
 > in that default value and locks the key so only TrustedInstaller can change it, so expect "Access
 > is denied" from the two GUID lines there. That's fine, and Windows' value stays. The last two lines clear the
-> KB5079391-era **service-name** SafeBoot entries that every patch has written since v4.6.1. The
+> KB5079391-era **service-name** Safe Boot entries that every patch has written since v4.6.1. The
 > Recovery Kit clears all four the same way; clear only the two GUID keys and the patch isn't
 > fully reverted.
 >
@@ -524,7 +524,7 @@ If you need a clean DISM result, for example before a feature update or when som
 Some community workarounds force `nvmedisk.sys` with a custom OEM INF and BCD TESTSIGNING. This tool warns on that evidence but will not automate or remove the route because it changes driver-store state outside the registry/FeatureStore rollback model. Capture evidence with `pnputil /enum-drivers /files`, then revert through Device Manager or remove the confirmed package with `pnputil /delete-driver <oem#.inf> /uninstall` only after you know which INF owns the binding.
 
 ### Can't boot into Safe Mode
-This shouldn't happen if you used this tool (SafeBoot keys are included). If it does, follow the WinRE steps above.
+This shouldn't happen if you used this tool (Safe Boot keys are included). If it does, follow the WinRE steps above.
 
 ### SSD vendor tools stopped working
 Samsung Magician, WD Dashboard, Crucial Storage Executive, and CrystalDiskInfo use legacy SCSI pass-through to communicate with drives. The native NVMe driver doesn't implement this interface. Use Windows built-in tools (Device Manager, `Get-PhysicalDisk`, `Get-StorageReliabilityCounter`) for health monitoring instead, or remove the patch to restore compatibility.

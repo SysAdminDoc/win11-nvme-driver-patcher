@@ -18,7 +18,7 @@ public static class SafeModeVerifyScriptService
         var sb = new StringBuilder();
         sb.AppendLine("# Verify-NVMeSafeMode.ps1");
         sb.AppendLine("# Run FROM Safe Mode after applying the NVMe driver patch. Confirms the");
-        sb.AppendLine("# SafeBoot keys actually bound nvmedisk.sys and the storage stack is live.");
+        sb.AppendLine("# Safe Boot keys actually bound nvmedisk.sys and the storage stack is live.");
         sb.AppendLine("#");
         sb.AppendLine($"# Generated {DateTime.UtcNow:u} by NVMe Driver Patcher v{AppConfig.AppVersion}");
         sb.AppendLine();

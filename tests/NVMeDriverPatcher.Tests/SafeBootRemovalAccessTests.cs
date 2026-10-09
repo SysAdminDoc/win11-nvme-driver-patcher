@@ -41,12 +41,12 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
         var removed = 0;
 
         PatchService.RemoveOwnedSafeBootKey(
-            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "SafeBoot Minimal", ref removed, log.Add);
+            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
 
         var line = Assert.Single(log);
         Assert.DoesNotContain("[FAIL]", line);
         Assert.Contains("[PRESERVED]", line);
-        Assert.Contains("SafeBoot Minimal", line);
+        Assert.Contains("Safe Boot Minimal", line);
         Assert.Equal(0, removed);
 
         // And the OS-owned key must still be there — never deleted, never re-ACL'd.
@@ -69,7 +69,7 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
         var removed = 0;
 
         PatchService.RemoveOwnedSafeBootKey(
-            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "SafeBoot Minimal", ref removed, log.Add);
+            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
 
         Assert.Contains("[REMOVED]", Assert.Single(log));
         Assert.Equal(1, removed);
@@ -90,7 +90,7 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
         var removed = 0;
 
         PatchService.RemoveOwnedSafeBootKey(
-            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "SafeBoot Minimal", ref removed, log.Add);
+            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
 
         Assert.Contains("[PRESERVED]", Assert.Single(log));
 
@@ -109,7 +109,7 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
         var removed = 0;
 
         PatchService.RemoveOwnedSafeBootKey(
-            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "SafeBoot Minimal", ref removed, log.Add);
+            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
 
         Assert.Contains("[ABSENT]", Assert.Single(log));
         Assert.Equal(0, removed);
@@ -128,7 +128,7 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
         var removed = 0;
 
         PatchService.RemoveOwnedSafeBootKey(
-            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "SafeBoot Minimal", ref removed, log.Add);
+            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
 
         Assert.Contains("[PRESERVED]", Assert.Single(log));
         Assert.Equal(0, removed);
@@ -152,7 +152,7 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
         var removed = 0;
 
         PatchService.RemoveOwnedSafeBootKey(
-            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "SafeBoot Minimal", ref removed, log.Add);
+            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
 
         var line = Assert.Single(log);
         Assert.Contains("[PRESERVED]", line);
@@ -175,7 +175,7 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
         var removed = 0;
 
         PatchService.RemoveOwnedSafeBootKey(
-            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "SafeBoot Minimal", ref removed, log.Add);
+            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
 
         Assert.Contains("[FAIL]", Assert.Single(log));
         Assert.Equal(0, removed);
