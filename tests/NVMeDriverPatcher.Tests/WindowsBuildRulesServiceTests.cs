@@ -57,6 +57,21 @@ public sealed class WindowsBuildRulesServiceTests
     }
 
     [Fact]
+    public void Summaries_RecordHotpatchExceptionFor26H1AndEnablementPackageFor26H2()
+    {
+        var rules = WindowsBuildRulesService.LoadRuleset();
+        Assert.Contains("Hotpatch",
+            rules.Rules.Single(r => r.Id == "post-26200-trains-bind-blocked").Summary);
+        foreach (var id in new[] { "26200-bind-blocked", "25h2-vivetool-new-ids" })
+            Assert.Contains("enablement package over 25H2", rules.Rules.Single(r => r.Id == id).Summary);
+
+        // A 26H2-reporting host still carries the 25H2 build number, so it resolves the same rule.
+        var ruleset = WindowsBuildRulesService.LoadRuleset();
+        Assert.Equal("25h2-vivetool-new-ids", WindowsBuildRulesService.Match(ruleset, 26200, 8246, false)!.Id);
+        Assert.Equal("26200-bind-blocked", WindowsBuildRulesService.Match(ruleset, 26200, 9000, false)!.Id);
+    }
+
+    [Fact]
     public void Match_NoMatch_ReturnsNull_AndDescribeIsConservative()
     {
         var empty = new WindowsBuildRuleset();
