@@ -50,46 +50,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: S
 
-- [ ] P3 — dll-hosted runs register `dotnet.exe` as the persistent binary for scheduled tasks and the service
-  Category: correctness
-  Where: `src/NVMeDriverPatcher.Cli/Program.cs:704` (`register-tasks`), `src/NVMeDriverPatcher.Watchdog/Program.cs:71` (`/install`) — both use `Environment.ProcessPath`
-  Problem: Under `dotnet NVMeDriverPatcher.Cli.dll` (the repo's own documented way to run the CLI non-elevated), `ProcessPath` is dotnet.exe, so BootVerify/WatchdogSweep tasks or the service get registered pointing at bare `dotnet.exe` with no dll argument — jobs that fail forever.
-  Evidence: `ProcessPath` semantics + call sites read.
-  Fix: Refuse registration when `ProcessPath` filename isn't the app exe, with a message naming the published exe to use.
-  Acceptance: `dotnet ...Cli.dll register-tasks` exits non-zero with the guidance; exe-hosted registration unchanged.
-  Confidence: Likely
-  Effort: S
-
-- [ ] P3 — Tray: machine-wide single-instance mutex, and synchronous WMI on the UI thread every 30 s
-  Category: ux
-  Where: `src/NVMeDriverPatcher.Tray/Program.cs:15, 26-27` (`Global\` mutex — second RDP/fast-user-switch session gets no icon, silent exit 0), `:60-64, 79-104` (WinForms timer runs `PatchVerificationService.Evaluate` incl. `TryGetLastBootTime` + `DriveService.TestNativeNVMeActive` WMI synchronously — menu stutters during each poll)
-  Problem: Per-session agent behaves per-machine; periodic UI-thread stalls.
-  Evidence: Both read.
-  Fix: Switch to `Local\` mutex; move polling to a worker thread and marshal results back.
-  Acceptance: Two sessions each get a tray icon; context menu stays responsive during polls.
-  Confidence: Verified
-  Effort: S
-
-- [ ] P3 — Config downgrade warning from `ConfigMigrationService.Migrate` is never shown
-  Category: reliability
-  Where: `src/NVMeDriverPatcher.Cli/Program.cs` (the `migrationSummary` returned by `ConfigMigrationService.Migrate` is assigned and never used); `src/NVMeDriverPatcher.Core/Services/ConfigMigrationService.cs:21-28`; the GUI never calls `Migrate` at all
-  Problem: When config.json carries a schema newer than this build (a downgrade, or an older CLI run against a newer GUI's config), `Migrate` leaves the file alone and returns a summary written so callers can warn. Nothing prints or logs it, so the user never learns that settings this build doesn't understand are being ignored.
-  Evidence: Found while fixing the swallowed migration exception; the summary is the only output of the downgrade branch.
-  Fix: When `config.ConfigVersion > ConfigMigrationService.CurrentSchemaVersion`, write the summary as a `[WARNING]` on stderr in the CLI and surface it in the GUI activity log (plus the event log once it's initialized).
-  Acceptance: A config.json with `ConfigVersion` above the current schema produces one visible warning per run in the CLI and the GUI; a current or older config produces none.
-  Confidence: Verified
-  Effort: S
-
-- [ ] P3 — Group Policy pins only apply at load; CLI flags and GUI toggles override them for the rest of the run
-  Category: reliability
-  Where: `src/NVMeDriverPatcher.Cli/Program.cs:97` then `:140-144` (`--include-server-key`, `--no-server-key`, `--standalone-future`, `--safe`/`--full` are applied after `GpoPolicyService.ApplyTo`); `src/NVMeDriverPatcher/ViewModels/MainViewModel.cs:199` (policy applied once, every Settings control stays editable and saves to config.json)
-  Problem: The ADMX and README say policy overrides local config, and the CLI comment says a pinned fleet policy isn't quietly overridden by a local run. In practice a pinned PatchProfile, IncludeServerKey or IncludeStandaloneFuture lasts only until a CLI flag or a Settings click changes it, so an admin who pins Safe can still get Full on a machine.
-  Evidence: Found while adding the IncludeStandaloneFuture policy for #19; the ADML text was kept to "Disabled turns it off" instead of claiming enforcement.
-  Fix: Keep the overlay from `GpoPolicyService.Read()` and re-apply it after CLI parsing, with a `[WARNING]` naming each flag the policy overrode. In the GUI, disable the pinned controls with a "Set by Group Policy" tooltip and skip pinned fields in `SyncConfigFromUI`.
-  Acceptance: With a policy pinning Safe, `apply --full` writes the Safe set and warns once; the Settings profile radios are disabled and the saved config keeps Safe.
-  Confidence: Verified
-  Effort: M
-
 - [ ] P3 — CHANGELOG versions 5.4.0/5.5.0 have no git tags; 5.3.0 was released with no CHANGELOG entry; stray malformed tag `v.3.0.0`
   Category: docs
   Where: `CHANGELOG.md:35, 54` (5.5.0/5.4.0 entries); git tags (`v5.2.0` → `v5.6.0` jump, `v.3.0.0` typo tag); commit 95bbf11 "chore: release v5.3.0" with no `[5.3.0]` section
@@ -140,16 +100,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: M
 
-- [ ] P3 — C# bare-name gate: per-line exemption can mask a co-located launch
-  Category: testing
-  Where: `tests/NVMeDriverPatcher.Tests/SystemToolPathServiceTests.cs:58-60, 222-228` (`NonLaunchToolLiteral` exempts the entire line on `Path.Combine(`/`.Equals(`/`File.Exists` etc.)
-  Problem: `new ProcessStartInfo("dism.exe") { WorkingDirectory = Path.Combine(dir) }` passes the gate — the same masking class that defeated it before 2026-08-02. No current occurrence in `src/` (grep-verified), so this is gate hardening, not a live defect.
-  Evidence: Regex behavior traced against the constructed counter-example.
-  Fix: Scope the exemption to the literal's context (token-level match) instead of the whole line; add the counter-example to the gate's self-check.
-  Acceptance: Self-check fails on the counter-example with the old regex, passes with the new.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — FeatureStore exact restore cannot clear the priority-8 User override when the baseline held a non-priority-8 configuration
   Category: correctness
   Where: `src/NVMeDriverPatcher.Core/Services/FeatureStoreWriterService.cs:533-557` (`BuildRestoreUpdate`: `Found=true` branch re-asserts at the baseline's priority; only `Found=false` issues the Operation-4 reset)
@@ -158,16 +108,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Fix: For `Found=true` entries with priority != 8, emit a priority-8 Operation-4 reset first, then re-assert the baseline configuration.
   Acceptance: Unit test with a priority-4 baseline fixture: restore plan contains the reset followed by the re-assert.
   Confidence: Likely (environment-dependent precondition; mechanism verified)
-  Effort: S
-
-- [ ] P3 — Bare CLI exe download ships without its native SQLite library
-  Category: packaging
-  Where: `src/NVMeDriverPatcher.Cli/NVMeDriverPatcher.Cli.csproj` (no `IncludeNativeLibrariesForSelfExtract`; the GUI csproj sets it), `packaging/release-artifacts.json` (`cli` uploads `publish/cli/NVMeDriverPatcher.Cli.exe` alone)
-  Problem: A local `dotnet publish -r win-x64 -p:PublishSingleFile=true` of the CLI leaves `e_sqlite3.dll` loose beside `NVMeDriverPatcher.Cli.exe`. The release uploads the exe by itself, so a direct CLI download has no SQLite native library and every command that touches `DataService` (snapshots, benchmark history) hits `DllNotFoundException` or a swallowed save failure. The MSI is unaffected because it ships the GUI publish folder. The data JSON files had the same gap and are now embedded in Core.
-  Evidence: Publish layout probe on 2026-10-05 listed `e_sqlite3.dll` beside the CLI exe.
-  Fix: Set `IncludeNativeLibrariesForSelfExtract=true` in the CLI csproj (and the Tray and Watchdog ones if they ever load SQLite), then re-run the publish probe and confirm only the exe, pdbs and `admx` remain. Check `SqliteVersionTests` still pins the native asset.
-  Acceptance: A CLI exe copied alone into an empty folder completes a DataService read and write without a missing-DLL error.
-  Confidence: Likely (layout verified; runtime failure inferred from SQLitePCLRaw native loading)
   Effort: S
 
 - [ ] P3 — BypassIO verdict uses one storage driver for every volume
@@ -179,6 +119,24 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Acceptance: Unit test with a two-volume fixture (C: on stornvme, D: on storahci) reports C: Enabled and D: Disabled with stack storahci.sys; the gaming-impact summary names only C:. A live run on a mixed NVMe+SATA machine matches Device Manager.
   Confidence: Verified (mechanism); hardware confirmation pending
   Effort: M
+
+- [ ] P3 — `re-enable-after-update` sets the profile after the Group Policy pins are re-applied
+  Category: correctness
+  Where: `src/NVMeDriverPatcher.Cli/Program.cs` (`re-enable-after-update`, the `config.PatchProfile = profile` assignment from the stored install record)
+  Problem: Pins are put back once, right after flag parsing (`GpoPolicyService.ReapplyPins`). This command sets the profile later from the remembered install, so a pinned Safe can still come back as Full on that path.
+  Fix: Re-apply the pins after that assignment (or have it skip a pinned profile) and warn the same way the flag path does.
+  Acceptance: With a policy pinning Safe and a remembered Full install, `re-enable-after-update` writes the Safe set and prints one warning.
+  Confidence: Likely (found reading the GPO fix, 2026-10-09)
+  Effort: S
+
+- [ ] P3 — Test helpers launch `powershell.exe` by bare name
+  Category: testing
+  Where: `tests/NVMeDriverPatcher.Tests/DocumentationFactsValidatorTests.cs` (`RunValidator`), and any other test that starts a tool with `new ProcessStartInfo("<tool>.exe")`
+  Problem: The bare-name gates cover `src/`, `packaging/` and `scripts/`, not the test tree, so a test run resolves `powershell.exe` through PATH and the current directory.
+  Fix: Route test launches through `SystemToolPathService.Resolve`/`.PowerShell` and widen the gate to `tests/` with an explicit allowlist for fixtures that need a bare name.
+  Acceptance: The widened gate passes; a planted `powershell.exe` in the test output folder isn't picked up.
+  Confidence: Verified (reported by the 2026-10-09 lane)
+  Effort: S
 
 ### Unaudited — needs a pass
 
@@ -282,20 +240,6 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
   Evidence: NuGet flat-container lookups (2026-10-06); https://www.sqlite.org/changes.html; https://developers.cloudflare.com/workers/wrangler/migration/deprecations/.
   Touches: `NVMeDriverPatcher.Core.csproj`, the test csproj, `NVMeDriverPatcher.csproj` (SkiaSharp family), `packaging/telemetry-receiver/package.json` and `wrangler.toml` `compatibility_date`.
   Acceptance: The build is clean, the suite passes, the GUI charts render the same in all three themes, and `wrangler deploy --dry-run` passes for the receiver.
-  Complexity: S
-
-- [ ] P3 — Smoke-test the MSI lifecycle in Windows Sandbox
-  Why: The winget sandbox smoke (`scripts/Test-PackageSandbox.ps1`) went with the winget channel, so nothing installs, queries and removes a built package in a clean guest anymore. The MSI is the install route admins and Intune use.
-  Evidence: removed `scripts/Test-PackageSandbox.ps1` (2026-10-06); `packaging/wix/NVMeDriverPatcher.wxs`; `scripts/Build-ReleaseArtifacts.ps1` MSI step.
-  Touches: a new `scripts/Test-MsiSandbox.ps1` that writes a `.wsb` with the publish folder mapped read-only, runs `msiexec /i` quietly, checks Program Files, the service and the scheduled task, runs `msiexec /x`, and checks nothing is left; a contract test that pins those steps.
-  Acceptance: On an x64 Windows 11 host with Windows Sandbox enabled, the script exits 0 and its guest log shows install, the installed CLI answering `--version`, uninstall, and no files, service or task left behind. Without Sandbox it fails fast with a clear message.
-  Complexity: S
-
-- [ ] P3 — The suite never runs the documentation-facts validator against the real repo
-  Why: Adding the StorPort readiness check (b5d915a) raised the preflight count to 29 while README still said 28, and all 1741 tests passed. `DocumentationFactsValidatorTests` only feeds the validator fixtures; the live check runs only inside `Validate-ReleaseVersions.ps1` at release time, so drift sits unnoticed until a release build.
-  Evidence: `tests/NVMeDriverPatcher.Tests/DocumentationFactsValidatorTests.cs`; `scripts/Validate-DocumentationFacts.ps1`; the README count fix of 2026-10-06.
-  Touches: one test that runs `Validate-DocumentationFacts.ps1 -RepoRoot <repo>` on the checkout, skipping the untracked `CLAUDE.md` checks when the file is absent so a clean clone still passes.
-  Acceptance: Changing the README preflight count by one makes the suite fail with the validator's message; a clean clone without CLAUDE.md passes.
   Complexity: S
 
 - [ ] P3 — The in-place updater's staging code has no caller
