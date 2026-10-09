@@ -32,8 +32,8 @@
     1. Feature Flag: 735209102  (NativeNVMeStackForGeClient - Primary enable)
     2. Feature Flag: 1853569164 (UxAccOptimization - Extended functionality)
     3. Feature Flag: 156965516  (Standalone_Future - Performance optimizations)
-    4. SafeBoot Minimal: {75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
-    5. SafeBoot Network: {75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
+    4. Safe Boot Minimal: {75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
+    5. Safe Boot Network: {75416E63-5912-4DFA-AE8F-3EFACCAFFB14}
     Optional:
     6. Feature Flag: 1176759950 (Microsoft Official Server 2025 key)
 
@@ -1499,8 +1499,8 @@ function Export-SystemDiagnostics {
         }
     }
 
-    [void]$sb.AppendLine(); [void]$sb.AppendLine("SafeBoot Minimal: $(if (Test-Path -LiteralPath $script:Config.SafeBootMinimal) { 'Present' } else { 'Not Present' })")
-    [void]$sb.AppendLine("SafeBoot Network: $(if (Test-Path -LiteralPath $script:Config.SafeBootNetwork) { 'Present' } else { 'Not Present' })")
+    [void]$sb.AppendLine(); [void]$sb.AppendLine("Safe Boot Minimal: $(if (Test-Path -LiteralPath $script:Config.SafeBootMinimal) { 'Present' } else { 'Not Present' })")
+    [void]$sb.AppendLine("Safe Boot Network: $(if (Test-Path -LiteralPath $script:Config.SafeBootNetwork) { 'Present' } else { 'Not Present' })")
 
     [void]$sb.AppendLine(); [void]$sb.AppendLine("SYSTEM PROTECTION"); [void]$sb.AppendLine("-----------------")
     try {
@@ -1610,19 +1610,19 @@ foreach ($feat in $featureIDs) {
 }
 
 if (Test-Path -LiteralPath $safeBootMinimal) {
-    Write-Host "  [PASS] SafeBoot Minimal" -ForegroundColor Green
+    Write-Host "  [PASS] Safe Boot Minimal" -ForegroundColor Green
     $passCount++
 }
 else {
-    Write-Host "  [FAIL] SafeBoot Minimal" -ForegroundColor Red
+    Write-Host "  [FAIL] Safe Boot Minimal" -ForegroundColor Red
 }
 
 if (Test-Path -LiteralPath $safeBootNetwork) {
-    Write-Host "  [PASS] SafeBoot Network" -ForegroundColor Green
+    Write-Host "  [PASS] Safe Boot Network" -ForegroundColor Green
     $passCount++
 }
 else {
-    Write-Host "  [FAIL] SafeBoot Network" -ForegroundColor Red
+    Write-Host "  [FAIL] Safe Boot Network" -ForegroundColor Red
 }
 
 Write-Host ""
@@ -2976,8 +2976,8 @@ function Uninstall-NVMePatch {
 
         Update-Progress -Value 60 -Status "Removing SafeBoot keys..."
 
-        Remove-OwnedSafeBootKey -Path $script:Config.SafeBootMinimal -Label "SafeBoot Minimal" -RemovedCount ([ref]$removedCount)
-        Remove-OwnedSafeBootKey -Path $script:Config.SafeBootNetwork -Label "SafeBoot Network" -RemovedCount ([ref]$removedCount)
+        Remove-OwnedSafeBootKey -Path $script:Config.SafeBootMinimal -Label "Safe Boot Minimal" -RemovedCount ([ref]$removedCount)
+        Remove-OwnedSafeBootKey -Path $script:Config.SafeBootNetwork -Label "Safe Boot Network" -RemovedCount ([ref]$removedCount)
 
         Update-Progress -Value 90 -Status "Validating..."
         # Residue re-probe. Every per-component failure above is logged and swallowed, so

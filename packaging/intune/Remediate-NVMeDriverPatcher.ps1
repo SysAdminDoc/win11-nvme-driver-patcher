@@ -10,7 +10,7 @@
 
   It never passes --force or --force-unsupported-build. The CLI refuses apply on a Windows build
   with no known enablement path, on a failed critical safety check, and when its recovery checks
-  don't pass (BitLocker recovery, System Restore on the system drive, SafeBoot entries that need
+  don't pass (BitLocker recovery, System Restore on the system drive, Safe Boot entries that need
   upgrade-safeboot first). A fleet remediation honors all of them and prints the CLI's reason.
   The device isn't restarted unless $restartAfterApply below is set to $true. The native driver
   loads on the next restart.

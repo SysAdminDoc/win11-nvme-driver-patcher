@@ -502,10 +502,10 @@ foreach ($feat in $featureIDs) {{
 }}
 $sbMin = ""HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Minimal\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}""
 $sbNet = ""HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Network\{{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}}""
-if (Test-Path -LiteralPath $sbMin) {{ Write-Host ""  [PASS] SafeBoot Minimal"" -ForegroundColor Green; $passCount++ }}
-else {{ Write-Host ""  [FAIL] SafeBoot Minimal"" -ForegroundColor Red }}
-if (Test-Path -LiteralPath $sbNet) {{ Write-Host ""  [PASS] SafeBoot Network"" -ForegroundColor Green; $passCount++ }}
-else {{ Write-Host ""  [FAIL] SafeBoot Network"" -ForegroundColor Red }}
+if (Test-Path -LiteralPath $sbMin) {{ Write-Host ""  [PASS] Safe Boot Minimal"" -ForegroundColor Green; $passCount++ }}
+else {{ Write-Host ""  [FAIL] Safe Boot Minimal"" -ForegroundColor Red }}
+if (Test-Path -LiteralPath $sbNet) {{ Write-Host ""  [PASS] Safe Boot Network"" -ForegroundColor Green; $passCount++ }}
+else {{ Write-Host ""  [FAIL] Safe Boot Network"" -ForegroundColor Red }}
 Write-Host """"; Write-Host ""Result: $passCount/$totalChecks"" -ForegroundColor $(if ($passCount -eq $totalChecks) {{ 'Green' }} else {{ 'Yellow' }})
 Write-Host """"; Write-Host ""Press any key...""; $null = $Host.UI.RawUI.ReadKey(""NoEcho,IncludeKeyDown"")";
 
