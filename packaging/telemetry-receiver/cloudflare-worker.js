@@ -1,5 +1,5 @@
 // Reference Cloudflare Worker for the NVMe Driver Patcher opt-in telemetry endpoint.
-// Deploy via `wrangler publish`, then point `--endpoint=https://<your-worker>.workers.dev/nvme/compat`
+// Deploy via `npx wrangler deploy` (the pinned copy), then point `--endpoint=https://<your-worker>.workers.dev/nvme/compat`
 // at your worker URL when calling `NVMeDriverPatcher.Cli telemetry --endpoint=...`.
 //
 // Stores submissions in Workers KV. The client never sends identifying data — see the
@@ -28,6 +28,15 @@ const MAX_SUMMARY_LIST_PAGES = 50;
 // turns N concurrent readers into one namespace scan.
 const SUMMARY_CACHE_TTL_SECONDS = 300;
 const SUMMARY_CACHE_KEY = "cache:summary";
+// Cloudflare allows 1,000 KV operations per Worker invocation, and a bulk get of up to 100 keys
+// counts as one. One get per record failed after roughly the 950th read, and the per-record catch
+// took those failures for corrupt entries, so a large namespace summarized only its first records
+// while `truncated` stayed false. Records are read 100 at a time now.
+const KV_BULK_GET_MAX = 100;
+// Worst case for one uncached summary: the cache read, every list page, every bulk read and the
+// cache write. TelemetryReceiverSummaryTests holds this under Cloudflare's 1,000.
+export const SUMMARY_MAX_KV_OPERATIONS =
+  2 + MAX_SUMMARY_LIST_PAGES + Math.ceil(MAX_SUMMARY_RECORDS / KV_BULK_GET_MAX);
 
 const RECORD_TTL_SECONDS = 60 * 60 * 24 * 365;
 
@@ -163,7 +172,13 @@ async function handleSubmit(request, env, corsOrigin) {
   const record = { receivedAt: ts, payload: validation.payload };
 
   const dayKey = ts.slice(0, 10);
-  await env.COMPAT.put(`${dayKey}/${keyHash}`, JSON.stringify(record), { expirationTtl: RECORD_TTL_SECONDS });
+  try {
+    await env.COMPAT.put(`${dayKey}/${keyHash}`, JSON.stringify(record), { expirationTtl: RECORD_TTL_SECONDS });
+  } catch {
+    // KV takes one write per second per key, so a quick resubmit from the same client lands here.
+    // Say so plainly instead of letting the runtime answer with a bare 500.
+    return json({ error: "Storage is busy. Try again in a minute." }, 503, corsOrigin);
+  }
 
   return json({ accepted: true, ts }, 200, corsOrigin);
 }
@@ -385,25 +400,22 @@ async function handleSummary(env, corsOrigin) {
 
   const { names, complete } = await paginateKeys(env.COMPAT, "cache:", MAX_SUMMARY_LIST_PAGES);
   const scannedKeys = names.length;
-  const cap = Math.min(scannedKeys, MAX_SUMMARY_RECORDS);
-
-  const reports = [];
-  for (let i = 0; i < cap; i++) {
-    try {
-      const raw = await env.COMPAT.get(names[i], { type: "json" });
-      if (raw?.payload) reports.push(raw.payload);
-    } catch { /* skip corrupt entries */ }
-  }
+  const { reports, unreadable } = await readRecords(env.COMPAT, names.slice(0, MAX_SUMMARY_RECORDS));
 
   const payload = JSON.stringify({
     ...summarizeReports(reports),
     scannedKeys,
     summarizedRecords: reports.length,
+    unreadableRecords: unreadable,
     truncated: scannedKeys > MAX_SUMMARY_RECORDS || !complete,
     generatedAt: new Date().toISOString()
   });
 
-  await env.COMPAT.put(SUMMARY_CACHE_KEY, payload, { expirationTtl: SUMMARY_CACHE_TTL_SECONDS });
+  // Best effort: two edge locations refreshing at once can trip KV's one-write-per-second limit on
+  // this key, and the summary just computed is still the right answer to send.
+  try {
+    await env.COMPAT.put(SUMMARY_CACHE_KEY, payload, { expirationTtl: SUMMARY_CACHE_TTL_SECONDS });
+  } catch { /* the next reader recomputes */ }
 
   return new Response(payload, {
     status: 200,
@@ -413,6 +425,30 @@ async function handleSummary(env, corsOrigin) {
       ...corsHeaders(corsOrigin)
     }
   });
+}
+
+// Reads stored records with bulk gets of at most KV_BULK_GET_MAX keys. A key that comes back
+// empty (it expired after the list) or without a payload, and every key of a bulk read that
+// failed, is counted in `unreadable` rather than dropped without a trace. Exported for tests.
+export async function readRecords(kv, names) {
+  const reports = [];
+  let unreadable = 0;
+  for (let i = 0; i < names.length; i += KV_BULK_GET_MAX) {
+    const batch = names.slice(i, i + KV_BULK_GET_MAX);
+    let values;
+    try {
+      values = await kv.get(batch, { type: "json" });
+    } catch {
+      unreadable += batch.length;
+      continue;
+    }
+    for (const name of batch) {
+      const raw = values?.get?.(name);
+      if (raw?.payload) reports.push(raw.payload);
+      else unreadable++;
+    }
+  }
+  return { reports, unreadable };
 }
 
 // Pure aggregation over the stored, normalized projections. Reads the EXACT field shape the app

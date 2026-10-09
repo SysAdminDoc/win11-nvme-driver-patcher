@@ -134,6 +134,101 @@ public sealed class TelemetryReceiverSummaryTests
     }
 
     [Fact]
+    public void ReadRecords_StaysUnderTheKvOperationLimit_AndCountsWhatItCouldNotRead()
+    {
+        // Cloudflare allows 1,000 KV operations per invocation and counts a bulk get of up to 100
+        // keys as one. The mock fails the way Cloudflare does past the limit, so a per-key reader
+        // would lose everything after the 1,000th record instead of reading all 2,500.
+        var harness = """
+            import { pathToFileURL } from 'node:url';
+            const m = await import(pathToFileURL(process.argv[2]).href);
+            const store = new Map();
+            for (let i = 0; i < 2500; i++) store.set(`2026-10-09/k${i}`, { payload: { controllers: [], verification: 'Confirmed' } });
+            store.set('2026-10-09/expired', null);
+            const names = [...store.keys()];
+            const make = (failCall) => {
+              const kv = { ops: 0 };
+              kv.get = async (keys) => {
+                kv.ops++;
+                if (kv.ops > 1000) throw new Error('Too many API requests by single Worker invocation');
+                if (!Array.isArray(keys) || keys.length > 100) throw new Error('not a bulk get of at most 100 keys');
+                if (kv.ops === failCall) throw new Error('KV read failed');
+                return new Map(keys.map(n => [n, store.get(n) ?? null]));
+              };
+              return kv;
+            };
+            const okKv = make(-1);
+            const ok = await m.readRecords(okKv, names);
+            const failingKv = make(2);
+            const failing = await m.readRecords(failingKv, names);
+            process.stdout.write(JSON.stringify({
+              read: ok.reports.length, unreadable: ok.unreadable, ops: okKv.ops,
+              failingRead: failing.reports.length, failingUnreadable: failing.unreadable,
+              budget: m.SUMMARY_MAX_KV_OPERATIONS
+            }));
+            """;
+
+        using var doc = JsonDocument.Parse(RunHarness(harness));
+        var root = doc.RootElement;
+
+        Assert.Equal(2500, root.GetProperty("read").GetInt32());
+        Assert.Equal(1, root.GetProperty("unreadable").GetInt32());
+        Assert.Equal(26, root.GetProperty("ops").GetInt32());
+        // A failed bulk read costs its whole batch, and the summary says so instead of skipping it.
+        Assert.Equal(2400, root.GetProperty("failingRead").GetInt32());
+        Assert.Equal(101, root.GetProperty("failingUnreadable").GetInt32());
+        Assert.InRange(root.GetProperty("budget").GetInt32(), 1, 999);
+    }
+
+    [Fact]
+    public void KvWriteRefusals_AnswerPlainly_AndTheSummaryStillServes()
+    {
+        // KV takes one write per second per key. A refused submission write used to escape as a
+        // bare runtime 500, and a refused summary-cache write threw away the summary just computed.
+        var harness = """
+            import { pathToFileURL } from 'node:url';
+            import { webcrypto } from 'node:crypto';
+            globalThis.crypto ??= webcrypto;
+            const worker = (await import(pathToFileURL(process.argv[2]).href)).default;
+            const env = {
+              SECRET: 's', ALLOWED_ORIGINS: '',
+              COMPAT: {
+                put: async () => { throw new Error('KV PUT failed: 429 Too Many Requests'); },
+                get: async (k) => Array.isArray(k) ? new Map(k.map(n => [n, null])) : null,
+                list: async () => ({ keys: [], list_complete: true })
+              },
+              RATE_LIMITER: { limit: async () => ({ success: true }) },
+              SUMMARY_RATE_LIMITER: { limit: async () => ({ success: true }) }
+            };
+            const body = JSON.stringify({ schemaVersion: 1, anonId: '11111111-2222-3333-4444-555555555555', controllers: [] });
+            const bytes = new TextEncoder().encode(body);
+            const headers = new Map([['content-type', 'application/json'], ['content-length', String(bytes.byteLength)]]);
+            const post = {
+              method: 'POST', url: 'https://w.example/nvme/compat',
+              headers: { get: (k) => headers.get(String(k).toLowerCase()) ?? null },
+              body: { getReader: () => { let sent = false; return {
+                read: async () => sent ? { done: true } : (sent = true, { done: false, value: bytes }),
+                cancel: async () => {} }; } },
+              text: async () => body
+            };
+            const submit = await worker.fetch(post, env);
+            const summary = await worker.fetch({ method: 'GET', url: 'https://w.example/nvme/compat/summary', headers: { get: () => null } }, env);
+            process.stdout.write(JSON.stringify({
+              submit: submit.status, submitBody: await submit.text(),
+              summary: summary.status, summaryBody: JSON.parse(await summary.text())
+            }));
+            """;
+
+        using var doc = JsonDocument.Parse(RunHarness(harness));
+        var root = doc.RootElement;
+
+        Assert.Equal(503, root.GetProperty("submit").GetInt32());
+        Assert.Contains("Try again", root.GetProperty("submitBody").GetString(), StringComparison.Ordinal);
+        Assert.Equal(200, root.GetProperty("summary").GetInt32());
+        Assert.Equal(0, root.GetProperty("summaryBody").GetProperty("totalSubmissions").GetInt32());
+    }
+
+    [Fact]
     public void Misconfiguration_FailsClosedRatherThanDegrading()
     {
         // A stock deployment that forgot the secret used to hash anonId with "" and serve happily;
@@ -325,9 +420,12 @@ public sealed class TelemetryReceiverSummaryTests
                 COMPAT: {
                   put: async (k, v) => { env.writes++; store.set(k, v); },
                   get: async (k, opts) => {
-                    const raw = store.get(k);
-                    if (raw === undefined) return null;
-                    return opts?.type === 'json' ? JSON.parse(raw) : raw;
+                    const one = (name) => {
+                      const raw = store.get(name);
+                      if (raw === undefined) return null;
+                      return opts?.type === 'json' ? JSON.parse(raw) : raw;
+                    };
+                    return Array.isArray(k) ? new Map(k.map(name => [name, one(name)])) : one(k);
                   },
                   list: async () => ({ keys: [...store.keys()].map(name => ({ name })), list_complete: true })
                 },
