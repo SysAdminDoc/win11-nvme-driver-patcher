@@ -16,6 +16,9 @@ public class BypassIoVolumeInfo
     public bool RegistryValuePresent { get; set; }
     public bool RegistryEnabled { get; set; }
     public string DeviceService { get; set; } = string.Empty;
+    // The installed INF of the bound storage driver and whether it declares BypassIO support.
+    public string InfName { get; set; } = string.Empty;
+    public BypassIoInfDeclaration InfDeclaration { get; set; } = BypassIoInfDeclaration.Unknown;
     public int QueryExitCode { get; set; } = -1;
 }
 
@@ -28,7 +31,9 @@ internal sealed record BypassIoRegistryEvidence(
 internal sealed record BypassIoDeviceEvidence(
     bool Readable,
     string ServiceName,
-    string Detail);
+    string Detail,
+    string InfName = "",
+    BypassIoInfDeclaration InfDeclaration = BypassIoInfDeclaration.Unknown);
 
 // Per-volume inspector around `fsutil bypassio state <drive>`. Post-patch, nvmedisk.sys refuses
 // BypassIO — this lets the user see exactly which volumes lost it. The state verdict is based on
@@ -91,14 +96,39 @@ public static class BypassIoInspectorService
             .Where(v => !string.IsNullOrWhiteSpace(v))
             .ToList();
 
+        var infStatement = DescribeInfDeclarations(volumes);
         if (enabledVolumes.Count == 0)
-            return "Gaming impact: none. BypassIO is already off on all volumes.";
+            return "Gaming impact: none. BypassIO is already off on all volumes." + infStatement;
 
         var volumeList = string.Join(", ", enabledVolumes);
         return $"Gaming impact: BypassIO is active on {enabledVolumes.Count} volume(s) ({volumeList}). " +
             $"After patching to nvmedisk.sys, DirectStorage titles such as {DriveService.DirectStorageGameExamplesText} can fall back to legacy I/O with higher CPU use or stutter. " +
-            "The native-NVMe mutation is machine-wide, so a game-library drive cannot be excluded; remove the patch or accept this global tradeoff.";
+            "The native-NVMe mutation is machine-wide, so a game-library drive cannot be excluded; remove the patch or accept this global tradeoff." +
+            infStatement;
     }
+
+    /// <summary>
+    /// One sentence per distinct bound driver INF whose declaration is known, read from the INF
+    /// itself. Empty when no INF could be read, so the summary never claims what it didn't see.
+    /// </summary>
+    internal static string DescribeInfDeclarations(IEnumerable<BypassIoVolumeInfo> volumes)
+    {
+        var sentences = volumes
+            .Where(v => v.InfDeclaration != BypassIoInfDeclaration.Unknown && !string.IsNullOrWhiteSpace(v.InfName))
+            .Select(v => DescribeInfDeclaration(v.InfName, v.InfDeclaration))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return sentences.Count == 0 ? string.Empty : " " + string.Join(" ", sentences);
+    }
+
+    internal static string DescribeInfDeclaration(string infName, BypassIoInfDeclaration declaration) => declaration switch
+    {
+        BypassIoInfDeclaration.Declared =>
+            $"The bound storage driver's INF ({infName}) declares BypassIO support (StorageSupportedFeatures).",
+        BypassIoInfDeclaration.NotDeclared =>
+            $"The bound storage driver's INF ({infName}) doesn't declare BypassIO support, so Windows blocks BypassIO on that volume.",
+        _ => string.Empty
+    };
 
     internal sealed record BypassIoQueryResult(int ExitCode, string Stdout, string Stderr);
 
@@ -194,6 +224,8 @@ public static class BypassIoInspectorService
             RegistryValuePresent = registry.ValuePresent,
             RegistryEnabled = registry.Enabled,
             DeviceService = string.IsNullOrWhiteSpace(serviceName) ? "Unknown" : serviceName,
+            InfName = device.InfName,
+            InfDeclaration = device.InfDeclaration,
             Stack = StackName(serviceName),
             QueryExitCode = queryExitCode
         };
@@ -295,18 +327,45 @@ public static class BypassIoInspectorService
         string drive,
         int diskNumber,
         string? diskService,
-        string? controllerService)
+        string? controllerService,
+        string? diskInf = null,
+        string? controllerInf = null,
+        Func<string, string?>? readInfText = null)
     {
         var disk = NormalizeServiceName(diskService);
         var controller = NormalizeServiceName(controllerService);
         var scope = $"Volume {drive} on disk {diskNumber}: DEVPKEY_Device_Service disk node={DisplayService(disk)}, controller={DisplayService(controller)}";
         if (string.Equals(disk, "nvmedisk", StringComparison.OrdinalIgnoreCase))
-            return new BypassIoDeviceEvidence(true, "nvmedisk", scope + "; selected=nvmedisk.");
+            return WithInf(new BypassIoDeviceEvidence(true, "nvmedisk", scope + "; selected=nvmedisk."), diskInf);
         if (string.IsNullOrWhiteSpace(controller))
             return new BypassIoDeviceEvidence(false, string.Empty, scope + "; no controller service to read.");
-        return new BypassIoDeviceEvidence(true, controller, scope + $"; selected={controller}.");
+        return WithInf(new BypassIoDeviceEvidence(true, controller, scope + $"; selected={controller}."), controllerInf);
 
         static string DisplayService(string value) => string.IsNullOrWhiteSpace(value) ? "none" : value;
+
+        // The INF of the node the service was taken from says whether that driver opts in to BypassIO.
+        BypassIoDeviceEvidence WithInf(BypassIoDeviceEvidence evidence, string? infName)
+        {
+            if (string.IsNullOrWhiteSpace(infName) || readInfText is null) return evidence;
+            var name = Path.GetFileName(infName.Trim());
+            var declaration = BypassIoInfReader.Evaluate(readInfText(name), evidence.ServiceName);
+            return evidence with
+            {
+                InfName = name,
+                InfDeclaration = declaration,
+                Detail = evidence.Detail + $" INF {name}: {declaration}."
+            };
+        }
+    }
+
+    private static string? ReadInstalledInf(string infName)
+    {
+        try
+        {
+            var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "INF", infName);
+            return File.Exists(path) ? File.ReadAllText(path) : null;
+        }
+        catch { return null; }
     }
 
     /// <summary>
@@ -316,7 +375,7 @@ public static class BypassIoInspectorService
     /// </summary>
     internal static Func<string, BypassIoDeviceEvidence> CreateVolumeDeviceResolver()
     {
-        Dictionary<uint, string>? services = null;
+        Dictionary<uint, (string Service, string Inf)>? services = null;
         string enumerationError = string.Empty;
         var enumerated = false;
 
@@ -346,9 +405,11 @@ public static class BypassIoInspectorService
                 if (parent != NativeMethods.CR_SUCCESS)
                     return Unreadable(drive, $"CM_Get_Parent failed with CONFIGRET 0x{parent:X8}.");
 
-                services.TryGetValue(diskDevInst, out var diskService);
-                services.TryGetValue(controllerDevInst, out var controllerService);
-                return BuildVolumeDeviceEvidence(drive, diskNumber, diskService, controllerService);
+                services.TryGetValue(diskDevInst, out var diskNode);
+                services.TryGetValue(controllerDevInst, out var controllerNode);
+                return BuildVolumeDeviceEvidence(
+                    drive, diskNumber, diskNode.Service, controllerNode.Service,
+                    diskNode.Inf, controllerNode.Inf, ReadInstalledInf);
             }
             catch (Exception ex)
             {
@@ -361,10 +422,10 @@ public static class BypassIoInspectorService
                 Detail: $"Unable to map volume {drive} to its storage controller: {reason}");
     }
 
-    private static Dictionary<uint, string>? ReadDeviceServiceMap(out string error)
+    private static Dictionary<uint, (string Service, string Inf)>? ReadDeviceServiceMap(out string error)
     {
         error = string.Empty;
-        var map = new Dictionary<uint, string>();
+        var map = new Dictionary<uint, (string Service, string Inf)>();
         using var deviceSet = NativeMethods.SetupDiGetClassDevsAllClasses(
             IntPtr.Zero,
             null,
@@ -386,7 +447,10 @@ public static class BypassIoInspectorService
             }
 
             if (TryReadDeviceService(deviceSet, ref device, out var service))
-                map[device.DevInst] = service;
+            {
+                TryReadDeviceString(deviceSet, ref device, NativeMethods.DEVPKEY_Device_DriverInfPath, out var inf);
+                map[device.DevInst] = (service, inf);
+            }
         }
         return map;
     }
@@ -431,10 +495,16 @@ public static class BypassIoInspectorService
     private static bool TryReadDeviceService(
         DeviceInfoSetSafeHandle deviceSet,
         ref NativeMethods.SP_DEVINFO_DATA device,
+        out string service) =>
+        TryReadDeviceString(deviceSet, ref device, NativeMethods.DEVPKEY_Device_Service, out service);
+
+    private static bool TryReadDeviceString(
+        DeviceInfoSetSafeHandle deviceSet,
+        ref NativeMethods.SP_DEVINFO_DATA device,
+        NativeMethods.DEVPROPKEY propertyKey,
         out string service)
     {
         service = string.Empty;
-        var propertyKey = NativeMethods.DEVPKEY_Device_Service;
         if (!NativeMethods.SetupDiGetDeviceProperty(
                 deviceSet,
                 ref device,

@@ -156,6 +156,8 @@ public static class CliJson
         BlockedBy = result.BlockedBy,
         Warning = result.Warning,
         GamingImpact = result.GamingImpact,
+        DriverInfName = result.DriverInfName,
+        DriverInfDeclaration = result.DriverInfDeclaration,
         History = history is null ? null : new BypassIoHistoryJson
         {
             Recorded = history.Recorded,
@@ -446,6 +448,10 @@ public sealed class BypassIoJson
     public string BlockedBy { get; set; } = string.Empty;
     public string Warning { get; set; } = string.Empty;
     public string GamingImpact { get; set; } = string.Empty;
+    /// <summary>Installed INF of the bound storage driver, for example stornvme.inf; empty when unknown.</summary>
+    public string DriverInfName { get; set; } = string.Empty;
+    /// <summary>Declared, NotDeclared or Unknown: whether that INF sets StorageSupportedFeatures for BypassIO.</summary>
+    public string DriverInfDeclaration { get; set; } = "Unknown";
     /// <summary>Present only with --history.</summary>
     public BypassIoHistoryJson? History { get; set; }
 }
