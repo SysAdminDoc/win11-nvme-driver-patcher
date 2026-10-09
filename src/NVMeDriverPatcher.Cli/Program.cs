@@ -742,6 +742,7 @@ class Program
 
         var verdict = AutoBenchmarkService.Compare(baseline, current, threshold);
         Console.WriteLine(verdict.Summary);
+        if (!verdict.Comparable) return 2;
         return verdict.Regressed ? 1 : 0;
     }
 

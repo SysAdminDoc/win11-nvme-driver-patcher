@@ -25,7 +25,9 @@ public static class BenchmarkService
         PropertyNameCaseInsensitive = true
     };
 
-    private const string DiskSpdArchiveUrl = "https://github.com/microsoft/diskspd/releases/download/v2.2/DiskSpd.ZIP";
+    // The release the archive URL and PinnedDiskSpdSha256 below are pinned to; stored with each result.
+    internal const string PinnedDiskSpdVersion = "2.2";
+    private const string DiskSpdArchiveUrl = $"https://github.com/microsoft/diskspd/releases/download/v{PinnedDiskSpdVersion}/DiskSpd.ZIP";
     private const long MinArchiveBytes = 32 * 1024;
     private const long MaxArchiveBytes = 64 * 1024 * 1024;
     private const long MinExeBytes = 32 * 1024;
@@ -58,6 +60,36 @@ public static class BenchmarkService
             return PinnedDiskSpdSha256.Contains(Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant());
         }
         catch { return false; }
+    }
+
+    internal static string ComputeSha256Hex(string path)
+    {
+        using var fs = File.OpenRead(path);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(fs)).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Null when the two runs can be compared. A warning when both recorded the DiskSpd that made
+    /// them and the version or executable hash differs, since DiskSpd changes its defaults between
+    /// releases and a percentage across them would be misleading. A run with nothing recorded
+    /// (saved before this was tracked, always the pinned release) is not flagged.
+    /// </summary>
+    public static string? DescribeDiskSpdMismatch(
+        string? versionA, string? sha256A, string? versionB, string? sha256B)
+    {
+        bool knownA = !string.IsNullOrWhiteSpace(versionA) || !string.IsNullOrWhiteSpace(sha256A);
+        bool knownB = !string.IsNullOrWhiteSpace(versionB) || !string.IsNullOrWhiteSpace(sha256B);
+        if (!knownA || !knownB) return null;
+
+        bool versionDiffers = !string.IsNullOrWhiteSpace(versionA) && !string.IsNullOrWhiteSpace(versionB) &&
+            !string.Equals(versionA!.Trim(), versionB!.Trim(), StringComparison.OrdinalIgnoreCase);
+        bool hashDiffers = !string.IsNullOrWhiteSpace(sha256A) && !string.IsNullOrWhiteSpace(sha256B) &&
+            !string.Equals(sha256A!.Trim(), sha256B!.Trim(), StringComparison.OrdinalIgnoreCase);
+        if (!versionDiffers && !hashDiffers) return null;
+
+        string Label(string? v) => string.IsNullOrWhiteSpace(v) ? "an unrecorded version" : $"DiskSpd {v!.Trim()}";
+        return $"These runs used different DiskSpd builds ({Label(versionA)} and {Label(versionB)}), " +
+               "so no percentage is shown. Run both again with the same DiskSpd to compare them.";
     }
 
     private static readonly Regex RxDiskSpdTotalLine = new(@"^\s*total:",          RegexOptions.Compiled);
@@ -304,10 +336,16 @@ public static class BenchmarkService
         }
 
         var testFile = Path.Combine(benchDir, "diskspd_test.dat");
+        var argumentLines = new List<string>();
+        string exeSha256;
+        try { exeSha256 = ComputeSha256Hex(exe); }
+        catch { exeSha256 = string.Empty; }
         BenchmarkResult? result = new()
         {
             Label = label,
             Timestamp = DateTime.Now.ToString("o"),
+            DiskSpdVersion = PinnedDiskSpdVersion,
+            DiskSpdSha256 = exeSha256,
             Desktop = new BenchmarkProfileResult
             {
                 ProfileId = "desktop-qd1",
@@ -331,10 +369,9 @@ public static class BenchmarkService
                 cancellationToken.ThrowIfCancellationRequested();
                 log?.Invoke(description);
                 ReportProgress(progress, progressValue, progressText);
-                var output = await RunDiskSpd(
-                    exe,
-                    CreateDiskSpdArguments(writePercent, testFile, threads, outstandingIo),
-                    cancellationToken);
+                var diskSpdArguments = CreateDiskSpdArguments(writePercent, testFile, threads, outstandingIo);
+                argumentLines.Add(string.Join(' ', diskSpdArguments));
+                var output = await RunDiskSpd(exe, diskSpdArguments, cancellationToken);
                 var metrics = ParseDiskSpdOutput(output);
                 if (!HasAnyMetrics(metrics))
                     throw new InvalidOperationException($"{description} completed, but no parseable metrics were returned.");
@@ -369,6 +406,7 @@ public static class BenchmarkService
                 progressText: "Benchmarking desktop writes...",
                 threads: DesktopThreads,
                 outstandingIo: DesktopOutstandingIo);
+            result.DiskSpdArguments = string.Join(" | ", argumentLines);
         }
         catch (OperationCanceledException)
         {
@@ -658,6 +696,9 @@ public static class BenchmarkService
                 result.Read ??= new BenchmarkMetrics();
                 result.Write ??= new BenchmarkMetrics();
                 result.Desktop ??= new BenchmarkProfileResult();
+                result.DiskSpdVersion ??= string.Empty;
+                result.DiskSpdSha256 ??= string.Empty;
+                result.DiskSpdArguments ??= string.Empty;
                 result.Desktop.ProfileId = string.IsNullOrWhiteSpace(result.Desktop.ProfileId)
                     ? "desktop-qd1" : result.Desktop.ProfileId;
                 result.Desktop.ProfileName = string.IsNullOrWhiteSpace(result.Desktop.ProfileName)

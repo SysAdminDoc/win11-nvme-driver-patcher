@@ -16,6 +16,9 @@ public class BenchmarkBaseline
     public double DesktopReadLatencyMs { get; set; }
     public double DesktopWriteLatencyMs { get; set; }
     public string Notes { get; set; } = string.Empty;
+    // DiskSpd that produced the numbers; empty when the baseline predates this being recorded.
+    public string DiskSpdVersion { get; set; } = string.Empty;
+    public string DiskSpdSha256 { get; set; } = string.Empty;
 }
 
 public class RegressionVerdict
@@ -27,6 +30,8 @@ public class RegressionVerdict
     public double DesktopReadDeltaPercent { get; set; }
     public double DesktopWriteDeltaPercent { get; set; }
     public string Summary { get; set; } = string.Empty;
+    // False when the two runs came from different DiskSpd builds; the deltas are then left at 0.
+    public bool Comparable { get; set; } = true;
 }
 
 // Persistent rolling baseline of benchmark results. Pairs with the `scheduled-benchmark`
@@ -98,11 +103,18 @@ public static class AutoBenchmarkService
         DesktopWriteIops = result.Desktop?.Write?.IOPS ?? 0,
         DesktopReadLatencyMs = result.Desktop?.Read?.AvgLatencyMs ?? 0,
         DesktopWriteLatencyMs = result.Desktop?.Write?.AvgLatencyMs ?? 0,
-        Notes = result.Label ?? string.Empty
+        Notes = result.Label ?? string.Empty,
+        DiskSpdVersion = result.DiskSpdVersion ?? string.Empty,
+        DiskSpdSha256 = result.DiskSpdSha256 ?? string.Empty
     };
 
     public static RegressionVerdict Compare(BenchmarkBaseline baseline, BenchmarkBaseline current, double thresholdPercent)
     {
+        var mismatch = BenchmarkService.DescribeDiskSpdMismatch(
+            baseline.DiskSpdVersion, baseline.DiskSpdSha256, current.DiskSpdVersion, current.DiskSpdSha256);
+        if (mismatch is not null)
+            return new RegressionVerdict { Comparable = false, Summary = "NOT COMPARABLE: " + mismatch };
+
         double readDelta = PercentDelta(baseline.ReadIops, current.ReadIops);
         double writeDelta = PercentDelta(baseline.WriteIops, current.WriteIops);
         bool hasDesktopRead = baseline.DesktopReadIops > 0 && current.DesktopReadIops > 0;

@@ -49,4 +49,11 @@ public class BenchmarkRecord
     public double DesktopWriteLatencyMs { get; set; }
 
     public string? Notes { get; set; }
+
+    // DiskSpd provenance; null on rows saved before schema v4.
+    public string? DiskSpdVersion { get; set; }
+
+    public string? DiskSpdSha256 { get; set; }
+
+    public string? DiskSpdArguments { get; set; }
 }

@@ -161,4 +161,33 @@ public sealed class BenchmarkServiceTests
         Assert.NotNull(result.Read);
         Assert.NotNull(result.Write);
     }
+
+    [Fact]
+    public void DescribeDiskSpdMismatch_WarnsOnlyWhenBothRecordedAndDiffer()
+    {
+        Assert.Null(BenchmarkService.DescribeDiskSpdMismatch("2.2", "aa", "2.2", "AA"));
+        Assert.Null(BenchmarkService.DescribeDiskSpdMismatch("", "", "2.3", "bb"));
+        Assert.Null(BenchmarkService.DescribeDiskSpdMismatch(null, null, null, null));
+        var versionWarning = BenchmarkService.DescribeDiskSpdMismatch("2.2", "aa", "2.3", "aa");
+        Assert.NotNull(versionWarning);
+        Assert.Contains("DiskSpd 2.2", versionWarning);
+        Assert.Contains("DiskSpd 2.3", versionWarning);
+        Assert.NotNull(BenchmarkService.DescribeDiskSpdMismatch("2.2", "aa", "2.2", "bb"));
+    }
+
+    [Fact]
+    public void SanitizeBenchmarkHistory_OldResultsWithoutDiskSpdFieldsGetEmptyStrings()
+    {
+        var result = new BenchmarkResult { DiskSpdVersion = null!, DiskSpdSha256 = null!, DiskSpdArguments = null! };
+        var clean = BenchmarkService.SanitizeBenchmarkHistory([result]).Single();
+        Assert.Equal(string.Empty, clean.DiskSpdVersion);
+        Assert.Equal(string.Empty, clean.DiskSpdSha256);
+        Assert.Equal(string.Empty, clean.DiskSpdArguments);
+    }
+
+    [Fact]
+    public void PinnedDiskSpdVersion_MatchesTheDownloadPin()
+    {
+        Assert.Equal("2.2", BenchmarkService.PinnedDiskSpdVersion);
+    }
 }
