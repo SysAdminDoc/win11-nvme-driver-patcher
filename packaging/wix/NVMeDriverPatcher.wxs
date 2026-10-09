@@ -61,11 +61,15 @@
       install, so this guards against a risky choice rather than an attacker. There's no folder
       picker; INSTALLFOLDER on the command line may name a folder inside Program Files (never
       Program Files itself, which would get the protected DACL below), and "\." or "/" is refused
-      so ".." can't climb back out. Installed skips the check in maintenance mode (repair, change,
-      uninstall). Test-InstallFolderAcl.ps1 matches the message text.
+      so ".." can't climb back out. There's deliberately no "Installed OR": in maintenance mode
+      `ADDLOCAL=WatchdogService INSTALLFOLDER=D:\Apps` would put the new component in a folder that
+      never gets the pinned DACL (InstallFolderPermissions is already installed). INSTALLFOLDER is
+      unset before CostFinalize unless the command line sets it, and the folder the UI resolves is
+      the installed one under Program Files, so repair and uninstall still pass.
+      Test-InstallFolderAcl.ps1 matches the message text.
     -->
     <Launch
-      Condition='Installed OR NOT INSTALLFOLDER OR (INSTALLFOLDER ~&lt;&lt; ProgramFiles64Folder AND NOT (INSTALLFOLDER ~= ProgramFiles64Folder) AND NOT (INSTALLFOLDER &gt;&lt; "\.") AND NOT (INSTALLFOLDER &gt;&lt; "/"))'
+      Condition='NOT INSTALLFOLDER OR (INSTALLFOLDER ~&lt;&lt; ProgramFiles64Folder AND NOT (INSTALLFOLDER ~= ProgramFiles64Folder) AND NOT (INSTALLFOLDER &gt;&lt; "\.") AND NOT (INSTALLFOLDER &gt;&lt; "/"))'
       Message="NVMe Driver Patcher installs only under Program Files. A folder elsewhere can usually be renamed by a standard user, who could then swap in their own copy of programs that run with administrator rights. Leave INSTALLFOLDER unset, or point it at a folder inside Program Files." />
 
     <UI>

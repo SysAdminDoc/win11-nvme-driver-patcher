@@ -186,7 +186,10 @@ public sealed class InstallerContentTests
         var launch = Regex.Match(wxs, @"<Launch\s+Condition='([^']+)'\s+Message=""([^""]+)""", RegexOptions.Singleline);
         Assert.True(launch.Success, "The MSI has no Launch condition guarding INSTALLFOLDER.");
         var condition = launch.Groups[1].Value;
-        Assert.StartsWith("Installed OR NOT INSTALLFOLDER OR (", condition);
+        // No "Installed OR": in maintenance mode ADDLOCAL plus INSTALLFOLDER would otherwise put a
+        // new component in a folder that never gets the pinned DACL.
+        Assert.StartsWith("NOT INSTALLFOLDER OR (", condition);
+        Assert.DoesNotContain("Installed", condition);
         Assert.Contains("INSTALLFOLDER ~&lt;&lt; ProgramFiles64Folder", condition);   // case-insensitive prefix
         Assert.Contains("NOT (INSTALLFOLDER ~= ProgramFiles64Folder)", condition);    // never Program Files itself
         Assert.Contains(@"NOT (INSTALLFOLDER &gt;&lt; ""\."")", condition);           // no "..", no "."
