@@ -260,10 +260,10 @@ public static class DryRunService
         var existing = current.Value as string;
         var note = mirrorNote ?? mutation.Path switch
         {
-            AppConfig.SafeBootMinimalPath => "SafeBoot Minimal support (prevents INACCESSIBLE_BOOT_DEVICE in Safe Mode)",
-            AppConfig.SafeBootNetworkPath => "SafeBoot Network support",
-            AppConfig.SafeBootMinimalServicePath => "SafeBoot Minimal entry for the nvmedisk service",
-            _ => "SafeBoot Network entry for the nvmedisk service"
+            AppConfig.SafeBootMinimalPath => "Safe Boot Minimal support (prevents INACCESSIBLE_BOOT_DEVICE in Safe Mode)",
+            AppConfig.SafeBootNetworkPath => "Safe Boot Network support",
+            AppConfig.SafeBootMinimalServicePath => "Safe Boot Minimal entry for the nvmedisk service",
+            _ => "Safe Boot Network entry for the nvmedisk service"
         };
         if (current.WindowsOwned)
         {

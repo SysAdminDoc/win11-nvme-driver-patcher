@@ -141,7 +141,7 @@ public static class PreflightService
             var safeBoot = SafeBootUpgradeService.Evaluate();
             if (safeBoot.UpgradeNeeded)
                 checks["SafeBootEntries"] = new(CheckStatus.Warning,
-                    "SafeBoot entries predate KB5079391. Run the SafeBoot upgrade (Safe Mode risk on 25H2+)");
+                    "Safe Boot entries predate KB5079391. Run the Safe Boot upgrade (Safe Mode risk on 25H2+)");
         }
         catch { /* probe is best-effort */ }
 

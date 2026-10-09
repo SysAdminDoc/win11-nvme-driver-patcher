@@ -213,7 +213,7 @@ public static class MutationLedgerService
                 : mirrorControlSets ?? [];
             var baseline = reuseBaseline ? prior!.Baseline : CaptureBaseline(effectiveMirrors);
             if (baseline.SafeBoot.Entries.Any(entry => entry.AccessDenied))
-                return new(false, "SafeBoot pre-state could not be read exactly; refusing to mutate boot-critical state.");
+                return new(false, "Safe Boot pre-state could not be read exactly; refusing to mutate boot-critical state.");
 
             if (requireFeatureStoreBaseline && !baseline.FeatureStoreCaptureComplete)
             {
@@ -693,7 +693,7 @@ public static class MutationLedgerService
 
         var safeBootFailures = SafeBootStateService.RestoreFromJournal(
             new RealSafeBootRegistry(), ledger.Baseline.SafeBoot, log);
-        failures.AddRange(safeBootFailures.Select(path => "SafeBoot " + path));
+        failures.AddRange(safeBootFailures.Select(path => "Safe Boot " + path));
 
         if (ledger.FeatureStoreTouched)
         {
@@ -745,11 +745,11 @@ public static class MutationLedgerService
             {
                 var actual = safeBoot.Read(expected.Path);
                 if (!SafeBootStateService.IsAtBaselineOrWindowsOwned(expected, actual))
-                    differences.Add("SafeBoot key differs from baseline: " + expected.Path);
+                    differences.Add("Safe Boot key differs from baseline: " + expected.Path);
             }
             catch (Exception ex)
             {
-                differences.Add($"SafeBoot key unverifiable: {expected.Path} ({ex.GetType().Name})");
+                differences.Add($"Safe Boot key unverifiable: {expected.Path} ({ex.GetType().Name})");
             }
         }
 

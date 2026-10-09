@@ -364,7 +364,7 @@ class Program
     static int UpgradeSafeBootCommand()
     {
         var report = SafeBootUpgradeService.Evaluate();
-        Console.WriteLine("SafeBoot Entry Upgrade (KB5079391)");
+        Console.WriteLine("Safe Boot Entry Upgrade (KB5079391)");
         Console.WriteLine("==================================");
         Console.WriteLine(report.Summary);
         if (!report.UpgradeNeeded)

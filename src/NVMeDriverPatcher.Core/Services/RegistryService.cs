@@ -265,7 +265,7 @@ public static class RegistryService
             if (safeBootDeletions.Count > 0)
             {
                 lines.Add("");
-                lines.Add("; Delete SafeBoot keys the patch creates (absent before patch):");
+                lines.Add("; Delete Safe Boot keys the patch creates (absent before patch):");
                 lines.AddRange(safeBootDeletions);
             }
             lines.Add("");

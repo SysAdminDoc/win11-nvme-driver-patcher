@@ -292,7 +292,7 @@ public static class SafeBootStateService
             {
                 // Apply never writes a Windows-owned key, so there's nothing to undo, and the
                 // write would be refused anyway.
-                log?.Invoke($"  [SafeBoot] Left {entry.Path} as is: Windows owns and write-protects it");
+                log?.Invoke($"  [Safe Boot] Left {entry.Path} as is: Windows owns and write-protects it");
                 continue;
             }
 
@@ -300,19 +300,19 @@ public static class SafeBootStateService
             {
                 var plan = PlanRestore(entry.ToSnapshot());
                 registry.ApplyRestore(entry.Path, plan);
-                log?.Invoke($"  [SafeBoot] Restored {entry.Path}: " +
+                log?.Invoke($"  [Safe Boot] Restored {entry.Path}: " +
                     (plan.DeleteEntireKey ? "removed app-created key"
                      : plan.DeleteAppDefaultValue ? "removed app default value, kept pre-existing key/values"
                      : $"restored prior default '{plan.RestorePriorDefault}'"));
             }
             catch (Exception ex) when (HarmlessRefusal(registry, entry, ex) is string reason)
             {
-                log?.Invoke($"  [SafeBoot] Left {entry.Path} as is: {reason}");
+                log?.Invoke($"  [Safe Boot] Left {entry.Path} as is: {reason}");
             }
             catch (Exception ex)
             {
                 failures.Add($"{entry.Path} ({ex.GetType().Name})");
-                log?.Invoke($"  [SafeBoot] FAILED to restore {entry.Path}: {ex.Message}");
+                log?.Invoke($"  [Safe Boot] FAILED to restore {entry.Path}: {ex.Message}");
             }
         }
         return failures;
@@ -424,7 +424,7 @@ public static class SafeBootStateService
 
             var staged = JsonSerializer.Deserialize<SafeBootJournal>(File.ReadAllText(tmp));
             if (staged is null || staged.Entries.Count != journal.Entries.Count)
-                throw new InvalidDataException("Staged SafeBoot journal validation failed.");
+                throw new InvalidDataException("Staged Safe Boot journal validation failed.");
 
             if (File.Exists(target))
                 File.Replace(tmp, target, target + ".bak", ignoreMetadataErrors: true);
@@ -450,7 +450,7 @@ public static class SafeBootStateService
         catch (Exception ex)
         {
             try { if (tmp is not null && File.Exists(tmp)) File.Delete(tmp); } catch { }
-            log?.Invoke($"  [SafeBoot] Could not persist SafeBoot journal: {ex.Message}");
+            log?.Invoke($"  [Safe Boot] Could not persist Safe Boot journal: {ex.Message}");
             return false;
         }
     }

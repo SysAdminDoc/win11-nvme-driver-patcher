@@ -290,7 +290,7 @@ public static class CriticalEnvironmentProbeService
         DateTimeOffset observedAtUtc)
     {
         const string id = "SafeBoot";
-        const string label = "SafeBoot registry";
+        const string label = "Safe Boot registry";
         try
         {
             var keys = platform.InspectSafeBootKeys();
@@ -299,7 +299,7 @@ public static class CriticalEnvironmentProbeService
                 keys.Network == SafeBootKeyDisposition.AccessDenied)
             {
                 return Result(id, label, CriticalProbeVerdict.Fail, CriticalProbeReasonCode.AccessDenied,
-                    "SafeBoot GUID key access is denied; recovery entries cannot be proved writable.",
+                    "Safe Boot GUID key access is denied; recovery entries cannot be proved writable.",
                     evidence, observedAtUtc);
             }
             var windowsOwned = new List<string>();
@@ -309,13 +309,13 @@ public static class CriticalEnvironmentProbeService
             {
                 bool both = windowsOwned.Count == 2;
                 return Result(id, label, CriticalProbeVerdict.Pass, CriticalProbeReasonCode.ConfirmedSafe,
-                    $"Windows owns the SafeBoot {string.Join(" and ", windowsOwned)} {(both ? "keys" : "key")} for this driver " +
+                    $"Windows owns the Safe Boot {string.Join(" and ", windowsOwned)} {(both ? "keys" : "key")} for this driver " +
                     $"and write-protects {(both ? "them" : "it")}. Windows already registers the driver for Safe Mode there, " +
                     $"so the patch leaves {(both ? "them" : "it")} as {(both ? "they are" : "it is")}.",
                     evidence, observedAtUtc);
             }
             return Result(id, label, CriticalProbeVerdict.Pass, CriticalProbeReasonCode.ConfirmedSafe,
-                "SafeBoot GUID key state is readable and preserves any pre-existing values.",
+                "Safe Boot GUID key state is readable and preserves any pre-existing values.",
                 evidence, observedAtUtc);
         }
         catch (Exception ex)

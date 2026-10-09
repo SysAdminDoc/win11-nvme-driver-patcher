@@ -170,7 +170,7 @@ public static class RecoveryProofGateService
         }
         catch (Exception ex)
         {
-            return new() { Label = "SafeBoot entries", Passed = false, Detail = $"Check failed: {ex.Message}" };
+            return new() { Label = "Safe Boot entries", Passed = false, Detail = $"Check failed: {ex.Message}" };
         }
     }
 
@@ -188,17 +188,17 @@ public static class RecoveryProofGateService
         bool windowsOwnsGuidKeys)
     {
         if (guidEntriesPresent && serviceEntriesComplete)
-            return new() { Label = "SafeBoot entries", Passed = true, Detail = "GUID + service-name entries both present" };
+            return new() { Label = "Safe Boot entries", Passed = true, Detail = "GUID + service-name entries both present" };
         if (guidEntriesPresent && !serviceEntriesComplete)
-            return new() { Label = "SafeBoot entries", Passed = false, Detail = "GUID entries present but KB5079391 service-name entries missing. Run upgrade-safeboot" };
+            return new() { Label = "Safe Boot entries", Passed = false, Detail = "GUID entries present but KB5079391 service-name entries missing. Run upgrade-safeboot" };
         return new()
         {
-            Label = "SafeBoot entries",
+            Label = "Safe Boot entries",
             Passed = true,
             Detail = !windowsOwnsGuidKeys
                 ? serviceEntriesComplete
                     ? "The service-name entries are present, but this tool's GUID entries aren't. Apply adds them"
-                    : "No SafeBoot entries from this tool yet. Apply creates them"
+                    : "No Safe Boot entries from this tool yet. Apply creates them"
                 : serviceEntriesComplete
                     ? "Windows' own GUID entries are in place and stay as they are, and the service-name entries are present"
                     : "Windows' own GUID entries are in place and stay as they are. Apply adds the service-name entries"

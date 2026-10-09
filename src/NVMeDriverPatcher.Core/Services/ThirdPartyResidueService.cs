@@ -68,11 +68,11 @@ public static class ThirdPartyResidueService
         }
         if (orphaned.Count > 0)
         {
-            parts.Add($"SafeBoot {string.Join(" and ", orphaned)} {(orphaned.Count == 1 ? "entry" : "entries")} for " +
+            parts.Add($"Safe Boot {string.Join(" and ", orphaned)} {(orphaned.Count == 1 ? "entry" : "entries")} for " +
                 "the native driver are still set, but no NVMe override is. Something removed the overrides and left " +
                 "these behind. That's usually a debloat script's revert or a registry cleaner, though some 24H2 builds " +
                 "delete 735209102 at boot on their own. They do nothing by themselves, and Remove clears them. To " +
-                "patch again, run the SafeBoot upgrade first, since Apply's recovery check stops on these entries.");
+                "patch again, run the Safe Boot upgrade first, since Apply's recovery check stops on these entries.");
             if (!snapshot.PoliciesMicrosoftExists)
             {
                 parts.Add(@"The whole Policies\Microsoft registry tree is gone as well, which is what FR33THY Ultimate's " +

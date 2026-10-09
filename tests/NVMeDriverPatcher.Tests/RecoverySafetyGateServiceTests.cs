@@ -15,13 +15,13 @@ public sealed class RecoverySafetyGateServiceTests : IDisposable
     {
         RecoverySafetyGateService.ReportFailure(
             "Interrupted mutation ledger",
-            "SafeBoot Network could not be restored.");
+            "Safe Boot Network could not be restored.");
 
         var state = RecoverySafetyGateService.Snapshot();
 
         Assert.False(state.MutationAllowed);
         Assert.Single(state.Failures);
-        Assert.Contains("SafeBoot Network could not be restored", state.Summary, StringComparison.Ordinal);
+        Assert.Contains("Safe Boot Network could not be restored", state.Summary, StringComparison.Ordinal);
         Assert.Contains("Remove the patch or export diagnostics/recovery material", state.Summary, StringComparison.Ordinal);
 
         RecoverySafetyGateService.ReportFailure(
@@ -82,9 +82,9 @@ public sealed class RecoverySafetyGateServiceTests : IDisposable
             new InterruptedMutationRecoveryResult(
                 InterruptedMutationAction.RestoreOriginalState,
                 Success: false,
-                "SafeBoot rollback remained incomplete."));
+                "Safe Boot rollback remained incomplete."));
         Assert.False(failedLedger.MutationAllowed);
-        Assert.Contains("SafeBoot rollback remained incomplete", failedLedger.Summary, StringComparison.Ordinal);
+        Assert.Contains("Safe Boot rollback remained incomplete", failedLedger.Summary, StringComparison.Ordinal);
 
         RecoverySafetyGateService.Reset();
         var cleanAutoRevert = RecoverySafetyGateService.ObserveAutoRevert(new AutoRevertOutcome
