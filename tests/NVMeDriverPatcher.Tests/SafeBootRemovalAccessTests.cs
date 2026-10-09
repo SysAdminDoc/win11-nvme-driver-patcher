@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using Microsoft.Win32;
@@ -24,11 +26,13 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
 {
     private const string Leaf = "{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}";
 
-    // Only this class writes under TestParent, so the startup sweep can clear every sibling tree
-    // (left behind by a run that died between the deny ACE and Dispose) without touching other suites.
+    // Only this class writes under TestParent, so the startup sweep can clear trees left behind by a run
+    // that died between the deny ACE and Dispose without touching other suites.
     private const string TestParent = @"Software\NVMeDriverPatcherTests\SafeBootAccess";
 
-    private readonly string _root = $@"{TestParent}\{Guid.NewGuid():N}";
+    // "<pid>-<guid>": the process ID tells a crashed run's leftovers apart from a test host running
+    // alongside this one, whose live fixtures the sweep must leave alone.
+    private readonly string _root = $@"{TestParent}\{Environment.ProcessId}-{Guid.NewGuid():N}";
 
     static SafeBootRemovalAccessTests()
     {
@@ -37,11 +41,35 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
             using var parent = Registry.CurrentUser.OpenSubKey(TestParent);
             if (parent is null) return;
             foreach (var name in parent.GetSubKeyNames())
+            {
+                if (OwnerIsRunning(name)) continue;
                 RestoreAccessAndDelete($@"{TestParent}\{name}");
+            }
         }
         catch
         {
             // Best effort: a stuck orphan under a GUID path is harmless.
+        }
+    }
+
+    // A tree is live when its PID prefix names a running process other than this one. This host has
+    // created nothing when the sweep runs, so its own PID can only be a reused PID from a dead run.
+    // Names without the prefix predate it and are always stale.
+    private static bool OwnerIsRunning(string keyName)
+    {
+        var dash = keyName.IndexOf('-');
+        if (dash <= 0 ||
+            !int.TryParse(keyName.AsSpan(0, dash), NumberStyles.None, CultureInfo.InvariantCulture, out var pid) ||
+            pid == Environment.ProcessId)
+            return false;
+        try
+        {
+            Process.GetProcessById(pid).Dispose();
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false; // Not running.
         }
     }
 
