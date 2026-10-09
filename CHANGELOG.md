@@ -186,7 +186,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - Removed leftovers of the old window layout that nothing used anymore: an unused tab control style, a hidden maximize button and its handlers (the standard title bar buttons do that job), a collapsed panel splitter and the grid rows and columns that existed for it, a settings toggle command with no button, and two converters nothing bound.
 
 ### Docs
-- Registry backup and removal-residue tests run against fixture trees instead of the live machine. The recovery gate tests use a temp folder, and a crashed run no longer leaves protected test keys behind.
+- Registry backup and removal-residue tests run against fixture trees instead of the live machine. The recovery gate tests use a temp folder, and a crashed run no longer leaves protected test keys behind. The override ownership checks cover the unpatched, empty-key and patched states on fixtures too, so they take the same branches whether or not the test PC is patched. One clearly named smoke test still reads the real key, and its blocking check now counts an unreadable key the way the app does.
 - README counts 28 preflight checks, the number PreflightService defines. It said 27.
 - CLI help now describes what `register-tasks`, `tail` and `watchdog --auto-revert` actually do,
   and lists every command that supports `--json` (twelve, not five).

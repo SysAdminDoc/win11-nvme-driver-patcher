@@ -17,31 +17,23 @@ public sealed class PatchServiceTests
     }
 
     [Fact]
-    public void ProbeRemovalResidue_ReadsEveryStore_WithoutThrowing_AndReturnsWellFormedEntries()
+    public void LiveHklmSmoke_ProbeAndOwnershipReadTheRealKeyWithoutThrowing()
     {
-        // Read-only probe against the live HKLM64 — safe without admin and non-destructive.
-        // On an unpatched machine it returns few/no entries; each entry must be a human-readable,
-        // non-empty descriptor. Any store it cannot confirm clean is reported as residue
-        // (fail-closed) rather than throwing.
-        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-        var residue = PatchService.ProbeRemovalResidue(hklm, workingDir: null, log: null);
-
-        Assert.NotNull(residue);
-        Assert.All(residue, r => Assert.False(string.IsNullOrWhiteSpace(r)));
-    }
-
-    [Fact]
-    public void InspectRegistryOverrideOwnership_ReadsLiveKeyWithoutMutatingIt()
-    {
+        // Live smoke only: proves the read path works on a real HKLM handle (owner lookup, the
+        // writable-handle check) without admin and without writing anything. It asserts nothing
+        // that depends on whether this machine is patched; the patched and unpatched branches
+        // are pinned against HKCU fixtures in RegistryOverrideOwnershipTests.
         using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
 
         var report = PatchService.InspectRegistryOverrideOwnership(hklm);
+        var residue = PatchService.ProbeRemovalResidue(hklm, workingDir: null, log: null);
 
-        Assert.NotNull(report);
         Assert.False(string.IsNullOrWhiteSpace(report.Summary));
-        Assert.NotNull(report.Owner);
-        Assert.NotNull(report.RemainingValueNames);
-        Assert.Equal(report.RemainingValueNames.Count > 0 && !report.CurrentUserCanWrite, report.HasBlockingResidue);
+        Assert.False(string.IsNullOrWhiteSpace(report.Owner));
+        Assert.Equal(
+            !report.Readable || (report.RemainingValueNames.Count > 0 && !report.CurrentUserCanWrite),
+            report.HasBlockingResidue);
+        Assert.All(residue, r => Assert.False(string.IsNullOrWhiteSpace(r)));
     }
 
 
