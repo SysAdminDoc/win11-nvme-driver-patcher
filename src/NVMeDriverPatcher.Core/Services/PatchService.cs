@@ -68,7 +68,8 @@ public static class PatchService
     /// writes the other flags without it, so a baseline that holds it was captured mid-life and
     /// the flags it holds are presumed this tool's. It is a presumption: a script that set the
     /// primary flag and the extras before this tool ever ran looks the same, which is why the
-    /// wording says so and Remove still restores the recorded baseline.
+    /// wording says so. Remove applies the same rule
+    /// (<see cref="MutationLedgerService.RemovalTargets"/>).
     /// A null <paramref name="baseline"/> means apply captures a fresh one next, which records
     /// whatever is set now as pre-existing; the primary flag's live value decides that case the
     /// same way, so the preview can't say KEEP where apply will clear.
@@ -139,7 +140,7 @@ public static class PatchService
                 delete(item.SubKey, item.ValueName);
                 cleared++;
                 log?.Invoke(item.BaselineCapturedMidLife
-                    ? $"  [CLEARED] {item.ValueName} under {item.SubKey}: it was already set alongside this tool's primary flag before any ledger existed, so it's presumed to be an older version's, and this apply doesn't include it. Remove restores it with the rest of the recorded baseline."
+                    ? $"  [CLEARED] {item.ValueName} under {item.SubKey}: it was already set alongside this tool's primary flag before any ledger existed, so it's presumed to be an older version's, and this apply doesn't include it. Remove clears it too."
                     : $"  [CLEARED] {item.ValueName} under {item.SubKey}: an earlier apply of this tool wrote it, and this apply doesn't include it");
             }
             catch (Exception ex)
@@ -820,7 +821,7 @@ public static class PatchService
             if (mutationLedger is not null)
             {
                 bool hadMutation = mutationLedger.Phase != MutationOperationPhase.Reverted;
-                var restored = MutationLedgerService.RestoreOriginalState(workingDir, log);
+                var restored = MutationLedgerService.RestoreForRemoval(workingDir, log);
                 if (restored.NothingChanged)
                 {
                     // Another process is mid-apply. Nothing was restored, so this isn't residue
@@ -881,6 +882,22 @@ public static class PatchService
 
                 result.RegistryOverrideOwnership = InspectLiveRegistryOverrideOwnership();
                 log?.Invoke($"  [Registry] {result.RegistryOverrideOwnership.Summary}");
+                // REMOVED needs the live key to hold none of this tool's values, not just a
+                // restore that matched its own targets.
+                if (!result.RegistryOverrideOwnership.Readable)
+                {
+                    result.Residue.Add($"This tool's override values under {AppConfig.RegistryPath} couldn't be checked after the restore.");
+                }
+                else
+                {
+                    var remaining = result.RegistryOverrideOwnership.RemainingValueNames;
+                    var left = MutationLedgerService.OwnedValuesLeftAfterRemoval(remaining, mutationLedger.Baseline.RegistryValues);
+                    foreach (var name in remaining.Except(left, StringComparer.OrdinalIgnoreCase))
+                        log?.Invoke($"  [KEPT] {name}: it was set before this tool's first apply, so Remove put it back as it was.");
+                    foreach (var name in left)
+                        result.Residue.Add($"Feature override value {name} is still set under {AppConfig.RegistryPath}.");
+                }
+                result.Success = result.Success && result.Residue.Count == 0;
                 ReportStorPortOverrides(result, log);
 
                 if (result.Success)
