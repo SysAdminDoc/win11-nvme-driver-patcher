@@ -245,13 +245,6 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
   Acceptance: The confirmation's expected-gains text distinguishes high-queue-depth workloads from ordinary desktop use and names the write regression; the README does the same above the fold. Pairs with the QD1 benchmark item so the claim is measurable on the user's own machine.
   Complexity: S
 
-- [ ] P3 — Fix the Chocolatey/Scoop blocked item's mechanism (it names a workflow file that cannot exist)
-  Why: The blocked item in Roadmap_Blocked.md says to add `choco push` and a Scoop bucket PR step to `.github/workflows/release.yml`. This repo has no `.github/workflows/` at all and build/release CI is banned by policy, so the item as written is unimplementable even once its credentials arrive.
-  Evidence: `Roadmap_Blocked.md:48-53`; `.github/` contains only issue templates.
-  Touches: `Roadmap_Blocked.md`, `scripts/Build-ReleaseArtifacts.ps1`, `scripts/Update-PackageManifests.ps1`.
-  Acceptance: The blocked item describes a local publish step in the release builder gated on the credentials, and no longer references a GitHub Actions workflow.
-  Complexity: S
-
 - [ ] P3 — Plan the xunit v3 migration
   Why: NuGet marks `xunit` 2.9.3 deprecated ("Legacy") with `xunit.v3` as the alternative; v3's `TestContext.Current.CancellationToken` would replace the hand-rolled bounded-`WaitForExit` pattern documented in CLAUDE.md and tracked in the P2 `ReadToEnd()` item above. Not urgent — 2.9.3 has no CVE — but the suite is this repo's primary safety evidence and should not sit on a deprecated runner indefinitely.
   Evidence: `dotnet list package --deprecated` on `tests/NVMeDriverPatcher.Tests`; https://xunit.net/docs/getting-started/v3/migration.
@@ -273,13 +266,6 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
   Complexity: L
 
 ### P2
-
-- [ ] P2 — Smart App Control: detect it, explain it, and test both download paths against it
-  Why: Since April 2026, 25H2 users can turn Smart App Control back on after turning it off. It blocks unsigned `.exe`, `.msi` and `.ps1` files that carry Mark of the Web, and the dialog has no override. The GUI exe is what most people download (1,072 of v5.6.0's downloads against 235 for the MSI), and nothing in the repo mentions SAC.
-  Evidence: https://textslashplain.com/2026/04/28/smart-app-control/; `grep -ri "Smart App Control" src scripts README.md` is empty (2026-10-06); v5.6.0 release download counts.
-  Touches: README install section; a SAC state read (`HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy\VerifiedAndReputablePolicyState`) in diagnostics and the support bundle; `AutoUpdaterService` messages.
-  Acceptance: On a SAC-enabled VM the browser-downloaded GUI exe, MSI and PowerShell module are each tried, and the README states what happens and the way through. The in-app updater's download is tried too, and its message matches the result. The support bundle records SAC state.
-  Complexity: M
 
 ### P3
 

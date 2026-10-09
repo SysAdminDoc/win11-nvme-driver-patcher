@@ -698,6 +698,9 @@ public static class DiagnosticsService
         }
         catch (Exception ex) { sb.AppendLine($"  Unavailable: {ex.Message}"); }
 
+        sb.AppendLine().AppendLine("SMART APP CONTROL").AppendLine("-----------------");
+        sb.AppendLine($"  {SmartAppControlService.Describe(SmartAppControlService.Read())}");
+
         sb.AppendLine().AppendLine("ETW NVMe DRIVER WATCHDOG EVIDENCE").AppendLine("---------------------------------");
         var etwEvidence = EtwTraceService.GetLatestProviderEvidence(workingDir);
         if (etwEvidence is null)

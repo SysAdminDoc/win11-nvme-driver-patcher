@@ -64,6 +64,24 @@ Download [`NVMe_Driver_Patcher.ps1`](https://github.com/SysAdminDoc/win11-nvme-d
 > It remains in releases for air-gapped status, removal, diagnostics, and recovery/export use.
 </details>
 
+### If Windows blocks it
+
+The release files aren't code-signed. The first time you run one, SmartScreen may say "Windows
+protected your PC". Click **More info**, then **Run anyway**.
+
+Smart App Control is stricter. When it's on, Windows blocks unsigned apps it has no reputation
+for, and Microsoft doesn't offer an exception for a single app. That can hit the exes, the MSI
+and the PowerShell module. Check it under Windows Security > App & browser control > Smart App
+Control settings:
+
+- **Evaluation** doesn't block anything, though Windows may switch it on later.
+- **On** leaves one way through: turn Smart App Control off on that page, then run the tool.
+  Windows 11 25H2 with the April 2026 Windows Security update lets you turn it back on later.
+  Older builds can't, so decide before you switch it off.
+
+The support bundle records which state your PC is in, and the update badge and the CLI's
+`update-check` warn when it's on and a new version is out.
+
 ### Verify the download (recommended)
 
 Every release also carries a combined [`SHA256SUMS.txt`](https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/latest/download/SHA256SUMS.txt) listing every asset's hash.

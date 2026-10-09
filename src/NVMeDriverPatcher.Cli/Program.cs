@@ -922,6 +922,8 @@ class Program
         Console.WriteLine($"Update available: {result.Tag}");
         Console.WriteLine($"Asset: {result.Name}");
         Console.WriteLine($"URL: {result.Url}");
+        if (SmartAppControlService.DownloadNote(SmartAppControlService.Read()) is string sacNote)
+            Console.WriteLine(sacNote);
         return 0;
     }
 
