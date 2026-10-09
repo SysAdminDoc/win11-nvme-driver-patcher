@@ -214,7 +214,7 @@ public sealed class RecoveryKitServiceTests : IDisposable
 
         using var process = new System.Diagnostics.Process();
         process.StartInfo = new System.Diagnostics.ProcessStartInfo(
-            "cmd.exe", $"/d /c \"\"{Path.Combine(kitDir, RecoveryKitService.GuardScriptFileName)}\"\"")
+            SystemToolPathService.Resolve("cmd.exe"), $"/d /c \"\"{Path.Combine(kitDir, RecoveryKitService.GuardScriptFileName)}\"\"")
         {
             UseShellExecute = false,
             RedirectStandardOutput = true,

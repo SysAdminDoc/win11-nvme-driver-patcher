@@ -177,7 +177,7 @@ public sealed class UpdateManifestScriptTests
 
         private static ScriptResult Run(string script, params string[] args)
         {
-            var startInfo = new ProcessStartInfo("powershell.exe")
+            var startInfo = new ProcessStartInfo(SystemToolPathService.PowerShell)
             {
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,

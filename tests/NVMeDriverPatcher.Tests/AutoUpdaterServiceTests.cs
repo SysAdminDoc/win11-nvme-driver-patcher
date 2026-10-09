@@ -126,7 +126,7 @@ public sealed class AutoUpdaterServiceTests
         try
         {
             var command = AutoUpdaterService.BuildRestartCommand(staged, target, new string('0', 64));
-            var startInfo = new ProcessStartInfo("powershell.exe")
+            var startInfo = new ProcessStartInfo(SystemToolPathService.PowerShell)
             {
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,

@@ -110,6 +110,85 @@ public sealed class SystemToolPathServiceTests
             $"These lines name a tool without resolving it; route them through SystemToolPathService: {string.Join(", ", offenders)}");
     }
 
+    /// <summary>
+    /// A test that starts a process from a bare name: a ProcessStartInfo or Process.Start call whose
+    /// first argument is a string literal, or a FileName assignment of an .exe literal. A bare name
+    /// resolves through the current directory and PATH, so a planted binary in the test output
+    /// folder would run in place of the real tool. Only launch-shaped uses count: asset names,
+    /// fixtures and assertions that merely mention an .exe are fine.
+    /// </summary>
+    private static readonly Regex BareNameLaunch = new(
+        @"(ProcessStartInfo\(\s*|Process\.Start\(\s*)""(?<tool>[^""\\/:]+)""" +
+        @"|FileName\s*=\s*""(?<tool>[^""\\/:]+\.exe)""",
+        RegexOptions.Compiled);
+
+    // Fixtures that must carry a bare name, as (file, tool). node has no fixed install path, and the
+    // test skips itself when it is missing, so it is looked up on PATH on purpose.
+    private static readonly (string File, string Tool)[] BareNameAllowlist =
+    [
+        ("TelemetryReceiverSummaryTests.cs", "node"),
+    ];
+
+    [Fact]
+    public void NoTestLaunchesAToolByBareName()
+    {
+        // Self-check the detector against each launch shape, and against shapes that must stay quiet.
+        Assert.Matches(BareNameLaunch, "var startInfo = new ProcessStartInfo(\"powershell.exe\")");
+        Assert.Matches(BareNameLaunch, "process.StartInfo = new System.Diagnostics.ProcessStartInfo(\n    \"cmd.exe\", args)");
+        Assert.Matches(BareNameLaunch, "Process.Start(\"explorer.exe\");");
+        Assert.Matches(BareNameLaunch, "new ProcessStartInfo { FileName = \"sc.exe\" }");
+        Assert.DoesNotMatch(BareNameLaunch, "new ProcessStartInfo(SystemToolPathService.PowerShell)");
+        Assert.DoesNotMatch(BareNameLaunch, "new ProcessStartInfo(SystemToolPathService.Resolve(\"cmd.exe\"), args)");
+        Assert.DoesNotMatch(BareNameLaunch, "new ProcessStartInfo(@\"C:\\Windows\\System32\\cmd.exe\")");
+        Assert.DoesNotMatch(BareNameLaunch, "FileName = \"compat.json\"");
+        Assert.DoesNotMatch(BareNameLaunch, "Assert.Equal(\"NVMeDriverPatcher.exe\", name);");
+
+        var offenders = ShippedSourceFiles("tests")
+            .SelectMany(path => BareNameLaunch.Matches(File.ReadAllText(path))
+                .Select(m => (File: Path.GetFileName(path), Tool: m.Groups["tool"].Value)))
+            .Where(hit => !BareNameAllowlist.Contains(hit))
+            .Select(hit => $"{hit.File} ({hit.Tool})")
+            .Distinct()
+            .ToList();
+
+        Assert.True(
+            offenders.Count == 0,
+            $"These tests launch a tool by bare name; use SystemToolPathService.Resolve/.PowerShell, or add a justified allowlist entry: {string.Join(", ", offenders)}");
+    }
+
+    [Fact]
+    public void Launch_UsesTheSystem32PowerShellEvenWhenAPlantedOneSitsInTheWorkingDirectory()
+    {
+        var plantDir = Path.Combine(Path.GetTempPath(), "nvme-plant-ps-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(plantDir);
+        try
+        {
+            // A stub that would be unmistakable if it ran: cmd.exe renamed to powershell.exe.
+            File.Copy(SystemToolPathService.Resolve("cmd.exe"), Path.Combine(plantDir, "powershell.exe"));
+
+            var psi = new System.Diagnostics.ProcessStartInfo(SystemToolPathService.PowerShell)
+            {
+                WorkingDirectory = plantDir,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", "Write-Output 'real-powershell'; exit 7" })
+                psi.ArgumentList.Add(argument);
+
+            var result = TestProcessRunner.Run(psi, TimeSpan.FromSeconds(30));
+
+            Assert.False(result.TimedOut);
+            Assert.Equal(7, result.ExitCode);
+            Assert.Contains("real-powershell", result.StdOut, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { Directory.Delete(plantDir, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public async Task Resolve_IgnoresAToolPlantedInTheWorkingDirectory()
     {
