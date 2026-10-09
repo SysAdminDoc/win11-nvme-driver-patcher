@@ -1241,6 +1241,12 @@ class Program
         var registryOverride = FallbackFeatureCatalog.AssessRegistryOverrides(
             preflight.BuildDetails,
             AppConfig.FeatureIDs);
+        // Tasks registered before register-tasks checked its target, or repointed since, still run
+        // as SYSTEM. A warning only: the exit code stays the patch state that scripts key on.
+        var taskWarnings = SchedulerService.AuditRegisteredTaskTargets()
+            .Where(audit => audit.NeedsAttention)
+            .Select(audit => audit.Detail)
+            .ToList();
 
         if (json)
         {
@@ -1250,7 +1256,7 @@ class Program
             var src = PatchVerificationService.ClassifyEnablementSource(native?.IsActive ?? false, status.Count, evidence);
             Console.WriteLine(CliJson.Serialize("status",
                 CliJson.BuildStatus(status, native, src, WindowsBuildRulesService.MatchCurrent(), registryOverride,
-                    BuildActionPolicyService.EvaluateCurrent(config.WorkingDir))));
+                    BuildActionPolicyService.EvaluateCurrent(config.WorkingDir), taskWarnings)));
             return status.Applied ? 0 : status.Partial ? 2 : 1;
         }
 
@@ -1344,6 +1350,9 @@ class Program
             foreach (var sw in preflight.IncompatibleSoftware)
                 Console.WriteLine($"  [{sw.Severity}] {sw.Name}: {sw.Message}");
         }
+
+        foreach (var warning in taskWarnings)
+            Console.WriteLine($"\nWARNING: {warning}");
 
         Console.WriteLine();
         return status.Applied ? 0 : status.Partial ? 2 : 1;

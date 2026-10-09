@@ -701,6 +701,10 @@ public static class DiagnosticsService
         sb.AppendLine().AppendLine("SMART APP CONTROL").AppendLine("-----------------");
         sb.AppendLine($"  {SmartAppControlService.Describe(SmartAppControlService.Read())}");
 
+        sb.AppendLine().AppendLine("SCHEDULED TASKS").AppendLine("---------------");
+        foreach (var task in SchedulerService.AuditRegisteredTaskTargets())
+            sb.AppendLine(task.NeedsAttention ? $"  WARNING: {task.Detail}" : $"  {task.Detail}");
+
         sb.AppendLine().AppendLine("ETW NVMe DRIVER WATCHDOG EVIDENCE").AppendLine("---------------------------------");
         var etwEvidence = EtwTraceService.GetLatestProviderEvidence(workingDir);
         if (etwEvidence is null)

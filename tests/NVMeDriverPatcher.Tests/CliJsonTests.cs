@@ -73,6 +73,21 @@ public sealed class CliJsonTests
     }
 
     [Fact]
+    public void Status_AlwaysCarriesScheduledTaskWarnings()
+    {
+        // Always present, so a script can test its length without checking that it exists first.
+        var clean = Parse("status", CliJson.BuildStatus(new PatchStatus(), null, EnablementSource.None, null))
+            .GetProperty("data");
+        Assert.Equal(0, clean.GetProperty("scheduledTaskWarnings").GetArrayLength());
+
+        const string warning = @"SysAdminDoc\NVMePatcher\BootVerify runs a program anyone can replace.";
+        var flagged = Parse("status", CliJson.BuildStatus(
+                new PatchStatus(), null, EnablementSource.None, null, null, null, new[] { warning }))
+            .GetProperty("data");
+        Assert.Equal(warning, flagged.GetProperty("scheduledTaskWarnings")[0].GetString());
+    }
+
+    [Fact]
     public void Watchdog_FieldNamesAreStable()
     {
         var report = new WatchdogReport

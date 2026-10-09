@@ -28,7 +28,8 @@ public static class CliJson
         EnablementSource source,
         WindowsBuildRule? rule,
         RegistryOverrideAssessment? registryOverride = null,
-        BuildActionPolicy? policy = null) => new()
+        BuildActionPolicy? policy = null,
+        IReadOnlyList<string>? scheduledTaskWarnings = null) => new()
     {
         Status = status.Applied ? "applied" : status.Partial ? "partial" : "not-applied",
         Applied = status.Applied,
@@ -45,6 +46,7 @@ public static class CliJson
         BuildRuleLastReviewed = rule?.LastReviewed,
         ApplyAllowed = policy?.MutationAllowed ?? false,
         ApplyBlockedReason = policy is { MutationAllowed: false } ? policy.Reason : null,
+        ScheduledTaskWarnings = scheduledTaskWarnings?.ToList() ?? new(),
         RegistryOverride = registryOverride is null ? null : new RegistryOverrideJson
         {
             BuildNumber = registryOverride.BuildNumber,
@@ -322,6 +324,9 @@ public sealed class StatusJson
     // enablement path reads as "nothing to fix" instead of failing remediation on every cycle.
     public bool ApplyAllowed { get; set; }
     public string? ApplyBlockedReason { get; set; }
+    // One plain sentence per registered task whose program someone other than an administrator
+    // could swap, or that couldn't be read. Always present; empty when there's nothing to fix.
+    public List<string> ScheduledTaskWarnings { get; set; } = new();
     public RegistryOverrideJson? RegistryOverride { get; set; }
 }
 
