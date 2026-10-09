@@ -1,4 +1,6 @@
 using System.IO;
+using System.Windows;
+using NVMeDriverPatcher.Models;
 using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.ViewModels;
@@ -9,96 +11,210 @@ namespace NVMeDriverPatcher.ViewModels;
 // Pure state-projection; no I/O beyond filesystem stat + the DataService DB.
 public partial class MainViewModel
 {
-    private void UpdateOperationalHistory()
+    // Newest request wins: a slow gather that finishes after a newer one started must not
+    // overwrite the newer state.
+    private int _operationalHistoryGeneration;
+
+    /// <summary>
+    /// Everything <see cref="GatherOperationalHistory"/> reads from disk, the benchmark database and
+    /// the registry, as plain data. Applying it touches only view-model state.
+    /// </summary>
+    internal sealed record OperationalHistorySnapshot(
+        bool HasBackupFiles,
+        bool HasBenchmarkHistory,
+        string? RecoveryKitPath,
+        bool RecoveryKitInWorkingFolder,
+        DateTime RecoveryKitWrittenAt,
+        bool RecoveryKitReadFailed,
+        string? VerificationScriptPath,
+        DateTime VerificationScriptWrittenAt,
+        bool VerificationScriptReadFailed,
+        string? DiagnosticsReportPath,
+        DateTime DiagnosticsReportWrittenAt,
+        bool DiagnosticsReportReadFailed,
+        PatchStatus? PatchStatus);
+
+    /// <summary>The config values the gather needs, copied on the UI thread so the worker never touches Config.</summary>
+    internal sealed record OperationalHistoryInputs(
+        string WorkingDir,
+        string? LastRecoveryKitPath,
+        string? LastVerificationScriptPath,
+        string? LastDiagnosticsPath);
+
+    // Refreshes the workspace summaries without blocking the caller. The directory scans, the
+    // SQLite read and the registry read run on the thread pool; the results are applied back here.
+    // Callers never read the outcome straight away, so they stay synchronous and fire this.
+    private void UpdateOperationalHistory() => _ = RefreshOperationalHistoryAsync();
+
+    internal async Task RefreshOperationalHistoryAsync()
     {
+        int generation = ++_operationalHistoryGeneration;
+        var inputs = CurrentHistoryInputs();
+
+        OperationalHistorySnapshot snapshot;
         try
         {
-            _hasBackupFiles = Directory.Exists(Config.WorkingDir)
-                && Directory.EnumerateFiles(Config.WorkingDir, "*.reg", SearchOption.TopDirectoryOnly).Any();
+            snapshot = await Task.Run(() => GatherOperationalHistory(inputs));
+        }
+        catch (Exception ex)
+        {
+            Log($"Workspace history refresh skipped: {ex.Message}", "DEBUG");
+            return;
+        }
+
+        if (generation != _operationalHistoryGeneration) return;
+
+        try
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher is null || dispatcher.CheckAccess())
+                ApplyOperationalHistory(snapshot);
+            else
+                dispatcher.Invoke(() => ApplyOperationalHistory(snapshot));
+        }
+        catch (Exception ex)
+        {
+            Log($"Workspace history refresh skipped: {ex.Message}", "DEBUG");
+        }
+    }
+
+    // Pure gather: file system, SQLite and registry only. No view-model state, no dispatcher.
+    internal static OperationalHistorySnapshot GatherOperationalHistory(OperationalHistoryInputs inputs)
+    {
+        bool hasBackupFiles;
+        try
+        {
+            hasBackupFiles = Directory.Exists(inputs.WorkingDir)
+                && Directory.EnumerateFiles(inputs.WorkingDir, "*.reg", SearchOption.TopDirectoryOnly).Any();
         }
         catch
         {
-            _hasBackupFiles = false;
+            hasBackupFiles = false;
         }
 
+        bool hasBenchmarkHistory;
         try
         {
             var benchmarks = DataService.GetBenchmarkHistory();
-            _hasBenchmarkHistory = DataService.DatabaseState.IsAvailable && benchmarks.Count > 0;
+            hasBenchmarkHistory = DataService.DatabaseState.IsAvailable && benchmarks.Count > 0;
         }
         catch
         {
-            _hasBenchmarkHistory = false;
+            hasBenchmarkHistory = false;
         }
 
+        string? recoveryKitPath = null;
+        bool recoveryKitInWorkingFolder = false, recoveryKitReadFailed = false;
+        DateTime recoveryKitWrittenAt = default;
         try
         {
-            var recoveryKitPath = ResolveRecoveryKitPath();
-            HasRecoveryKit = !string.IsNullOrWhiteSpace(recoveryKitPath);
+            recoveryKitPath = ResolveRecoveryKitPath(inputs);
+            if (!string.IsNullOrWhiteSpace(recoveryKitPath))
+            {
+                recoveryKitWrittenAt = Directory.GetFiles(recoveryKitPath, "*", SearchOption.TopDirectoryOnly)
+                    .Select(File.GetLastWriteTime)
+                    .DefaultIfEmpty(Directory.GetLastWriteTime(recoveryKitPath))
+                    .Max();
+                recoveryKitInWorkingFolder = string.Equals(
+                    recoveryKitPath, Path.Combine(inputs.WorkingDir, "NVMe_Recovery_Kit"), StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        catch
+        {
+            recoveryKitPath = null;
+            recoveryKitReadFailed = true;
+        }
 
+        string? verificationScriptPath = null;
+        bool verificationScriptReadFailed = false;
+        DateTime verificationScriptWrittenAt = default;
+        try
+        {
+            verificationScriptPath = ResolveVerificationScriptPath(inputs);
+            if (!string.IsNullOrWhiteSpace(verificationScriptPath))
+                verificationScriptWrittenAt = new FileInfo(verificationScriptPath).LastWriteTime;
+        }
+        catch
+        {
+            verificationScriptPath = null;
+            verificationScriptReadFailed = true;
+        }
+
+        string? diagnosticsReportPath = null;
+        bool diagnosticsReportReadFailed = false;
+        DateTime diagnosticsReportWrittenAt = default;
+        try
+        {
+            diagnosticsReportPath = ResolveLatestDiagnosticsReportPath(inputs);
+            if (!string.IsNullOrWhiteSpace(diagnosticsReportPath))
+                diagnosticsReportWrittenAt = new FileInfo(diagnosticsReportPath).LastWriteTime;
+        }
+        catch
+        {
+            diagnosticsReportPath = null;
+            diagnosticsReportReadFailed = true;
+        }
+
+        PatchStatus? patchStatus = null;
+        try { patchStatus = RegistryService.GetPatchStatus(); } catch { }
+
+        return new OperationalHistorySnapshot(
+            hasBackupFiles, hasBenchmarkHistory,
+            recoveryKitPath, recoveryKitInWorkingFolder, recoveryKitWrittenAt, recoveryKitReadFailed,
+            verificationScriptPath, verificationScriptWrittenAt, verificationScriptReadFailed,
+            diagnosticsReportPath, diagnosticsReportWrittenAt, diagnosticsReportReadFailed,
+            patchStatus);
+    }
+
+    // UI-thread half: turns a gathered snapshot into the bound strings and badges.
+    private void ApplyOperationalHistory(OperationalHistorySnapshot snapshot)
+    {
+        _hasBackupFiles = snapshot.HasBackupFiles;
+        _hasBenchmarkHistory = snapshot.HasBenchmarkHistory;
+
+        if (snapshot.RecoveryKitReadFailed)
+        {
+            HasRecoveryKit = false;
+            RecoveryKitStatusText = "Recovery kit status could not be read.";
+        }
+        else
+        {
+            HasRecoveryKit = !string.IsNullOrWhiteSpace(snapshot.RecoveryKitPath);
             if (!HasRecoveryKit)
             {
                 RecoveryKitStatusText = NoRecoveryKitText;
             }
             else
             {
-                var latestRecoveryWrite = Directory.GetFiles(recoveryKitPath!, "*", SearchOption.TopDirectoryOnly)
-                    .Select(File.GetLastWriteTime)
-                    .DefaultIfEmpty(Directory.GetLastWriteTime(recoveryKitPath!))
-                    .Max();
-                var locationLabel = string.Equals(recoveryKitPath, Path.Combine(Config.WorkingDir, "NVMe_Recovery_Kit"), StringComparison.OrdinalIgnoreCase)
-                    ? "working folder"
-                    : "export location";
-
-                RecoveryKitStatusText = $"Recovery kit ready in the {locationLabel}. Last updated {latestRecoveryWrite:g}. Includes offline rollback files for Windows and WinRE.";
+                var locationLabel = snapshot.RecoveryKitInWorkingFolder ? "working folder" : "export location";
+                RecoveryKitStatusText = $"Recovery kit ready in the {locationLabel}. Last updated {snapshot.RecoveryKitWrittenAt:g}. Includes offline rollback files for Windows and WinRE.";
             }
         }
-        catch
-        {
-            HasRecoveryKit = false;
-            RecoveryKitStatusText = "Recovery kit status could not be read.";
-        }
 
-        try
-        {
-            var verificationScriptPath = ResolveVerificationScriptPath();
-            HasVerificationScript = !string.IsNullOrWhiteSpace(verificationScriptPath);
-
-            if (!HasVerificationScript)
-            {
-                VerificationScriptStatusText = NoVerificationScriptText;
-            }
-            else
-            {
-                var fileInfo = new FileInfo(verificationScriptPath!);
-                VerificationScriptStatusText = $"Verification script ready as {fileInfo.Name}, updated {fileInfo.LastWriteTime:g}. Use it after reboot to confirm every expected registry and Safe Mode key is present.";
-            }
-        }
-        catch
+        if (snapshot.VerificationScriptReadFailed)
         {
             HasVerificationScript = false;
             VerificationScriptStatusText = "Verification script status could not be read.";
         }
-
-        try
+        else
         {
-            var diagnosticsReportPath = ResolveLatestDiagnosticsReportPath();
-            HasDiagnosticsReport = !string.IsNullOrWhiteSpace(diagnosticsReportPath);
-
-            if (!HasDiagnosticsReport)
-            {
-                DiagnosticsReportStatusText = NoDiagnosticsReportText;
-            }
-            else
-            {
-                var fileInfo = new FileInfo(diagnosticsReportPath!);
-                DiagnosticsReportStatusText = $"Latest diagnostics report: {fileInfo.Name}, exported {fileInfo.LastWriteTime:g}. Keep it with the recovery kit when you need a support-ready snapshot of this machine.";
-            }
+            HasVerificationScript = !string.IsNullOrWhiteSpace(snapshot.VerificationScriptPath);
+            VerificationScriptStatusText = !HasVerificationScript
+                ? NoVerificationScriptText
+                : $"Verification script ready as {Path.GetFileName(snapshot.VerificationScriptPath)}, updated {snapshot.VerificationScriptWrittenAt:g}. Use it after reboot to confirm every expected registry and Safe Mode key is present.";
         }
-        catch
+
+        if (snapshot.DiagnosticsReportReadFailed)
         {
             HasDiagnosticsReport = false;
             DiagnosticsReportStatusText = "Diagnostics report status could not be read.";
+        }
+        else
+        {
+            HasDiagnosticsReport = !string.IsNullOrWhiteSpace(snapshot.DiagnosticsReportPath);
+            DiagnosticsReportStatusText = !HasDiagnosticsReport
+                ? NoDiagnosticsReportText
+                : $"Latest diagnostics report: {Path.GetFileName(snapshot.DiagnosticsReportPath)}, exported {snapshot.DiagnosticsReportWrittenAt:g}. Keep it with the recovery kit when you need a support-ready snapshot of this machine.";
         }
 
         RecoveryWorkspaceSummaryText = (HasRecoveryKit, HasVerificationScript, HasDiagnosticsReport) switch
@@ -113,47 +229,55 @@ public partial class MainViewModel
             _ => "Create a recovery kit and a verification script before you apply, so the change is easy to undo or confirm."
         };
 
-        var sharedStatus = RegistryService.GetPatchStatus();
-        UpdateWorkflowGuide(sharedStatus);
-        UpdateRecommendedActions(sharedStatus);
+        UpdateWorkflowGuide(snapshot.PatchStatus);
+        UpdateRecommendedActions(snapshot.PatchStatus);
         UpdateWorkspaceBadges();
     }
 
-    private string? ResolveRecoveryKitPath()
-    {
-        if (!string.IsNullOrWhiteSpace(Config.LastRecoveryKitPath) && Directory.Exists(Config.LastRecoveryKitPath))
-            return Config.LastRecoveryKitPath;
+    private string? ResolveRecoveryKitPath() => ResolveRecoveryKitPath(CurrentHistoryInputs());
 
-        if (string.IsNullOrWhiteSpace(Config.WorkingDir))
+    private string? ResolveVerificationScriptPath() => ResolveVerificationScriptPath(CurrentHistoryInputs());
+
+    private string? ResolveLatestDiagnosticsReportPath() => ResolveLatestDiagnosticsReportPath(CurrentHistoryInputs());
+
+    private OperationalHistoryInputs CurrentHistoryInputs() => new(
+        Config.WorkingDir, Config.LastRecoveryKitPath, Config.LastVerificationScriptPath, Config.LastDiagnosticsPath);
+
+    private static string? ResolveRecoveryKitPath(OperationalHistoryInputs inputs)
+    {
+        if (!string.IsNullOrWhiteSpace(inputs.LastRecoveryKitPath) && Directory.Exists(inputs.LastRecoveryKitPath))
+            return inputs.LastRecoveryKitPath;
+
+        if (string.IsNullOrWhiteSpace(inputs.WorkingDir))
             return null;
 
-        var localKitPath = Path.Combine(Config.WorkingDir, "NVMe_Recovery_Kit");
+        var localKitPath = Path.Combine(inputs.WorkingDir, "NVMe_Recovery_Kit");
         return Directory.Exists(localKitPath) ? localKitPath : null;
     }
 
-    private string? ResolveVerificationScriptPath()
+    private static string? ResolveVerificationScriptPath(OperationalHistoryInputs inputs)
     {
-        if (!string.IsNullOrWhiteSpace(Config.LastVerificationScriptPath) && File.Exists(Config.LastVerificationScriptPath))
-            return Config.LastVerificationScriptPath;
+        if (!string.IsNullOrWhiteSpace(inputs.LastVerificationScriptPath) && File.Exists(inputs.LastVerificationScriptPath))
+            return inputs.LastVerificationScriptPath;
 
-        if (string.IsNullOrWhiteSpace(Config.WorkingDir))
+        if (string.IsNullOrWhiteSpace(inputs.WorkingDir))
             return null;
 
-        var localScriptPath = Path.Combine(Config.WorkingDir, "Verify_NVMe_Patch.ps1");
+        var localScriptPath = Path.Combine(inputs.WorkingDir, "Verify_NVMe_Patch.ps1");
         return File.Exists(localScriptPath) ? localScriptPath : null;
     }
 
-    private string? ResolveLatestDiagnosticsReportPath()
+    private static string? ResolveLatestDiagnosticsReportPath(OperationalHistoryInputs inputs)
     {
-        if (IsExistingTextFile(Config.LastDiagnosticsPath))
-            return Config.LastDiagnosticsPath;
+        if (IsExistingTextFile(inputs.LastDiagnosticsPath))
+            return inputs.LastDiagnosticsPath;
 
-        if (string.IsNullOrEmpty(Config.WorkingDir) || !Directory.Exists(Config.WorkingDir))
+        if (string.IsNullOrEmpty(inputs.WorkingDir) || !Directory.Exists(inputs.WorkingDir))
             return null;
 
         try
         {
-            return Directory.GetFiles(Config.WorkingDir, "NVMe_Diagnostics_*.txt", SearchOption.TopDirectoryOnly)
+            return Directory.GetFiles(inputs.WorkingDir, "NVMe_Diagnostics_*.txt", SearchOption.TopDirectoryOnly)
                 .OrderByDescending(File.GetLastWriteTime)
                 .FirstOrDefault();
         }

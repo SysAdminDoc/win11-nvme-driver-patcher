@@ -450,6 +450,12 @@ public partial class MainViewModel : ObservableObject
             Log($"Safe Boot upgrade check skipped: {ex.Message}", "DEBUG");
         }
 
+        // One benchmark-history read per refresh cycle, taken off the UI thread. The bench label and
+        // the overview summary both used to read the file again inside the dispatcher call.
+        List<BenchmarkResult> benchmarkHistory;
+        try { benchmarkHistory = await Task.Run(() => BenchmarkService.GetHistory(Config.WorkingDir)); }
+        catch { benchmarkHistory = []; }
+
         try
         {
             Application.Current?.Dispatcher.Invoke(() =>
@@ -537,7 +543,7 @@ public partial class MainViewModel : ObservableObject
             // Drives, registry, status
             UpdateDrivesList();
             UpdateStatusDisplay();
-            UpdateOverviewSummary();
+            UpdateOverviewSummary(benchmarkHistory);
             UpdateOperationalHistory();
 
             // Update badge. PreflightService now runs the update check fire-and-forget so it
@@ -555,10 +561,9 @@ public partial class MainViewModel : ObservableObject
             // Benchmark label
             BenchLabelText = "";
             BenchLabelVisible = false;
-            var history = BenchmarkService.GetHistory(Config.WorkingDir);
-            if (history.Count > 0)
+            if (benchmarkHistory.Count > 0)
             {
-                var last = history[^1];
+                var last = benchmarkHistory[^1];
                 if (last.Read.IOPS > 0)
                 {
                     BenchLabelText = $"Last bench: {last.Read.IOPS} IOPS high-QD read / {last.Write.IOPS} IOPS high-QD write; {last.Desktop.Read.IOPS} IOPS desktop QD1 read ({last.Label})";
@@ -587,7 +592,7 @@ public partial class MainViewModel : ObservableObject
                 Log($"Patch actions turned off by build policy: {buildPolicy.Reason}", "WARNING");
             RefreshMutationSafetyState();
             // The overview was written before the build policy was known.
-            UpdateOverviewSummary();
+            UpdateOverviewSummary(benchmarkHistory);
             });
         }
         catch (Exception ex)
@@ -861,7 +866,7 @@ public partial class MainViewModel : ObservableObject
             DriverLabelText = $"Current driver: {_preflight.DriverInfo.CurrentDriver}";
     }
 
-    private void UpdateOverviewSummary()
+    private void UpdateOverviewSummary(IReadOnlyList<BenchmarkResult>? benchmarkHistory = null)
     {
         if (_preflight is null)
         {
@@ -869,7 +874,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        bool hasBenchmarkHistory = BenchmarkService.GetHistory(Config.WorkingDir).Count > 0;
+        bool hasBenchmarkHistory = (benchmarkHistory ?? BenchmarkService.GetHistory(Config.WorkingDir)).Count > 0;
         var status = RegistryService.GetPatchStatus();
 
         _warningCount = _preflight.Checks.Values.Count(c => c.Status == CheckStatus.Warning);
