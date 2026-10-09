@@ -116,7 +116,7 @@ public sealed class ReleaseAssetsScriptTests
         string? publishedTag,
         string? publishedAssetsPath)
     {
-        var startInfo = new ProcessStartInfo("powershell.exe")
+        var startInfo = new ProcessStartInfo(NVMeDriverPatcher.Services.SystemToolPathService.PowerShell)
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,

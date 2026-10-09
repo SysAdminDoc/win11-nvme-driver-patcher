@@ -82,7 +82,7 @@ public sealed class PackagingVersionScriptTests
 
     private static ScriptResult RunScript(string repoRoot)
     {
-        var startInfo = new ProcessStartInfo("powershell.exe")
+        var startInfo = new ProcessStartInfo(NVMeDriverPatcher.Services.SystemToolPathService.PowerShell)
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,

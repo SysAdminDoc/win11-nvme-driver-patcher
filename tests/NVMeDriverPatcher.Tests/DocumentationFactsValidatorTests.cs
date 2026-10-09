@@ -55,7 +55,7 @@ public sealed class DocumentationFactsValidatorTests
     {
         using var process = new Process
         {
-            StartInfo = new ProcessStartInfo("powershell.exe")
+            StartInfo = new ProcessStartInfo(NVMeDriverPatcher.Services.SystemToolPathService.PowerShell)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,

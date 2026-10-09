@@ -85,7 +85,7 @@ public sealed class PackageManifestsScriptTests
         string arm64ExePath,
         string? outputRoot = null)
     {
-        var startInfo = new ProcessStartInfo("powershell.exe")
+        var startInfo = new ProcessStartInfo(NVMeDriverPatcher.Services.SystemToolPathService.PowerShell)
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,

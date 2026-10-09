@@ -160,7 +160,7 @@ public sealed class IntuneRemediationScriptTests : IDisposable
 
     private static ProcessStartInfo PowerShell(string script, params string[] arguments)
     {
-        var startInfo = new ProcessStartInfo("powershell.exe")
+        var startInfo = new ProcessStartInfo(SystemToolPathService.PowerShell)
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,

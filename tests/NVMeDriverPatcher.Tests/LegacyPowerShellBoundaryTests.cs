@@ -77,7 +77,7 @@ public sealed class LegacyPowerShellBoundaryTests
 
     private static ScriptResult RunPowerShell(params string[] arguments)
     {
-        var startInfo = new ProcessStartInfo("powershell.exe")
+        var startInfo = new ProcessStartInfo(NVMeDriverPatcher.Services.SystemToolPathService.PowerShell)
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,

@@ -60,7 +60,7 @@ public sealed class ArtifactManifestScriptTests : IDisposable
 
     private ScriptResult RunScript()
     {
-        var startInfo = new ProcessStartInfo("powershell.exe")
+        var startInfo = new ProcessStartInfo(SystemToolPathService.PowerShell)
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,

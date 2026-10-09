@@ -200,7 +200,7 @@ public sealed class BuildRulesFreshnessScriptTests
     private static ScriptResult RunAgainst(string rulesPath, string asOf, string? featureIdsPath = null)
     {
         using var process = new Process();
-        process.StartInfo = new ProcessStartInfo("powershell.exe")
+        process.StartInfo = new ProcessStartInfo(NVMeDriverPatcher.Services.SystemToolPathService.PowerShell)
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
