@@ -109,16 +109,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### Unaudited — needs a pass
 
-- [ ] P3 — Areas this audit did not cover
-  Category: docs
-  Where: (scope note)
-  Problem: (a) `packaging/telemetry-receiver/` was only shallowly re-checked against its prior audit, not re-audited in depth. (b) The WPF GUI was audited by code-trace only — it requires elevation this environment cannot grant, so no live pixel/theme/screenshot verification was performed; the theme findings above are verified from resource dictionaries, but a live three-theme visual sweep (especially nested surfaces: dialogs over the workspace, chart tooltips, toasts) remains unexecuted. (c) Live service behavior (P0 watchdog finding, SCM restart semantics) is verified by trace, not by installing the service. (d) The `claude-security` scan follow-up remains parked in Roadmap_Blocked.md.
-  Evidence: Session constraints (non-elevated agent shell; audit-only pass).
-  Fix: On the next elevated session: run the GUI in all three themes on the isolated display and screenshot the surfaces named above; run `Test-WatchdogService.ps1` with an extended liveness window; give telemetry-receiver a dedicated pass.
-  Acceptance: Each sub-item either confirms clean or produces new ROADMAP entries.
-  Confidence: Verified (as a scope statement)
-  Effort: M
-
 ## Research-Driven Additions — 2026-08-11
 
 Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here duplicates the
@@ -138,36 +128,15 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
   Acceptance: The confirmation's expected-gains text distinguishes high-queue-depth workloads from ordinary desktop use and names the write regression; the README does the same above the fold. Pairs with the QD1 benchmark item so the claim is measurable on the user's own machine.
   Complexity: S
 
-- [ ] P3 — Plan the xunit v3 migration
-  Why: NuGet marks `xunit` 2.9.3 deprecated ("Legacy") with `xunit.v3` as the alternative; v3's `TestContext.Current.CancellationToken` would replace the hand-rolled bounded-`WaitForExit` pattern documented in CLAUDE.md and tracked in the P2 `ReadToEnd()` item above. Not urgent — 2.9.3 has no CVE — but the suite is this repo's primary safety evidence and should not sit on a deprecated runner indefinitely.
-  Evidence: `dotnet list package --deprecated` on `tests/NVMeDriverPatcher.Tests`; https://xunit.net/docs/getting-started/v3/migration.
-  Touches: `tests/NVMeDriverPatcher.Tests/NVMeDriverPatcher.Tests.csproj` and the whole suite.
-  Acceptance: The suite runs green on xunit.v3 with the same test count and no new environment side effects; the shared bounded-process helper uses the framework cancellation token.
-  Complexity: L
-
 ## Research-Driven Additions — 2026-10-06
 
 Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these repeats an item above; where one touches the same ground, the item says how they relate.
 
 ### P1
 
-- [ ] P1 — Test the per-controller StorPort route and the global kill switch in VMs
-  Why: Every current retail client build resolves to `none-known` in `windows_build_rules.json`, so the enable path is idle for nearly every user. The StorPort value is the only route reported working on 25H2 (26200.9168) and on 24H2 from 26100.8875. Separately, if `DisableNativeNVMeStack=1` forces the legacy path ahead of any feature decision, the recovery kit gets a one-value offline revert that works whatever route bound the drive.
-  Evidence: RESEARCH.md Executive Summary items 1 and 2, Open Questions 1 and 2; `windows_build_rules.json` (lastReviewed 2026-10-05); the 24H2 rig recipe in the project working notes.
-  Touches: VM work only (the 24H2 rig, plus retail-edition 25H2 26200.x and 26H2 26300.x guests). Results go into `windows_build_rules.json` and, if the route works, a new roadmap item.
-  Acceptance: An evidence table per build covering: bind after reboot on a secondary drive and then the boot drive (Class `NvmeDisk`, service `nvmedisk`, a `GenNvmeDisk` hardware ID), a Safe Mode boot, `DISM /ScanHealth` and SFC, survival across one cumulative update, revert by deleting the value, and revert by setting `DisableNativeNVMeStack=1` offline from WinRE (also on the 24H2 guest after a three-value bind). The build rules record each verdict with `lastReviewed`. A working route gets its own implementation item with the measured costs; a failed one gets a sentence in the rule summary.
-  Complexity: L
-
 ### P2
 
 ### P3
-
-- [ ] P3 — Prove Identify and SMART reads still work under nvmedisk
-  Why: A driver teardown says nvmedisk doesn't clearly expose `IOCTL_STORAGE_PROTOCOL_COMMAND`, and users say vendor SSD tools stop seeing the drive. The app's health reads use the `IOCTL_STORAGE_QUERY_PROPERTY` protocol-specific path, which nobody has checked under nvmedisk. If it fails, the health view goes blank after the swap, exactly when people want it.
-  Evidence: https://borecraft.com/findings/Windows_Server_2025_NVMe_Driver.html; https://learn.microsoft.com/en-us/windows/win32/fileio/working-with-nvme-devices; `src/NVMeDriverPatcher.Core/Interop/StorageStructs.cs:15-19`; `Services/NvmeIdentifyService.cs`.
-  Touches: `NvmeIdentifyService`, the SMART reader, the support bundle (record which query path answered).
-  Acceptance: On the 24H2 guest with nvmedisk bound, Identify and SMART reads either work (recorded in the working notes) or the UI says plainly that the native driver doesn't answer them, instead of showing empty values.
-  Complexity: S
 
 - [ ] P3 — Ship one shared runtime in the MSI instead of four
   Why: v5.6.0's MSI and Intune zip are 211 MB each, because the GUI (89 MB), Tray (57 MB), CLI (44 MB) and Watchdog (44 MB) each embed their own .NET runtime. An MDL user complained about the size. Publishing the four self-contained but not single-file into one shared directory keeps the no-prerequisite install with one runtime copy.
@@ -175,13 +144,6 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
   Touches: `Build-ReleaseArtifacts.ps1` MSI staging, the WiX source, the service and scheduled-task registration paths, `Validate-ReleaseAssets.ps1`. The portable single-file exes stay as they are. Relates to the P3 "dll-hosted runs register `dotnet.exe`" item above: a shared directory must still register the apphost exe, not `dotnet.exe`.
   Acceptance: MSI and Intune zip sizes measured before and after; install, upgrade over the 5.6.0 MSI, repair and uninstall all pass; the service and tray start from the new layout.
   Complexity: M
-
-- [ ] P3 — CHANGELOG's 5.7.0 section describes a release that was never published
-  Why: The newest tag and GitHub release is v5.6.0, but the CHANGELOG has `## [5.7.0] - 2026-08-11` and the repo notes said 5.7.0 shipped. The existing tag item above covers 5.4.0, 5.5.0, 5.3.0 and `v.3.0.0`, not this one. Tagging an old commit as a release that never had artifacts would mislead, so fold it forward.
-  Evidence: `gh release list` (2026-10-06); `CHANGELOG.md:253`; bump commit `394e2b8`.
-  Touches: `CHANGELOG.md`, the next release's notes.
-  Acceptance: When the next release is cut, its notes carry every 5.7.0 bullet, and no CHANGELOG heading names a version without a matching tag.
-  Complexity: S
 
 - [ ] P3 — Dependency refresh: SourceGear.sqlite3 3.53.4, Microsoft.NET.Test.Sdk 18.10.1, SkiaSharp 4.153.1, wrangler 4.148.0
   Why: All four have newer stable releases with no advisories against the pinned versions, and staying close makes the next security bump small. SkiaSharp needs a render check because 4.150 turned obsolete APIs into errors. SQLitePCLRaw stays on 3.0.4.
