@@ -206,6 +206,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   next cut actually uploads its sidecars.
 
 ### Security
+- `register-tasks` only points its SYSTEM scheduled tasks at a CLI under Program Files or the folder the MSI installed to. Run from Downloads or the desktop, it used to register tasks that ran that copy as SYSTEM, so any program able to replace the file could get itself run as SYSTEM at the next sign-in or hourly sweep.
 - Each release now carries a signed `update-manifest.json` with the version, the oldest install allowed to take it, an expiry and the SHA-256 of every release file. The update staging code refuses a download unless the signature matches one of the two public keys the app ships with, the manifest names that release and a newer version, it hasn't expired, and the file matches both its `.sha256` sidecar and the manifest. Swapping an exe and its sidecar on the release page no longer gets past it. The release gate checks the signature and every hash before anything is published. The README explains key rotation.
 - Release publishing now requires SDK 10.0.401 or newer, embeds .NET runtime 10.0.12 or newer
   in every self-contained executable, and rejects older runtime payloads from the release gate.

@@ -80,6 +80,38 @@ public sealed class SchedulerServiceTests
         AssertPair(args, "/TN", SchedulerService.WatchdogTaskName);
     }
 
+    // Both tasks run the CLI as SYSTEM, so the exe has to sit where only admins can write: Program
+    // Files, or the folder the MSI installed to, which it locks down.
+    [Theory]
+    [InlineData(@"C:\Program Files\NVMe Driver Patcher\NVMeDriverPatcher.Cli.exe", true)]
+    [InlineData(@"c:\program files (x86)\NVMe Driver Patcher\NVMeDriverPatcher.Cli-win-arm64.exe", true)]
+    [InlineData(@"C:\Users\someone\Downloads\NVMeDriverPatcher.Cli.exe", false)]
+    [InlineData(@"C:\Program FilesX\NVMeDriverPatcher.Cli.exe", false)]
+    [InlineData(@"C:\Program Files\..\Users\someone\NVMeDriverPatcher.Cli.exe", false)]
+    [InlineData(@"\\server\share\Program Files\NVMeDriverPatcher.Cli.exe", false)]
+    [InlineData(@"C:\Program Files", false)]
+    [InlineData("D:/Apps/NVMe Driver Patcher/NVMeDriverPatcher.Cli.exe", true)]
+    [InlineData("D:/Apps/NVMe Driver Patcher Old/NVMeDriverPatcher.Cli.exe", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void IsProtectedTaskTarget_OnlyUnderProgramFilesOrTheMsiFolder(string? exe, bool expected)
+    {
+        // The third root stands in for the HKLM InstallLocation of an MSI installed elsewhere.
+        var roots = new[] { @"C:\Program Files", @"C:\Program Files (x86)\", "D:/Apps/NVMe Driver Patcher", "" };
+        Assert.Equal(expected, SchedulerService.IsProtectedTaskTarget(exe, roots));
+    }
+
+    [Fact]
+    public void RegisterTasks_RefusesAnUnprotectedExeBeforeRegisteringAnything()
+    {
+        var program = File.ReadAllText(Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "NVMeDriverPatcher.Cli", "Program.cs")));
+        var body = program[program.IndexOf("static int RegisterTasksCommand(", StringComparison.Ordinal)..];
+        var guard = body.IndexOf("SchedulerService.IsProtectedTaskTarget(cliExe)", StringComparison.Ordinal);
+        var register = body.IndexOf("SchedulerService.Register", StringComparison.Ordinal);
+        Assert.True(guard >= 0 && guard < register, "the Program Files check must run before any task is registered");
+    }
+
     private static void AssertPair(string[] args, string flag, string expectedValue)
     {
         var idx = Array.IndexOf(args, flag);

@@ -12,10 +12,68 @@ public static class SchedulerService
     public const string WatchdogTaskName = @"SysAdminDoc\NVMePatcher\WatchdogSweep";
 
     public static bool RegisterBootVerify(string cliPath, Action<string>? log = null) =>
-        RunSchtasks(BuildBootVerifyArgs(cliPath), log);
+        GuardTaskTarget(cliPath, log) && RunSchtasks(BuildBootVerifyArgs(cliPath), log);
 
     public static bool RegisterWatchdogSweep(string cliPath, int intervalMinutes, Action<string>? log = null) =>
-        RunSchtasks(BuildWatchdogSweepArgs(cliPath, intervalMinutes), log);
+        GuardTaskTarget(cliPath, log) && RunSchtasks(BuildWatchdogSweepArgs(cliPath, intervalMinutes), log);
+
+    /// <summary>
+    /// Both tasks run the CLI as SYSTEM, so whoever can replace the exe gets SYSTEM. Only a CLI
+    /// under Program Files, where only administrators and TrustedInstaller can write, or in the
+    /// folder the MSI installed to (it pins an admin-only DACL there, and records the folder under
+    /// HKLM) may be the target. A copy in Downloads or on the desktop can be swapped by any
+    /// program the user runs.
+    /// </summary>
+    public static bool IsProtectedTaskTarget(string? exePath) =>
+        IsProtectedTaskTarget(exePath, new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+            ReadMsiInstallLocation() ?? string.Empty,
+        });
+
+    private static string? ReadMsiInstallLocation()
+    {
+        try
+        {
+            using var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(
+                Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64);
+            using var key = hklm.OpenSubKey(@"Software\SysAdminDoc\NVMeDriverPatcher");
+            return key?.GetValue("InstallLocation") as string;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            return null;
+        }
+    }
+
+    internal static bool IsProtectedTaskTarget(string? exePath, IEnumerable<string> protectedRoots)
+    {
+        if (string.IsNullOrWhiteSpace(exePath)) return false;
+        string full;
+        try
+        {
+            full = Path.GetFullPath(exePath);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+        foreach (var root in protectedRoots)
+        {
+            if (string.IsNullOrWhiteSpace(root)) continue;
+            var prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)) + Path.DirectorySeparatorChar;
+            if (full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    private static bool GuardTaskTarget(string cliPath, Action<string>? log)
+    {
+        if (IsProtectedTaskTarget(cliPath)) return true;
+        log?.Invoke($"[ERROR] Not registering a SYSTEM task for {cliPath}: it isn't under Program Files or the MSI's install folder, so other programs could replace it.");
+        return false;
+    }
 
     public static bool Unregister(string taskName, Action<string>? log = null) =>
         RunSchtasks(BuildUnregisterArgs(taskName), log);

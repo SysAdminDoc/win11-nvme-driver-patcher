@@ -788,6 +788,15 @@ class Program
                 "Scheduled tasks need the exe path to launch later. Run NVMeDriverPatcher.Cli.exe register-tasks from the install folder.");
             return 1;
         }
+        // Both tasks run this exe as SYSTEM, so a copy any program can overwrite (Downloads, the
+        // desktop) would hand SYSTEM to whatever replaced it before the next trigger.
+        if (!SchedulerService.IsProtectedTaskTarget(cliExe))
+        {
+            Console.Error.WriteLine($"register-tasks won't point SYSTEM tasks at {cliExe}. Anything that can replace a file in that folder " +
+                "would get its program run as SYSTEM. Install with the MSI, or copy the CLI into a folder under Program Files as an administrator, " +
+                "and run register-tasks from there.");
+            return 1;
+        }
         bool boot = SchedulerService.RegisterBootVerify(cliExe, Console.WriteLine);
         bool sweep = SchedulerService.RegisterWatchdogSweep(cliExe, 60, Console.WriteLine);
         return boot && sweep ? 0 : 1;
