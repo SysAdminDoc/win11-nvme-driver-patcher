@@ -35,8 +35,11 @@ public sealed class WinReInjectionApplyResult
     public string? OriginalSha256 { get; set; }
     public string? BackupSha256 { get; set; }
     public string? FinalSha256 { get; set; }
-    /// <summary>The image already carried this stornvme version or newer, so nothing was backed up or changed.</summary>
+    /// <summary>The image already carried this stornvme version or newer, so no copy was added.
+    /// Nothing was backed up or changed either, unless extra copies had to be removed.</summary>
     public bool AlreadyCurrent { get; set; }
+    /// <summary>The new copy went in and was committed, but the older copies couldn't be removed.</summary>
+    public bool RemovalFailed { get; set; }
     public List<string> Log { get; } = [];
 }
 
@@ -47,10 +50,15 @@ internal sealed record WinReBackup(string Path, string ImageName, DateTime Taken
 internal sealed record ImageDriverPackage(string PublishedName, string OriginalFileName, Version? Version);
 
 /// <summary>
-/// What the image's own stornvme copies say about this run: stop because the image is current, or
-/// inject and then remove the older copies listed in <see cref="Superseded"/>.
+/// What the image's own stornvme copies say about this run. <see cref="AlreadyCurrent"/> means no
+/// copy is added. <see cref="Superseded"/> lists the copies to remove so the image keeps one, which
+/// can be non-empty even when the image is current (an older tool stacked duplicates).
+/// <see cref="Unreadable"/> copies have no version this tool can compare and are never removed.
 /// </summary>
-internal sealed record StornvmeImageCheck(bool AlreadyCurrent, IReadOnlyList<ImageDriverPackage> Superseded, string Detail);
+internal sealed record StornvmeImageCheck(bool AlreadyCurrent, IReadOnlyList<ImageDriverPackage> Superseded, string Detail)
+{
+    public IReadOnlyList<ImageDriverPackage> Unreadable { get; init; } = [];
+}
 
 /// <summary>Runs one DISM command and returns its standard output; throws on a nonzero exit.</summary>
 internal delegate Task<string> DismCommandRunner(
@@ -168,8 +176,11 @@ public static class WinReDriverInjectionService
 
     /// <summary>
     /// Pure: compares the image's injected copies of the staged INF with the staged package's
-    /// DriverVer. A copy at that version or newer means the image is current. Only older copies
-    /// mean inject and then remove them, so the image keeps one copy.
+    /// DriverVer. A copy at that version or newer means the image is current and nothing is added.
+    /// Either way the image should end with one copy: when it's current, every other versioned copy
+    /// (older ones and same-version duplicates) is superseded by the newest; when it isn't, every
+    /// versioned copy is superseded by the staged one. A copy whose version didn't parse is left in
+    /// place and reported, because it could be a newer package this tool can't judge.
     /// </summary>
     internal static StornvmeImageCheck CheckImageCopies(
         IReadOnlyList<ImageDriverPackage> imageDrivers, string driverInfPath, Version? stagedVersion)
@@ -182,20 +193,47 @@ public static class WinReDriverInjectionService
         if (copies.Count == 0)
             return new StornvmeImageCheck(false, [], $"The WinRE image has no injected copy of {infName} yet.");
 
-        string Describe(ImageDriverPackage p) => $"{p.PublishedName} ({p.Version?.ToString() ?? "version unknown"})";
-        var listed = string.Join(", ", copies.Select(Describe));
+        static string Describe(ImageDriverPackage p) => $"{p.PublishedName} ({p.Version?.ToString() ?? "version unknown"})";
+        static string Names(IEnumerable<ImageDriverPackage> packages) => string.Join(", ", packages.Select(Describe));
+        static int OemNumber(ImageDriverPackage p) =>
+            int.TryParse(p.PublishedName.AsSpan(3, p.PublishedName.Length - 7), out var n) ? n : -1;
 
-        if (stagedVersion is null)
+        var unreadable = copies.Where(p => p.Version is null).ToList();
+        var versioned = copies.Where(p => p.Version is not null).ToList();
+        var unreadableNote = unreadable.Count == 0 ? "" :
+            $" {Names(unreadable)} didn't report a version this tool can read, so it's left in place.";
+
+        // The copy to keep: newest version, and between same-version duplicates the higher oem
+        // number, which is the later staging. Lists stay in the image's own order.
+        var newest = versioned
+            .OrderByDescending(p => p.Version)
+            .ThenByDescending(p => OemNumber(p))
+            .FirstOrDefault();
+        bool current = newest is not null && (stagedVersion is null || newest.Version >= stagedVersion);
+        if (stagedVersion is null && newest is null)
+        {
             return new StornvmeImageCheck(true, [],
-                $"The WinRE image already carries {listed}, and the staged {infName} has no DriverVer to compare it with, so another copy isn't added.");
+                $"The WinRE image already carries {Names(copies)}, and the staged {infName} has no DriverVer to compare it with, so another copy isn't added.")
+            { Unreadable = unreadable };
+        }
 
-        var current = copies.FirstOrDefault(p => p.Version is not null && p.Version >= stagedVersion);
-        if (current is not null)
-            return new StornvmeImageCheck(true, [],
-                $"The WinRE image already carries {Describe(current)}, the same as or newer than the staged {stagedVersion}.");
+        if (current)
+        {
+            var extras = versioned.Where(p => !ReferenceEquals(p, newest)).ToList();
+            var compared = stagedVersion is null
+                ? $"and the staged {infName} has no DriverVer to compare it with, so another copy isn't added"
+                : $"the same as or newer than the staged {stagedVersion}";
+            var extrasNote = extras.Count == 0 ? "" :
+                $" The extra {Names(extras)} {(extras.Count == 1 ? "is" : "are")} removed so the image keeps one copy.";
+            return new StornvmeImageCheck(true, extras,
+                $"The WinRE image already carries {Describe(newest!)}, {compared}.{extrasNote}{unreadableNote}")
+            { Unreadable = unreadable };
+        }
 
-        return new StornvmeImageCheck(false, copies,
-            $"The WinRE image carries the older {listed}. Staged {stagedVersion} goes in and replaces it.");
+        var older = versioned.Count == 0 ? "" : $" The older {Names(versioned)} {(versioned.Count == 1 ? "is" : "are")} removed after it goes in.";
+        return new StornvmeImageCheck(false, versioned,
+            $"Staged {stagedVersion} goes into the WinRE image.{older}{unreadableNote}")
+        { Unreadable = unreadable };
     }
 
     public static string CreateDefaultMountDir(string workingDir) =>
@@ -258,14 +296,25 @@ public static class WinReDriverInjectionService
         sb.AppendLine($"  Mount dir   : {plan.MountDir}");
         sb.AppendLine();
         sb.AppendLine("  --apply first mounts the image read-only and lists its drivers. If it already carries this");
-        sb.AppendLine("  stornvme version or newer, it stops there with no backup. An older injected copy is removed");
-        sb.AppendLine("  (/Remove-Driver) after the new one goes in, so the image keeps one copy.");
+        sb.AppendLine("  stornvme version or newer, it doesn't add another copy. Older or duplicate injected copies");
+        sb.AppendLine("  are removed (/Remove-Driver) in the same mount, so the image keeps one copy.");
         sb.AppendLine();
+        var dism = plan.Steps.Count > 0 ? plan.Steps[0].Exe : "dism.exe";
+        sb.AppendLine("  0. By hand, check the image first (read-only, nothing changes):");
+        sb.AppendLine($"     {dism} /Mount-Image /ImageFile:{plan.WinReImagePath} /Index:1 /MountDir:{plan.MountDir} /ReadOnly");
+        sb.AppendLine($"     {dism} /Image:{plan.MountDir} /Get-Drivers /English");
+        sb.AppendLine($"     {dism} /Unmount-Image /MountDir:{plan.MountDir} /Discard");
+        sb.AppendLine($"     If it lists an oem<N>.inf whose original name is {Path.GetFileName(plan.DriverInfPath)} at this version or newer, skip step 2.");
         int i = 1;
         foreach (var step in plan.Steps)
         {
             sb.AppendLine($"  {i++}. {step.Description}");
             sb.AppendLine($"     {step.CommandLine}");
+            if (i == 3)
+            {
+                sb.AppendLine("     Then remove every other stornvme oem<N>.inf the check listed, keeping only the newest:");
+                sb.AppendLine($"     {dism} /Image:{plan.MountDir} /Remove-Driver /Driver:oem<N>.inf");
+            }
         }
         sb.AppendLine();
         sb.AppendLine(plan.IsExecutable
@@ -344,10 +393,10 @@ public static class WinReDriverInjectionService
 
             var check = CheckImageCopies(ParseDriverList(listing), plan.DriverInfPath, ReadDriverVersion(plan.DriverInfPath));
             Write("[INFO] " + check.Detail);
-            if (check.AlreadyCurrent)
+            result.AlreadyCurrent = check.AlreadyCurrent;
+            if (check.AlreadyCurrent && check.Superseded.Count == 0)
             {
                 result.Success = true;
-                result.AlreadyCurrent = true;
                 result.Summary = "WinRE image is already current. Nothing was injected, backed up or committed.";
                 Write("[OK] " + result.Summary);
                 return result;
@@ -402,17 +451,33 @@ public static class WinReDriverInjectionService
             await runner(plan.Steps[0].Exe, plan.Steps[0].Args, 300, cancellationToken).ConfigureAwait(false);
             mounted = true;
 
-            Write("[INFO] Adding stornvme.inf to mounted WinRE image...");
-            await runner(plan.Steps[1].Exe, plan.Steps[1].Args, 300, cancellationToken).ConfigureAwait(false);
+            if (!check.AlreadyCurrent)
+            {
+                Write("[INFO] Adding stornvme.inf to mounted WinRE image...");
+                await runner(plan.Steps[1].Exe, plan.Steps[1].Args, 300, cancellationToken).ConfigureAwait(false);
+            }
 
             var replaced = string.Join(", ", check.Superseded.Select(p => p.PublishedName));
+            string? removalError = null;
             if (check.Superseded.Count > 0)
             {
-                // The new package took the next oem<N>.inf, so the older names still point at the old copies.
-                Write($"[INFO] Removing the older stornvme copy from the mounted image: {replaced}...");
+                // A new package takes the next oem<N>.inf, so the older names still point at the old copies.
+                Write($"[INFO] Removing the extra stornvme copies from the mounted image: {replaced}...");
                 var removeArgs = new List<string> { $"/Image:{plan.MountDir}", "/Remove-Driver" };
                 removeArgs.AddRange(check.Superseded.Select(p => $"/Driver:{p.PublishedName}"));
-                await runner(dism, removeArgs.ToArray(), 300, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await runner(dism, removeArgs.ToArray(), 300, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!check.AlreadyCurrent && ex is not OperationCanceledException)
+                {
+                    // The new copy is in. Discarding it over a leftover would leave WinRE without the
+                    // current driver, so commit and name what's left. A remove-only run has nothing
+                    // else to keep, so its failure still discards.
+                    removalError = ex.Message;
+                    result.RemovalFailed = true;
+                    Write($"[WARN] Couldn't remove {replaced} ({ex.Message}). Committing the new copy anyway.");
+                }
             }
 
             Write("[INFO] Committing and unmounting WinRE image...");
@@ -422,10 +487,15 @@ public static class WinReDriverInjectionService
             result.FinalSha256 = await ComputeSha256Async(plan.WinReImagePath, cancellationToken).ConfigureAwait(false);
             Write($"[INFO] WinRE image SHA-256 after injection: {result.FinalSha256}");
             result.Success = true;
-            result.Summary = check.Superseded.Count > 0
-                ? $"WinRE image updated with stornvme.inf, replacing the older {replaced}. Boot into WinRE once and confirm the system volume is accessible."
-                : "WinRE image updated with stornvme.inf. Boot into WinRE once and confirm the system volume is accessible.";
-            Write("[OK] " + result.Summary);
+            const string bootCheck = "Boot into WinRE once and confirm the system volume is accessible.";
+            result.Summary = check.AlreadyCurrent
+                ? $"WinRE image already had a current stornvme.inf. Removed the extra {replaced} so it keeps one copy. {bootCheck}"
+                : removalError is not null
+                    ? $"WinRE image updated with stornvme.inf, but the older {replaced} couldn't be removed ({removalError}), so the image carries more than one copy. {bootCheck}"
+                    : check.Superseded.Count > 0
+                        ? $"WinRE image updated with stornvme.inf, replacing the older {replaced}. {bootCheck}"
+                        : $"WinRE image updated with stornvme.inf. {bootCheck}";
+            Write((removalError is null ? "[OK] " : "[WARN] ") + result.Summary);
         }
         catch (Exception ex)
         {

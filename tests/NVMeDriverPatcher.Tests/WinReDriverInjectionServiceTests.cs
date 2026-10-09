@@ -556,6 +556,172 @@ public sealed class WinReDriverInjectionServiceTests
     }
 
     [Fact]
+    public void CheckImageCopies_CurrentImageWithStackedDuplicates_KeepsTheNewestAndSupersedesTheRest()
+    {
+        // An older tool that added a copy on every run leaves same-version duplicates behind. The
+        // image is current, but the extras still go, and the later staging (higher oem number) stays.
+        var drivers = new[]
+        {
+            new ImageDriverPackage("oem0.inf", "stornvme.inf", Version.Parse(StagedVersion)),
+            new ImageDriverPackage("oem1.inf", "stornvme.inf", new Version(10, 0, 26100, 1)),
+            new ImageDriverPackage("oem3.inf", "stornvme.inf", Version.Parse(StagedVersion)),
+        };
+
+        var check = WinReDriverInjectionService.CheckImageCopies(drivers, @"C:\Store\stornvme.inf", Version.Parse(StagedVersion));
+
+        Assert.True(check.AlreadyCurrent);
+        Assert.Equal(new[] { "oem0.inf", "oem1.inf" }, check.Superseded.Select(p => p.PublishedName));
+        Assert.Contains("oem3.inf", check.Detail, StringComparison.Ordinal);
+        Assert.Contains("keeps one copy", check.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CheckImageCopies_ACopyWithNoReadableVersion_IsReportedButNeverRemoved()
+    {
+        var drivers = new[]
+        {
+            new ImageDriverPackage("oem0.inf", "stornvme.inf", null),
+            new ImageDriverPackage("oem1.inf", "stornvme.inf", new Version(10, 0, 26100, 1)),
+        };
+
+        var check = WinReDriverInjectionService.CheckImageCopies(drivers, @"C:\Store\stornvme.inf", Version.Parse(StagedVersion));
+
+        Assert.False(check.AlreadyCurrent);
+        Assert.Equal("oem1.inf", Assert.Single(check.Superseded).PublishedName);
+        Assert.Equal("oem0.inf", Assert.Single(check.Unreadable).PublishedName);
+        Assert.Contains("left in place", check.Detail, StringComparison.Ordinal);
+
+        // Only unreadable copies and no staged version either: nothing is added and nothing removed.
+        var unknown = WinReDriverInjectionService.CheckImageCopies(drivers[..1], @"C:\Store\stornvme.inf", stagedVersion: null);
+        Assert.True(unknown.AlreadyCurrent);
+        Assert.Empty(unknown.Superseded);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_CurrentImageWithDuplicates_RemovesTheExtrasWithoutAddingAnother()
+    {
+        var root = CreateTempDir();
+        try
+        {
+            var image = Path.Combine(root, "winre.wim");
+            File.WriteAllText(image, "fake winre image");
+            var plan = WinReDriverInjectionService.BuildPlan(image, Path.Combine(root, "mount"), WriteStagedInf(root));
+            var listing = DriverListing(
+                DriverBlock("oem0.inf", "stornvme.inf", StagedVersion),
+                DriverBlock("oem1.inf", "stornvme.inf", StagedVersion));
+            var commands = new List<string>();
+
+            var result = await WinReDriverInjectionService.ApplyAsync(plan, root, (_, args, _, _) =>
+            {
+                var command = string.Join(" ", args);
+                commands.Add(command);
+                return Task.FromResult(command.Contains("/Get-Drivers") ? listing : string.Empty);
+            });
+
+            Assert.True(result.Success, result.Summary);
+            Assert.True(result.AlreadyCurrent);
+            Assert.Contains("Removed the extra oem0.inf", result.Summary, StringComparison.Ordinal);
+            Assert.NotNull(result.BackupPath);
+            Assert.DoesNotContain(commands, c => c.Contains("/Add-Driver"));
+            var remove = commands.FindIndex(c => c.Contains("/Remove-Driver"));
+            var commit = commands.FindIndex(c => c.Contains("/Commit"));
+            Assert.True(remove >= 0 && commit > remove, string.Join(" | ", commands));
+            Assert.Contains("/Driver:oem0.inf", commands[remove], StringComparison.Ordinal);
+            Assert.DoesNotContain("oem1.inf", commands[remove], StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDir(root);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyAsync_RemoveFailsAfterAGoodAdd_CommitsTheNewCopyAndNamesTheLeftover()
+    {
+        var root = CreateTempDir();
+        try
+        {
+            var image = Path.Combine(root, "winre.wim");
+            File.WriteAllText(image, "fake winre image");
+            var plan = WinReDriverInjectionService.BuildPlan(image, Path.Combine(root, "mount"), WriteStagedInf(root));
+            var listing = DriverListing(DriverBlock("oem0.inf", "stornvme.inf", "10.0.26100.1"));
+            var commands = new List<string>();
+
+            var result = await WinReDriverInjectionService.ApplyAsync(plan, root, (_, args, _, _) =>
+            {
+                var command = string.Join(" ", args);
+                commands.Add(command);
+                if (command.Contains("/Remove-Driver"))
+                    return Task.FromException<string>(new InvalidOperationException("DISM exited with 50"));
+                return Task.FromResult(command.Contains("/Get-Drivers") ? listing : string.Empty);
+            });
+
+            Assert.True(result.Success, result.Summary);
+            Assert.True(result.RemovalFailed);
+            Assert.Contains("oem0.inf couldn't be removed", result.Summary, StringComparison.Ordinal);
+            var add = commands.FindIndex(c => c.Contains("/Add-Driver"));
+            var commit = commands.FindIndex(c => c.Contains("/Commit"));
+            Assert.True(add >= 0 && commit > add, string.Join(" | ", commands));
+            // The only discard is the read-only look before any change.
+            Assert.Single(commands, c => c.Contains("/Discard"));
+        }
+        finally
+        {
+            TryDeleteDir(root);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyAsync_RemoveOnlyRunThatFails_DiscardsInsteadOfCommitting()
+    {
+        var root = CreateTempDir();
+        try
+        {
+            var image = Path.Combine(root, "winre.wim");
+            File.WriteAllText(image, "fake winre image");
+            var plan = WinReDriverInjectionService.BuildPlan(image, Path.Combine(root, "mount"), WriteStagedInf(root));
+            var listing = DriverListing(
+                DriverBlock("oem0.inf", "stornvme.inf", StagedVersion),
+                DriverBlock("oem1.inf", "stornvme.inf", StagedVersion));
+            var commands = new List<string>();
+
+            var result = await WinReDriverInjectionService.ApplyAsync(plan, root, (_, args, _, _) =>
+            {
+                var command = string.Join(" ", args);
+                commands.Add(command);
+                if (command.Contains("/Remove-Driver"))
+                    return Task.FromException<string>(new InvalidOperationException("DISM exited with 50"));
+                return Task.FromResult(command.Contains("/Get-Drivers") ? listing : string.Empty);
+            });
+
+            Assert.False(result.Success);
+            Assert.False(result.RemovalFailed);
+            Assert.DoesNotContain(commands, c => c.Contains("/Commit") || c.Contains("/Add-Driver"));
+            Assert.Equal(2, commands.Count(c => c.Contains("/Discard")));
+        }
+        finally
+        {
+            TryDeleteDir(root);
+        }
+    }
+
+    [Fact]
+    public void RenderPlan_TellsAHandRunToCheckFirstAndRemoveTheOlderCopies()
+    {
+        var plan = WinReDriverInjectionService.BuildPlan(
+            @"C:\Recovery\WindowsRE\winre.wim", @"C:\Temp\mount", @"C:\Windows\INF\stornvme.inf");
+        var text = WinReDriverInjectionService.RenderPlan(plan);
+
+        int readOnly = text.IndexOf("/ReadOnly", StringComparison.Ordinal);
+        int list = text.IndexOf("/Get-Drivers /English", StringComparison.Ordinal);
+        int add = text.IndexOf("/Add-Driver", StringComparison.Ordinal);
+        int remove = text.IndexOf("/Remove-Driver /Driver:oem<N>.inf", StringComparison.Ordinal);
+        int commit = text.IndexOf("/Commit", StringComparison.Ordinal);
+        Assert.True(readOnly >= 0 && list > readOnly && add > list && remove > add && commit > remove, text);
+        Assert.Contains("original name is stornvme.inf", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PruneBackups_KeepsTheBackupJustMade_EvenWhenTheClockWentBackwards()
     {
         // A dead CMOS battery can stamp the new backup years before the ones already there. It
