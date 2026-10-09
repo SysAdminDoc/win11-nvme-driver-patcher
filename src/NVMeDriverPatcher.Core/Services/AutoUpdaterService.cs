@@ -5,20 +5,6 @@ using System.Text.Json;
 
 namespace NVMeDriverPatcher.Services;
 
-public class AutoUpdateResult
-{
-    public bool Success { get; set; }
-    public string Summary { get; set; } = string.Empty;
-    public string? StagedPath { get; set; }
-    public string? RestartCommand { get; set; }
-    /// <summary>True when content-level verification (SHA-256 sidecar or Authenticode) passed.</summary>
-    public bool ContentVerified { get; set; }
-    /// <summary>Name of the verification signal that ran: "signed-manifest", "sha256", "authenticode", or "none".</summary>
-    public string VerificationMethod { get; set; } = "none";
-    /// <summary>Digest embedded into the post-exit swap command for a second verification.</summary>
-    public string? ExpectedSha256 { get; set; }
-}
-
 public enum ReleaseAssetFetchStatus
 {
     Available,
@@ -43,15 +29,11 @@ public sealed class ReleaseAssetFetchResult
     public bool IsAvailable => Status == ReleaseAssetFetchStatus.Available;
 }
 
-// Downloads a GitHub release asset into an Administrators/SYSTEM-only ProgramData folder,
-// verifies the allowlisted download host, the SHA-256 sidecar and the release's signed update
-// manifest (UpdateManifestService), and emits a swap script. The swap
-// itself happens after the running exe exits, so that script re-hashes before copying and again
-// before launching the installed target.
-//
-// Heavy lifting (host allowlist, redirect handling, .part staging, size caps, SHA-256 +
-// Authenticode verification, atomic promote) lives in VerifiedDownloader. This service stays
-// focused on GitHub-API-asset discovery and the restart-command ergonomics.
+// Finds the latest GitHub release's GUI asset for `update-check` and checks that release's signed
+// update manifest (UpdateManifestService). Only the release metadata, the manifest and its
+// signature are fetched. The app never downloads or replaces itself: an in-place swap of the GUI
+// exe alone would leave an MSI install with mismatched CLI, tray and watchdog binaries, and an MSI
+// repair would put the old GUI back.
 public static class AutoUpdaterService
 {
     private static readonly IReadOnlyCollection<string> AllowedHosts = new[]
@@ -67,8 +49,8 @@ public static class AutoUpdaterService
 
     private static HttpClient CreateSharedClient()
     {
-        // AllowAutoRedirect=false is load-bearing: VerifiedDownloader drives redirects manually
-        // so every hop is re-checked against AllowedHosts. If the client were to auto-follow
+        // AllowAutoRedirect=false is load-bearing: VerifiedDownloader and FetchLatestAssetAsync drive
+        // redirects manually so every hop is re-checked against AllowedHosts. If the client were to auto-follow
         // redirects, our per-hop allowlist check would run once (on the final response) and
         // miss the intermediate hops entirely — a compromised CDN could then steer into an
         // unlisted host without us noticing until the end.
@@ -81,155 +63,45 @@ public static class AutoUpdaterService
         return client;
     }
 
-    public static async Task<AutoUpdateResult> StageUpdateAsync(
-        string browserDownloadUrl,
-        string targetAssetName,
-        CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Whether the release behind <paramref name="assetUrl"/> carries a signed update manifest that
+    /// verifies against the shipped keys, names that release and a newer version than this one, and
+    /// pins a SHA-256 for the asset. Nothing but the manifest and its signature is downloaded.
+    /// </summary>
+    public static Task<(bool Verified, string Summary, string? Sha256)> CheckReleaseManifestAsync(
+        string? assetUrl, CancellationToken cancellationToken = default)
     {
-        var result = new AutoUpdateResult();
-        if (!Uri.TryCreate(browserDownloadUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
-        {
-            result.Summary = "Download URL must be an absolute https:// URL.";
-            return result;
-        }
-        if (!AllowedHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase))
-        {
-            result.Summary = $"Download host '{uri.Host}' is not in the allowlist.";
-            return result;
-        }
-        if (string.IsNullOrWhiteSpace(targetAssetName) || targetAssetName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-        {
-            result.Summary = "Target asset name is invalid.";
-            return result;
-        }
-
-        try
-        {
-            if (!UpdateService.TryParseComparableVersion(Models.AppConfig.AppVersion, out var installed))
-            {
-                result.Summary = "The installed version couldn't be read, so the update manifest can't be checked.";
-                return result;
-            }
-            // The signed manifest comes first: without it nothing is downloaded or staged.
-            var manifest = await FetchVerifiedManifestAsync(
-                Http, uri, UpdateManifestService.TrustedPublicKeys, installed, DateTimeOffset.UtcNow, cancellationToken)
-                .ConfigureAwait(false);
-            if (manifest.ExpectedSha256 is null)
-            {
-                result.Summary = manifest.Summary;
-                return result;
-            }
-
-            var stagingAccess = PrivilegedStateSecurityService.EnsureForUpdates();
-            if (!stagingAccess.Success)
-            {
-                result.Summary = "Protected update staging is unavailable: " + stagingAccess.Summary;
-                return result;
-            }
-            var stagingDir = stagingAccess.Directory;
-            var stagedPath = Path.Combine(stagingDir, targetAssetName);
-
-            var policy = new VerifiedDownloader.DownloadPolicy
-            {
-                AllowedHosts = AllowedHosts,
-                MinBytes = 1_048_576,     // 1 MB — below this is almost certainly a 404 page
-                MaxBytes = 262_144_000,   // 250 MB — above this is out of scope
-                MaxRedirects = 6,
-                RequireIntegrity = true,             // never stage an unverified exe
-                // Authenticode fallback verifies signature VALIDITY, not signer IDENTITY, so it would
-                // accept any validly-signed binary at the asset URL. This project ships UNSIGNED and
-                // every release carries a SHA-256 sidecar, so require the sidecar and disable the
-                // fallback rather than accept an unpinned signer for the in-place self-replace.
-                AllowAuthenticodeFallback = false
-            };
-
-            var download = await DownloadPinnedAsync(
-                Http, uri, stagedPath, policy, manifest.ExpectedSha256, cancellationToken).ConfigureAwait(false);
-            if (!download.Success)
-            {
-                result.Summary = download.Summary;
-                return result;
-            }
-
-            var protectedFile = PrivilegedStateSecurityService.ProtectCriticalFile(
-                download.Path!, StateDirectoryRole.Privileged);
-            if (!protectedFile.Success)
-            {
-                TryDelete(download.Path);
-                result.Summary = "Staged update metadata is not trusted: " + protectedFile.Summary;
-                return result;
-            }
-
-            // Re-read only after the file has an admin-only DACL and trusted reparse/hard-link
-            // metadata. This must still match the digest VerifiedDownloader compared to the
-            // release sidecar; otherwise no post-exit command is exposed.
-            var protectedHash = await ComputeSha256Async(download.Path!, cancellationToken).ConfigureAwait(false);
-            if (!string.Equals(protectedHash, download.VerifiedSha256, StringComparison.OrdinalIgnoreCase))
-            {
-                TryDelete(download.Path);
-                result.Summary = "Staged update changed while its protected metadata was established; aborting.";
-                return result;
-            }
-
-            result.Success = true;
-            result.StagedPath = download.Path;
-            result.ContentVerified = true;
-            result.ExpectedSha256 = protectedHash;
-            result.VerificationMethod = "signed-manifest";
-
-            var currentExe = Environment.ProcessPath ?? "NVMeDriverPatcher.exe";
-            result.RestartCommand = BuildRestartCommand(download.Path!, currentExe, protectedHash);
-            result.Summary =
-                $"Update staged in protected ProgramData storage ({result.VerificationMethod} verified). Run the printed RestartCommand in a separate PowerShell window, then exit the app; it re-verifies SHA-256 before copy and launch.";
-            if (SmartAppControlService.DownloadNote(SmartAppControlService.Read()) is string sacNote)
-                result.Summary += " " + sacNote;
-        }
-        catch (Exception ex)
-        {
-            result.Summary = $"Staging failed: {ex.GetType().Name}: {ex.Message}";
-        }
-        return result;
+        if (!UpdateService.TryParseComparableVersion(Models.AppConfig.AppVersion, out var installed))
+            return Task.FromResult<(bool, string, string?)>(
+                (false, "The installed version couldn't be read, so the update manifest can't be checked.", null));
+        return CheckReleaseManifestAsync(
+            assetUrl, Http, UpdateManifestService.TrustedPublicKeys, installed, DateTimeOffset.UtcNow, cancellationToken);
     }
 
-    /// <summary>
-    /// Downloads through <see cref="VerifiedDownloader"/> (which checks the release's .sha256
-    /// sidecar) and then requires the result to match the SHA-256 the signed manifest pins. A
-    /// sidecar replaced along with the exe still matches it; the manifest doesn't. The staged
-    /// file is deleted on any failure.
-    /// </summary>
-    internal static async Task<VerifiedDownloader.DownloadResult> DownloadPinnedAsync(
+    internal static async Task<(bool Verified, string Summary, string? Sha256)> CheckReleaseManifestAsync(
+        string? assetUrl,
         HttpClient client,
-        Uri uri,
-        string stagedPath,
-        VerifiedDownloader.DownloadPolicy policy,
-        string manifestSha256,
+        IReadOnlyList<string> trustedKeys,
+        Version installedVersion,
+        DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
-        var download = await VerifiedDownloader
-            .DownloadAsync(client, uri, stagedPath, policy, cancellationToken)
-            .ConfigureAwait(false);
-        if (!download.Success)
-            return download;
-
-        if (download.Signal != VerifiedDownloader.IntegritySignal.Sha256Sidecar ||
-            string.IsNullOrWhiteSpace(download.VerifiedSha256))
+        if (!Uri.TryCreate(assetUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps ||
+            !AllowedHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase))
         {
-            TryDelete(download.Path);
-            return new VerifiedDownloader.DownloadResult
-            {
-                Summary = "Update staging did not retain a sidecar-verified SHA-256; refusing to emit a swap command."
-            };
+            return (false, "The release asset URL isn't an https GitHub address, so its manifest wasn't checked.", null);
         }
-
-        if (!string.Equals(download.VerifiedSha256, manifestSha256, StringComparison.OrdinalIgnoreCase))
+        try
         {
-            TryDelete(download.Path);
-            return new VerifiedDownloader.DownloadResult
-            {
-                Summary = "The downloaded update matches its .sha256 file but not the signed update manifest; refusing it."
-            };
+            var (summary, sha256) = await FetchVerifiedManifestAsync(
+                client, uri, trustedKeys, installedVersion, nowUtc, cancellationToken).ConfigureAwait(false);
+            return (sha256 is not null, summary, sha256);
         }
-        return download;
+        catch (Exception ex) when (ex is HttpRequestException or IOException ||
+                                   (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            return (false, $"The signed update manifest couldn't be fetched: {ex.Message}", null);
+        }
     }
 
     /// <summary>
@@ -287,39 +159,9 @@ public static class AutoUpdaterService
     internal static string? ExtractSha256(string? text) =>
         VerifiedDownloader.ExtractSha256(text);
 
-    internal static Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken) =>
-        VerifiedDownloader.ComputeSha256Async(path, cancellationToken);
-
-    internal static bool VerifyAuthenticode(string path) =>
-        VerifiedDownloader.VerifyAuthenticode(path);
-
-    internal static string BuildRestartCommand(string stagedPath, string currentExe, string expectedSha256)
-    {
-        // PowerShell single-quoted strings treat '' as a literal apostrophe. Escape any
-        // apostrophes in the paths so a pathological install path cannot break the command.
-        var staged = stagedPath.Replace("'", "''");
-        var current = currentExe.Replace("'", "''");
-        var expected = ExtractSha256(expectedSha256)
-            ?? throw new ArgumentException("A 64-character SHA-256 is required.", nameof(expectedSha256));
-        return
-            $"$expected='{expected}'; Start-Sleep -Seconds 2; " +
-            $"$actual=(Get-FileHash -LiteralPath '{staged}' -Algorithm SHA256).Hash.ToLowerInvariant(); " +
-            "if ($actual -ne $expected) { throw 'Staged update SHA-256 changed; refusing replacement.' }; " +
-            $"Copy-Item -LiteralPath '{staged}' -Destination '{current}' -Force; " +
-            $"$installed=(Get-FileHash -LiteralPath '{current}' -Algorithm SHA256).Hash.ToLowerInvariant(); " +
-            "if ($installed -ne $expected) { throw 'Installed update SHA-256 does not match; refusing launch.' }; " +
-            $"Start-Process -FilePath '{current}'";
-    }
-
-    private static void TryDelete(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return;
-        try { File.Delete(path); } catch { }
-    }
-
-    // The only asset name the auto-updater may stage. Releases also upload CLI, tray,
-    // watchdog, and MSI binaries — selecting "any .exe" made the update payload depend on
-    // upload order. Exact match + fail-closed: if the GUI asset is absent, no update.
+    // The only asset update-check reports. Releases also upload CLI, tray, watchdog, and MSI
+    // binaries; selecting "any .exe" made the answer depend on upload order. Exact match and
+    // fail-closed: if the GUI asset is absent, there's no update to offer.
     internal const string GuiAssetName = "NVMeDriverPatcher.exe";
 
     /// <summary>

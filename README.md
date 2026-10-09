@@ -111,13 +111,12 @@ and the SHA-256 of every release file. It's signed with an ECDSA P-256 key that 
 maintainer's machine, and the app ships the public half. This isn't code signing (the exes stay
 unsigned). It's a check the app runs itself.
 
-The app's update staging code isn't wired to a button yet, but it already refuses a download
-unless all of this holds: the manifest's signature matches a key the app ships with, the manifest
-names the same release and a newer version than the one installed, it hasn't expired, and the
-file matches both its `.sha256` sidecar and the manifest. Replacing an exe and its sidecar on
-GitHub isn't enough to get a swapped file through. Staged files live in an Administrators and
-SYSTEM only ProgramData folder, and the replacement command re-checks the SHA-256 before it
-copies and again before it launches.
+`NVMeDriverPatcher.Cli.exe update-check` reads the latest release's manifest and says whether it
+verifies: the signature matches a key the app ships with, the manifest names that release and a
+newer version than the one installed, and it hasn't expired. When it does, it prints the SHA-256
+the GUI exe has to have, so you can compare it with `Get-FileHash` after downloading. Replacing an
+exe and its `.sha256` file on GitHub doesn't change that hash. A release without a manifest
+(v5.6.0 and older) says so instead.
 
 **Key rotation.** Each version trusts two public keys. Releases are signed with the first. To
 rotate, a release moves the second key into first place, adds a fresh second key, and is signed

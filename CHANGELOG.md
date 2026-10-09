@@ -136,6 +136,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - `verify-payload --json` now uses the same versioned envelope as every other command (`schemaVersion`, `command`, `data`), and `bypassio --json --history` carries the pre/post snapshot diff and the volumes that lost BypassIO, which the text output had and the JSON dropped.
 
 ### Changed
+- The unused in-place update staging code is gone. Nothing ever called it, and swapping the GUI exe on its own would have left an MSI install with a GUI on one version and the CLI, tray and watchdog on another. Updates come from the release page or the MSI.
 - The window no longer rebuilds registry-flag, compatibility-note, change-plan and gaming-impact lists that nothing displayed. The Overview now lists each readiness check, and the Drives tab shows whether each drive is on the native or the legacy driver.
 - The Apply confirmation, the README and the offline overview now say that the measured gains show up at high queue depths, that ordinary desktop use may see little or no change, and that StorageReview measured 4K random writes slightly slower.
 - The legacy script's release gate checks many more registry-writing shapes (`Set-Item`, `reg.exe`, writable `OpenSubKey`, `New-Item` on a registry path and others) and tests itself against a fixture for each one, so a pattern that stops matching fails the gate.
@@ -225,6 +226,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   `Invoke-Checked` or extensionless names; release tools are resolved to absolute paths first.
 
 ### Added
+- `update-check` says whether the latest release's signed update manifest verifies, and when it does, prints the SHA-256 the GUI exe should have so a download can be checked against it. A release whose exe and `.sha256` file were both replaced can't change that hash.
 - Benchmark results record the DiskSpd version, the exe's SHA-256 and the full argument line. Comparing two results from different DiskSpd builds shows a warning instead of a percentage, and `compare-benchmarks` exits 2 with NOT COMPARABLE. The history database moves to schema v4 (three new nullable columns), backed up before the upgrade like the earlier ones.
 - The BypassIO gaming-impact summary and `bypassio --json` (`driverInfName`, `driverInfDeclaration`) say whether the bound storage driver's INF declares BypassIO support. Microsoft requires a storage driver to set `StorageSupportedFeatures` under its service's Parameters key, or BypassIO on that volume is blocked outright.
 - `scripts/Test-MsiSandbox.ps1` installs the MSI in Windows Sandbox, checks the install folder, the watchdog service, the CLI's version and the scheduled tasks, then uninstalls and checks nothing is left behind. It fails fast on a host without Sandbox.

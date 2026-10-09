@@ -964,6 +964,12 @@ class Program
         Console.WriteLine($"Update available: {result.Tag}");
         Console.WriteLine($"Asset: {result.Name}");
         Console.WriteLine($"URL: {result.Url}");
+        // Only the manifest and its signature are fetched. A verified manifest pins the hash the
+        // download has to match; the release's own .sha256 file can be replaced along with the exe.
+        var manifest = await AutoUpdaterService.CheckReleaseManifestAsync(result.Url);
+        Console.WriteLine(manifest.Verified
+            ? $"Signed update manifest: verified. {result.Name} should have SHA-256 {manifest.Sha256}."
+            : $"Signed update manifest: not verified. {manifest.Summary}");
         if (SmartAppControlService.DownloadNote(SmartAppControlService.Read()) is string sacNote)
             Console.WriteLine(sacNote);
         return 0;
