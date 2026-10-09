@@ -7,18 +7,22 @@ using NVMeDriverPatcher.Services;
 namespace NVMeDriverPatcher.Tray;
 
 // System tray agent — reads config + watchdog state every N seconds, renders a tray tooltip
-// + colored icon reflecting patch state. Single-instance via named mutex. The agent exits
-// cleanly on the Exit menu, and also exits at startup when another tray instance already
-// owns the named mutex (keeps the tray idempotent across re-launches).
+// + colored icon reflecting patch state. Single-instance per Windows session via a Local\
+// named mutex, so a second RDP or fast-user-switch session gets its own icon. The agent exits
+// cleanly on the Exit menu, and also exits at startup when another tray instance in the same
+// session already owns the mutex (keeps the tray idempotent across re-launches). The poll
+// runs on a worker thread (it does WMI and event-log reads) and posts the text back to the UI.
 internal static class Program
 {
-    private const string MutexName = "Global\\NVMeDriverPatcher.Tray.Single";
+    private const string MutexName = "Local\\NVMeDriverPatcher.Tray.Single";
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
     private static NotifyIcon? _icon;
     private static ToolStripMenuItem? _statusItem;
     private static ToolStripMenuItem? _watchdogItem;
     private static System.Windows.Forms.Timer? _poll;
     private static AppConfig _config = new();
+    private static Control? _marshal;
+    private static int _refreshRunning;
 
     [STAThread]
     private static int Main(string[] args)
@@ -36,6 +40,10 @@ internal static class Program
         {
             _config = new AppConfig { WorkingDir = AppConfig.GetWorkingDir() };
         }
+
+        // A control with a created handle gives the worker a safe way back to the UI thread.
+        _marshal = new Control();
+        _ = _marshal.Handle;
 
         _icon = new NotifyIcon
         {
@@ -78,37 +86,66 @@ internal static class Program
 
     private static void Refresh()
     {
-        try
+        // One poll at a time; a tick or "Refresh Now" that lands mid-poll is dropped.
+        if (Interlocked.Exchange(ref _refreshRunning, 1) == 1) return;
+        _ = Task.Run(() =>
         {
-            // Reload config on every tick so changes the user makes in the main GUI (auto-revert
-            // toggle, verification state after apply, renamed working directory) surface in the
-            // tray tooltip within one PollInterval. Without this, the tray would show the config
-            // state it saw at startup forever. Best-effort — if the file is mid-write we keep
-            // the previous config and re-try next tick.
-            try { _config = ConfigService.Load(); } catch { }
-
-            var status = RegistryService.GetPatchStatus();
-            var verification = PatchVerificationService.Evaluate(_config);
-            // Read-only: the tray runs unelevated and must never write protected watchdog state.
-            // The persisting overload downgrades its own verdict to Unavailable when that write
-            // fails, which for this process is always.
-            var watchdog = EventLogWatchdogService.EvaluateReadOnly(_config);
-
-            string statusLine = $"Patch: {(status.Applied ? "Applied" : status.Partial ? "Partial" : "Not applied")} " +
-                                $"({status.Count}/{status.Total}): {verification.Outcome}";
-            string watchdogLine = $"Watchdog: {watchdog.Verdict} ({watchdog.TotalEvents} events)";
-
-            if (_statusItem is not null) _statusItem.Text = statusLine;
-            if (_watchdogItem is not null) _watchdogItem.Text = watchdogLine;
-            if (_icon is not null)
+            string statusLine = "";
+            string watchdogLine = "";
+            string? failure = null;
+            try
             {
-                _icon.Text = Trim64($"{statusLine} | {watchdogLine}");
+                (statusLine, watchdogLine) = Poll();
             }
-        }
-        catch (Exception ex)
+            catch (Exception ex)
+            {
+                failure = ex.Message;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _refreshRunning, 0);
+            }
+            try
+            {
+                _marshal?.BeginInvoke(() => ApplyPoll(statusLine, watchdogLine, failure));
+            }
+            catch (InvalidOperationException) { } // handle gone: the tray is exiting
+        });
+    }
+
+    private static (string StatusLine, string WatchdogLine) Poll()
+    {
+        // Reload config on every tick so changes the user makes in the main GUI (auto-revert
+        // toggle, verification state after apply, renamed working directory) surface in the
+        // tray tooltip within one PollInterval. Without this, the tray would show the config
+        // state it saw at startup forever. Best-effort — if the file is mid-write we keep
+        // the previous config and re-try next tick.
+        try { _config = ConfigService.Load(); } catch { }
+
+        var status = RegistryService.GetPatchStatus();
+        var verification = PatchVerificationService.Evaluate(_config);
+        // Read-only: the tray runs unelevated and must never write protected watchdog state.
+        // The persisting overload downgrades its own verdict to Unavailable when that write
+        // fails, which for this process is always.
+        var watchdog = EventLogWatchdogService.EvaluateReadOnly(_config);
+
+        string statusLine = $"Patch: {(status.Applied ? "Applied" : status.Partial ? "Partial" : "Not applied")} " +
+                            $"({status.Count}/{status.Total}): {verification.Outcome}";
+        string watchdogLine = $"Watchdog: {watchdog.Verdict} ({watchdog.TotalEvents} events)";
+
+        return (statusLine, watchdogLine);
+    }
+
+    private static void ApplyPoll(string statusLine, string watchdogLine, string? failure)
+    {
+        if (failure is not null)
         {
-            if (_icon is not null) _icon.Text = Trim64("NVMe Driver Patcher: " + ex.Message);
+            if (_icon is not null) _icon.Text = Trim64("NVMe Driver Patcher: " + failure);
+            return;
         }
+        if (_statusItem is not null) _statusItem.Text = statusLine;
+        if (_watchdogItem is not null) _watchdogItem.Text = watchdogLine;
+        if (_icon is not null) _icon.Text = Trim64($"{statusLine} | {watchdogLine}");
     }
 
     private static string Trim64(string s) => s.Length > 63 ? s[..63] : s;
