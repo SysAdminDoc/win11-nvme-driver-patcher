@@ -34,7 +34,24 @@ public sealed class DocumentationFactsValidatorTests
         Assert.True(result.Output.Contains(expectedFailure, StringComparison.Ordinal), result.Output);
     }
 
-    private static (int ExitCode, string Output) RunValidator(string root)
+    [Fact]
+    public void Validator_AcceptsTheRealRepository()
+    {
+        // The fixture tests above prove the validator catches drift; this one proves the checkout
+        // itself has none, so a README count that falls behind the source fails the suite instead
+        // of waiting for Validate-ReleaseVersions.ps1 at release time. CLAUDE.md is untracked and
+        // the validator skips it when absent, so a clean clone passes too. The discovered-test
+        // floor is a release check (it would shell out to `dotnet test --list-tests` from inside
+        // a test run), so the count passed here is deliberately out of its way.
+        var repoRoot = Path.GetFullPath(Path.Combine(
+            Path.GetDirectoryName(ValidatorPath())!, ".."));
+
+        var result = RunValidator(repoRoot, discoveredTestCount: int.MaxValue);
+
+        Assert.True(result.ExitCode == 0, result.Output);
+    }
+
+    private static (int ExitCode, string Output) RunValidator(string root, int discoveredTestCount = 12)
     {
         using var process = new Process
         {
@@ -55,12 +72,12 @@ public sealed class DocumentationFactsValidatorTests
         process.StartInfo.ArgumentList.Add("-RepoRoot");
         process.StartInfo.ArgumentList.Add(root);
         process.StartInfo.ArgumentList.Add("-DiscoveredTestCount");
-        process.StartInfo.ArgumentList.Add("12");
+        process.StartInfo.ArgumentList.Add(discoveredTestCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
         process.Start();
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        Assert.True(process.WaitForExit(20_000), "Documentation validator timed out.");
+        Assert.True(process.WaitForExit(60_000), "Documentation validator timed out.");
         Task.WaitAll(stdout, stderr);
         return (process.ExitCode, stdout.Result + stderr.Result);
     }
