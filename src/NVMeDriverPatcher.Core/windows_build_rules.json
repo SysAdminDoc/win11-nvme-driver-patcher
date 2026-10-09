@@ -37,7 +37,7 @@
       "minUbr": 0,
       "maxUbr": 999999,
       "expectedPath": "none-known",
-      "summary": "Builds 26201-26299 (builds from 26300 up, 26H2 and the 26H1 trains included, match the 26300 rule first) inherit the GenNvmeDisk compatible-ID removal, so no working enablement path is known. Candidate probe 48613417 (NativeNVMeStackEnableForClientOS) is untested on this branch; source: https://github.com/phantomofearth/windows-velocity-feature-lists. Applying it remains gated behind live validation. Wait for Microsoft's official client rollout.",
+      "summary": "Builds 26201-26299 (builds from 26300 up match the 26300 rule first) inherit the GenNvmeDisk compatible-ID removal, so no working enablement path is known. Candidate probe 48613417 (NativeNVMeStackEnableForClientOS) is untested on this branch; source: https://github.com/phantomofearth/windows-velocity-feature-lists. Applying it remains gated behind live validation. Wait for Microsoft's official client rollout.",
       "sourceUrl": "https://github.com/thebookisclosed/ViVe/issues/164",
       "confidence": "community-reported",
       "lastReviewed": "2026-10-05"
