@@ -90,7 +90,7 @@ public sealed class DocsServiceTests
         Assert.Contains("25H2 26200.0-26200.8523", text);
         Assert.Contains("25H2 26200.8524+", text);
         Assert.Contains("verify/monitor/rollback only", text);
-        Assert.Contains("26300+", text);
+        Assert.Contains("26H2 (26300.x)", text);
         Assert.Contains("Feature flags", text);
         Assert.Contains("Pre-24H2 client builds", text);
     }
@@ -108,7 +108,7 @@ public sealed class DocsServiceTests
         Assert.Contains("24H2 evidenced fallback", readme);
         Assert.Contains("Other 24H2 builds", readme);
         Assert.Contains("Pre-24H2 client", readme);
-        Assert.Contains("26300+ Insider", readme);
+        Assert.Contains("| 26H2 and newer | 26300+ |", readme);
         Assert.Contains("Feature flags page", readme);
         Assert.Contains("windows_build_rules.json", readme);
     }

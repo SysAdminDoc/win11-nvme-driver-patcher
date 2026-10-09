@@ -340,7 +340,7 @@ When you redirect the CLI's output to a file or a pipe, it's written as UTF-8 wi
 | 25H2 26200.8524+ | 26200.8524+ | Verify / monitor / rollback only. No known registry or fallback route binds `GenNvmeDisk` on this branch. |
 | 24H2 evidenced fallback | 26100.8106 | Exact community-evidenced FeatureStore fallback interval; adjacent UBRs are not inferred. |
 | Other 24H2 builds | 26100.x / 26101-26199 | Verify / monitor / rollback only until the exact build and UBR have a sourced working path. |
-| 26300+ Insider | 26300+ | Check the native Settings Feature flags page first; registry and fallback routes are not expected to bind. |
+| 26H2 and newer | 26300+ | Verify / monitor / rollback only. Registry and fallback routes are not expected to bind. Experimental-channel Insiders should check the Feature flags page first. |
 | Pre-24H2 client | 26099 and below | Verify / monitor / rollback only; no sourced working enablement interval. |
 
 > The app and CLI use `src/NVMeDriverPatcher.Core/windows_build_rules.json` and the reviewed

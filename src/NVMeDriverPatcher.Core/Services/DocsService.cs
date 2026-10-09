@@ -23,7 +23,7 @@ Available topics:
   gpo              Group Policy / ADMX deployment for fleets.
   portable         Portable-mode deployment.
   telemetry        The opt-in compat telemetry payload.
-  featureflags     The native Feature flags page on Windows 11 26300+.
+  featureflags     The native Feature flags page for Experimental-channel Insiders.
   driverworkaround Custom INF / TESTSIGNING native NVMe workarounds.
   uninstall        Removing the app cleanly.
 ",
@@ -137,8 +137,9 @@ path. Current client buckets:
 * Other 24H2 26100/26101-26199 builds: verify/monitor/rollback only; no exact sourced path.
 * 25H2 26200.0-26200.8523: registry override is blocked; use the 25H2 FeatureStore fallback.
 * 25H2 26200.8524+ and 26201-26299: verify/monitor/rollback only; no known bind path.
-* 26300+: check Settings > Windows Update > Windows Insider Program > Feature flags first;
-  registry and fallback routes are not expected to bind.
+* 26H2 (26300.x) and newer builds (26300+): verify/monitor/rollback only; registry
+  and fallback routes are not expected to bind. Experimental-channel Insiders: check Settings >
+  Windows Update > Windows Insider Program > Feature flags first.
 * Pre-24H2 client builds: verify/monitor/rollback only; no sourced working interval.
 
 Server 2025 has a separate official opt-in path. Run `status` or preflight on the target
@@ -173,8 +174,9 @@ packaging/telemetry-receiver/ (Cloudflare Worker).
 ",
         ["featureflags"] = @"
 Starting with Insider build 26300.8155, Windows 11 has a built-in 'Feature flags' page
-under Settings > Windows Update > Windows Insider Program. If you are on build 26300 or
-newer, check there FIRST: Microsoft may expose native NVMe as an official, supported toggle.
+under Settings > Windows Update > Windows Insider Program. It's there for Insiders on the
+Experimental channel. A retail 26H2 PC (also build 26300) outside the Insider program
+doesn't have it. If you do have it, check there FIRST: Microsoft may expose native NVMe as an official, supported toggle.
 An official toggle is always preferable to this tool's overrides. On these builds the
 registry and ViVeTool routes do not bind the driver anyway (the GenNvmeDisk compatible ID
 was removed). If a native NVMe flag appears on that page, use it and treat this tool as a
