@@ -418,6 +418,32 @@ public sealed class SchedulerServiceTests
         Assert.False(audit.NeedsAttention);
     }
 
+    // schtasks prints through the console code page, so an accented folder name can come back as
+    // "r?seau", or with U+FFFD once decoded. That path isn't the real one, so it's unreadable,
+    // not unprotected.
+    [Theory]
+    [InlineData(@"C:\Program Files\Outils r?seau\NVMeDriverPatcher.Cli.exe")]
+    [InlineData("C:\\Program Files\\Outils r\uFFFDseau\\NVMeDriverPatcher.Cli.exe")]
+    public void EvaluateTaskQuery_APathSchtasksCouldNotPrintIsUnreadableNotUnprotected(string printed)
+    {
+        var audit = SchedulerService.EvaluateTaskQuery(
+            SchedulerService.BootTaskName, 0, TaskXml("\"" + printed + "\""),
+            _ => throw new InvalidOperationException("a garbled path must not be checked"));
+
+        Assert.Equal(ScheduledTaskTargetState.Unreadable, audit.State);
+        Assert.Null(audit.Target);
+        Assert.True(audit.NeedsAttention);
+        Assert.Contains("couldn't print", audit.Detail);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Program Files\NVMe Driver Patcher\NVMeDriverPatcher.Cli.exe", false)]
+    [InlineData(@"\\?\C:\Program Files\NVMe Driver Patcher\NVMeDriverPatcher.Cli.exe", false)]
+    [InlineData(@"\\?\C:\Program Files\Outils r?seau\NVMeDriverPatcher.Cli.exe", true)]
+    [InlineData(@"C:\Program Files\Outils r?seau\NVMeDriverPatcher.Cli.exe", true)]
+    public void IsGarbledPath_LeavesTheLongPathPrefixAlone(string path, bool garbled) =>
+        Assert.Equal(garbled, SchedulerService.IsGarbledPath(path));
+
     // A definition that can't be parsed, or a schtasks that never answered, must not read as safe.
     [Theory]
     [InlineData(0, "<Task><Actions>")]
