@@ -195,19 +195,21 @@ public sealed class InstallerContentTests
     }
 
     [Theory]
-    [InlineData("NVMeDriverPatcher.Cli", "NVMeDriverPatcher.Cli.exe", "static int RegisterTasksCommand(")]
-    [InlineData("NVMeDriverPatcher.Watchdog", "NVMeDriverPatcher.Watchdog.exe", "static int HandleServiceControl(")]
-    public void PersistentRegistration_RefusesADotnetHostedRun(string project, string exeName, string method)
+    [InlineData("NVMeDriverPatcher.Cli", "static int RegisterTasksCommand(")]
+    [InlineData("NVMeDriverPatcher.Watchdog", "static int HandleServiceControl(")]
+    public void PersistentRegistration_RefusesADotnetHostedRun(string project, string method)
     {
         // Under `dotnet X.dll` Environment.ProcessPath is dotnet.exe; registering it would leave
-        // a task or service that launches bare dotnet.exe forever.
+        // a task or service that launches bare dotnet.exe forever. The guard names the host, so the
+        // ARM64 exes (NVMeDriverPatcher.Cli-win-arm64.exe and friends) still register.
         var program = Read("src", project, "Program.cs");
         var start = program.IndexOf(method, StringComparison.Ordinal);
         Assert.True(start >= 0, method + " not found");
         var body = program[start..];
-        var guard = body.IndexOf($"Path.GetFileName(", StringComparison.Ordinal);
+        var guard = body.IndexOf("Path.GetFileNameWithoutExtension(", StringComparison.Ordinal);
         var register = body.IndexOf(project.EndsWith("Cli") ? "SchedulerService.Register" : "RunSc(\"create\"", StringComparison.Ordinal);
         Assert.True(guard >= 0 && guard < register, "exe-name guard must run before anything is registered");
-        Assert.Contains($"\"{exeName}\"", body[guard..register]);
+        Assert.Contains("\"dotnet\"", body[guard..register]);
+        Assert.DoesNotContain("Path.GetFileName(", body[..register]);
     }
 }
