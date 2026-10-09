@@ -69,15 +69,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified (reported by the 2026-10-09 lane)
   Effort: S
 
-- [ ] P3 — Build rule `26300-feature-flags-page` calls 26300+ "26H2 Experimental"
-  Category: docs
-  Where: `src/NVMeDriverPatcher.Core/windows_build_rules.json` (rule `26300-feature-flags-page` summary)
-  Problem: 26H2 ships as an enablement package over 25H2 on build 26200 (now noted in the 26200 rules), so labeling the 26300 Insider train "26H2" contradicts the same file.
-  Fix: Re-read the rule's `sourceUrl` and Microsoft's current Insider channel naming, then rename the label to what Microsoft calls 26300.x today. Don't touch the verdict or `lastReviewed` without that re-verification.
-  Acceptance: No rule summary calls two different builds 26H2; `WindowsBuildRulesServiceTests` pass.
-  Confidence: Likely (noticed 2026-10-09 while adding the 26H2 note)
-  Effort: S
-
 ### Unaudited — needs a pass
 
 ## Research-Driven Additions — 2026-08-11

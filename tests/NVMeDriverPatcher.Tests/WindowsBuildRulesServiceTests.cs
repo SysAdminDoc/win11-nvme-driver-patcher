@@ -57,18 +57,24 @@ public sealed class WindowsBuildRulesServiceTests
     }
 
     [Fact]
-    public void Summaries_RecordHotpatchExceptionFor26H1AndEnablementPackageFor26H2()
+    public void Summaries_Name26300As26H2AndPutThe26H1NoteWhere26H1Lands()
     {
-        var rules = WindowsBuildRulesService.LoadRuleset();
-        Assert.Contains("Hotpatch",
-            rules.Rules.Single(r => r.Id == "post-26200-trains-bind-blocked").Summary);
-        foreach (var id in new[] { "26200-bind-blocked", "25h2-vivetool-new-ids" })
-            Assert.Contains("enablement package over 25H2", rules.Rules.Single(r => r.Id == id).Summary);
-
-        // A 26H2-reporting host still carries the 25H2 build number, so it resolves the same rule.
+        // 26H2's enablement package (KB5121794) moves the build string to 26300, so a retail 26H2
+        // PC lands on the 26300 rule, and only that rule may call itself 26H2. 26H1 (28000
+        // series) matches the same rule first, so its Hotpatch note belongs there too.
         var ruleset = WindowsBuildRulesService.LoadRuleset();
-        Assert.Equal("25h2-vivetool-new-ids", WindowsBuildRulesService.Match(ruleset, 26200, 8246, false)!.Id);
-        Assert.Equal("26200-bind-blocked", WindowsBuildRulesService.Match(ruleset, 26200, 9000, false)!.Id);
+        var h2 = WindowsBuildRulesService.Match(ruleset, 26300, 9278, false)!;
+        Assert.Equal("26300-feature-flags-page", h2.Id);
+        Assert.Contains("26H2", h2.Summary);
+        Assert.Contains("KB5121794", h2.Summary);
+        Assert.Contains("Experimental", h2.Summary);
+        Assert.DoesNotContain("26H2 Experimental", h2.Summary);
+        Assert.All(ruleset.Rules.Where(r => r.Id != h2.Id), r => Assert.DoesNotContain("26H2", r.Summary));
+
+        var h1 = WindowsBuildRulesService.Match(ruleset, 28020, 1, false)!;
+        Assert.Contains("26H1", h1.Summary);
+        Assert.Contains("Hotpatch", h1.Summary);
+        Assert.Contains("26201-26299", ruleset.Rules.Single(r => r.Id == "post-26200-trains-bind-blocked").Summary);
     }
 
     [Fact]
