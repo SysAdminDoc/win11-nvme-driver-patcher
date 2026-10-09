@@ -540,7 +540,8 @@ function Write-AppEventLog {
     catch { }
 }
 
-Initialize-EventLogSource
+# CreateEventSource writes an HKLM key, so a pure -Status query must not trigger it.
+if (-not $Status) { Initialize-EventLogSource }
 
 # ===========================================================================
 # SECTION 7B: GITHUB UPDATE CHECK
