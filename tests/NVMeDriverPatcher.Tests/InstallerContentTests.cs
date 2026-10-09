@@ -193,4 +193,21 @@ public sealed class InstallerContentTests
         Assert.Contains("EnsureForWatchdog", program);
         Assert.DoesNotContain("icacls.exe", program);
     }
+
+    [Theory]
+    [InlineData("NVMeDriverPatcher.Cli", "NVMeDriverPatcher.Cli.exe", "static int RegisterTasksCommand(")]
+    [InlineData("NVMeDriverPatcher.Watchdog", "NVMeDriverPatcher.Watchdog.exe", "static int HandleServiceControl(")]
+    public void PersistentRegistration_RefusesADotnetHostedRun(string project, string exeName, string method)
+    {
+        // Under `dotnet X.dll` Environment.ProcessPath is dotnet.exe; registering it would leave
+        // a task or service that launches bare dotnet.exe forever.
+        var program = Read("src", project, "Program.cs");
+        var start = program.IndexOf(method, StringComparison.Ordinal);
+        Assert.True(start >= 0, method + " not found");
+        var body = program[start..];
+        var guard = body.IndexOf($"Path.GetFileName(", StringComparison.Ordinal);
+        var register = body.IndexOf(project.EndsWith("Cli") ? "SchedulerService.Register" : "RunSc(\"create\"", StringComparison.Ordinal);
+        Assert.True(guard >= 0 && guard < register, "exe-name guard must run before anything is registered");
+        Assert.Contains($"\"{exeName}\"", body[guard..register]);
+    }
 }
