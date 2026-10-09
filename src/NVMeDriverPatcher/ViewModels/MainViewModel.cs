@@ -183,6 +183,8 @@ public partial class MainViewModel : ObservableObject
     // corrupt the underlying array and crash later reads with IndexOutOfRangeException.
     private readonly object _logHistoryLock = new();
     private bool _hasLoggedSessionStart;
+    // Newer-schema warning captured in the ctor; written to the event log once it's initialized.
+    private string? _configDowngradeNotice;
 
     // Set while the ctor is priming view-bound properties from config, so the change partials
     // don't immediately save config back out (triggering a pointless write on every startup).
@@ -191,6 +193,14 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel()
     {
         Config = ConfigService.Load();
+        // The GUI never migrates, but a config written by a newer build must still be called out:
+        // settings this build doesn't understand are being ignored.
+        if (Config.ConfigVersion > ConfigMigrationService.CurrentSchemaVersion)
+        {
+            var (_, downgradeSummary) = ConfigMigrationService.Migrate(Config);
+            Log(downgradeSummary, "WARNING");
+            _configDowngradeNotice = downgradeSummary;
+        }
         // GPO overlay wins over shared config — a pinned fleet policy shouldn't be
         // quietly overridden by a stale local setting.
         try
@@ -320,6 +330,8 @@ public partial class MainViewModel : ObservableObject
             Log($"Working directory: {Config.WorkingDir}");
             Log("----------------------------------------");
             EventLogService.Write($"{AppConfig.AppName} v{AppConfig.AppVersion} started");
+            if (_configDowngradeNotice is not null)
+                EventLogService.Write(_configDowngradeNotice, System.Diagnostics.EventLogEntryType.Warning, 3010);
             _hasLoggedSessionStart = true;
         }
         else

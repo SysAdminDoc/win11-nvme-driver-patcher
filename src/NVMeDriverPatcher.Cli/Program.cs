@@ -85,6 +85,13 @@ class Program
             try
             {
                 var (changed, migrationSummary) = ConfigMigrationService.Migrate(config);
+                // A newer schema (downgrade, or an older CLI against a newer GUI's config) is left
+                // alone by Migrate; the summary is the only place that says so.
+                if (config.ConfigVersion > ConfigMigrationService.CurrentSchemaVersion)
+                {
+                    migrationFailure = migrationSummary;
+                    Console.Error.WriteLine("[WARNING] " + migrationFailure);
+                }
                 if (changed && !ConfigService.Save(config))
                     Console.Error.WriteLine("[WARNING] Config migration could not be saved. It will be re-attempted next run.");
             }
