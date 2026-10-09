@@ -97,6 +97,12 @@ count crosses the revert threshold AND AutoRevertEnabled is true, the next-boot
 AutoRevertService stages an uninstall. Tune via HKLM Policies or the CLI's
 `register-tasks` + watchdog.json.
 
+The scheduled tasks run the CLI as SYSTEM, so `register-tasks` only registers them when the
+CLI runs from Program Files or the folder the MSI installed to, and only if nobody but
+administrators can change that folder or rename the ones above it. A portable copy is
+refused. `status` warns about any task already registered against a program someone else
+could change.
+
 Storport Event ID 129 means a command timeout / device reset. Treat repeated
 command timeout (Storport 129) events as a strong revert signal, especially when paired
 with disk 51/153 paging or reset events.
@@ -165,6 +171,7 @@ Create portable.flag beside the exe (or run `portable-enable`) and the working d
 redirects diagnostics, exports, and user settings to Data\ beside the exe. Boot-critical
 mutation/recovery state always remains in the protected ProgramData State directory so a
 portable folder cannot replace an elevated rollback baseline. `portable-disable` removes the flag.
+`register-tasks` refuses a portable copy, because its tasks run the CLI as SYSTEM.
 ",
         ["telemetry"] = @"
 Opt-in. Build with `telemetry`; submit with `telemetry --endpoint=<https url>`. No
