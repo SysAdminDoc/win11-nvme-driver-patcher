@@ -444,6 +444,8 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 
 ## [5.6.0] - 2026-08-07
 
+First published release after 5.2.0. Versions 5.3.0, 5.4.0 (2026-08-02) and 5.5.0 (2026-08-07) were numbered in the source but never published or tagged, so their changes shipped in 5.6.0 and are listed here with it.
+
 ### Added
 - Patch writes are now mirrored into every spare `ControlSet00N`, not just `CurrentControlSet`
   (issue #15). Windows boot recovery, triggered by a scheduled `chkdsk /f`, a deleted
@@ -466,15 +468,6 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   loop. Any deliberate apply or removal resets the budget. Configure with `persistence-guard
   --on|--off|--max=<0-10>|--reset`, or the two new ADMX policies. Deliberately not wired into GUI
   startup: a launching user is present and can click Apply.
-### Fixed
-- `dry-run` / "Preview Changes" now shows the control-set mirror writes. Mirroring made the
-  preview under-report the real change set, which is precisely what that command exists to
-  prevent; both the install and uninstall previews now account for it.
-
-
-## [5.5.0] - 2026-08-07
-
-### Added
 - Preflight `BootRecoveryRisk` check (issue #15): warns when a boot-time chkdsk is scheduled
   (`chkdsk /f` rewrites the Session Manager `BootExecute` autochk entry) or when Windows has
   marked a control set as a failed boot (`SYSTEM\Select\Failed`). Either signal means the next
@@ -489,10 +482,6 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - ROADMAP: the mutation half of issue #15 is specified as two prioritized items, mirroring patch
   writes into every existing ControlSet00N (apply/remove symmetry), and an opt-in boot-time
   persistence guard on the existing `BootVerify` task.
-
-## [5.4.0] - 2026-08-02
-
-### Changed
 - **Unaudited-surface follow-up completed (2026-08-02)**. The offscreen workspace snapshot gate now
   renders and asserts Dark, Light and High Contrast pages; WPF startup was placement-proved on the
   exact isolated virtual display and private desktop; the tray agent, all 85 Core service files and
@@ -518,6 +507,46 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   whose bundled rules are already stale or would go stale within 14 days of shipping, and also
   catches unparseable or future review dates and rules with no source to re-verify against. Wired
   into `scripts/Build-ReleaseArtifacts.ps1` so a release cannot be cut without it.
+
+### Fixed
+- `dry-run` / "Preview Changes" now shows the control-set mirror writes. Mirroring made the
+  preview under-report the real change set, which is precisely what that command exists to
+  prevent; both the install and uninstall previews now account for it.
+- **README manual WinRE recovery left the patch partially applied**: the hand-run `reg delete`
+  sequence removed only the two GUID-class SafeBoot keys. Every patch since v4.6.1 also writes
+  `SafeBoot\Minimal\nvmedisk` and `SafeBoot\Network\nvmedisk` (KB5079391 / 25H2), and the Recovery
+  Kit removes all four leaves, so the documented manual fallback did not match what the tool itself
+  does. Added the two missing deletes, plus a warning that a FeatureStore-fallback install cannot be
+  reverted by registry deletions alone (`nvmedisk` can still bind after reboot). Documented the
+  service-name entries in the registry-components section.
+- **Compact Settings layout used hidden pre-redesign cards and left the live action row clipped**:
+  adaptive layout now targets the live profile and audit cards, gives the compact view real stacked
+  rows, and keeps the workspace activity row from consuming an unused second star row. The retired
+  `OverviewTabs` subtree and its dangling code-behind mutations are removed; the offscreen
+  accessibility harness now proves the compact card and both action buttons remain visible.
+- **Dark primary actions fell below WCAG AA contrast**: filled action buttons now use a dedicated
+  darkening rest/hover/pressed ramp while preserving the brighter accent for lines and focus, the
+  window chrome default uses the muted text token, and the close-button hover uses a readable danger
+  surface. A parser-based gate checks every declared theme foreground/background state across Dark,
+  Light, and High Contrast palettes.
+- **Benchmark and telemetry charts stopped following theme changes after tab switches**: chart views
+  now subscribe to the static theme event while loaded and detach only while unloaded, so returning
+  to a workspace tab restores live axis and series colors. A WPF lifecycle regression test covers
+  the unload/reload sequence.
+- **Code-drawn color fallbacks could drift from the active palette**: the stale semantic fallback
+  table is gone; brush resolution now consults the application theme before using one neutral
+  generic fallback, keeping Skia/LiveCharts surfaces on the same palette as the rest of the window.
+- **Non-structural history database failures vanished in Release builds**: swallowed database errors
+  now leave a dated, single-line record in the rotating diagnostics log, and support bundles include
+  sanitized current and retained application logs for triage.
+- **Patch profile help text said “Safe Mode”**: the settings explanation now says “Safe profile,”
+  distinguishes its feature flag from Windows Safe Mode, and names the Safe Boot rollback entries.
+- **Benchmark status updates repeatedly reparsed history on the UI thread**: a timestamp/size-aware
+  cache now keeps the visible chart responsive during readiness updates and invalidates after a new
+  benchmark result is saved.
+- **Visual regressions lacked executable gates**: the offscreen accessibility harness now asserts
+  compact Settings bounds and action placement, while the theme parser checks foreground/background
+  contrast across Dark, Light, and High Contrast states.
 
 ### Security
 - **Telemetry receiver stored unvalidated request bodies and republished them publicly** -
@@ -600,43 +629,6 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - **Bare-name execution gate extended beyond `src/`**: it now also scans `packaging/` and `scripts/`
   for `$PATH` lookups and bare-name launches in `.ps1`/`.psm1`, which is why neither PowerShell
   defect above was visible to the previous scan.
-
-### Fixed
-- **README manual WinRE recovery left the patch partially applied**: the hand-run `reg delete`
-  sequence removed only the two GUID-class SafeBoot keys. Every patch since v4.6.1 also writes
-  `SafeBoot\Minimal\nvmedisk` and `SafeBoot\Network\nvmedisk` (KB5079391 / 25H2), and the Recovery
-  Kit removes all four leaves, so the documented manual fallback did not match what the tool itself
-  does. Added the two missing deletes, plus a warning that a FeatureStore-fallback install cannot be
-  reverted by registry deletions alone (`nvmedisk` can still bind after reboot). Documented the
-  service-name entries in the registry-components section.
-- **Compact Settings layout used hidden pre-redesign cards and left the live action row clipped**:
-  adaptive layout now targets the live profile and audit cards, gives the compact view real stacked
-  rows, and keeps the workspace activity row from consuming an unused second star row. The retired
-  `OverviewTabs` subtree and its dangling code-behind mutations are removed; the offscreen
-  accessibility harness now proves the compact card and both action buttons remain visible.
-- **Dark primary actions fell below WCAG AA contrast**: filled action buttons now use a dedicated
-  darkening rest/hover/pressed ramp while preserving the brighter accent for lines and focus, the
-  window chrome default uses the muted text token, and the close-button hover uses a readable danger
-  surface. A parser-based gate checks every declared theme foreground/background state across Dark,
-  Light, and High Contrast palettes.
-- **Benchmark and telemetry charts stopped following theme changes after tab switches**: chart views
-  now subscribe to the static theme event while loaded and detach only while unloaded, so returning
-  to a workspace tab restores live axis and series colors. A WPF lifecycle regression test covers
-  the unload/reload sequence.
-- **Code-drawn color fallbacks could drift from the active palette**: the stale semantic fallback
-  table is gone; brush resolution now consults the application theme before using one neutral
-  generic fallback, keeping Skia/LiveCharts surfaces on the same palette as the rest of the window.
-- **Non-structural history database failures vanished in Release builds**: swallowed database errors
-  now leave a dated, single-line record in the rotating diagnostics log, and support bundles include
-  sanitized current and retained application logs for triage.
-- **Patch profile help text said “Safe Mode”**: the settings explanation now says “Safe profile,”
-  distinguishes its feature flag from Windows Safe Mode, and names the Safe Boot rollback entries.
-- **Benchmark status updates repeatedly reparsed history on the UI thread**: a timestamp/size-aware
-  cache now keeps the visible chart responsive during readiness updates and invalidates after a new
-  benchmark result is saved.
-- **Visual regressions lacked executable gates**: the offscreen accessibility harness now asserts
-  compact Settings bounds and action placement, while the theme parser checks foreground/background
-  contrast across Dark, Light, and High Contrast states.
 
 ## [5.2.0] - 2026-07-29
 
@@ -2418,6 +2410,10 @@ tool from "works great until the next Insider build" to "honest across build cha
 - Strip all DWM dark mode hacks -- restore original v3.0.0 theme behavior
 - Force PS 5.1 for GUI: re-launch from pwsh.exe to powershell.exe
 - Triple dark mode application: HandleCreated + Load + pre-ShowDialog
+
+## [3.0.0] - 2026-02-01
+
+Published on GitHub under the tag `v.3.0.0` (note the extra dot). The tag stays as it is because the v3.0.0 release page hangs off it. Changes from 3.0.0 and earlier weren't recorded in this file.
 
 ## Roadmap archive (2026-08-10, ROADMAP.md)
 

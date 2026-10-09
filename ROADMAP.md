@@ -40,16 +40,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Likely (not profiled)
   Effort: M
 
-- [ ] P3 — CHANGELOG versions 5.4.0/5.5.0 have no git tags; 5.3.0 was released with no CHANGELOG entry; stray malformed tag `v.3.0.0`
-  Category: docs
-  Where: `CHANGELOG.md:35, 54` (5.5.0/5.4.0 entries); git tags (`v5.2.0` → `v5.6.0` jump, `v.3.0.0` typo tag); commit 95bbf11 "chore: release v5.3.0" with no `[5.3.0]` section
-  Problem: A user cannot map CHANGELOG entries to downloadable releases; the malformed tag pollutes tag listings.
-  Evidence: `git tag` + CHANGELOG headers + `git log` compared directly.
-  Fix: Backfill tags `v5.4.0`/`v5.5.0` on their release commits (pattern: the RES-Slim v0.28/v0.29 backfill); add a brief `[5.3.0]` entry (content from commit 95bbf11's release); delete tag `v.3.0.0` (or document it). Note: tag pushes are release actions — do them in an implementation session, not this audit.
-  Acceptance: Every `[x.y.z]` CHANGELOG section ≥ 5.0.0 has a matching `vx.y.z` tag and vice versa.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — Repo hygiene: required release artifact is tracked-but-ignored; tracked ROADMAP.md links untracked Roadmap_Blocked.md; AGENTS.md tracking claim false
   Category: docs
   Where: `.gitignore:20` (`NVMe_Driver_Patcher.ps1` — tracked AND ignored; `release-artifacts.json` marks it required); `ROADMAP.md:3` (links `Roadmap_Blocked.md`, which is gitignored/untracked — dangling in clones); `AGENTS.md` ("README.md — the ONLY .md tracked in git" — CHANGELOG.md, RESEARCH.md, ROADMAP.md and four `packaging/**/README.md` are tracked)
