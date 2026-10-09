@@ -492,7 +492,7 @@ public static class FeatureStoreWriterService
                         Summary = $"FeatureStore baseline is missing the {(bootStore ? "Boot" : "Runtime")} store."
                     };
 
-                var updates = entries.Select(BuildRestoreUpdate).ToArray();
+                var updates = entries.SelectMany(BuildRestoreUpdates).ToArray();
                 ulong changeStamp = 0;
                 int status = RtlSetFeatureConfigurations(
                     ref changeStamp,
@@ -547,6 +547,27 @@ public static class FeatureStoreWriterService
         }
         return differences;
     }
+
+    // A baseline held at a priority other than 8 leaves the fallback's priority-8 User override in
+    // place when only the baseline is re-asserted, so clear priority 8 first, then re-assert.
+    private static IEnumerable<RTL_FEATURE_CONFIGURATION_UPDATE> BuildRestoreUpdates(
+        FeatureStoreConfigurationBaseline entry)
+    {
+        if (entry.Found && (entry.CompactState & 0xF) != 8)
+        {
+            yield return new RTL_FEATURE_CONFIGURATION_UPDATE
+            {
+                FeatureId = unchecked((uint)entry.FeatureId),
+                Priority = 8,
+                Operation = 4
+            };
+        }
+        yield return BuildRestoreUpdate(entry);
+    }
+
+    internal static IReadOnlyList<(uint FeatureId, uint Priority, uint Operation)> DescribeRestorePlan(
+        FeatureStoreConfigurationBaseline entry)
+        => BuildRestoreUpdates(entry).Select(u => (u.FeatureId, u.Priority, u.Operation)).ToArray();
 
     private static RTL_FEATURE_CONFIGURATION_UPDATE BuildRestoreUpdate(
         FeatureStoreConfigurationBaseline entry)
