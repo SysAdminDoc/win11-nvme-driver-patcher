@@ -287,14 +287,23 @@ public sealed class SchedulerServiceTests
     }
 
     [Fact]
-    public void CheckTaskTarget_RealReaderRefusesAFolderTheCurrentUserOwns()
+    public void CheckTaskTarget_RealReaderRefusesAFolderStandardUsersCanWrite()
     {
-        // A fresh folder under %TEMP% belongs to whoever made it (or, when elevated, grants that
-        // user full control through inheritance), so even named as a protected root it's refused.
+        // Reads the descriptor from disk, not a fake. The folder gets an explicit Users:Modify
+        // entry so it's refused whoever runs the test: as SYSTEM, %TEMP% is the admin-only
+        // C:\Windows\SystemTemp, and an untouched folder there would rightly pass.
         var dir = Path.Combine(Path.GetTempPath(), "nvme-sched-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dir);
+        var info = Directory.CreateDirectory(dir);
         try
         {
+            var acl = info.GetAccessControl();
+            acl.AddAccessRule(new FileSystemAccessRule(
+                new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinUsersSid, null),
+                FileSystemRights.Modify,
+                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                PropagationFlags.None,
+                AccessControlType.Allow));
+            info.SetAccessControl(acl);
             var exe = Path.Combine(dir, "NVMeDriverPatcher.Cli.exe");
             File.WriteAllBytes(exe, [0x4D, 0x5A]);
 
