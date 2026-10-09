@@ -44,8 +44,8 @@ public sealed class SqliteVersionTests
 
         using var document = JsonDocument.Parse(File.ReadAllText(assetsPath));
         var libraries = document.RootElement.GetProperty("libraries");
-        Assert.True(libraries.TryGetProperty("SourceGear.sqlite3/3.53.3", out var sourceGear),
-            "The pinned SourceGear.sqlite3/3.53.3 library was not selected by restore.");
+        Assert.True(libraries.TryGetProperty("SourceGear.sqlite3/3.53.4", out var sourceGear),
+            "The pinned SourceGear.sqlite3/3.53.4 library was not selected by restore.");
         Assert.Contains(sourceGear.GetProperty("files").EnumerateArray(),
             file => string.Equals(file.GetString(), nativeRelativePath, StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(libraries.EnumerateObject(),

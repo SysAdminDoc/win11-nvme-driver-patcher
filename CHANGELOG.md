@@ -136,6 +136,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - `verify-payload --json` now uses the same versioned envelope as every other command (`schemaVersion`, `command`, `data`), and `bypassio --json --history` carries the pre/post snapshot diff and the volumes that lost BypassIO, which the text output had and the JSON dropped.
 
 ### Changed
+- Dependency refresh: SourceGear.sqlite3 3.53.4, SkiaSharp 4.153.1 (all four packages), Microsoft.NET.Test.Sdk 18.10.1, and wrangler 4.147.0 for the sample telemetry receiver, whose compatibility date moves to 2026-10-02. Wrangler stops at 4.147.0 because the receiver's npm config holds new releases for a week. SQLitePCLRaw stays on 3.0.4.
 - The unused in-place update staging code is gone. Nothing ever called it, and swapping the GUI exe on its own would have left an MSI install with a GUI on one version and the CLI, tray and watchdog on another. Updates come from the release page or the MSI.
 - The window no longer rebuilds registry-flag, compatibility-note, change-plan and gaming-impact lists that nothing displayed. The Overview now lists each readiness check, and the Drives tab shows whether each drive is on the native or the legacy driver.
 - The Apply confirmation, the README and the offline overview now say that the measured gains show up at high queue depths, that ordinary desktop use may see little or no change, and that StorageReview measured 4K random writes slightly slower.
