@@ -179,6 +179,11 @@ internal static partial class NativeMethods
     internal static readonly DEVPROPKEY DEVPKEY_Device_Service = new(
         new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"), 6);
 
+    // DEVPKEY_Device_DriverInfPath: the installed INF (for example oem12.inf or stornvme.inf)
+    // that the device's bound driver came from.
+    internal static readonly DEVPROPKEY DEVPKEY_Device_DriverInfPath = new(
+        new Guid("a8b865dd-2e3d-4094-ad97-e593a70c75d6"), 5);
+
     internal const uint DEVPROP_TYPE_STRING = 0x00000012;
     internal const uint ERROR_INSUFFICIENT_BUFFER = 122;
     internal const uint ERROR_NO_MORE_ITEMS = 259;

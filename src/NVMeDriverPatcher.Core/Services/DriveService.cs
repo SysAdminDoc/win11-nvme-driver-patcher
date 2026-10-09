@@ -413,6 +413,8 @@ public static class DriveService
             result.DriverCompat = volume.Stack;
             result.BlockedBy = DetermineBypassIoBlocker(volume);
             result.RawOutput = volume.Detail;
+            result.DriverInfName = volume.InfName;
+            result.DriverInfDeclaration = volume.InfDeclaration.ToString();
 
             result.GamingImpact = BuildBypassIoGamingImpact(result);
             if (!result.Supported && IsNvmeStorage(result.StorageType))
@@ -441,6 +443,16 @@ public static class DriveService
     }
 
     internal static string BuildBypassIoGamingImpact(BypassIOResult result)
+    {
+        var impact = BuildBypassIoGamingImpactCore(result);
+        if (!Enum.TryParse<BypassIoInfDeclaration>(result.DriverInfDeclaration, out var declaration) ||
+            string.IsNullOrWhiteSpace(result.DriverInfName))
+            return impact;
+        var inf = BypassIoInspectorService.DescribeInfDeclaration(result.DriverInfName, declaration);
+        return inf.Length == 0 ? impact : impact + " " + inf;
+    }
+
+    private static string BuildBypassIoGamingImpactCore(BypassIOResult result)
     {
         var blocker = string.IsNullOrWhiteSpace(result.BlockedBy)
             ? "the current storage stack"

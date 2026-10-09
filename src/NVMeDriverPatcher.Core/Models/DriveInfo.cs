@@ -39,6 +39,10 @@ public class BypassIOResult
     public string RawOutput { get; set; } = string.Empty;
     public string Warning { get; set; } = string.Empty;
     public string GamingImpact { get; set; } = string.Empty;
+    // Installed INF of the bound storage driver and whether it declares BypassIO support:
+    // "Declared", "NotDeclared" or "Unknown" (INF not found or unreadable).
+    public string DriverInfName { get; set; } = string.Empty;
+    public string DriverInfDeclaration { get; set; } = "Unknown";
 }
 
 public class NVMeHealthInfo
