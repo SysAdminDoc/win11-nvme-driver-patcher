@@ -14,6 +14,25 @@ public partial class MainViewModel
     // DispatcherTimer lives on the UI thread; OnClosing() stops it before the final save.
     private System.Windows.Threading.DispatcherTimer? _settingsSaveDebouncer;
 
+    // Group Policy pins (see _policyOverlay). Editable means no policy value is set for it.
+    private const string PolicyPinnedToolTip = "Set by Group Policy";
+    public bool PatchProfileEditable => _policyOverlay.PatchProfile is null;
+    public bool ServerKeyEditable => _policyOverlay.IncludeServerKey is null;
+    public bool StandaloneFutureEditable => _policyOverlay.IncludeStandaloneFuture is null && IsFullModeSelected;
+
+    public string SafeProfileToolTip => PatchProfileEditable
+        ? "Writes the primary flag plus Safe Boot entries. This is the lowest-risk default."
+        : PolicyPinnedToolTip;
+    public string FullProfileToolTip => PatchProfileEditable
+        ? "Adds related optimization flags. Use only when the machine-specific evidence supports the higher-risk profile."
+        : PolicyPinnedToolTip;
+    public string StandaloneFutureToolTip => _policyOverlay.IncludeStandaloneFuture is null
+        ? "Full profile only. While 156965516 (Standalone_Future) is set, DISM /ScanHealth reports component store corruption on 24H2. SFC stays clean, and it clears once the value is removed."
+        : PolicyPinnedToolTip;
+    public string ServerKeyToolTip => ServerKeyEditable
+        ? "Also write feature flag 1176759950, the key Microsoft published for Windows Server 2025."
+        : PolicyPinnedToolTip;
+
     public void SetThemeMode(AppThemeMode mode)
     {
         mode = ThemeService.NormalizeMode(mode);
@@ -131,9 +150,10 @@ public partial class MainViewModel
     /// </summary>
     public void SyncConfigFromUI()
     {
-        Config.IncludeServerKey = IncludeServerKey;
-        Config.IncludeStandaloneFuture = IncludeStandaloneFuture;
-        Config.SkipWarnings = SkipWarnings;
+        // Pinned fields keep the policy value; the toggles are disabled, this covers code paths.
+        if (_policyOverlay.IncludeServerKey is null) Config.IncludeServerKey = IncludeServerKey;
+        if (_policyOverlay.IncludeStandaloneFuture is null) Config.IncludeStandaloneFuture = IncludeStandaloneFuture;
+        if (_policyOverlay.SkipWarnings is null) Config.SkipWarnings = SkipWarnings;
         Config.AutoSaveLog = AutoSaveLog;
         Config.EnableToasts = EnableToasts;
         Config.WriteEventLog = WriteEventLog;

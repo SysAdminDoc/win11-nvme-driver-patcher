@@ -811,9 +811,9 @@ public partial class MainViewModel
     [RelayCommand]
     private void UseRecommendedSetup()
     {
-        IncludeServerKey = true;
-        IncludeStandaloneFuture = false;
-        SkipWarnings = false;
+        if (ServerKeyEditable) IncludeServerKey = true;
+        if (_policyOverlay.IncludeStandaloneFuture is null) IncludeStandaloneFuture = false;
+        if (_policyOverlay.SkipWarnings is null) SkipWarnings = false;
         AutoSaveLog = true;
         EnableToasts = true;
         WriteEventLog = true;

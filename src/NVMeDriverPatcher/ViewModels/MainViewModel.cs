@@ -183,6 +183,9 @@ public partial class MainViewModel : ObservableObject
     // corrupt the underlying array and crash later reads with IndexOutOfRangeException.
     private readonly object _logHistoryLock = new();
     private bool _hasLoggedSessionStart;
+    // Group Policy pins read at startup. A pinned setting's control is disabled and
+    // SyncConfigFromUI leaves its Config field alone, so policy wins for the whole run.
+    private PolicyOverlay _policyOverlay = new();
     // Newer-schema warning captured in the ctor; written to the event log once it's initialized.
     private string? _configDowngradeNotice;
 
@@ -205,7 +208,8 @@ public partial class MainViewModel : ObservableObject
         // quietly overridden by a stale local setting.
         try
         {
-            var policyWatchdogSave = GpoPolicyService.ApplyTo(Config, GpoPolicyService.Read());
+            _policyOverlay = GpoPolicyService.Read();
+            var policyWatchdogSave = GpoPolicyService.ApplyTo(Config, _policyOverlay);
             if (policyWatchdogSave is { Success: false })
                 Log("Watchdog Group Policy state is unavailable: " + policyWatchdogSave.Summary, "WARNING");
         }
@@ -249,6 +253,7 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnIsFullModeSelectedChanged(bool value)
     {
+        OnPropertyChanged(nameof(StandaloneFutureEditable));
         if (!value) return;
         IsSafeModeSelected = false;
         Config.PatchProfile = PatchProfile.Full;
