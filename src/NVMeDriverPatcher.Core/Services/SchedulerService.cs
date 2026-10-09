@@ -378,6 +378,9 @@ public static class SchedulerService
         var targets = commands.Select(Environment.ExpandEnvironmentVariables).ToList();
         foreach (var target in targets)
         {
+            if (IsGarbledPath(target))
+                return new(taskName, ScheduledTaskTargetState.Unreadable, null,
+                    $"Couldn't read which program {taskName} runs: its path has characters schtasks couldn't print in this console, so it wasn't checked. Open the task in Task Scheduler to see the program.");
             var verdict = check(target);
             if (!verdict.IsProtected)
                 return new(taskName, ScheduledTaskTargetState.Unprotected, target,
@@ -386,6 +389,16 @@ public static class SchedulerService
         return new(taskName, ScheduledTaskTargetState.Protected, targets[0],
             $"{taskName} runs {targets[0]}, which only administrators can change.");
     }
+
+    /// <summary>
+    /// schtasks prints through the console code page, so a character that page can't show comes
+    /// back as '?' (or U+FFFD once .NET decodes it). '?' can't appear in a real path outside the
+    /// \\?\ prefix, so such a path isn't the one the task runs, and checking it would warn about a
+    /// file that isn't there.
+    /// </summary>
+    internal static bool IsGarbledPath(string path) =>
+        path.Contains('\uFFFD') ||
+        path.IndexOf('?', path.StartsWith(@"\\?\", StringComparison.Ordinal) ? 4 : 0) >= 0;
 
     private static readonly System.Xml.Linq.XNamespace TaskNamespace = "http://schemas.microsoft.com/windows/2004/02/mit/task";
 
