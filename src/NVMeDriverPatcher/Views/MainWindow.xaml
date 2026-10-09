@@ -778,6 +778,7 @@
                                                             <RowDefinition Height="Auto"/>
                                                             <RowDefinition Height="Auto"/>
                                                             <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
                                                         </Grid.RowDefinitions>
                                                         <Grid>
                                                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -823,6 +824,37 @@
                                                                    Margin="0,10,0,0"
                                                                    Foreground="{DynamicResource TextDim}"
                                                                    FontSize="{StaticResource FontSizeCaption}"/>
+                                                        <StackPanel Grid.Row="3" Margin="0,14,0,0">
+                                                            <TextBlock Text="READINESS CHECKS" Style="{StaticResource SectionEyebrow}"/>
+                                                            <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding ReadinessChecks}" AutomationProperties.Name="Readiness checks">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Border Margin="0,0,6,6" Style="{StaticResource StatusChipBorder}" ToolTip="{Binding DetailTooltip}" AutomationProperties.Name="{Binding Label}">
+                                                                            <StackPanel Orientation="Horizontal">
+                                                                                <Rectangle Width="6" Height="6" Margin="0,0,6,0" VerticalAlignment="Center">
+                                                                                    <Rectangle.Style>
+                                                                                        <Style TargetType="Rectangle">
+                                                                                            <Setter Property="Fill" Value="{DynamicResource TextDim}"/>
+                                                                                            <Style.Triggers>
+                                                                                                <DataTrigger Binding="{Binding StatusLabel}" Value="Ready"><Setter Property="Fill" Value="{DynamicResource Green}"/></DataTrigger>
+                                                                                                <DataTrigger Binding="{Binding StatusLabel}" Value="Review"><Setter Property="Fill" Value="{DynamicResource Yellow}"/></DataTrigger>
+                                                                                                <DataTrigger Binding="{Binding StatusLabel}" Value="Blocked"><Setter Property="Fill" Value="{DynamicResource Red}"/></DataTrigger>
+                                                                                                <DataTrigger Binding="{Binding StatusLabel}" Value="Info"><Setter Property="Fill" Value="{DynamicResource Accent}"/></DataTrigger>
+                                                                                            </Style.Triggers>
+                                                                                        </Style>
+                                                                                    </Rectangle.Style>
+                                                                                </Rectangle>
+                                                                                <TextBlock Text="{Binding Label}" Foreground="{DynamicResource TextSecondary}" FontSize="{StaticResource FontSizeCaption}" FontWeight="SemiBold"/>
+                                                                                <TextBlock Text="{Binding StatusLabel}" Margin="6,0,0,0" Foreground="{DynamicResource TextDim}" FontSize="{StaticResource FontSizeCaption}"/>
+                                                                            </StackPanel>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
                                                     </Grid>
                                                 </Border>
 
@@ -923,6 +955,7 @@
                                             </Grid.RowDefinitions>
 
                                             <Border Style="{StaticResource InsetCard}">
+                                                <StackPanel>
                                                 <WrapPanel>
                                                     <StackPanel MaxWidth="460"
                                                                 Margin="0,0,14,8">
@@ -938,6 +971,36 @@
                                                             ToolTip="Poll the currently selected NVMe drive again and refresh the local telemetry view."
                                                             Click="RefreshTelemetry_Click"/>
                                                 </WrapPanel>
+                                                <ItemsControl ItemsSource="{Binding Drives}" AutomationProperties.Name="Detected drives">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                                <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextPrimary}" FontSize="{StaticResource FontSizeMeta}" FontWeight="SemiBold"/>
+                                                                <TextBlock Text="{Binding Size}" Margin="10,0,0,0" Foreground="{DynamicResource TextMuted}" FontSize="{StaticResource FontSizeMeta}"/>
+                                                                <TextBlock Text="{Binding BusType}" Margin="10,0,0,0" Foreground="{DynamicResource TextDim}" FontSize="{StaticResource FontSizeMeta}"/>
+                                                                <Border Margin="10,0,0,0" Padding="6,1" Style="{StaticResource StatusChipBorder}" Visibility="{Binding IsBoot, Converter={StaticResource BoolVis}}">
+                                                                    <TextBlock Text="BOOT" Style="{StaticResource StatusChipText}"/>
+                                                                </Border>
+                                                                <Border Margin="6,0,0,0" Padding="6,1" CornerRadius="4" BorderThickness="1" Visibility="{Binding ShowDriverBadge, Converter={StaticResource BoolVis}}" ToolTip="Whether this drive is bound to the native nvmedisk.sys driver or still on the legacy stack.">
+                                                                    <Border.Style>
+                                                                        <Style TargetType="Border">
+                                                                            <Setter Property="Background" Value="{DynamicResource YellowBg}"/>
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource Yellow}"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsNativeDrive}" Value="True">
+                                                                                    <Setter Property="Background" Value="{DynamicResource GreenBg}"/>
+                                                                                    <Setter Property="BorderBrush" Value="{DynamicResource Green}"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Border.Style>
+                                                                    <TextBlock Text="{Binding DriverBadgeText}" Style="{StaticResource StatusChipText}" Foreground="{DynamicResource TextPrimary}"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                </StackPanel>
                                             </Border>
 
                                             <Border x:Name="TelemetryEmptyState"

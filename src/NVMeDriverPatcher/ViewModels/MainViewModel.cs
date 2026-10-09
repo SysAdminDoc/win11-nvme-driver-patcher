@@ -16,9 +16,6 @@ public partial class MainViewModel : ObservableObject
 {
     private const string NoActivityYetText = "No activity in this session yet.";
     private const string RemoveUnavailableText = "Remove stays unavailable until a patch or partial patch is present.";
-    private const string NoBackupHistoryText = "No registry backups are saved in the working folder yet.";
-    private const string NoSnapshotHistoryText = "No change snapshots saved yet.";
-    private const string NoBenchmarkHistoryText = "No benchmark runs saved yet.";
     private const string NoRecoveryKitText = "No recovery kit yet. Create one before you restart or hand the machine off.";
     private const string NoVerificationScriptText = "No verification script yet. Generate one to check the driver after the restart.";
     private const string NoDiagnosticsReportText = "No diagnostics report yet. Export one when you need to share this machine's state.";
@@ -40,7 +37,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _versionText = "";
     [ObservableProperty] private bool _updateAvailable;
     [ObservableProperty] private string _updateVersionText = "";
-    [ObservableProperty] private string _updateUrl = "";
+    private string _updateUrl = "";
     [ObservableProperty] private string _updateTooltip = "";
     [ObservableProperty] private bool _buttonsEnabled;
     [ObservableProperty] private bool _applyEnabled;
@@ -49,7 +46,6 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _mutationBlockedTitle = "";
     [ObservableProperty] private string _mutationBlockedReason = "";
     [ObservableProperty] private string _mutationBlockedGuidance = "";
-    [ObservableProperty] private bool _mutationCommandsEnabled;
     // Retained binding name; true for either a build-policy or startup-recovery block.
     [ObservableProperty] private bool _buildPolicyBlocked;
     // Cached dispositions from the last preflight/startup recovery so every mutation surface agrees.
@@ -63,7 +59,6 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _progressVisible;
     [ObservableProperty] private bool _isLoading = true;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(LogEntryCountText))] private int _logEntryCount;
-    [ObservableProperty] private int _logSuccessCount;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(LogWarningCountText))] private int _logWarningCount;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(LogErrorCountText))] private int _logErrorCount;
     [ObservableProperty] private string _activitySummaryText = "Activity entries will appear here as checks and actions run.";
@@ -77,15 +72,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _statusSummaryText = "Checking build support, storage layout, and rollback safety.";
     [ObservableProperty] private string _buildSummaryText = "Windows build check pending";
     [ObservableProperty] private string _driveInventorySummaryText = "Scanning local drives";
-    [ObservableProperty] private string _riskSummaryText = "Risk summary pending";
-    [ObservableProperty] private string _riskSummaryColor = "Accent";
     [ObservableProperty] private string _themeModeSummaryText = "Follows Windows. Current effective theme: dark.";
-    [ObservableProperty] private string _attentionSummaryText = "Important compatibility notes will surface here after the readiness scan completes.";
-    [ObservableProperty] private bool _hasAttentionNotes;
-    [ObservableProperty] private string _changePlanSummaryText = "The machine-specific change plan will appear here after readiness checks finish.";
-    [ObservableProperty] private bool _hasChangePlanSteps;
-    [ObservableProperty] private string _actionReadinessText = "Readiness checks will explain when apply or remove becomes available.";
-    [ObservableProperty] private string _actionReadinessColor = "TextMuted";
     [ObservableProperty] private string _applyButtonTooltipText = "Readiness checks are still running.";
     [ObservableProperty] private string _removeButtonTooltipText = RemoveUnavailableText;
     [ObservableProperty] private string _nextStepTitle = "Running readiness checks";
@@ -99,9 +86,6 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _nextStepSecondaryActionText = "";
     [ObservableProperty] private string _nextStepSecondaryActionId = "";
     [ObservableProperty] private bool _nextStepSecondaryActionEnabled;
-    [ObservableProperty] private string _backupHistoryText = NoBackupHistoryText;
-    [ObservableProperty] private string _snapshotHistoryText = NoSnapshotHistoryText;
-    [ObservableProperty] private string _benchmarkHistoryText = NoBenchmarkHistoryText;
     [ObservableProperty] private string _recoveryKitStatusText = NoRecoveryKitText;
     [ObservableProperty] private string _verificationScriptStatusText = NoVerificationScriptText;
     [ObservableProperty] private string _diagnosticsReportStatusText = NoDiagnosticsReportText;
@@ -110,8 +94,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _hasRecoveryKit;
     [ObservableProperty] private bool _hasVerificationScript;
     [ObservableProperty] private bool _hasDiagnosticsReport;
-    [ObservableProperty] private bool _hasBackupFiles;
-    [ObservableProperty] private bool _hasBenchmarkHistory;
+    private bool _hasBackupFiles;
+    private bool _hasBenchmarkHistory;
     [ObservableProperty] private string _scanStageStateText = "Readiness scan in progress";
     [ObservableProperty] private string _scanStageDetailText = "Windows build support, storage inventory, and hard safety blockers are being checked.";
     [ObservableProperty] private string _scanStageColor = "Accent";
@@ -124,15 +108,14 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _validationStageStateText = "Starts after the restart";
     [ObservableProperty] private string _validationStageDetailText = "Once Windows restarts on the native driver, benchmarks and diagnostics confirm the change on this machine.";
     [ObservableProperty] private string _validationStageColor = "TextDim";
-    [ObservableProperty] private int _warningCount;
-    [ObservableProperty] private int _criticalCount;
-    [ObservableProperty] private int _nvmeDriveCount;
-    [ObservableProperty] private int _totalDriveCount;
+    private int _warningCount;
+    private int _criticalCount;
+    private int _nvmeDriveCount;
+    private int _totalDriveCount;
 
     // Settings bindings
     [ObservableProperty] private bool _includeServerKey;
     [ObservableProperty] private bool _includeStandaloneFuture;
-    [ObservableProperty] private bool _skipWarnings;
     [ObservableProperty] private bool _autoSaveLog;
     [ObservableProperty] private bool _enableToasts;
     [ObservableProperty] private bool _writeEventLog;
@@ -147,11 +130,6 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showViVeToolFallbackBadge;
     [ObservableProperty] private bool _showSafeBootUpgradeBadge;
 
-    // DirectStorage / BypassIO gaming impact panel (AR-2026-007 + RD-006).
-    [ObservableProperty] private string _directStorageImpactText = "";
-    [ObservableProperty] private string _directStorageImpactSeverity = "Info";
-    [ObservableProperty] private bool _directStoragePanelVisible;
-
     // How the native driver got enabled (RD-004) — drives the official-rollout pivot.
     private EnablementSource _enablementSource = EnablementSource.None;
 
@@ -165,13 +143,7 @@ public partial class MainViewModel : ObservableObject
 
     // UI collections
     public ObservableCollection<PreflightCheckVM> ReadinessChecks { get; } = [];
-    public ObservableCollection<PreflightCheckVM> LeftChecks { get; } = [];
-    public ObservableCollection<PreflightCheckVM> RightChecks { get; } = [];
     public ObservableCollection<DriveRowVM> Drives { get; } = [];
-    public ObservableCollection<RegistryFlagVM> RegistryFlags { get; } = [];
-    public ObservableCollection<RegistryFlagVM> SafeBootFlags { get; } = [];
-    public ObservableCollection<AttentionNoteVM> AttentionNotes { get; } = [];
-    public ObservableCollection<ChangePlanStepVM> ChangePlanSteps { get; } = [];
     public ObservableCollection<string> LogEntries { get; } = [];
 
     public string LogText => string.Join("\n", LogEntries);
@@ -220,7 +192,6 @@ public partial class MainViewModel : ObservableObject
         {
             IncludeServerKey = Config.IncludeServerKey;
             IncludeStandaloneFuture = Config.IncludeStandaloneFuture;
-            SkipWarnings = Config.SkipWarnings;
             AutoSaveLog = Config.AutoSaveLog;
             EnableToasts = Config.EnableToasts;
             WriteEventLog = Config.WriteEventLog;
@@ -248,7 +219,6 @@ public partial class MainViewModel : ObservableObject
         Config.PatchProfile = PatchProfile.Safe;
         if (!_suppressConfigWrites) { try { ConfigService.Save(Config); } catch { } }
         RefreshPatchProfileHelpText();
-        RefreshOptionalFlagRows();
     }
 
     partial void OnIsFullModeSelectedChanged(bool value)
@@ -259,7 +229,6 @@ public partial class MainViewModel : ObservableObject
         Config.PatchProfile = PatchProfile.Full;
         if (!_suppressConfigWrites) { try { ConfigService.Save(Config); } catch { } }
         RefreshPatchProfileHelpText();
-        RefreshOptionalFlagRows();
     }
 
     private void RefreshPatchProfileHelpText()
@@ -308,7 +277,6 @@ public partial class MainViewModel : ObservableObject
         LogEntries.Clear();
         lock (_logHistoryLock) { _logHistory.Clear(); }
         LogEntryCount = 0;
-        LogSuccessCount = 0;
         LogWarningCount = 0;
         LogErrorCount = 0;
         LatestActivityText = "Session activity cleared. New events will appear here.";
@@ -491,8 +459,6 @@ public partial class MainViewModel : ObservableObject
 
             // Map checks to UI
             ReadinessChecks.Clear();
-            LeftChecks.Clear();
-            RightChecks.Clear();
 
             var leftMap = new[] { "WindowsVersion", "NVMeDrives", "BitLocker", "VeraCrypt", "LaptopPower", "DriverStatus" };
             var leftLabels = new[] { "Build", "NVMe", "BitLocker", "VeraCrypt", "Power", "Driver" };
@@ -515,7 +481,6 @@ public partial class MainViewModel : ObservableObject
                     else if (leftMap[i] == "WindowsVersion" && _preflight.BuildDetails is not null)
                         vm.Tooltip = $"{_preflight.BuildDetails.Caption}\nBuild {_preflight.BuildDetails.BuildNumber}.{_preflight.BuildDetails.UBR}";
                     ReadinessChecks.Add(vm);
-                    LeftChecks.Add(vm);
                 }
             }
             for (int i = 0; i < rightMap.Length; i++)
@@ -533,7 +498,6 @@ public partial class MainViewModel : ObservableObject
                             vm.Tooltip = string.Join("\n", lines);
                     }
                     ReadinessChecks.Add(vm);
-                    RightChecks.Add(vm);
                 }
             }
 
@@ -572,11 +536,8 @@ public partial class MainViewModel : ObservableObject
 
             // Drives, registry, status
             UpdateDrivesList();
-            UpdateRegistryDisplay();
             UpdateStatusDisplay();
-            UpdateAttentionNotes();
             UpdateOverviewSummary();
-            UpdateDirectStoragePanel();
             UpdateOperationalHistory();
 
             // Update badge. PreflightService now runs the update check fire-and-forget so it
@@ -722,8 +683,8 @@ public partial class MainViewModel : ObservableObject
 
     private void RefreshMutationActionAvailability()
     {
-        MutationCommandsEnabled = ButtonsEnabled && _mutationAllowedByBuild && _mutationAllowedByRecovery;
-        ApplyEnabled = MutationCommandsEnabled
+        bool mutationCommandsEnabled = ButtonsEnabled && _mutationAllowedByBuild && _mutationAllowedByRecovery;
+        ApplyEnabled = mutationCommandsEnabled
             && _preflight is not null
             && PreflightService.AllCriticalPassed(_preflight.Checks)
             && !_preflight.VeraCryptDetected
@@ -750,7 +711,7 @@ public partial class MainViewModel : ObservableObject
     {
         UpdateAvailable = true;
         UpdateVersionText = $"v{info.Version}";
-        UpdateUrl = info.URL;
+        _updateUrl = info.URL;
         var sacNote = SmartAppControlService.DownloadNote(SmartAppControlService.Read());
         UpdateTooltip = sacNote is null ? $"Click to download v{info.Version}" : $"Click to download v{info.Version}. {sacNote}";
         Log($"UPDATE AVAILABLE: v{info.Version} -- {AppConfig.GitHubURL}/releases", "WARNING");
@@ -830,20 +791,8 @@ public partial class MainViewModel : ObservableObject
         {
             var vm = new DriveRowVM
             {
-                Name = drv.Name, Size = drv.Size, BusType = drv.BusType,
-                IsNVMe = drv.IsNVMe, IsBoot = drv.IsBoot
+                Name = drv.Name, Size = drv.Size, BusType = drv.BusType, IsBoot = drv.IsBoot
             };
-
-            if (drv.IsNVMe && _preflight.CachedHealth.TryGetValue(drv.Number.ToString(), out var health))
-            {
-                vm.Temperature = health.Temperature;
-                vm.Wear = health.Wear;
-                vm.SmartTooltip = health.SmartTooltip;
-            }
-
-            // Firmware version
-            if (drv.IsNVMe && _preflight.DriverInfo?.FirmwareVersions.TryGetValue(drv.Number.ToString(), out var fw) == true)
-                vm.Firmware = fw;
 
             if (drv.IsNVMe && _preflight.NativeNVMeStatus?.IsActive == true)
             {
@@ -857,54 +806,6 @@ public partial class MainViewModel : ObservableObject
             }
 
             Drives.Add(vm);
-        }
-    }
-
-    private void UpdateRegistryDisplay()
-    {
-        RegistryFlags.Clear();
-        SafeBootFlags.Clear();
-
-        var status = RegistryService.GetPatchStatus();
-
-        foreach (var id in AppConfig.FeatureIDs)
-            RegistryFlags.Add(BuildFlagRow(id, status.Keys.Contains(id), Config.PatchProfile, IncludeStandaloneFuture, IncludeServerKey));
-        RegistryFlags.Add(BuildFlagRow(AppConfig.ServerFeatureID, RegistryService.IsServerKeyApplied(), Config.PatchProfile, IncludeStandaloneFuture, IncludeServerKey));
-
-        SafeBootFlags.Add(new RegistryFlagVM
-        {
-            Id = "SafeBoot", Name = "Minimal: boot protection",
-            IsSet = status.Keys.Contains("SafeBootMinimal")
-        });
-        SafeBootFlags.Add(new RegistryFlagVM
-        {
-            Id = "SafeBoot/Net", Name = "Network: Safe Mode with Networking",
-            IsSet = status.Keys.Contains("SafeBootNetwork")
-        });
-    }
-
-    /// <summary>One feature flag row. The two opt-in values read "(optional)" unless the current
-    /// selection writes them or they're already set.</summary>
-    internal static RegistryFlagVM BuildFlagRow(string id, bool isSet, PatchProfile profile, bool includeStandaloneFuture, bool includeServerKey)
-    {
-        if (id == AppConfig.ServerFeatureID)
-            return new RegistryFlagVM { Id = id, Name = "Server 2025 (optional)", IsSet = isSet, IsOptional = !includeServerKey && !isSet };
-
-        string name = AppConfig.FeatureNames.TryGetValue(id, out var fn) ? fn.Split('(')[0].Trim() : "Unknown";
-        bool planned = profile == PatchProfile.Full && includeStandaloneFuture;
-        bool optional = id == AppConfig.StandaloneFutureFeatureID && !planned && !isSet;
-        return new RegistryFlagVM { Id = id, Name = optional ? $"{name} (optional)" : name, IsSet = isSet, IsOptional = optional };
-    }
-
-    /// <summary>Re-labels the opt-in rows after a profile or checkbox change, from the values
-    /// already read. The rows used to keep the old label until the next registry refresh.</summary>
-    private void RefreshOptionalFlagRows()
-    {
-        for (int i = 0; i < RegistryFlags.Count; i++)
-        {
-            var row = RegistryFlags[i];
-            if (row.Id is AppConfig.StandaloneFutureFeatureID or AppConfig.ServerFeatureID)
-                RegistryFlags[i] = BuildFlagRow(row.Id, row.IsSet, Config.PatchProfile, IncludeStandaloneFuture, IncludeServerKey);
         }
     }
 
@@ -971,38 +872,22 @@ public partial class MainViewModel : ObservableObject
         bool hasBenchmarkHistory = BenchmarkService.GetHistory(Config.WorkingDir).Count > 0;
         var status = RegistryService.GetPatchStatus();
 
-        WarningCount = _preflight.Checks.Values.Count(c => c.Status == CheckStatus.Warning);
-        CriticalCount = _preflight.Checks.Values.Count(c => c.Critical && c.Status == CheckStatus.Fail);
-        TotalDriveCount = _preflight.CachedDrives.Count;
-        NvmeDriveCount = _preflight.CachedDrives.Count(d => d.IsNVMe);
+        _warningCount = _preflight.Checks.Values.Count(c => c.Status == CheckStatus.Warning);
+        _criticalCount = _preflight.Checks.Values.Count(c => c.Critical && c.Status == CheckStatus.Fail);
+        _totalDriveCount = _preflight.CachedDrives.Count;
+        _nvmeDriveCount = _preflight.CachedDrives.Count(d => d.IsNVMe);
 
         if (_preflight.BuildDetails is { } build)
             BuildSummaryText = $"Win 11 {build.DisplayVersion} | {build.BuildNumber}.{build.UBR}";
         else
             BuildSummaryText = "Windows build details unavailable";
 
-        if (TotalDriveCount == 0)
+        if (_totalDriveCount == 0)
             DriveInventorySummaryText = "No drives found";
-        else if (NvmeDriveCount == 0)
-            DriveInventorySummaryText = $"0 NVMe / {TotalDriveCount} {Pluralize(TotalDriveCount, "device")}";
+        else if (_nvmeDriveCount == 0)
+            DriveInventorySummaryText = $"0 NVMe / {_totalDriveCount} {Pluralize(_totalDriveCount, "device")}";
         else
-            DriveInventorySummaryText = $"{NvmeDriveCount} NVMe / {TotalDriveCount} {Pluralize(TotalDriveCount, "device")}";
-
-        if (CriticalCount > 0)
-        {
-            RiskSummaryText = $"{CriticalCount} {Pluralize(CriticalCount, "blocker")}";
-            RiskSummaryColor = "Red";
-        }
-        else if (WarningCount > 0)
-        {
-            RiskSummaryText = $"{WarningCount} advisory {Pluralize(WarningCount, "note")}";
-            RiskSummaryColor = "Yellow";
-        }
-        else
-        {
-            RiskSummaryText = "Clear";
-            RiskSummaryColor = "Green";
-        }
+            DriveInventorySummaryText = $"{_nvmeDriveCount} NVMe / {_totalDriveCount} {Pluralize(_totalDriveCount, "device")}";
 
         if (_preflight.NativeNVMeStatus?.IsActive == true)
         {
@@ -1012,17 +897,17 @@ public partial class MainViewModel : ObservableObject
         {
             if (status.Applied)
                 StatusSummaryText = "The patch is configured, but Windows is still on the legacy path until after the next reboot.";
-            else if (CriticalCount > 0)
+            else if (_criticalCount > 0)
                 StatusSummaryText = "A critical safeguard failed. Resolve the blocking item before applying any driver changes.";
             else if (BlockedByBuild)
                 StatusSummaryText = "There's no known way to turn on the native driver on this build yet.";
-            else if (WarningCount > 0)
+            else if (_warningCount > 0)
                 StatusSummaryText = "This system can proceed, but there are caveats worth reviewing before you commit.";
             else
                 StatusSummaryText = "This system looks ready for a controlled apply with backup, notices, and recovery helpers in place.";
         }
 
-        if (CriticalCount > 0)
+        if (_criticalCount > 0)
         {
             NextStepTitle = "Resolve blockers";
             NextStepDescription = PreflightService.DescribeBlockers(_preflight.Checks);
@@ -1055,7 +940,7 @@ public partial class MainViewModel : ObservableObject
             NextStepDescription = "App updates bring new build rules. Create a recovery kit now so it's ready when this build gets a working method.";
             NextStepColor = "Yellow";
         }
-        else if (WarningCount > 0)
+        else if (_warningCount > 0)
         {
             NextStepTitle = "Review the tradeoffs, then decide";
             NextStepDescription = hasBenchmarkHistory
@@ -1079,7 +964,6 @@ public partial class MainViewModel : ObservableObject
         // Pass the already-fetched status to each sub-method so they don't each open their
         // own registry handle — avoids 4+ redundant reads and the TOCTOU window they create.
         UpdateActionGuidance(status);
-        UpdateChangePlan(status);
         UpdateWorkflowGuide(status);
         UpdateRecommendedActions(status);
         UpdateWorkspaceBadges();
@@ -1092,15 +976,13 @@ public partial class MainViewModel : ObservableObject
         StatusSummaryText = "Scanning your system build, storage layout, and rollback safety.";
         BuildSummaryText = "Windows build check pending";
         DriveInventorySummaryText = "Scanning local drives";
-        RiskSummaryText = "Risk summary pending";
-        RiskSummaryColor = "Accent";
         NextStepTitle = "Running readiness checks";
         NextStepDescription = "Driver changes stay locked until Windows build support, drive visibility, and rollback safety are confirmed.";
         NextStepColor = "Accent";
-        WarningCount = 0;
-        CriticalCount = 0;
-        NvmeDriveCount = 0;
-        TotalDriveCount = 0;
+        _warningCount = 0;
+        _criticalCount = 0;
+        _nvmeDriveCount = 0;
+        _totalDriveCount = 0;
         HasNextStepPrimaryAction = false;
         NextStepPrimaryActionText = "";
         NextStepPrimaryActionId = "";
@@ -1109,140 +991,9 @@ public partial class MainViewModel : ObservableObject
         NextStepSecondaryActionText = "";
         NextStepSecondaryActionId = "";
         NextStepSecondaryActionEnabled = false;
-        AttentionNotes.Clear();
-        HasAttentionNotes = false;
-        AttentionSummaryText = "Important compatibility notes will surface here after the readiness scan completes.";
-        ChangePlanSteps.Clear();
-        HasChangePlanSteps = false;
-        ChangePlanSummaryText = "The machine-specific change plan will appear here after readiness checks finish.";
-        ActionReadinessText = "Readiness checks will explain when apply or remove becomes available.";
-        ActionReadinessColor = "TextMuted";
         ApplyButtonTooltipText = "Readiness checks are still running.";
         RemoveButtonTooltipText = RemoveUnavailableText;
         UpdateWorkspaceBadges();
-    }
-
-    private void UpdateDirectStoragePanel()
-    {
-        if (_preflight is null)
-        {
-            DirectStoragePanelVisible = false;
-            return;
-        }
-
-        try
-        {
-            var volumes = BypassIoInspectorService.Inspect();
-            var enabledCount = volumes.Count(v => v.Enabled);
-
-            if (enabledCount == 0)
-            {
-                DirectStorageImpactText = BypassIoInspectorService.BuildGamingImpactSummary(volumes);
-                DirectStorageImpactSeverity = "Info";
-            }
-            else
-            {
-                DirectStorageImpactText = BypassIoInspectorService.BuildGamingImpactSummary(volumes);
-                DirectStorageImpactSeverity = "Warning";
-            }
-            DirectStoragePanelVisible = true;
-
-            var (pre, post) = DataService.GetBypassIoLatestPair();
-            if (pre.Count > 0 && post.Count > 0)
-            {
-                var preVolumes = pre.Where(r => r.Timestamp == pre[0].Timestamp).ToList();
-                var postVolumes = post.Where(r => r.Timestamp == post[0].Timestamp).ToList();
-                var lost = preVolumes.Where(p => p.Enabled)
-                    .Where(p => postVolumes.Any(q => q.VolumeLetter == p.VolumeLetter && !q.Enabled))
-                    .Select(p => p.VolumeLetter).ToList();
-                if (lost.Count > 0)
-                    DirectStorageImpactText += $" Volumes that lost BypassIO after patching: {string.Join(", ", lost)}.";
-            }
-        }
-        catch
-        {
-            DirectStoragePanelVisible = false;
-        }
-    }
-
-    private void UpdateAttentionNotes()
-    {
-        AttentionNotes.Clear();
-
-        if (_preflight is null)
-        {
-            HasAttentionNotes = false;
-            AttentionSummaryText = "Important compatibility notes will surface here after the readiness scan completes.";
-            return;
-        }
-
-        if (_preflight.VeraCryptDetected)
-        {
-            AttentionNotes.Add(new AttentionNoteVM
-            {
-                Title = "VeraCrypt system encryption is a hard stop",
-                Detail = "The native NVMe path breaks VeraCrypt system-encrypted boot. This machine should not be patched unless that configuration changes.",
-                ToneColor = "Red"
-            });
-        }
-
-        if (_preflight.BitLockerEnabled)
-        {
-            AttentionNotes.Add(new AttentionNoteVM
-            {
-                Title = "BitLocker recovery is proved before suspension",
-                Detail = (_preflight.BitLockerRecovery?.Detail ?? "A numerical recovery-password protector must be present.") +
-                         " The apply transaction then verifies a one-reboot suspension through WMI before changing the storage path.",
-                ToneColor = "Yellow"
-            });
-        }
-
-        if (_preflight.IsLaptop)
-        {
-            AttentionNotes.Add(new AttentionNoteVM
-            {
-                Title = "Laptop power behavior may change",
-                Detail = "Microsoft doesn't document how the native driver idles the drive. If it idles less than stornvme does under the power plan, battery life gets shorter and the idle SSD runs warmer, so watch idle drain after the restart.",
-                ToneColor = "Yellow"
-            });
-        }
-
-        if (_preflight.BypassIOStatus?.Warning is { Length: > 0 } bypassWarning)
-        {
-            AttentionNotes.Add(new AttentionNoteVM
-            {
-                Title = "DirectStorage path has caveats",
-                Detail = bypassWarning,
-                ToneColor = "Yellow"
-            });
-        }
-
-        foreach (var software in _preflight.IncompatibleSoftware
-                     .OrderByDescending(s => string.Equals(s.Severity, "Critical", StringComparison.OrdinalIgnoreCase))
-                     .Take(4))
-        {
-            AttentionNotes.Add(new AttentionNoteVM
-            {
-                Title = $"{software.Name} compatibility note",
-                Detail = software.Message,
-                ToneColor = string.Equals(software.Severity, "Critical", StringComparison.OrdinalIgnoreCase)
-                    ? "Red"
-                    : "Yellow"
-            });
-        }
-
-        HasAttentionNotes = AttentionNotes.Count > 0;
-        if (!HasAttentionNotes)
-        {
-            AttentionSummaryText = "The latest readiness scan did not surface any special compatibility notes beyond the standard checks.";
-            return;
-        }
-
-        int blockingNotes = AttentionNotes.Count(note => string.Equals(note.ToneColor, "Red", StringComparison.OrdinalIgnoreCase));
-        int advisoryNotes = AttentionNotes.Count - blockingNotes;
-        AttentionSummaryText = blockingNotes > 0
-            ? $"{blockingNotes} blocking compatibility {Pluralize(blockingNotes, "note")} and {advisoryNotes} advisory {Pluralize(advisoryNotes, "note")} deserve review before you rely on the migration plan."
-            : $"{advisoryNotes} advisory {Pluralize(advisoryNotes, "note")} surfaced during the latest scan. Review them before treating this machine as a routine patch candidate.";
     }
 
     // Workspace / operational-history partial — UpdateOperationalHistory,
@@ -1250,7 +1001,7 @@ public partial class MainViewModel : ObservableObject
     // and IsExistingTextFile live in MainViewModel.Workspace.cs (same partial class).
 
 
-    // Guidance / workflow partial — UpdateChangePlan, UpdateActionGuidance,
+    // Guidance / workflow partial — UpdateActionGuidance,
     // BuildBlockingActionSummary, GetCheckDisplayName, UpdateWorkflowGuide, and
     // UpdateRecommendedActions live in MainViewModel.Guidance.cs (same partial class).
 
@@ -1553,7 +1304,6 @@ public partial class MainViewModel : ObservableObject
         {
             SetProgress(0, "");
             ButtonsEnabled = true;
-            UpdateRegistryDisplay();
             UpdateStatusDisplay();
             UpdateOverviewSummary();
             UpdateOperationalHistory();
@@ -1588,9 +1338,6 @@ public partial class MainViewModel : ObservableObject
 
         switch (level.ToUpperInvariant())
         {
-            case "SUCCESS":
-                LogSuccessCount++;
-                break;
             case "WARNING":
                 LogWarningCount++;
                 break;
@@ -1667,4 +1414,4 @@ public partial class MainViewModel : ObservableObject
 }
 
 // Item-view-model types used by the ObservableCollection<T>s above (PreflightCheckVM,
-// RegistryFlagVM, AttentionNoteVM, ChangePlanStepVM, DriveRowVM) live in RowViewModels.cs.
+// DriveRowVM) live in RowViewModels.cs.

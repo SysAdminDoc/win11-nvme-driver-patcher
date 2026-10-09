@@ -4,8 +4,8 @@ using NVMeDriverPatcher.Services;
 namespace NVMeDriverPatcher.ViewModels;
 
 // Workspace / operational-history partial of MainViewModel. Reads the on-disk artifact set
-// (registry backups, recovery kit, verification script, diagnostics reports, benchmark +
-// snapshot DB rows) and projects it into the workspace summary strings and sidebar badges.
+// (registry backups, recovery kit, verification script, diagnostics reports, benchmark
+// DB rows) and projects it into the workspace summary strings and sidebar badges.
 // Pure state-projection; no I/O beyond filesystem stat + the DataService DB.
 public partial class MainViewModel
 {
@@ -13,84 +13,22 @@ public partial class MainViewModel
     {
         try
         {
-            if (Directory.Exists(Config.WorkingDir))
-            {
-                var backupFiles = Directory.GetFiles(Config.WorkingDir, "*.reg", SearchOption.TopDirectoryOnly)
-                    .Select(path => new FileInfo(path))
-                    .OrderByDescending(file => file.LastWriteTime)
-                    .ToList();
-                HasBackupFiles = backupFiles.Count > 0;
-
-                if (backupFiles.Count == 0)
-                {
-                    BackupHistoryText = NoBackupHistoryText;
-                }
-                else
-                {
-                    var latestBackup = backupFiles[0];
-                    BackupHistoryText = $"{backupFiles.Count} backup {Pluralize(backupFiles.Count, "file")} available. Latest: {latestBackup.Name} on {latestBackup.LastWriteTime:g}.";
-                }
-            }
-            else
-            {
-                HasBackupFiles = false;
-                BackupHistoryText = "Working folder is unavailable, so backup history cannot be read.";
-            }
+            _hasBackupFiles = Directory.Exists(Config.WorkingDir)
+                && Directory.EnumerateFiles(Config.WorkingDir, "*.reg", SearchOption.TopDirectoryOnly).Any();
         }
         catch
         {
-            HasBackupFiles = false;
-            BackupHistoryText = "Backup history could not be read from the working folder.";
-        }
-
-        try
-        {
-            var snapshots = DataService.GetSnapshots();
-            var databaseState = DataService.DatabaseState;
-            if (!databaseState.IsAvailable)
-            {
-                SnapshotHistoryText = $"Snapshot history unavailable: {databaseState.Summary} {databaseState.RecoveryAction}";
-            }
-            else if (snapshots.Count == 0)
-            {
-                SnapshotHistoryText = NoSnapshotHistoryText;
-            }
-            else
-            {
-                var latestSnapshot = snapshots[0];
-                SnapshotHistoryText = $"{snapshots.Count} snapshot {Pluralize(snapshots.Count, "entry", "entries")} recorded. Latest: {latestSnapshot.Description} on {latestSnapshot.Timestamp:g}.";
-            }
-        }
-        catch
-        {
-            SnapshotHistoryText = "Snapshot history could not be loaded.";
+            _hasBackupFiles = false;
         }
 
         try
         {
             var benchmarks = DataService.GetBenchmarkHistory();
-            var databaseState = DataService.DatabaseState;
-            if (!databaseState.IsAvailable)
-            {
-                HasBenchmarkHistory = false;
-                BenchmarkHistoryText = $"Benchmark history unavailable: {databaseState.Summary} {databaseState.RecoveryAction}";
-            }
-            else if (benchmarks.Count == 0)
-            {
-                HasBenchmarkHistory = false;
-                BenchmarkHistoryText = NoBenchmarkHistoryText;
-            }
-            else
-            {
-                HasBenchmarkHistory = true;
-                var latestBenchmark = benchmarks[0];
-                BenchmarkHistoryText = $"{benchmarks.Count} benchmark {Pluralize(benchmarks.Count, "run")} saved. Latest: {latestBenchmark.Label} on {latestBenchmark.Timestamp:g}.";
-            }
+            _hasBenchmarkHistory = DataService.DatabaseState.IsAvailable && benchmarks.Count > 0;
         }
         catch
         {
-            HasBenchmarkHistory = false;
-            BenchmarkHistoryText = "Benchmark history could not be loaded.";
+            _hasBenchmarkHistory = false;
         }
 
         try
@@ -176,7 +114,6 @@ public partial class MainViewModel
         };
 
         var sharedStatus = RegistryService.GetPatchStatus();
-        UpdateChangePlan(sharedStatus);
         UpdateWorkflowGuide(sharedStatus);
         UpdateRecommendedActions(sharedStatus);
         UpdateWorkspaceBadges();

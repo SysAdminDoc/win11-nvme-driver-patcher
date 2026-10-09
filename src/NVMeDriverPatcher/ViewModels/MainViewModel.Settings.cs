@@ -95,21 +95,11 @@ public partial class MainViewModel
 
     partial void OnIncludeServerKeyChanged(bool value)
     {
-        UpdateChangePlan();
-        RefreshOptionalFlagRows();
         DebouncedSaveSettings();
     }
 
     partial void OnIncludeStandaloneFutureChanged(bool value)
     {
-        UpdateChangePlan();
-        RefreshOptionalFlagRows();
-        DebouncedSaveSettings();
-    }
-
-    partial void OnSkipWarningsChanged(bool value)
-    {
-        UpdateChangePlan();
         DebouncedSaveSettings();
     }
 
@@ -153,7 +143,6 @@ public partial class MainViewModel
         // Pinned fields keep the policy value; the toggles are disabled, this covers code paths.
         if (_policyOverlay.IncludeServerKey is null) Config.IncludeServerKey = IncludeServerKey;
         if (_policyOverlay.IncludeStandaloneFuture is null) Config.IncludeStandaloneFuture = IncludeStandaloneFuture;
-        if (_policyOverlay.SkipWarnings is null) Config.SkipWarnings = SkipWarnings;
         Config.AutoSaveLog = AutoSaveLog;
         Config.EnableToasts = EnableToasts;
         Config.WriteEventLog = WriteEventLog;
