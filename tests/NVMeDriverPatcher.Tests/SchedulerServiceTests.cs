@@ -1,3 +1,4 @@
+using System.Security.AccessControl;
 using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.Tests;
@@ -81,7 +82,8 @@ public sealed class SchedulerServiceTests
     }
 
     // Both tasks run the CLI as SYSTEM, so the exe has to sit where only admins can write: Program
-    // Files, or the folder the MSI installed to, which it locks down.
+    // Files, or the folder the MSI installed to, which it locks down. This is the path half only;
+    // the permission half is covered below with injected descriptors.
     [Theory]
     [InlineData(@"C:\Program Files\NVMe Driver Patcher\NVMeDriverPatcher.Cli.exe", true)]
     [InlineData(@"c:\program files (x86)\NVMe Driver Patcher\NVMeDriverPatcher.Cli-win-arm64.exe", true)]
@@ -92,13 +94,221 @@ public sealed class SchedulerServiceTests
     [InlineData(@"C:\Program Files", false)]
     [InlineData("D:/Apps/NVMe Driver Patcher/NVMeDriverPatcher.Cli.exe", true)]
     [InlineData("D:/Apps/NVMe Driver Patcher Old/NVMeDriverPatcher.Cli.exe", false)]
+    [InlineData(@"NVMe Driver Patcher\NVMeDriverPatcher.Cli.exe", false)]
     [InlineData("", false)]
     [InlineData(null, false)]
-    public void IsProtectedTaskTarget_OnlyUnderProgramFilesOrTheMsiFolder(string? exe, bool expected)
+    public void MatchProtectedRoot_OnlyUnderProgramFilesOrTheMsiFolder(string? exe, bool expected)
     {
         // The third root stands in for the HKLM InstallLocation of an MSI installed elsewhere.
         var roots = new[] { @"C:\Program Files", @"C:\Program Files (x86)\", "D:/Apps/NVMe Driver Patcher", "" };
-        Assert.Equal(expected, SchedulerService.IsProtectedTaskTarget(exe, roots));
+        Assert.Equal(expected, SchedulerService.MatchProtectedRoot(exe, roots) is not null);
+    }
+
+    // An MSI installed straight to a drive records InstallLocation D:\, and a bare root would vouch
+    // for every program on that drive.
+    [Theory]
+    [InlineData(@"D:\")]
+    [InlineData("D:/")]
+    [InlineData(@"\\server\share\")]
+    public void MatchProtectedRoot_IgnoresARootOnlyInstallLocation(string installLocation)
+    {
+        var roots = new[] { @"C:\Program Files", installLocation };
+
+        Assert.Null(SchedulerService.MatchProtectedRoot(@"D:\Downloads\NVMeDriverPatcher.Cli.exe", roots));
+        Assert.Null(SchedulerService.MatchProtectedRoot(@"\\server\share\NVMeDriverPatcher.Cli.exe", roots));
+        var check = SchedulerService.CheckTaskTarget(@"D:\Downloads\NVMeDriverPatcher.Cli.exe", roots, Reader());
+        Assert.False(check.IsProtected);
+        Assert.Contains("isn't under Program Files", check.Reason);
+    }
+
+    private const string TrustedInstaller = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
+
+    // Read off a stock Windows 11 install. Program Files: TrustedInstaller owns it, SYSTEM and
+    // Administrators modify, Users and app packages read, and the GA entries are inherit-only.
+    private const string ProgramFilesSddl =
+        "O:" + TrustedInstaller + "D:P(A;;FA;;;" + TrustedInstaller + ")(A;CIIO;GA;;;" + TrustedInstaller + ")" +
+        "(A;;0x1301bf;;;SY)(A;OICIIO;GA;;;SY)(A;;0x1301bf;;;BA)(A;OICIIO;GA;;;BA)" +
+        "(A;;0x1200a9;;;BU)(A;OICIIO;GXGR;;;BU)(A;OICIIO;GA;;;CO)(A;;0x1200a9;;;AC)";
+
+    // C:\ lets Authenticated Users create folders (0x4, this folder only), and hands them Modify
+    // only on what they create (inherit-only), so nobody else can rename Program Files.
+    private const string SystemDriveSddl =
+        "O:" + TrustedInstaller + "D:P(A;;0x4;;;AU)(A;OICIIO;0xe0010000;;;AU)" +
+        "(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)";
+
+    // A folder an installer made under Program Files, and the exe inside it, inheriting from it.
+    private const string ProgramFilesChildSddl =
+        "O:BAD:(A;ID;FA;;;SY)(A;OICIIOID;GA;;;SY)(A;ID;FA;;;BA)(A;OICIIOID;GA;;;BA)" +
+        "(A;ID;0x1200a9;;;BU)(A;OICIIOID;GXGR;;;BU)(A;OICIIOID;GA;;;CO)";
+    private const string ProgramFilesExeSddl = "O:SYD:(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;0x1200a9;;;BU)";
+
+    // What the MSI pins on INSTALLFOLDER (NVMeDriverPatcher.wxs, InstallFolderSecurity).
+    private const string MsiFolderSddl = "O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)";
+
+    // A fresh NTFS data volume: Authenticated Users get Modify on everything, the root included.
+    private const string DataDriveSddl =
+        "O:BAD:(A;OICI;FA;;;BA)(A;OICI;FA;;;SY)(A;OICI;0x1301bf;;;AU)(A;OICIIO;GA;;;CO)(A;OICI;0x1200a9;;;BU)";
+
+    private static readonly string[] ProgramFilesRoots = { @"C:\Program Files", @"C:\Program Files (x86)" };
+
+    private const string StockExe = @"C:\Program Files\NVMe Driver Patcher\NVMeDriverPatcher.Cli.exe";
+
+    private static Dictionary<string, string> StockProgramFiles() => new(StringComparer.OrdinalIgnoreCase)
+    {
+        [StockExe] = ProgramFilesExeSddl,
+        [@"C:\Program Files\NVMe Driver Patcher"] = ProgramFilesChildSddl,
+        [@"C:\Program Files"] = ProgramFilesSddl,
+        [@"C:\"] = SystemDriveSddl,
+    };
+
+    [Fact]
+    public void CheckTaskTarget_AcceptsStockProgramFilesAndReadsEveryFolderToTheDrive()
+    {
+        var read = new List<string>();
+        var check = SchedulerService.CheckTaskTarget(StockExe, ProgramFilesRoots, Reader(StockProgramFiles(), read));
+
+        Assert.True(check.IsProtected, check.Reason);
+        Assert.Equal(new[] { StockExe, @"C:\Program Files\NVMe Driver Patcher", @"C:\Program Files", @"C:\" }, read);
+    }
+
+    [Fact]
+    public void CheckTaskTarget_RefusesAUserWritableFolderUnderProgramFiles()
+    {
+        // Another vendor's folder that lets Users write. A CLI copied in there passes the path test,
+        // and anyone could swap it before the next SYSTEM run.
+        var acls = StockProgramFiles();
+        acls[@"C:\Program Files\NVMe Driver Patcher"] =
+            "O:BAD:(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;BU)";
+
+        var check = SchedulerService.CheckTaskTarget(StockExe, ProgramFilesRoots, Reader(acls));
+
+        Assert.False(check.IsProtected);
+        Assert.EndsWith(@"can add, change or delete files in C:\Program Files\NVMe Driver Patcher.", check.Reason);
+    }
+
+    [Fact]
+    public void CheckTaskTarget_RefusesAnExeOnlyItsOwnerShouldControl()
+    {
+        // Owned by Users: the owner can rewrite the DACL whenever it likes, whatever it says today.
+        var acls = StockProgramFiles();
+        acls[StockExe] = "O:BUD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;0x1200a9;;;BU)";
+
+        var check = SchedulerService.CheckTaskTarget(StockExe, ProgramFilesRoots, Reader(acls));
+
+        Assert.False(check.IsProtected);
+        Assert.StartsWith(StockExe + " is owned by ", check.Reason);
+    }
+
+    [Fact]
+    public void CheckTaskTarget_AcceptsTheMsiDaclInACustomFolder()
+    {
+        const string exe = @"D:\Apps\NVMe Driver Patcher\NVMeDriverPatcher.Cli.exe";
+        var roots = new[] { @"C:\Program Files", @"D:\Apps\NVMe Driver Patcher" };
+        var acls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [exe] = MsiFolderSddl,
+            [@"D:\Apps\NVMe Driver Patcher"] = MsiFolderSddl,
+            [@"D:\Apps"] = MsiFolderSddl,
+            // Authenticated Users hold Modify, DELETE included, on the drive root, but a root
+            // can't be renamed, so only DELETE_CHILD or re-permission rights would count there.
+            [@"D:\"] = DataDriveSddl,
+        };
+
+        var check = SchedulerService.CheckTaskTarget(exe, roots, Reader(acls));
+
+        Assert.True(check.IsProtected, check.Reason);
+    }
+
+    [Fact]
+    public void CheckTaskTarget_RefusesTheMsiFolderWhenAnyoneCanRenameTheFolderAboveIt()
+    {
+        // The MSI locks its own folder, but D:\Apps inherited Modify for Authenticated Users from
+        // the drive. Any of them can rename D:\Apps and build a fake tree at the same path.
+        const string exe = @"D:\Apps\NVMe Driver Patcher\NVMeDriverPatcher.Cli.exe";
+        var roots = new[] { @"D:\Apps\NVMe Driver Patcher" };
+        var acls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [exe] = MsiFolderSddl,
+            [@"D:\Apps\NVMe Driver Patcher"] = MsiFolderSddl,
+            [@"D:\Apps"] = DataDriveSddl,
+            [@"D:\"] = DataDriveSddl,
+        };
+
+        var check = SchedulerService.CheckTaskTarget(exe, roots, Reader(acls));
+
+        Assert.False(check.IsProtected);
+        Assert.Contains(@"can rename or re-permission D:\Apps,", check.Reason);
+    }
+
+    [Fact]
+    public void CheckTaskTarget_IgnoresAnInheritOnlyCreatorOwnerEntry()
+    {
+        // CREATOR OWNER GENERIC_ALL marked inherit-only only seeds new children. It grants nothing
+        // on the folder itself. Without the IO flag the same entry is a real grant and must fail,
+        // which proves the first result isn't a check that ignores CREATOR OWNER altogether.
+        var acls = StockProgramFiles();
+        acls[@"C:\Program Files\NVMe Driver Patcher"] = MsiFolderSddl + "(A;OICIIO;GA;;;CO)";
+        Assert.True(SchedulerService.CheckTaskTarget(StockExe, ProgramFilesRoots, Reader(acls)).IsProtected);
+
+        acls[@"C:\Program Files\NVMe Driver Patcher"] = MsiFolderSddl + "(A;OICI;GA;;;CO)";
+        Assert.False(SchedulerService.CheckTaskTarget(StockExe, ProgramFilesRoots, Reader(acls)).IsProtected);
+    }
+
+    [Fact]
+    public void CheckTaskTarget_RefusesWhenAPermissionReadFails()
+    {
+        var acls = StockProgramFiles();
+        var reader = Reader(acls);
+        PathSecurity Failing(string path) =>
+            path.Equals(@"C:\Program Files", StringComparison.OrdinalIgnoreCase)
+                ? throw new UnauthorizedAccessException("Access is denied.")
+                : reader(path);
+
+        var check = SchedulerService.CheckTaskTarget(StockExe, ProgramFilesRoots, Failing);
+
+        Assert.False(check.IsProtected);
+        Assert.StartsWith(@"Couldn't read the permissions on C:\Program Files ", check.Reason);
+    }
+
+    [Fact]
+    public void CheckTaskTarget_RefusesAJunctionAnywhereOnThePath()
+    {
+        var acls = StockProgramFiles();
+        var reader = Reader(acls);
+        PathSecurity Linked(string path) =>
+            path.Equals(@"C:\Program Files\NVMe Driver Patcher", StringComparison.OrdinalIgnoreCase)
+                ? reader(path) with { IsReparsePoint = true }
+                : reader(path);
+
+        var check = SchedulerService.CheckTaskTarget(StockExe, ProgramFilesRoots, Linked);
+
+        Assert.False(check.IsProtected);
+        Assert.StartsWith(@"C:\Program Files\NVMe Driver Patcher is a junction", check.Reason);
+    }
+
+    [Fact]
+    public void CheckTaskTarget_RealReaderRefusesAFolderTheCurrentUserOwns()
+    {
+        // A fresh folder under %TEMP% belongs to whoever made it (or, when elevated, grants that
+        // user full control through inheritance), so even named as a protected root it's refused.
+        var dir = Path.Combine(Path.GetTempPath(), "nvme-sched-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var exe = Path.Combine(dir, "NVMeDriverPatcher.Cli.exe");
+            File.WriteAllBytes(exe, [0x4D, 0x5A]);
+
+            var check = SchedulerService.CheckTaskTarget(exe, new[] { dir }, SchedulerService.ReadPathSecurity);
+
+            Assert.False(check.IsProtected);
+            Assert.Contains(dir, check.Reason);
+            Assert.DoesNotContain("Couldn't read", check.Reason);
+            Assert.DoesNotContain("doesn't exist", check.Reason);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     [Fact]
@@ -107,10 +317,23 @@ public sealed class SchedulerServiceTests
         var program = File.ReadAllText(Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "NVMeDriverPatcher.Cli", "Program.cs")));
         var body = program[program.IndexOf("static int RegisterTasksCommand(", StringComparison.Ordinal)..];
-        var guard = body.IndexOf("SchedulerService.IsProtectedTaskTarget(cliExe)", StringComparison.Ordinal);
+        var guard = body.IndexOf("SchedulerService.CheckTaskTarget(cliExe)", StringComparison.Ordinal);
         var register = body.IndexOf("SchedulerService.Register", StringComparison.Ordinal);
-        Assert.True(guard >= 0 && guard < register, "the Program Files check must run before any task is registered");
+        Assert.True(guard >= 0 && guard < register, "the protection check must run before any task is registered");
     }
+
+    // Every path the check asks about gets the descriptor mapped to it, or an admin-only one.
+    private static Func<string, PathSecurity> Reader(
+        Dictionary<string, string>? sddlByPath = null,
+        List<string>? read = null) =>
+        path =>
+        {
+            read?.Add(path);
+            var sddl = sddlByPath is not null && sddlByPath.TryGetValue(path, out var mapped) ? mapped : MsiFolderSddl;
+            var descriptor = new DirectorySecurity();
+            descriptor.SetSecurityDescriptorSddlForm(sddl);
+            return new PathSecurity(descriptor);
+        };
 
     private static void AssertPair(string[] args, string flag, string expectedValue)
     {

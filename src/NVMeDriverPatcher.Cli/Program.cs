@@ -789,12 +789,14 @@ class Program
             return 1;
         }
         // Both tasks run this exe as SYSTEM, so a copy any program can overwrite (Downloads, the
-        // desktop) would hand SYSTEM to whatever replaced it before the next trigger.
-        if (!SchedulerService.IsProtectedTaskTarget(cliExe))
+        // desktop, a Program Files folder another vendor left writable) would hand SYSTEM to
+        // whatever replaced it before the next trigger.
+        var target = SchedulerService.CheckTaskTarget(cliExe);
+        if (!target.IsProtected)
         {
-            Console.Error.WriteLine($"register-tasks won't point SYSTEM tasks at {cliExe}. Anything that can replace a file in that folder " +
-                "would get its program run as SYSTEM. Install with the MSI, or copy the CLI into a folder under Program Files as an administrator, " +
-                "and run register-tasks from there.");
+            Console.Error.WriteLine($"register-tasks won't point SYSTEM tasks at {cliExe}. {target.Reason}");
+            Console.Error.WriteLine("Anything that can change that file or folder would get its program run as SYSTEM, so a portable copy is always refused. " +
+                "Install with the MSI, or copy the CLI into a folder under Program Files as an administrator, and run register-tasks from there.");
             return 1;
         }
         bool boot = SchedulerService.RegisterBootVerify(cliExe, Console.WriteLine);
