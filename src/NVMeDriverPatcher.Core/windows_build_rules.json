@@ -37,7 +37,7 @@
       "minUbr": 0,
       "maxUbr": 999999,
       "expectedPath": "none-known",
-      "summary": "Insider trains newer than 26200 (26H1 28020/28120 and later) inherit the GenNvmeDisk compatible-ID removal, so no working enablement path is known. Candidate probe 48613417 (NativeNVMeStackEnableForClientOS) is untested on this branch; source: https://github.com/phantomofearth/windows-velocity-feature-lists. Applying it remains gated behind live validation. Wait for Microsoft's official client rollout.",
+      "summary": "Insider trains newer than 26200 (26H1 28020/28120 and later) inherit the GenNvmeDisk compatible-ID removal, so no working enablement path is known. Candidate probe 48613417 (NativeNVMeStackEnableForClientOS) is untested on this branch; source: https://github.com/phantomofearth/windows-velocity-feature-lists. Applying it remains gated behind live validation. Wait for Microsoft's official client rollout. 26H1 is an OEM-only, ARM-targeted release and does not get Hotpatch.",
       "sourceUrl": "https://github.com/thebookisclosed/ViVe/issues/164",
       "confidence": "community-reported",
       "lastReviewed": "2026-10-05"
@@ -50,7 +50,7 @@
       "minUbr": 8524,
       "maxUbr": 999999,
       "expectedPath": "none-known",
-      "summary": "Evidenced on Insider 26200.8524 (ViVe issue 164): stornvme stopped exposing the GenNvmeDisk compatible ID, so nvmedisk.inf can't match and both the registry and ViVeTool routes set flags that have no effect. Retail 25H2 UBRs above 8524 have no exact sourced evidence either way, so they stay verify/monitor/rollback. Candidate probe 48613417 (NativeNVMeStackEnableForClientOS) is untested on this branch; source: https://github.com/phantomofearth/windows-velocity-feature-lists. Applying it remains gated behind live validation. No working enablement path is known; wait for Microsoft's official client rollout.",
+      "summary": "Evidenced on Insider 26200.8524 (ViVe issue 164): stornvme stopped exposing the GenNvmeDisk compatible ID, so nvmedisk.inf can't match and both the registry and ViVeTool routes set flags that have no effect. Retail 25H2 UBRs above 8524 have no exact sourced evidence either way, so they stay verify/monitor/rollback. Candidate probe 48613417 (NativeNVMeStackEnableForClientOS) is untested on this branch; source: https://github.com/phantomofearth/windows-velocity-feature-lists. Applying it remains gated behind live validation. No working enablement path is known; wait for Microsoft's official client rollout. A host that reports 26H2 is an enablement package over 25H2, so it keeps build 26200 and lands on this rule.",
       "sourceUrl": "https://github.com/thebookisclosed/ViVe/issues/164",
       "confidence": "community-reported",
       "lastReviewed": "2026-10-05"
@@ -64,7 +64,7 @@
       "maxUbr": 8523,
       "expectedPath": "vivetool-fallback",
       "fallbackSet": "native-nvme-stack-25h2",
-      "summary": "25H2 (26200.x before .8524): the registry override is neutered, and the FeatureStore fallback applies 55369237 + 48433719 (49453572 is Always Enabled and probe-only). One forum report also has 60786016 + 48433719 binding on 26200.8116/.8117; this set doesn't use it.",
+      "summary": "25H2 (26200.x before .8524): the registry override is neutered, and the FeatureStore fallback applies 55369237 + 48433719 (49453572 is Always Enabled and probe-only). One forum report also has 60786016 + 48433719 binding on 26200.8116/.8117; this set doesn't use it. A host that reports 26H2 is an enablement package over 25H2, so it keeps build 26200 and lands on the 25H2 rules.",
       "sourceUrl": "https://www.elevenforum.com/t/windows-11-25h2-nvmedisk-sys-driver-support.46678/",
       "confidence": "community-reported",
       "lastReviewed": "2026-10-05"
