@@ -42,8 +42,9 @@
     </Feature>
 
     <!--
-      Opt-in (Level 2 = not installed by default). Select via the feature tree or
-      `msiexec /i NVMeDriverPatcher.msi ADDLOCAL=WatchdogService`. Registers the
+      Opt-in (Level 2 = not installed by default). The UI has no feature tree: a fresh install
+      takes `msiexec /i NVMeDriverPatcher.msi ADDLOCAL=ALL`, an existing one adds it with
+      `ADDLOCAL=WatchdogService`. Registers the
       real-time event-log watchdog as a LocalService auto-start service and removes
       it cleanly on uninstall.
     -->
@@ -51,11 +52,26 @@
       <ComponentGroupRef Id="WatchdogFiles" />
     </Feature>
 
+    <!--
+      Program Files only. The DACL pinned on INSTALLFOLDER below protects the files, but not the
+      path to them: a standard user who can rename a parent (C:\Tools, or a user-made D:\Apps) can
+      move the real folder aside and build their own tree at the same path, and the next elevated
+      GUI launch, repair-time SYSTEM custom action or watchdog service start runs their binaries.
+      Program Files and C:\ can't be renamed by them. Only an administrator can run this per-machine
+      install, so this guards against a risky choice rather than an attacker. There's no folder
+      picker; INSTALLFOLDER on the command line may name a folder inside Program Files (never
+      Program Files itself, which would get the protected DACL below), and "\." or "/" is refused
+      so ".." can't climb back out. Installed skips the check in maintenance mode (repair, change,
+      uninstall). Test-InstallFolderAcl.ps1 matches the message text.
+    -->
+    <Launch
+      Condition='Installed OR NOT INSTALLFOLDER OR (INSTALLFOLDER ~&lt;&lt; ProgramFiles64Folder AND NOT (INSTALLFOLDER ~= ProgramFiles64Folder) AND NOT (INSTALLFOLDER &gt;&lt; "\.") AND NOT (INSTALLFOLDER &gt;&lt; "/"))'
+      Message="NVMe Driver Patcher installs only under Program Files. A folder elsewhere can usually be renamed by a standard user, who could then swap in their own copy of programs that run with administrator rights. Leave INSTALLFOLDER unset, or point it at a folder inside Program Files." />
+
     <UI>
-      <ui:WixUI Id="WixUI_InstallDir" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui" />
+      <ui:WixUI Id="WixUI_Minimal" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui" />
     </UI>
-    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
-    <!-- Issue #12: WixUI_InstallDir shows a license page. Point it at our real product license/info
+    <!-- Issue #12: WixUI_Minimal shows a license page. Point it at our real product license/info
          RTF (product purpose, risk, recovery, MIT license) instead of WiX's default sample text. -->
     <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
 
@@ -92,11 +108,12 @@
       is expected to place the assets at $(var.PublishDir)\... before invoking `wix build`.
     -->
     <!--
-      INSTALLFOLDER is user-selectable through WixUI_InstallDir, and a directory created outside
-      ProgramFiles64Folder inherits its parent's DACL - so an install to, say, C:\Tools would leave
-      every shipped binary writable by a standard user while the MSI registers the watchdog as an
-      auto-start service and invokes it from a deferred SYSTEM custom action. That is a direct
-      write-to-SYSTEM-execution path. Pin the same protected DACL PROGRAMDATAFOLDER already gets:
+      INSTALLFOLDER can be set on the command line (inside Program Files, see the Launch condition
+      above), and a directory created under a folder another vendor left writable inherits that
+      folder's DACL - which would leave every shipped binary writable by a standard user while the
+      MSI registers the watchdog as an auto-start service and invokes it from a deferred SYSTEM
+      custom action. That is a direct write-to-SYSTEM-execution path. Pin the same protected DACL
+      PROGRAMDATAFOLDER already gets:
       SYSTEM and Administrators full, Users read+execute, no inheritance from the parent. The ACEs
       are OICI so the binaries MSI drops in here inherit them, and the owner is forced to
       Administrators - a standard user who pre-created the target directory would otherwise keep
