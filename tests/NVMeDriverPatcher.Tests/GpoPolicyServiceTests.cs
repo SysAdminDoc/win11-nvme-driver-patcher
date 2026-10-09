@@ -161,4 +161,69 @@ public sealed class GpoPolicyServiceTests
         }
         finally { try { Directory.Delete(dir, recursive: true); } catch { } }
     }
+
+    [Fact]
+    public void ReapplyPins_RestoresPinnedValuesChangedAfterLoad_AndNamesEach()
+    {
+        var overlay = new PolicyOverlay
+        {
+            PatchProfile = PatchProfile.Safe,
+            IncludeServerKey = false,
+            IncludeStandaloneFuture = false
+        };
+        var config = new AppConfig();
+        GpoPolicyService.ApplyTo(config, overlay);
+
+        // What --full, --include-server-key and --standalone-future do after the overlay ran.
+        config.PatchProfile = PatchProfile.Full;
+        config.IncludeServerKey = true;
+        config.IncludeStandaloneFuture = true;
+
+        var restored = GpoPolicyService.ReapplyPins(config, overlay);
+
+        Assert.Equal(PatchProfile.Safe, config.PatchProfile);
+        Assert.False(config.IncludeServerKey);
+        Assert.False(config.IncludeStandaloneFuture);
+        Assert.Equal(
+            new[]
+            {
+                (nameof(PolicyOverlay.PatchProfile), "Safe"),
+                (nameof(PolicyOverlay.IncludeServerKey), "off"),
+                (nameof(PolicyOverlay.IncludeStandaloneFuture), "off")
+            },
+            restored);
+    }
+
+    [Fact]
+    public void ReapplyPins_IsSilentWhenNothingChangedOrNothingIsPinned()
+    {
+        var pinned = new PolicyOverlay { PatchProfile = PatchProfile.Full };
+        var config = new AppConfig { PatchProfile = PatchProfile.Full };
+        Assert.Empty(GpoPolicyService.ReapplyPins(config, pinned));
+
+        // No pin means the flag wins.
+        var free = new AppConfig { PatchProfile = PatchProfile.Full, IncludeServerKey = true };
+        Assert.Empty(GpoPolicyService.ReapplyPins(free, new PolicyOverlay()));
+        Assert.True(free.IncludeServerKey);
+    }
+
+    [Fact]
+    public void Cli_ReappliesThePolicyAfterParsingFlags_AndTheGuiLocksPinnedControls()
+    {
+        var cli = ReadRepoFile("src", "NVMeDriverPatcher.Cli", "Program.cs");
+        var flags = cli.IndexOf("else if (fullMode) config.PatchProfile = PatchProfile.Full;", StringComparison.Ordinal);
+        var reapply = cli.IndexOf("GpoPolicyService.ReapplyPins(config, policyOverlay)", StringComparison.Ordinal);
+        Assert.True(flags >= 0 && reapply > flags, "pins must be re-applied after the CLI flags are parsed");
+        Assert.Contains("[WARNING] Group Policy pins", cli, StringComparison.Ordinal);
+
+        var settings = ReadRepoFile("src", "NVMeDriverPatcher", "ViewModels", "MainViewModel.Settings.cs");
+        Assert.Contains("if (_policyOverlay.IncludeServerKey is null) Config.IncludeServerKey = IncludeServerKey;", settings, StringComparison.Ordinal);
+        Assert.Contains("if (_policyOverlay.IncludeStandaloneFuture is null) Config.IncludeStandaloneFuture = IncludeStandaloneFuture;", settings, StringComparison.Ordinal);
+        Assert.Contains("Set by Group Policy", settings, StringComparison.Ordinal);
+
+        var xaml = ReadRepoFile("src", "NVMeDriverPatcher", "Views", "MainWindow.xaml");
+        foreach (var binding in new[] { "PatchProfileEditable", "ServerKeyEditable", "StandaloneFutureEditable" })
+            Assert.Contains($"IsEnabled=\"{{Binding {binding}}}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ToolTipService.ShowOnDisabled=\"True\"", xaml, StringComparison.Ordinal);
+    }
 }

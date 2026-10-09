@@ -102,7 +102,8 @@ class Program
             }
             // GPO overlay takes precedence over shared config.json so a pinned fleet policy
             // isn't quietly overridden by a local run of the CLI.
-            var policyWatchdogSave = GpoPolicyService.ApplyTo(config, GpoPolicyService.Read());
+            var policyOverlay = GpoPolicyService.Read();
+            var policyWatchdogSave = GpoPolicyService.ApplyTo(config, policyOverlay);
             if (policyWatchdogSave is { Success: false })
                 Console.Error.WriteLine("[WARNING] Watchdog Group Policy state is unavailable: " + policyWatchdogSave.Summary);
             LogRotationService.RotateAll(config);
@@ -160,6 +161,19 @@ class Program
             }
             if (safeMode) config.PatchProfile = PatchProfile.Safe;
             else if (fullMode) config.PatchProfile = PatchProfile.Full;
+
+            // The overlay above ran before these flags did. Put pinned values back and say which
+            // flag lost, so a fleet policy that pins Safe can't be turned into Full by --full.
+            foreach (var (setting, pinned) in GpoPolicyService.ReapplyPins(config, policyOverlay))
+            {
+                var flag = setting switch
+                {
+                    nameof(PolicyOverlay.PatchProfile) => safeMode ? "--safe" : "--full",
+                    nameof(PolicyOverlay.IncludeServerKey) => excludeServerKeyOverride ? "--no-server-key" : "--include-server-key",
+                    _ => excludeStandaloneFutureOverride ? "--no-standalone-future" : "--standalone-future"
+                };
+                Console.Error.WriteLine($"[WARNING] Group Policy pins {setting} to {pinned}, so {flag} was ignored.");
+            }
 
             bool json = args.Any(a => a is not null && MatchesAny(a, "--json"));
             bool dryRun = args.Any(a => a is not null && MatchesAny(a, "--dry-run", "--preview"));

@@ -87,6 +87,33 @@ public static class GpoPolicyService
         return null;
     }
 
+    /// <summary>
+    /// Puts back any pinned value that a command-line flag or a local toggle changed after
+    /// <see cref="ApplyTo"/> ran, so policy keeps winning for the whole run. Covers the settings
+    /// a user can change at run time (profile and the two optional flags). Returns one entry per
+    /// setting it had to restore, with the pinned value, so callers can warn once for each.
+    /// </summary>
+    public static IReadOnlyList<(string Setting, string PinnedValue)> ReapplyPins(AppConfig config, PolicyOverlay overlay)
+    {
+        var restored = new List<(string, string)>();
+        if (overlay.PatchProfile is PatchProfile profile && config.PatchProfile != profile)
+        {
+            config.PatchProfile = profile;
+            restored.Add((nameof(PolicyOverlay.PatchProfile), profile.ToString()));
+        }
+        if (overlay.IncludeServerKey is bool serverKey && config.IncludeServerKey != serverKey)
+        {
+            config.IncludeServerKey = serverKey;
+            restored.Add((nameof(PolicyOverlay.IncludeServerKey), serverKey ? "on" : "off"));
+        }
+        if (overlay.IncludeStandaloneFuture is bool future && config.IncludeStandaloneFuture != future)
+        {
+            config.IncludeStandaloneFuture = future;
+            restored.Add((nameof(PolicyOverlay.IncludeStandaloneFuture), future ? "on" : "off"));
+        }
+        return restored;
+    }
+
     private static PatchProfile? ReadProfile(RegistryKey key, string valueName)
     {
         try
