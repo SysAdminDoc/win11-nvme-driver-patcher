@@ -59,6 +59,23 @@ public partial class BenchmarkComparisonView : UserControl
         if (history.Count >= 2)
         {
             var prev = history[^2];
+            var diskSpdMismatch = BenchmarkService.DescribeDiskSpdMismatch(
+                prev.DiskSpdVersion, prev.DiskSpdSha256, latest.DiskSpdVersion, latest.DiskSpdSha256);
+            if (diskSpdMismatch is not null)
+            {
+                const string different = "Different DiskSpd build";
+                ReadDelta.Text = different;
+                WriteDelta.Text = different;
+                DesktopReadDelta.Text = different;
+                DesktopWriteDelta.Text = different;
+                foreach (var block in new[] { ReadDelta, WriteDelta, DesktopReadDelta, DesktopWriteDelta })
+                    block.Foreground = ResolveBrush("TextDim");
+                BenchmarkSummaryText.Text = diskSpdMismatch;
+                TrendHintText.Text = "DiskSpd changes its defaults between releases, so only runs from the same build are comparable.";
+                ApplyBenchmarkState("Not Comparable", "TextDim", "SurfaceInset", "Border");
+            }
+            else
+            {
             ReadDelta.Text = FormatDelta(prev.Read.IOPS, latest.Read.IOPS);
             ReadDelta.Foreground = DeltaBrush(prev.Read.IOPS, latest.Read.IOPS);
             WriteDelta.Text = FormatDelta(prev.Write.IOPS, latest.Write.IOPS);
@@ -81,6 +98,7 @@ public partial class BenchmarkComparisonView : UserControl
             BenchmarkSummaryText.Text = BuildComparisonSummary(prev, latest);
             TrendHintText.Text = "Use the chart to confirm whether the latest change moved both read and write performance in the direction you expected, not just one headline metric.";
             ApplyBenchmarkState("Comparison Ready", "Green", "GreenBg", "Green");
+            }
         }
         else
         {

@@ -55,4 +55,48 @@ public sealed class AutoBenchmarkCompareTests
         var verdict = AutoBenchmarkService.Compare(baseline, AutoBenchmarkService.FromResult(postPatch), thresholdPercent: 15);
         Assert.True(verdict.Regressed);
     }
+
+    [Fact]
+    public void Compare_DifferentDiskSpdVersions_IsNotComparableAndShowsNoPercentage()
+    {
+        var baseline = Base(100_000, 50_000);
+        baseline.DiskSpdVersion = "2.2";
+        var current = Base(50_000, 25_000);
+        current.DiskSpdVersion = "2.3";
+
+        var verdict = AutoBenchmarkService.Compare(baseline, current, thresholdPercent: 15);
+
+        Assert.False(verdict.Comparable);
+        Assert.False(verdict.Regressed);
+        Assert.Contains("different DiskSpd", verdict.Summary);
+        Assert.DoesNotContain("%", verdict.Summary);
+    }
+
+    [Fact]
+    public void Compare_SameOrUnrecordedDiskSpd_StillComparesNormally()
+    {
+        var legacy = Base(100_000, 50_000);
+        var recorded = Base(70_000, 50_000);
+        recorded.DiskSpdVersion = "2.2";
+        recorded.DiskSpdSha256 = "abc";
+
+        Assert.True(AutoBenchmarkService.Compare(legacy, recorded, 15).Regressed);
+
+        var sameBuild = Base(100_000, 50_000);
+        sameBuild.DiskSpdVersion = "2.2";
+        sameBuild.DiskSpdSha256 = "ABC";
+        Assert.True(AutoBenchmarkService.Compare(sameBuild, recorded, 15).Comparable);
+    }
+
+    [Fact]
+    public void FromResult_CarriesTheDiskSpdBuild()
+    {
+        var baseline = AutoBenchmarkService.FromResult(new BenchmarkResult
+        {
+            DiskSpdVersion = "2.2",
+            DiskSpdSha256 = "deadbeef"
+        });
+        Assert.Equal("2.2", baseline.DiskSpdVersion);
+        Assert.Equal("deadbeef", baseline.DiskSpdSha256);
+    }
 }

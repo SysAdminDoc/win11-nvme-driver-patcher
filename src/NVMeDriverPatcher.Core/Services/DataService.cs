@@ -121,7 +121,10 @@ public static class DataService
                 DesktopReadLatencyMs = desktop.Read?.AvgLatencyMs ?? 0,
                 DesktopWriteIOPS = desktop.Write?.IOPS ?? 0,
                 DesktopWriteThroughputMBs = desktop.Write?.ThroughputMBs ?? 0,
-                DesktopWriteLatencyMs = desktop.Write?.AvgLatencyMs ?? 0
+                DesktopWriteLatencyMs = desktop.Write?.AvgLatencyMs ?? 0,
+                DiskSpdVersion = string.IsNullOrWhiteSpace(result.DiskSpdVersion) ? null : result.DiskSpdVersion,
+                DiskSpdSha256 = string.IsNullOrWhiteSpace(result.DiskSpdSha256) ? null : result.DiskSpdSha256,
+                DiskSpdArguments = string.IsNullOrWhiteSpace(result.DiskSpdArguments) ? null : result.DiskSpdArguments
             };
 
             db.Benchmarks.Add(record);

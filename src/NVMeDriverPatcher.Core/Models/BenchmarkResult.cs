@@ -11,6 +11,11 @@ public class BenchmarkResult
     public BenchmarkMetrics Read { get; set; } = new();
     public BenchmarkMetrics Write { get; set; } = new();
     public BenchmarkProfileResult Desktop { get; set; } = new();
+    // Which DiskSpd produced this run. Empty on results saved before this was recorded.
+    public string DiskSpdVersion { get; set; } = string.Empty;
+    public string DiskSpdSha256 { get; set; } = string.Empty;
+    // The argument line of every profile arm, in run order, joined with " | ".
+    public string DiskSpdArguments { get; set; } = string.Empty;
 }
 
 public class BenchmarkProfileResult

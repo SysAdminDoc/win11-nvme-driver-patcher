@@ -34,7 +34,7 @@ public sealed record AppDatabaseState(
 /// </summary>
 internal static class AppDatabaseUpgradeService
 {
-    internal const int CurrentSchemaVersion = 3;
+    internal const int CurrentSchemaVersion = 4;
     private const string UpgradeMutexName = @"Global\NVMeDriverPatcher.DatabaseUpgrade";
     private static readonly TimeSpan UpgradeMutexTimeout = TimeSpan.FromSeconds(30);
 
@@ -58,7 +58,8 @@ internal static class AppDatabaseUpgradeService
                 "WriteIOPS", "WriteThroughputMBs", "WriteLatencyMs",
                 "DesktopProfileId", "DesktopProfileName", "DesktopThreads", "DesktopOutstandingIo",
                 "DesktopDurationSeconds", "DesktopReadIOPS", "DesktopReadThroughputMBs", "DesktopReadLatencyMs",
-                "DesktopWriteIOPS", "DesktopWriteThroughputMBs", "DesktopWriteLatencyMs", "Notes"
+                "DesktopWriteIOPS", "DesktopWriteThroughputMBs", "DesktopWriteLatencyMs", "Notes",
+                "DiskSpdVersion", "DiskSpdSha256", "DiskSpdArguments"
             ],
             ["Snapshots"] =
                 ["Id", "Timestamp", "Description", "RegistryStateJson", "PatchStatusJson", "IsPrePatch"],
@@ -133,7 +134,7 @@ internal static class AppDatabaseUpgradeService
                 return Available(CurrentSchemaVersion, "History database schema and integrity checks passed.");
             }
 
-            // Either a real v1→v3 migration or adoption of a formerly-unversioned v2 layout.
+            // Either a real v1→v4 migration or adoption of a formerly-unversioned v2 layout.
             // Both change schema metadata, so both require a validated backup.
             return UpgradeExisting(path, detectedVersion, beforeCommit);
         }
@@ -159,7 +160,7 @@ internal static class AppDatabaseUpgradeService
             ApplyPersistentPragmas(connection);
             ValidateQuickCheck(connection);
             ValidateCurrentSchema(connection);
-            return Available(CurrentSchemaVersion, "Created history database schema v3; integrity check passed.");
+            return Available(CurrentSchemaVersion, "Created history database schema v4; integrity check passed.");
         }
         catch (Exception ex)
         {
@@ -197,6 +198,12 @@ internal static class AppDatabaseUpgradeService
             {
                 UpgradeV2ToV3(connection, transaction);
                 detectedVersion = 3;
+            }
+
+            if (detectedVersion == 3)
+            {
+                UpgradeV3ToV4(connection, transaction);
+                detectedVersion = 4;
             }
             else if (detectedVersion != CurrentSchemaVersion)
                 throw new InvalidDataException($"No migration path exists from schema v{detectedVersion}.");
@@ -268,6 +275,17 @@ internal static class AppDatabaseUpgradeService
             """);
     }
 
+    private static void UpgradeV3ToV4(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        // Nullable: rows written before this version have no DiskSpd provenance to report.
+        Execute(connection, transaction,
+            """
+            ALTER TABLE "Benchmarks" ADD COLUMN "DiskSpdVersion" TEXT NULL;
+            ALTER TABLE "Benchmarks" ADD COLUMN "DiskSpdSha256" TEXT NULL;
+            ALTER TABLE "Benchmarks" ADD COLUMN "DiskSpdArguments" TEXT NULL;
+            """);
+    }
+
     private static int DetectSchemaVersion(
         SqliteConnection connection,
         int declaredVersion,
@@ -280,7 +298,8 @@ internal static class AppDatabaseUpgradeService
         if (CurrentTables.All(tables.Contains))
         {
             var benchmarkColumns = ReadColumnNames(connection, "Benchmarks", transaction);
-            return benchmarkColumns.Contains("DesktopProfileId") ? CurrentSchemaVersion : 2;
+            if (!benchmarkColumns.Contains("DesktopProfileId")) return 2;
+            return benchmarkColumns.Contains("DiskSpdVersion") ? CurrentSchemaVersion : 3;
         }
         if (BaseTables.All(tables.Contains) && !tables.Contains("BypassIoHistory"))
             return 1;

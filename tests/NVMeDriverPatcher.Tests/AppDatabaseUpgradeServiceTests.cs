@@ -396,7 +396,8 @@ public sealed class AppDatabaseUpgradeServiceTests : IDisposable
                      "DesktopProfileId", "DesktopProfileName", "DesktopThreads", "DesktopOutstandingIo",
                      "DesktopDurationSeconds", "DesktopReadIOPS", "DesktopReadThroughputMBs",
                      "DesktopReadLatencyMs", "DesktopWriteIOPS", "DesktopWriteThroughputMBs",
-                     "DesktopWriteLatencyMs"
+                     "DesktopWriteLatencyMs",
+                     "DiskSpdVersion", "DiskSpdSha256", "DiskSpdArguments"
                  })
             Assert.True(ColumnExists(path, "Benchmarks", column), $"Missing benchmark column {column}");
         AssertQuickCheck(path);
@@ -445,5 +446,60 @@ public sealed class AppDatabaseUpgradeServiceTests : IDisposable
         var connection = new SqliteConnection($"Data Source={path}");
         connection.Open();
         return connection;
+    }
+
+    [Fact]
+    public void DeclaredV3Fixture_GainsDiskSpdColumnsAndKeepsRows()
+    {
+        var path = Path.Combine(_root, "v3.db");
+        CreateV1Fixture(path);
+        AddV2Schema(path);
+        Execute(path,
+            """
+            ALTER TABLE Benchmarks ADD COLUMN DesktopProfileId TEXT NOT NULL DEFAULT 'desktop-qd1';
+            ALTER TABLE Benchmarks ADD COLUMN DesktopProfileName TEXT NOT NULL DEFAULT 'Desktop QD1';
+            ALTER TABLE Benchmarks ADD COLUMN DesktopThreads INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE Benchmarks ADD COLUMN DesktopOutstandingIo INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE Benchmarks ADD COLUMN DesktopDurationSeconds INTEGER NOT NULL DEFAULT 30;
+            ALTER TABLE Benchmarks ADD COLUMN DesktopReadIOPS REAL NOT NULL DEFAULT 0;
+            ALTER TABLE Benchmarks ADD COLUMN DesktopReadThroughputMBs REAL NOT NULL DEFAULT 0;
+            ALTER TABLE Benchmarks ADD COLUMN DesktopReadLatencyMs REAL NOT NULL DEFAULT 0;
+            ALTER TABLE Benchmarks ADD COLUMN DesktopWriteIOPS REAL NOT NULL DEFAULT 0;
+            ALTER TABLE Benchmarks ADD COLUMN DesktopWriteThroughputMBs REAL NOT NULL DEFAULT 0;
+            ALTER TABLE Benchmarks ADD COLUMN DesktopWriteLatencyMs REAL NOT NULL DEFAULT 0;
+            PRAGMA user_version=3;
+            """);
+
+        var result = Upgrade(path);
+
+        Assert.True(result.IsAvailable, result.Summary);
+        Assert.NotNull(result.BackupPath);
+        AssertCurrentSchema(path);
+        Assert.Equal("legacy benchmark", Scalar(path, "SELECT Label FROM Benchmarks WHERE Id=1"));
+        Assert.True(Scalar(path, "SELECT DiskSpdVersion FROM Benchmarks WHERE Id=1") is null or DBNull);
+        Assert.False(ColumnExists(result.BackupPath!, "Benchmarks", "DiskSpdVersion"));
+    }
+
+    [Fact]
+    public void DiskSpdProvenance_RoundTripsThroughTheContext()
+    {
+        var path = Path.Combine(_root, "roundtrip.db");
+        Assert.True(Upgrade(path).IsAvailable);
+
+        using (var db = new AppDbContext(path))
+        {
+            db.Benchmarks.Add(new BenchmarkRecord
+            {
+                Label = "x",
+                Timestamp = DateTime.UtcNow,
+                DiskSpdVersion = "2.2",
+                DiskSpdSha256 = "abc123",
+                DiskSpdArguments = "-c128M -d30"
+            });
+            db.SaveChanges();
+        }
+
+        Assert.Equal("2.2", Scalar(path, "SELECT DiskSpdVersion FROM Benchmarks WHERE Label='x'"));
+        Assert.Equal("-c128M -d30", Scalar(path, "SELECT DiskSpdArguments FROM Benchmarks WHERE Label='x'"));
     }
 }
