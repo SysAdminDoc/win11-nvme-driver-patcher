@@ -83,6 +83,18 @@ public sealed class CliProgramOptionTests
         Assert.Matches(@"EventLogService\.Write\(\s*migrationFailure", program[initialize..]);
     }
 
+    [Fact]
+    public void ConfigDowngrade_IsWarnedOnStderrAndRecordedInTheEventLog()
+    {
+        var program = ReadCliProgram();
+        var call = program.IndexOf("ConfigMigrationService.Migrate(", StringComparison.Ordinal);
+        Assert.True(call >= 0, "Program no longer runs the config migration");
+        var guard = Regex.Match(program[call..],
+            @"(?s)if \(config\.ConfigVersion > ConfigMigrationService\.CurrentSchemaVersion\)\s*\{[^}]*migrationFailure = migrationSummary;[^}]*Console\.Error\.WriteLine\(""\[WARNING\] "" \+ migrationFailure\);");
+        Assert.True(guard.Success, "a newer config schema must produce a [WARNING] on stderr");
+        // Same event-log write as a failed migration (asserted above).
+    }
+
     private static string ReadCliProgram() => ReadRepoFile("src", "NVMeDriverPatcher.Cli", "Program.cs");
 
     private static string ReadRepoFile(params string[] relative)
