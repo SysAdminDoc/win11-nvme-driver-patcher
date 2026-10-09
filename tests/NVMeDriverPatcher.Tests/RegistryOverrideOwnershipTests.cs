@@ -76,6 +76,54 @@ public sealed class RegistryOverrideOwnershipTests : IDisposable
     }
 
     [Fact]
+    public void UnpatchedState_AbsentKey_IsCleanWithNoOwnerAndNothingBlocking()
+    {
+        using var root = Registry.CurrentUser.CreateSubKey(_root, writable: true)!;
+
+        var report = PatchService.InspectRegistryOverrideOwnership(root);
+
+        Assert.False(report.KeyExists);
+        Assert.True(report.Readable);
+        Assert.Equal("(none)", report.Owner);
+        Assert.Empty(report.RemainingValueNames);
+        Assert.False(report.HasBlockingResidue);
+        Assert.StartsWith("Registry override ownership: clean.", report.Summary, StringComparison.Ordinal);
+        Assert.Contains("absent", report.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmptyOverridesKey_IsCleanButNamesItsOwner()
+    {
+        using var root = BuildOverrides();
+
+        var report = PatchService.InspectRegistryOverrideOwnership(root);
+
+        Assert.True(report.KeyExists);
+        Assert.True(report.Readable);
+        Assert.Empty(report.RemainingValueNames);
+        Assert.Empty(report.ForeignValueNames);
+        Assert.False(report.HasBlockingResidue);
+        Assert.False(string.IsNullOrWhiteSpace(report.Owner));
+        Assert.StartsWith("Registry override ownership: clean. Key is readable", report.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PatchedState_OwnedValuesOnAWritableKey_AreResidueButNotBlocking()
+    {
+        using var root = BuildOverrides(AppConfig.PrimaryFeatureID, AppConfig.ServerFeatureID);
+
+        var report = PatchService.InspectRegistryOverrideOwnership(root);
+
+        Assert.True(report.KeyExists);
+        Assert.True(report.Readable);
+        Assert.True(report.CurrentUserCanWrite);
+        Assert.Equal(2, report.RemainingValueNames.Count);
+        Assert.False(report.HasBlockingResidue);
+        Assert.StartsWith("Registry override residue: 2 value(s) remain", report.Summary, StringComparison.Ordinal);
+        Assert.EndsWith("current user can rewrite.", report.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AbsentOverridesKey_LeavesNoFeatureOverrideResidue()
     {
         using var root = Registry.CurrentUser.CreateSubKey(_root, writable: true)!;

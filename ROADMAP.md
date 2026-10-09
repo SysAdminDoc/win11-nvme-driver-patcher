@@ -19,15 +19,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified by grep (leftovers reported by the cleanup pass)
   Effort: S
 
-- [ ] P3 — `PatchServiceTests` still reads the live HKLM overrides key
-  Category: test-reliability
-  Where: `tests/NVMeDriverPatcher.Tests/PatchServiceTests.cs:20-31`, `InspectRegistryOverrideOwnership_ReadsLiveKeyWithoutMutatingIt`
-  Problem: The registry fixture work moved backup and residue coverage onto HKCU trees, but these two still read the real overrides key, so their interesting branches depend on whether the test machine is patched.
-  Fix: Point them at an HKCU fixture through the internal hive overloads the fixture tests already use, and keep one explicit live smoke test if the read path needs it.
-  Acceptance: Both pass with the same branches on a patched and an unpatched machine.
-  Confidence: Verified
-  Effort: S
-
 ### Unaudited — needs a pass
 
 ## Research-Driven Additions — 2026-08-11
