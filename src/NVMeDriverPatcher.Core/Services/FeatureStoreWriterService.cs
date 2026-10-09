@@ -492,20 +492,27 @@ public static class FeatureStoreWriterService
                         Summary = $"FeatureStore baseline is missing the {(bootStore ? "Boot" : "Runtime")} store."
                     };
 
-                var updates = entries.SelectMany(BuildRestoreUpdates).ToArray();
-                ulong changeStamp = 0;
-                int status = RtlSetFeatureConfigurations(
-                    ref changeStamp,
-                    bootStore ? ConfigurationType.Boot : ConfigurationType.Runtime,
-                    updates,
-                    (uint)updates.Length);
-                if (status != StatusSuccess)
+                // Two calls, resets first. Nothing documents whether one call takes the same ID twice
+                // or applies its array in order, and a reset that landed after the re-assert would
+                // wipe it. A failed second call still leaves the baseline's own priority untouched.
+                var (resets, restores) = BuildRestorePasses(entries);
+                foreach (var (pass, updates) in new[] { ("priority-8 reset", resets), ("exact restore", restores) })
                 {
-                    return new FeatureStoreWriteResult
+                    if (updates.Length == 0) continue;
+                    ulong changeStamp = 0;
+                    int status = RtlSetFeatureConfigurations(
+                        ref changeStamp,
+                        bootStore ? ConfigurationType.Boot : ConfigurationType.Runtime,
+                        updates,
+                        (uint)updates.Length);
+                    if (status != StatusSuccess)
                     {
-                        Success = false,
-                        Summary = $"RtlSetFeatureConfigurations({(bootStore ? "Boot" : "Runtime")}) exact restore failed with NTSTATUS 0x{status:X8}."
-                    };
+                        return new FeatureStoreWriteResult
+                        {
+                            Success = false,
+                            Summary = $"RtlSetFeatureConfigurations({(bootStore ? "Boot" : "Runtime")}) {pass} failed with NTSTATUS 0x{status:X8}."
+                        };
+                    }
                 }
             }
 
@@ -568,6 +575,32 @@ public static class FeatureStoreWriterService
     internal static IReadOnlyList<(uint FeatureId, uint Priority, uint Operation)> DescribeRestorePlan(
         FeatureStoreConfigurationBaseline entry)
         => BuildRestoreUpdates(entry).Select(u => (u.FeatureId, u.Priority, u.Operation)).ToArray();
+
+    // One store's restore as two arrays, each naming an ID at most once: the priority-8 resets
+    // BuildRestoreUpdates puts ahead of a re-assert, then every entry's own restore update.
+    private static (RTL_FEATURE_CONFIGURATION_UPDATE[] Resets, RTL_FEATURE_CONFIGURATION_UPDATE[] Restores)
+        BuildRestorePasses(IReadOnlyList<FeatureStoreConfigurationBaseline> entries)
+    {
+        var resets = new List<RTL_FEATURE_CONFIGURATION_UPDATE>();
+        var restores = new List<RTL_FEATURE_CONFIGURATION_UPDATE>();
+        foreach (var entry in entries)
+        {
+            var updates = BuildRestoreUpdates(entry).ToArray();
+            resets.AddRange(updates[..^1]);
+            restores.Add(updates[^1]);
+        }
+        return (resets.ToArray(), restores.ToArray());
+    }
+
+    internal static (
+        IReadOnlyList<(uint FeatureId, uint Priority, uint Operation)> Resets,
+        IReadOnlyList<(uint FeatureId, uint Priority, uint Operation)> Restores) DescribeRestorePasses(
+        IReadOnlyList<FeatureStoreConfigurationBaseline> entries)
+    {
+        var (resets, restores) = BuildRestorePasses(entries);
+        return (resets.Select(u => (u.FeatureId, u.Priority, u.Operation)).ToArray(),
+                restores.Select(u => (u.FeatureId, u.Priority, u.Operation)).ToArray());
+    }
 
     private static RTL_FEATURE_CONFIGURATION_UPDATE BuildRestoreUpdate(
         FeatureStoreConfigurationBaseline entry)
