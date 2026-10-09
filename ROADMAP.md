@@ -51,10 +51,3 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
 ### P2
 
 ### P3
-
-- [ ] P3 — Ship one shared runtime in the MSI instead of four
-  Why: v5.6.0's MSI and Intune zip are 211 MB each, because the GUI (89 MB), Tray (57 MB), CLI (44 MB) and Watchdog (44 MB) each embed their own .NET runtime. An MDL user complained about the size. Publishing the four self-contained but not single-file into one shared directory keeps the no-prerequisite install with one runtime copy.
-  Evidence: v5.6.0 release asset sizes; MDL native NVMe thread (2026 size complaint); `src/NVMeDriverPatcher/NVMeDriverPatcher.csproj:17-18`; `src/NVMeDriverPatcher.Cli/NVMeDriverPatcher.Cli.csproj:11-12`.
-  Touches: `Build-ReleaseArtifacts.ps1` MSI staging, the WiX source, the service and scheduled-task registration paths, `Validate-ReleaseAssets.ps1`. The portable single-file exes stay as they are. Relates to the P3 "dll-hosted runs register `dotnet.exe`" item above: a shared directory must still register the apphost exe, not `dotnet.exe`.
-  Acceptance: MSI and Intune zip sizes measured before and after; install, upgrade over the 5.6.0 MSI, repair and uninstall all pass; the service and tray start from the new layout.
-  Complexity: M
