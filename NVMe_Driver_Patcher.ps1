@@ -3821,62 +3821,26 @@ if ($script:ui['UpdateBadge']) {
 # Refresh button
 if ($script:ui['BtnRefresh']) {
     $script:ui['BtnRefresh'].Add_Click({
+        if ($script:bgHandle) {
+            Write-Log "A pre-flight check is already running"
+            return
+        }
         Write-Log "----------------------------------------"
         Write-Log "Refreshing system checks..."
         Set-ButtonsEnabled -Enabled $false
         $script:ui['BtnRefresh'].IsEnabled = $false
 
-        try {
-            Invoke-PreflightChecks | Out-Null
-            $script:CachedHealth = Get-NVMeHealthData
-            $script:CachedMigration = Get-StorageDiskMigration
-
-            # Update UI with fresh data
-            $bc = $script:BrushConverter
-            $checkToDot = @{
-                'WindowsVersion' = 'DotBuild'; 'NVMeDrives' = 'DotNVMe'; 'BitLocker' = 'DotBitLocker'
-                'VeraCrypt' = 'DotVeraCrypt'; 'LaptopPower' = 'DotPower'; 'DriverStatus' = 'DotDriver'
-                'ThirdPartyDriver' = 'Dot3rdParty'; 'Compatibility' = 'DotCompat'
-                'SystemProtection' = 'DotSysProt'; 'BypassIO' = 'DotBypassIO'
-            }
-            $checkToVal = @{
-                'WindowsVersion' = 'ValBuild'; 'NVMeDrives' = 'ValNVMe'; 'BitLocker' = 'ValBitLocker'
-                'VeraCrypt' = 'ValVeraCrypt'; 'LaptopPower' = 'ValPower'; 'DriverStatus' = 'ValDriver'
-                'ThirdPartyDriver' = 'Val3rdParty'; 'Compatibility' = 'ValCompat'
-                'SystemProtection' = 'ValSysProt'; 'BypassIO' = 'ValBypassIO'
-            }
-            foreach ($checkName in $script:PreflightChecks.Keys) {
-                $check = $script:PreflightChecks[$checkName]
-                $statusColor = switch ($check.Status) {
-                    "Pass" { "#FF22c55e" }; "Warning" { "#FFf59e0b" }; "Fail" { "#FFef4444" }
-                    "Info" { "#FF3b82f6" }; default { "#FF71717a" }
-                }
-                if ($checkToDot.ContainsKey($checkName) -and $script:ui[$checkToDot[$checkName]]) {
-                    $script:ui[$checkToDot[$checkName]].Fill = $bc.ConvertFromString($statusColor)
-                }
-                if ($checkToVal.ContainsKey($checkName) -and $script:ui[$checkToVal[$checkName]]) {
-                    $script:ui[$checkToVal[$checkName]].Text = $check.Message
-                    $script:ui[$checkToVal[$checkName]].Foreground = $bc.ConvertFromString($statusColor)
-                }
-            }
-            if ($script:IncompatibleSoftware -and $script:IncompatibleSoftware.Count -gt 0 -and $script:ui['ValCompat']) {
-                $tipLines = @($script:IncompatibleSoftware | ForEach-Object { "[$($_.Severity)] $($_.Name): $($_.Message)" })
-                $script:ui['ValCompat'].ToolTip = $tipLines -join "`n"
-            }
-
+        # The probes run in the background runspace; the window stays responsive until the repaint.
+        $started = Start-BackgroundPreflight -OnComplete {
+            param($r)
+            Update-PreflightDisplay $script:PreflightChecks
             Update-DrivesList
             Update-StatusDisplay
             Write-Log "Refresh complete"
         }
-        catch {
-            Write-Log "Refresh error: $($_.Exception.Message)" -Level "ERROR"
-        }
-        finally {
+        if (-not $started) {
             Set-ButtonsEnabled -Enabled $true
             $script:ui['BtnRefresh'].IsEnabled = $true
-            if (-not (Test-PreflightPassed) -or $script:VeraCryptDetected) {
-                if ($script:ui['BtnApply']) { $script:ui['BtnApply'].IsEnabled = $false }
-            }
         }
     })
 }
@@ -3951,6 +3915,246 @@ $script:ui['BtnExportLog'].Add_Click({
 # SECTION 19: ASYNC PREFLIGHT & WINDOW EVENTS
 # ===========================================================================
 
+# Paints the pre-flight dots and value labels. Shared by the startup run and the Refresh button.
+function Update-PreflightDisplay {
+    param($Checks)
+    if (-not $Checks) { return }
+    $bc = $script:BrushConverter
+
+    # Map checklist check names to UI element names
+    $checkToDot = @{
+        'WindowsVersion'   = 'DotBuild'
+        'NVMeDrives'       = 'DotNVMe'
+        'BitLocker'        = 'DotBitLocker'
+        'VeraCrypt'        = 'DotVeraCrypt'
+        'LaptopPower'      = 'DotPower'
+        'DriverStatus'     = 'DotDriver'
+        'ThirdPartyDriver' = 'Dot3rdParty'
+        'Compatibility'    = 'DotCompat'
+        'SystemProtection' = 'DotSysProt'
+        'BypassIO'         = 'DotBypassIO'
+    }
+    $checkToVal = @{
+        'WindowsVersion'   = 'ValBuild'
+        'NVMeDrives'       = 'ValNVMe'
+        'BitLocker'        = 'ValBitLocker'
+        'VeraCrypt'        = 'ValVeraCrypt'
+        'LaptopPower'      = 'ValPower'
+        'DriverStatus'     = 'ValDriver'
+        'ThirdPartyDriver' = 'Val3rdParty'
+        'Compatibility'    = 'ValCompat'
+        'SystemProtection' = 'ValSysProt'
+        'BypassIO'         = 'ValBypassIO'
+    }
+
+    foreach ($checkName in $Checks.Keys) {
+        $check = $Checks[$checkName]
+        $statusColor = switch ($check.Status) {
+            "Pass"    { "#FF22c55e" }
+            "Warning" { "#FFf59e0b" }
+            "Fail"    { "#FFef4444" }
+            "Info"    { "#FF3b82f6" }
+            default   { "#FF71717a" }
+        }
+
+        # Update dot
+        if ($checkToDot.ContainsKey($checkName) -and $script:ui[$checkToDot[$checkName]]) {
+            $script:ui[$checkToDot[$checkName]].Fill = $bc.ConvertFromString($statusColor)
+        }
+
+        # Update value label
+        if ($checkToVal.ContainsKey($checkName) -and $script:ui[$checkToVal[$checkName]]) {
+            $script:ui[$checkToVal[$checkName]].Text = $check.Message
+            $script:ui[$checkToVal[$checkName]].Foreground = $bc.ConvertFromString($statusColor)
+        }
+
+        # Add tooltip to Compatibility row with full software details
+        if ($checkName -eq 'Compatibility' -and $script:IncompatibleSoftware -and $script:IncompatibleSoftware.Count -gt 0 -and $script:ui['ValCompat']) {
+            $tipLines = @($script:IncompatibleSoftware | ForEach-Object { "[$($_.Severity)] $($_.Name): $($_.Message)" })
+            $script:ui['ValCompat'].ToolTip = $tipLines -join "`n"
+        }
+    }
+}
+
+# Runs the pre-flight probes (DISM/CIM/fsutil, 5-20 s) in a background runspace so the window stays
+# responsive, polls with a DispatcherTimer, marshals the results back into script scope, then calls
+# $OnComplete on the UI thread. $OnComplete receives the result table, or $null when the run had to
+# fall back to synchronous checks. Returns $false when nothing was started.
+function Start-BackgroundPreflight {
+    param(
+        [Parameter(Mandatory)][scriptblock]$OnComplete,
+        [bool]$CheckForUpdate = $false
+    )
+
+    if ($script:bgHandle) {
+        Write-Log "A pre-flight check is already running" -Level "INFO"
+        return $false
+    }
+
+    try {
+        # Build runspace with all needed function definitions
+        $funcNames = @('Get-WindowsBuildDetails', 'Get-NVMeHealthData', 'Get-SystemDrives',
+                       'Test-BitLockerEnabled', 'Test-VeraCryptSystemEncryption', 'Get-IncompatibleSoftware',
+                       'Test-LaptopChassis', 'Get-StorageDiskMigration', 'Get-NVMeDriverInfo', 'Test-NativeNVMeActive',
+                       'ConvertFrom-BypassIOState', 'Get-BypassIOStatus', 'Test-PatchStatus', 'Invoke-PreflightChecks',
+                       'Test-UpdateAvailable')
+        $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+        # Write-Log in the background runspace: collects messages for replay on UI thread
+        $bgLogFunc = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new(
+            'Write-Log', 'param([string]$Message, [string]$Level = "INFO"); if (-not $script:BgLogMessages) { $script:BgLogMessages = [System.Collections.ArrayList]::new() }; [void]$script:BgLogMessages.Add(@{ Message = $Message; Level = $Level })')
+        $iss.Commands.Add($bgLogFunc)
+        foreach ($fn in $funcNames) {
+            $cmd = Get-Command $fn -ErrorAction SilentlyContinue
+            if ($cmd) {
+                $entry = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new($fn, $cmd.Definition)
+                $iss.Commands.Add($entry)
+            }
+        }
+
+        $bgRunspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($iss)
+        $bgRunspace.Open()
+        $bgPS = [PowerShell]::Create()
+        $bgPS.Runspace = $bgRunspace
+
+        $configCopy = $script:Config.Clone()
+        $configCopy.FeatureNames = $script:Config.FeatureNames.Clone()
+        $configCopy.LogHistory = [System.Collections.ArrayList]::new()
+        $configCopy.SilentMode = $true
+
+        [void]$bgPS.AddScript({
+            param($cfg, $checkForUpdate)
+            $script:Config = $cfg
+            $checks = Invoke-PreflightChecks
+            $healthData = Get-NVMeHealthData
+            $migrationData = Get-StorageDiskMigration
+            # Update check in its own try/catch -- network calls can hang despite TimeoutSec
+            $updateInfo = $null
+            if ($checkForUpdate) {
+                try { $updateInfo = Test-UpdateAvailable } catch {}
+            }
+            return @{
+                Checks              = $checks
+                BuildDetails        = $script:BuildDetails
+                CachedDrives        = $script:CachedDrives
+                HasNVMeDrives       = $script:HasNVMeDrives
+                BitLockerEnabled    = $script:BitLockerEnabled
+                VeraCryptDetected   = $script:VeraCryptDetected
+                IsLaptop            = $script:IsLaptop
+                IncompatibleSoftware = $script:IncompatibleSoftware
+                DriverInfo          = $script:DriverInfo
+                NativeNVMeStatus    = $script:NativeNVMeStatus
+                BypassIOStatus      = $script:BypassIOStatus
+                BgLogMessages       = $script:BgLogMessages
+                CachedHealth        = $healthData
+                CachedMigration     = $migrationData
+                UpdateAvailable     = $updateInfo
+            }
+        }).AddParameter('cfg', $configCopy).AddParameter('checkForUpdate', $CheckForUpdate)
+
+        $script:bgPS = $bgPS
+        $script:bgRunspace = $bgRunspace
+        $script:preflightOnComplete = $OnComplete
+        $script:bgHandle = $bgPS.BeginInvoke()
+        $script:bgStartTime = [System.Diagnostics.Stopwatch]::StartNew()
+    }
+    catch {
+        Write-Log "Could not start the background pre-flight check: $($_.Exception.Message)" -Level "ERROR"
+        $script:bgHandle = $null
+        return $false
+    }
+
+    # Poll for completion with a DispatcherTimer
+    $script:preflightTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $script:preflightTimer.Interval = [TimeSpan]::FromMilliseconds(200)
+    $script:preflightTimer.Add_Tick({
+        $needSync = $false
+        $r = $null
+
+        if (-not $script:bgHandle.IsCompleted) {
+            # Timeout: if preflight takes longer than 90 seconds, abort and run synchronously
+            if ($script:bgStartTime.ElapsedMilliseconds -le 90000) { return }
+            $script:preflightTimer.Stop()
+            Write-Log "Pre-flight background check timed out after 90s -- running synchronously..." -Level "WARNING"
+            try { $script:bgPS.Stop(); $script:bgPS.Dispose(); $script:bgRunspace.Dispose() } catch {}
+            $needSync = $true
+        }
+        else {
+            $script:preflightTimer.Stop()
+            try {
+                # Surface any errors from the background runspace
+                if ($script:bgPS.HadErrors) {
+                    foreach ($err in $script:bgPS.Streams.Error) {
+                        Write-Log "Preflight error: $($err.Exception.Message)" -Level "ERROR"
+                    }
+                }
+
+                $resultList = $script:bgPS.EndInvoke($script:bgHandle)
+                if (-not $resultList -or $resultList.Count -eq 0) {
+                    Write-Log "Pre-flight returned no results -- falling back to synchronous checks" -Level "WARNING"
+                    $needSync = $true
+                }
+                else {
+                    $r = $resultList[0]
+
+                    # Marshal results back to script scope
+                    $script:PreflightChecks     = $r.Checks
+                    $script:BuildDetails        = $r.BuildDetails
+                    $script:CachedDrives        = $r.CachedDrives
+                    $script:HasNVMeDrives       = $r.HasNVMeDrives
+                    $script:BitLockerEnabled    = $r.BitLockerEnabled
+                    $script:VeraCryptDetected   = $r.VeraCryptDetected
+                    $script:IsLaptop            = $r.IsLaptop
+                    $script:IncompatibleSoftware = $r.IncompatibleSoftware
+                    $script:DriverInfo          = $r.DriverInfo
+                    $script:NativeNVMeStatus    = $r.NativeNVMeStatus
+                    $script:BypassIOStatus      = $r.BypassIOStatus
+                    $script:CachedHealth        = $r.CachedHealth
+                    $script:CachedMigration     = $r.CachedMigration
+
+                    # Replay background log messages on the UI thread
+                    if ($r.BgLogMessages) {
+                        foreach ($msg in $r.BgLogMessages) {
+                            Write-Log $msg.Message -Level $msg.Level
+                        }
+                    }
+                }
+            }
+            catch {
+                Write-Log "Pre-flight check error: $($_.Exception.Message)" -Level "ERROR"
+            }
+            try { $script:bgPS.Dispose(); $script:bgRunspace.Dispose() } catch {}
+        }
+        $script:bgHandle = $null
+
+        if ($needSync) {
+            try {
+                Invoke-PreflightChecks | Out-Null
+                $script:CachedHealth = Get-NVMeHealthData
+                $script:CachedMigration = Get-StorageDiskMigration
+            }
+            catch {
+                Write-Log "Pre-flight error: $($_.Exception.Message)" -Level "ERROR"
+            }
+        }
+
+        try {
+            & $script:preflightOnComplete $r
+        }
+        catch {
+            Write-Log "Pre-flight check error: $($_.Exception.Message)" -Level "ERROR"
+        }
+        finally {
+            Set-ButtonsEnabled -Enabled $true
+            if ($script:ui['BtnRefresh']) { $script:ui['BtnRefresh'].IsEnabled = $true }
+            if (-not (Test-PreflightPassed) -or $script:VeraCryptDetected) {
+                if ($script:ui['BtnApply']) { $script:ui['BtnApply'].IsEnabled = $false }
+            }
+        }
+    })
+    $script:preflightTimer.Start()
+    return $true
+}
+
 $script:window.Add_ContentRendered({
     Write-Log "$($script:Config.AppName) v$($script:Config.AppVersion) started"
     Write-Log "Working directory: $($script:Config.WorkingDir)"
@@ -3958,207 +4162,14 @@ $script:window.Add_ContentRendered({
     Write-Log "Running pre-flight checks..."
     Set-ButtonsEnabled -Enabled $false
 
-    # Build runspace with all needed function definitions
-    $funcNames = @('Get-WindowsBuildDetails', 'Get-NVMeHealthData', 'Get-SystemDrives',
-                   'Test-BitLockerEnabled', 'Test-VeraCryptSystemEncryption', 'Get-IncompatibleSoftware',
-                   'Test-LaptopChassis', 'Get-StorageDiskMigration', 'Get-NVMeDriverInfo', 'Test-NativeNVMeActive',
-                   'ConvertFrom-BypassIOState', 'Get-BypassIOStatus', 'Test-PatchStatus', 'Invoke-PreflightChecks',
-                   'Test-UpdateAvailable')
-    $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
-    # Write-Log in the background runspace: collects messages for replay on UI thread
-    $bgLogFunc = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new(
-        'Write-Log', 'param([string]$Message, [string]$Level = "INFO"); if (-not $script:BgLogMessages) { $script:BgLogMessages = [System.Collections.ArrayList]::new() }; [void]$script:BgLogMessages.Add(@{ Message = $Message; Level = $Level })')
-    $iss.Commands.Add($bgLogFunc)
-    foreach ($fn in $funcNames) {
-        $cmd = Get-Command $fn -ErrorAction SilentlyContinue
-        if ($cmd) {
-            $entry = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new($fn, $cmd.Definition)
-            $iss.Commands.Add($entry)
-        }
-    }
+    $started = Start-BackgroundPreflight -CheckForUpdate $true -OnComplete {
+        param($r)
+        Update-PreflightDisplay $script:PreflightChecks
 
-    $bgRunspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($iss)
-    $bgRunspace.Open()
-    $bgPS = [PowerShell]::Create()
-    $bgPS.Runspace = $bgRunspace
-
-    $configCopy = $script:Config.Clone()
-    $configCopy.FeatureNames = $script:Config.FeatureNames.Clone()
-    $configCopy.LogHistory = [System.Collections.ArrayList]::new()
-    $configCopy.SilentMode = $true
-
-    [void]$bgPS.AddScript({
-        param($cfg)
-        $script:Config = $cfg
-        $checks = Invoke-PreflightChecks
-        $healthData = Get-NVMeHealthData
-        $migrationData = Get-StorageDiskMigration
-        # Update check in its own try/catch -- network calls can hang despite TimeoutSec
-        $updateInfo = $null
-        try { $updateInfo = Test-UpdateAvailable } catch {}
-        return @{
-            Checks              = $checks
-            BuildDetails        = $script:BuildDetails
-            CachedDrives        = $script:CachedDrives
-            HasNVMeDrives       = $script:HasNVMeDrives
-            BitLockerEnabled    = $script:BitLockerEnabled
-            VeraCryptDetected   = $script:VeraCryptDetected
-            IsLaptop            = $script:IsLaptop
-            IncompatibleSoftware = $script:IncompatibleSoftware
-            DriverInfo          = $script:DriverInfo
-            NativeNVMeStatus    = $script:NativeNVMeStatus
-            BypassIOStatus      = $script:BypassIOStatus
-            BgLogMessages       = $script:BgLogMessages
-            CachedHealth        = $healthData
-            CachedMigration     = $migrationData
-            UpdateAvailable     = $updateInfo
-        }
-    }).AddParameter('cfg', $configCopy)
-
-    $script:bgHandle = $bgPS.BeginInvoke()
-    $script:bgPS = $bgPS
-    $script:bgRunspace = $bgRunspace
-    $script:bgStartTime = [System.Diagnostics.Stopwatch]::StartNew()
-
-    # Poll for completion with a DispatcherTimer
-    $script:preflightTimer = New-Object System.Windows.Threading.DispatcherTimer
-    $script:preflightTimer.Interval = [TimeSpan]::FromMilliseconds(200)
-    $script:preflightTimer.Add_Tick({
-        if (-not $script:bgHandle.IsCompleted) {
-            # Timeout: if preflight takes longer than 90 seconds, abort and run synchronously
-            if ($script:bgStartTime.ElapsedMilliseconds -gt 90000) {
-                $script:preflightTimer.Stop()
-                Write-Log "Pre-flight background check timed out after 90s -- running synchronously..." -Level "WARNING"
-                try { $script:bgPS.Stop(); $script:bgPS.Dispose(); $script:bgRunspace.Dispose() } catch {}
-                # Fall back to synchronous preflight
-                try {
-                    Invoke-PreflightChecks | Out-Null
-                    $script:CachedHealth = Get-NVMeHealthData
-                    Update-DrivesList
-                    Update-StatusDisplay
-                    try { $script:UpdateAvailable = Test-UpdateAvailable } catch {}
-                    try {
-                        $rebootCheck = Test-PatchAppliedSinceLastRun
-                        if ($rebootCheck.Changed) {
-                            Write-Log "========== POST-REBOOT VERIFICATION ==========" -Level "SUCCESS"
-                            Write-Log "  $($rebootCheck.Message)" -Level "SUCCESS"
-                            Write-Log "===============================================" -Level "SUCCESS"
-                        }
-                    } catch {}
-                    Write-Log "Ready. Select an action above."
-                } catch {
-                    Write-Log "Pre-flight error: $($_.Exception.Message)" -Level "ERROR"
-                }
-                Set-ButtonsEnabled -Enabled $true
-                if (-not (Test-PreflightPassed) -or $script:VeraCryptDetected) {
-                    if ($script:ui['BtnApply']) { $script:ui['BtnApply'].IsEnabled = $false }
-                }
-                return
-            }
-            return
-        }
-
-        $script:preflightTimer.Stop()
-
-        try {
-            # Surface any errors from the background runspace
-            if ($script:bgPS.HadErrors) {
-                foreach ($err in $script:bgPS.Streams.Error) {
-                    Write-Log "Preflight error: $($err.Exception.Message)" -Level "ERROR"
-                }
-            }
-
-            $resultList = $script:bgPS.EndInvoke($script:bgHandle)
-            if (-not $resultList -or $resultList.Count -eq 0) {
-                Write-Log "Pre-flight returned no results -- falling back to synchronous checks" -Level "WARNING"
-                Invoke-PreflightChecks | Out-Null
-                $script:CachedHealth = Get-NVMeHealthData
-                Update-DrivesList
-                Update-StatusDisplay
-                Write-Log "Ready. Select an action above."
-                return
-            }
-            $r = $resultList[0]
-
-            # Marshal results back to script scope
-            $script:BuildDetails        = $r.BuildDetails
-            $script:CachedDrives        = $r.CachedDrives
-            $script:HasNVMeDrives       = $r.HasNVMeDrives
-            $script:BitLockerEnabled    = $r.BitLockerEnabled
-            $script:VeraCryptDetected   = $r.VeraCryptDetected
-            $script:IsLaptop            = $r.IsLaptop
-            $script:IncompatibleSoftware = $r.IncompatibleSoftware
-            $script:DriverInfo          = $r.DriverInfo
-            $script:NativeNVMeStatus    = $r.NativeNVMeStatus
-            $script:BypassIOStatus      = $r.BypassIOStatus
-            $checks                     = $r.Checks
-
-            # Replay background log messages on the UI thread
-            if ($r.BgLogMessages) {
-                foreach ($msg in $r.BgLogMessages) {
-                    Write-Log $msg.Message -Level $msg.Level
-                }
-            }
-
-            $bc = $script:BrushConverter
-
-            # Map checklist check names to UI element names
-            $checkToDot = @{
-                'WindowsVersion'   = 'DotBuild'
-                'NVMeDrives'       = 'DotNVMe'
-                'BitLocker'        = 'DotBitLocker'
-                'VeraCrypt'        = 'DotVeraCrypt'
-                'LaptopPower'      = 'DotPower'
-                'DriverStatus'     = 'DotDriver'
-                'ThirdPartyDriver' = 'Dot3rdParty'
-                'Compatibility'    = 'DotCompat'
-                'SystemProtection' = 'DotSysProt'
-                'BypassIO'         = 'DotBypassIO'
-            }
-            $checkToVal = @{
-                'WindowsVersion'   = 'ValBuild'
-                'NVMeDrives'       = 'ValNVMe'
-                'BitLocker'        = 'ValBitLocker'
-                'VeraCrypt'        = 'ValVeraCrypt'
-                'LaptopPower'      = 'ValPower'
-                'DriverStatus'     = 'ValDriver'
-                'ThirdPartyDriver' = 'Val3rdParty'
-                'Compatibility'    = 'ValCompat'
-                'SystemProtection' = 'ValSysProt'
-                'BypassIO'         = 'ValBypassIO'
-            }
-
-            foreach ($checkName in $checks.Keys) {
-                $check = $checks[$checkName]
-                $statusColor = switch ($check.Status) {
-                    "Pass"    { "#FF22c55e" }
-                    "Warning" { "#FFf59e0b" }
-                    "Fail"    { "#FFef4444" }
-                    "Info"    { "#FF3b82f6" }
-                    default   { "#FF71717a" }
-                }
-
-                # Update dot
-                if ($checkToDot.ContainsKey($checkName) -and $script:ui[$checkToDot[$checkName]]) {
-                    $script:ui[$checkToDot[$checkName]].Fill = $bc.ConvertFromString($statusColor)
-                }
-
-                # Update value label
-                if ($checkToVal.ContainsKey($checkName) -and $script:ui[$checkToVal[$checkName]]) {
-                    $script:ui[$checkToVal[$checkName]].Text = $check.Message
-                    $script:ui[$checkToVal[$checkName]].Foreground = $bc.ConvertFromString($statusColor)
-                }
-
-                # Add tooltip to Compatibility row with full software details
-                if ($checkName -eq 'Compatibility' -and $script:IncompatibleSoftware -and $script:IncompatibleSoftware.Count -gt 0 -and $script:ui['ValCompat']) {
-                    $tipLines = @($script:IncompatibleSoftware | ForEach-Object { "[$($_.Severity)] $($_.Name): $($_.Message)" })
-                    $script:ui['ValCompat'].ToolTip = $tipLines -join "`n"
-                }
-            }
-
+        if ($r) {
             # Log all check results
-            foreach ($checkName in $checks.Keys) {
-                $check = $checks[$checkName]
+            foreach ($checkName in $script:PreflightChecks.Keys) {
+                $check = $script:PreflightChecks[$checkName]
                 $level = switch ($check.Status) {
                     "Pass"    { "SUCCESS" }
                     "Warning" { "WARNING" }
@@ -4169,9 +4180,6 @@ $script:window.Add_ContentRendered({
                 Write-Log "  [$checkName] $($check.Message)" -Level $level
             }
 
-            # Health and migration data loaded in background runspace
-            $script:CachedHealth = $r.CachedHealth
-            $script:CachedMigration = $r.CachedMigration
             Update-DrivesList
 
             # Log firmware versions
@@ -4212,62 +4220,56 @@ $script:window.Add_ContentRendered({
                     $script:ui['UpdateBadge'].ToolTip = "Click to download v$($script:UpdateAvailable.Version)"
                 }
             }
+        }
+        else {
+            # Synchronous fallback already ran the probes
+            Update-DrivesList
+            Update-StatusDisplay
+        }
 
-            # Show last benchmark IOPS in status card
-            try {
-                $benchHistory = Get-BenchmarkHistory
-                if ($benchHistory.Count -gt 0) {
-                    $lastBench = $benchHistory[-1]
-                    if ($lastBench.Read -and $lastBench.Read.IOPS -gt 0) {
-                        if ($script:ui['BenchLabel']) {
-                            $script:ui['BenchLabel'].Text = "Last bench: $($lastBench.Read.IOPS) IOPS read / $($lastBench.Write.IOPS) IOPS write ($($lastBench.Label))"
-                            $script:ui['BenchLabel'].Visibility = 'Visible'
-                        }
+        # Show last benchmark IOPS in status card
+        try {
+            $benchHistory = Get-BenchmarkHistory
+            if ($benchHistory.Count -gt 0) {
+                $lastBench = $benchHistory[-1]
+                if ($lastBench.Read -and $lastBench.Read.IOPS -gt 0) {
+                    if ($script:ui['BenchLabel']) {
+                        $script:ui['BenchLabel'].Text = "Last bench: $($lastBench.Read.IOPS) IOPS read / $($lastBench.Write.IOPS) IOPS write ($($lastBench.Label))"
+                        $script:ui['BenchLabel'].Visibility = 'Visible'
                     }
                 }
             }
-            catch { <# Benchmark display best-effort #> }
+        }
+        catch { <# Benchmark display best-effort #> }
 
-            # Post-reboot verification detection
-            try {
-                $rebootCheck = Test-PatchAppliedSinceLastRun
-                if ($rebootCheck.Changed) {
-                    Write-Log "" -Level "INFO"
-                    Write-Log "========== POST-REBOOT VERIFICATION ==========" -Level "SUCCESS"
-                    Write-Log "  $($rebootCheck.Message)" -Level "SUCCESS"
-                    if ($rebootCheck.Driver) { Write-Log "  Active driver: $($rebootCheck.Driver)" -Level "SUCCESS" }
-                    if ($rebootCheck.Migration) {
-                        if ($rebootCheck.Migration.Migrated.Count -gt 0) {
-                            Write-Log "  Migrated to Storage disks:" -Level "SUCCESS"
-                            foreach ($d in $rebootCheck.Migration.Migrated) { Write-Log "    + $d" -Level "SUCCESS" }
-                        }
-                        if ($rebootCheck.Migration.Legacy.Count -gt 0) {
-                            Write-Log "  Still under Disk drives (legacy):" -Level "WARNING"
-                            foreach ($d in $rebootCheck.Migration.Legacy) { Write-Log "    - $d" -Level "WARNING" }
-                        }
+        # Post-reboot verification detection
+        try {
+            $rebootCheck = Test-PatchAppliedSinceLastRun
+            if ($rebootCheck.Changed) {
+                Write-Log "" -Level "INFO"
+                Write-Log "========== POST-REBOOT VERIFICATION ==========" -Level "SUCCESS"
+                Write-Log "  $($rebootCheck.Message)" -Level "SUCCESS"
+                if ($rebootCheck.Driver) { Write-Log "  Active driver: $($rebootCheck.Driver)" -Level "SUCCESS" }
+                if ($rebootCheck.Migration) {
+                    if ($rebootCheck.Migration.Migrated.Count -gt 0) {
+                        Write-Log "  Migrated to Storage disks:" -Level "SUCCESS"
+                        foreach ($d in $rebootCheck.Migration.Migrated) { Write-Log "    + $d" -Level "SUCCESS" }
                     }
-                    Write-Log "===============================================" -Level "SUCCESS"
-                    Write-Log ""
-                    Show-ToastNotification -Title "NVMe Driver Active" -Message $rebootCheck.Message -Type "Success"
+                    if ($rebootCheck.Migration.Legacy.Count -gt 0) {
+                        Write-Log "  Still under Disk drives (legacy):" -Level "WARNING"
+                        foreach ($d in $rebootCheck.Migration.Legacy) { Write-Log "    - $d" -Level "WARNING" }
+                    }
                 }
+                Write-Log "===============================================" -Level "SUCCESS"
+                Write-Log ""
+                Show-ToastNotification -Title "NVMe Driver Active" -Message $rebootCheck.Message -Type "Success"
             }
-            catch { <# Post-reboot check is best-effort #> }
+        }
+        catch { <# Post-reboot check is best-effort #> }
 
-            Write-Log "Ready. Select an action above."
-        }
-        catch {
-            Write-Log "Pre-flight check error: $($_.Exception.Message)" -Level "ERROR"
-        }
-        finally {
-            $script:bgPS.Dispose()
-            $script:bgRunspace.Dispose()
-            Set-ButtonsEnabled -Enabled $true
-            if (-not (Test-PreflightPassed) -or $script:VeraCryptDetected) {
-                if ($script:ui['BtnApply']) { $script:ui['BtnApply'].IsEnabled = $false }
-            }
-        }
-    }.GetNewClosure())
-    $script:preflightTimer.Start()
+        Write-Log "Ready. Select an action above."
+    }
+    if (-not $started) { Set-ButtonsEnabled -Enabled $true }
 
     Write-AppEventLog -Message "$($script:Config.AppName) v$($script:Config.AppVersion) started" -EntryType "Information" -EventId 1000
 })

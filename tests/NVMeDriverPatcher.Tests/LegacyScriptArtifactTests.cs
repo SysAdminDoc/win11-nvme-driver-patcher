@@ -119,6 +119,28 @@ public sealed class LegacyScriptArtifactTests
         Assert.DoesNotContain("GAP ", result.StdOut, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RefreshAndStartup_BothRunPreflightThroughTheBackgroundRunspace()
+    {
+        // Refresh used to run the DISM/CIM/fsutil probes inline on the dispatcher thread. Both entry
+        // points must go through Start-BackgroundPreflight, and neither handler may probe directly.
+        var result = RunPowerShellScript(Path.GetTempPath(), """
+            $tokens = $null; $errors = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($ScriptPath, [ref]$tokens, [ref]$errors)
+            $calls = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] }, $true)
+            foreach ($pair in @(@('Add_Click', 'BtnRefresh'), @('Add_ContentRendered', 'window'))) {
+                $handler = $calls | Where-Object { $_.Member.Value -eq $pair[0] -and $_.Expression.Extent.Text -match $pair[1] } | Select-Object -First 1
+                if (-not $handler) { "MISSING $($pair[0]) handler for $($pair[1])"; continue }
+                $text = $handler.Extent.Text
+                if ($text -notmatch 'Start-BackgroundPreflight') { "SYNC $($pair[1]) handler does not call Start-BackgroundPreflight" }
+                if ($text -match 'Invoke-PreflightChecks|Get-NVMeHealthData|Get-StorageDiskMigration') { "SYNC $($pair[1]) handler probes inline" }
+            }
+            """);
+        Assert.True(result.ExitCode == 0, result.StdOut + Environment.NewLine + result.StdErr);
+        Assert.DoesNotContain("MISSING ", result.StdOut, StringComparison.Ordinal);
+        Assert.DoesNotContain("SYNC ", result.StdOut, StringComparison.Ordinal);
+    }
+
     private const string Tool =
         @"(?<tool>powershell|pwsh|shutdown|explorer|fsutil|reg|regedit|cmd|notepad|bcdedit|pnputil|dism|manage-bde|wevtutil|sc|schtasks)(?:\.exe)?";
 
