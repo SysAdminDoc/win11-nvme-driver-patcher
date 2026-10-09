@@ -37,6 +37,7 @@ $windowsPowerShellAliases = @{
     icm = 'Invoke-Command'; ii = 'Invoke-Item'; sajb = 'Start-Job'; ndr = 'New-PSDrive'; mount = 'New-PSDrive'
     cd = 'Set-Location'; chdir = 'Set-Location'; sl = 'Set-Location'; pushd = 'Push-Location'
     sal = 'Set-Alias'; nal = 'New-Alias'; ipal = 'Import-Alias'
+    sv = 'Set-Variable'; set = 'Set-Variable'; nv = 'New-Variable'; clv = 'Clear-Variable'; rv = 'Remove-Variable'
 }
 foreach ($entry in $windowsPowerShellAliases.GetEnumerator()) {
     if (-not $script:CommandAliases.ContainsKey($entry.Key)) { $script:CommandAliases[$entry.Key] = $entry.Value }
@@ -116,17 +117,17 @@ function Get-VariableOriginIndex {
     return $index
 }
 
-# The text of a node plus, transitively, every origin of the variables it reads, so
+# A node plus, transitively, every origin of the variables it reads, so
 # `$key = 'HKLM:\...'; New-Item $key` is judged by what $key holds rather than by its name.
-function Get-ReachableText {
+function Get-ReachableNode {
     param($Node, [hashtable]$Index)
-    $texts = New-Object System.Collections.Generic.List[string]
+    $nodes = New-Object System.Collections.Generic.List[object]
     $seen = @{}
     $queue = New-Object System.Collections.Generic.Queue[object]
     $queue.Enqueue($Node)
-    while ($queue.Count -gt 0 -and $texts.Count -lt 256) {
+    while ($queue.Count -gt 0 -and $nodes.Count -lt 256) {
         $current = $queue.Dequeue()
-        $texts.Add($current.Extent.Text)
+        $nodes.Add($current)
         foreach ($variable in @($current.FindAll({
             param($n)
             $n -is [System.Management.Automation.Language.VariableExpressionAst]
@@ -145,8 +146,38 @@ function Get-ReachableText {
             foreach ($origin in $Index[$key]) { $queue.Enqueue($origin) }
         }
     }
-    return ($texts -join "`n")
+    return $nodes.ToArray()
 }
+
+function Get-ReachableText {
+    param($Node, [hashtable]$Index)
+    $texts = foreach ($reached in @(Get-ReachableNode -Node $Node -Index $Index)) { $reached.Extent.Text }
+    return (@($texts) -join "`n")
+}
+
+# The string values a node can carry: its own literals plus those of every variable origin feeding it.
+# Literals inside script block bodies are left out; the commands in those bodies are checked where they stand.
+function Get-ReachableString {
+    param($Node, [hashtable]$Index)
+    $values = New-Object System.Collections.Generic.List[string]
+    foreach ($source in @(Get-ReachableNode -Node $Node -Index $Index)) {
+        foreach ($literal in @($source.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.StringConstantExpressionAst] -or
+            $n -is [System.Management.Automation.Language.ExpandableStringExpressionAst]
+        }, $true))) {
+            $inBlock = $false
+            for ($p = $literal.Parent; $p -and $p -ne $source.Parent; $p = $p.Parent) {
+                if ($p -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) { $inBlock = $true; break }
+            }
+            if (-not $inBlock -and $literal.Value) { $values.Add([string]$literal.Value) }
+        }
+    }
+    return $values.ToArray()
+}
+
+# Registry and driver tools, by leaf name. A launch target held in a variable is judged by these.
+$script:WatchedToolLeaf = '(?i)^(reg|regedit|regedit32|pnputil|devcon)(\.exe)?$'
 
 function Get-OwningFunctionName {
     param($Node)
@@ -160,19 +191,22 @@ function Get-OwningFunctionName {
 # artifact needs none: its only call is the top-level `if (-not $Status)` guard.
 $script:EventLogInitializerCallers = @()
 
-# True when the call sits in the true branch of `if (-not $Status)` / `if (!$Status)` with no deferred
-# script block or unlisted function between them. A function body or script block can be invoked from
-# anywhere, so an enclosing guard outside it proves nothing.
+# True when the call sits in the true branch of `if (-not $Status)` / `if (!$Status)` at script level, with
+# no function or script block anywhere above it. A function body or script block can be invoked from
+# anywhere, so an enclosing guard outside it proves nothing, and inside one `$Status` can be its own
+# parameter (`function F { param($Status) if (-not $Status) { ... } }`) rather than the script's switch.
+# Functions named in $script:EventLogInitializerCallers may call it without a guard.
 function Test-StatusGuardedCall {
     param($Command)
+    $guarded = $false
     $child = $Command
     $walker = $Command.Parent
     while ($walker) {
-        if ($walker -is [System.Management.Automation.Language.IfStatementAst]) {
+        if (-not $guarded -and $walker -is [System.Management.Automation.Language.IfStatementAst]) {
             foreach ($clause in $walker.Clauses) {
                 $isThisBranch = $clause.Item2.Extent.StartOffset -eq $child.Extent.StartOffset -and
                     $clause.Item2.Extent.EndOffset -eq $child.Extent.EndOffset
-                if ($isThisBranch -and $clause.Item1.Extent.Text.Trim() -match '^(-not\s*|!\s*)\$Status$') { return $true }
+                if ($isThisBranch -and $clause.Item1.Extent.Text.Trim() -match '^(-not\s*|!\s*)\$Status$') { $guarded = $true }
             }
         }
         if ($walker -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
@@ -185,11 +219,14 @@ function Test-StatusGuardedCall {
         $child = $walker
         $walker = $walker.Parent
     }
-    return $false
+    return $guarded
 }
 
+# -Fragment checks a string some launcher hands to another shell (`powershell -Command "..."`, `iex '...'`,
+# `cmd /c "..."`) as if it were code: only the command and member checks run, parse errors are expected
+# (cmd syntax), and the artifact-level checks are skipped. Depth bounds strings nested in strings.
 function Get-BoundaryFailure {
-    param([string]$Source)
+    param([string]$Source, [switch]$Fragment, [int]$Depth = 0)
 
     $tokens = $null
     $parseErrors = $null
@@ -199,14 +236,9 @@ function Get-BoundaryFailure {
         [ref]$parseErrors)
 
     $failures = New-Object System.Collections.Generic.List[string]
-    foreach ($parseError in @($parseErrors)) {
-        $failures.Add("PowerShell parse error at line $($parseError.Extent.StartLineNumber): $($parseError.Message)")
-    }
-
-    $parameterNames = @($ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
-    foreach ($required in @('Apply', 'Remove', 'Status', 'ExportDiagnostics', 'GenerateVerifyScript', 'ExportRecoveryKit')) {
-        if ($parameterNames -notcontains $required) {
-            $failures.Add("required legacy parameter is missing: -$required")
+    if (-not $Fragment) {
+        foreach ($parseError in @($parseErrors)) {
+            $failures.Add("PowerShell parse error at line $($parseError.Extent.StartLineNumber): $($parseError.Message)")
         }
     }
 
@@ -214,18 +246,27 @@ function Get-BoundaryFailure {
         param($node)
         $node -is [System.Management.Automation.Language.FunctionDefinitionAst]
     }, $true))
-    if ($functions.Name -contains 'Install-NVMePatch') {
-        $failures.Add('Install-NVMePatch must not exist in the read/recover-only artifact')
-    }
-    foreach ($requiredFunction in @(
-        'Test-PatchStatus',
-        'Uninstall-NVMePatch',
-        'Export-SystemDiagnostics',
-        'New-VerificationScript',
-        'Export-RecoveryKit'
-    )) {
-        if ($functions.Name -notcontains $requiredFunction) {
-            $failures.Add("required read/recovery function is missing: $requiredFunction")
+    if (-not $Fragment) {
+        $parameterNames = @($ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
+        foreach ($required in @('Apply', 'Remove', 'Status', 'ExportDiagnostics', 'GenerateVerifyScript', 'ExportRecoveryKit')) {
+            if ($parameterNames -notcontains $required) {
+                $failures.Add("required legacy parameter is missing: -$required")
+            }
+        }
+
+        if ($functions.Name -contains 'Install-NVMePatch') {
+            $failures.Add('Install-NVMePatch must not exist in the read/recover-only artifact')
+        }
+        foreach ($requiredFunction in @(
+            'Test-PatchStatus',
+            'Uninstall-NVMePatch',
+            'Export-SystemDiagnostics',
+            'New-VerificationScript',
+            'Export-RecoveryKit'
+        )) {
+            if ($functions.Name -notcontains $requiredFunction) {
+                $failures.Add("required read/recovery function is missing: $requiredFunction")
+            }
         }
     }
 
@@ -262,6 +303,15 @@ function Get-BoundaryFailure {
         $toolName = if ($name) { $name } elseif ($command.CommandElements.Count -gt 0) { $command.CommandElements[0].Extent.Text.Trim('"', "'") } else { '' }
         $leaf = if ($toolName) { ($toolName -split '[\\/]')[-1] } else { '' }
         $label = if ($typedName -and $typedName -ne $name) { "$name (typed as $typedName)" } else { $toolName }
+        # `$regExe = Join-Path $env:SystemRoot 'System32\reg.exe'; & $regExe add ...` names no tool where it
+        # runs, so a launch target held in a variable is judged by the strings that feed it.
+        if (-not $name -and $command.CommandElements.Count -gt 0 -and
+            -not ($command.CommandElements[0] -is [System.Management.Automation.Language.StringConstantExpressionAst])) {
+            foreach ($value in @(Get-ReachableString -Node $command.CommandElements[0] -Index $originIndex)) {
+                $valueLeaf = ($value.Trim().Trim('"', "'") -split '[\\/]')[-1]
+                if ($valueLeaf -match $script:WatchedToolLeaf) { $leaf = $valueLeaf; break }
+            }
+        }
 
         # A tool counts whether it is named bare, with .exe, or by full path.
         foreach ($candidate in @($name, $leaf, "$leaf.exe")) {
@@ -315,20 +365,34 @@ function Get-BoundaryFailure {
                 $failures.Add("prohibited registry tool call remains reachable at line ${line}: $label")
             }
             elseif ($isLauncher) {
+                # What the launcher hands over: its own text plus every string reaching it through variables,
+                # so `$regExe = ...'reg.exe'; Start-Process $regExe` and `$cmd = '...'; iex $cmd` are seen.
+                $launchStrings = @(Get-ReachableString -Node $command -Index $originIndex)
+                $launchText = (@($text) + $launchStrings) -join "`n"
                 # `cmd /c reg add`, `Start-Process reg`: any reg/regedit launched through another process.
                 # A .reg file name (x.reg) is not the tool, so a leading dot does not count here.
-                if ($text -match '(?i)(?<![.\w-])reg(edit)?(32)?(\.exe)?(?![\w-])') {
+                if ($launchText -match '(?i)(?<![.\w-])reg(edit)?(32)?(\.exe)?(?![\w-])') {
                     $failures.Add("prohibited registry tool launch remains reachable at line ${line}: $label")
                 }
                 # Opening a .reg file runs a registry merge.
-                if ($name -in @('Start-Process', 'Invoke-Item') -and $text -match '(?i)\.reg\b') {
+                if ($name -in @('Start-Process', 'Invoke-Item') -and $launchText -match '(?i)\.reg\b') {
                     $failures.Add("prohibited registry file import remains reachable at line ${line}: $label")
                 }
                 # `powershell -Command "Set-ItemProperty ..."` and `iex '...'` hide the command inside a string.
                 foreach ($prohibited in $prohibitedCommands) {
-                    if ($text -match "(?i)(?<![\w-])$([regex]::Escape($prohibited))(?![\w-])") {
+                    if ($launchText -match "(?i)(?<![\w-])$([regex]::Escape($prohibited))(?![\w-])") {
                         $failures.Add("prohibited mutation command launched through $label at line ${line}: $prohibited")
                         break
+                    }
+                }
+                # The same strings read as code catch what a name scan can't: `sp` and other aliases,
+                # New-Item on a registry path, and bare tool names such as `pnputil` under cmd /c.
+                if ($Depth -lt 3) {
+                    foreach ($launched in $launchStrings) {
+                        if ([string]::IsNullOrWhiteSpace($launched)) { continue }
+                        foreach ($inner in @(Get-BoundaryFailure -Source $launched -Fragment -Depth ($Depth + 1))) {
+                            $failures.Add("prohibited command launched through $label at line ${line}: $inner")
+                        }
                     }
                 }
             }
@@ -352,6 +416,51 @@ function Get-BoundaryFailure {
         # CreateEventSource writes an HKLM event-log key; only Initialize-EventLogSource may do it.
         if ($memberName -eq 'CreateEventSource' -and (Get-OwningFunctionName $call) -ne 'Initialize-EventLogSource') {
             $failures.Add("CreateEventSource is reachable outside Initialize-EventLogSource at line $line")
+        }
+    }
+
+    # The artifact launches programs only with Start-Process or the call operator, which the checks above
+    # read. [Diagnostics.Process]::Start, a Process object or a ProcessStartInfo hides the program in
+    # arguments and properties those checks never follow, so the types themselves are off limits.
+    foreach ($typeNode in @($ast.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.TypeExpressionAst] -or
+        $node -is [System.Management.Automation.Language.TypeConstraintAst]
+    }, $true))) {
+        $typeName = $typeNode.TypeName.FullName
+        if ($typeName -match '(?i)^(System\.)?(Diagnostics\.)?Process(StartInfo)?$') {
+            $failures.Add("prohibited process launch API remains reachable at line $($typeNode.Extent.StartLineNumber): [$typeName]")
+        }
+    }
+    foreach ($command in $commands) {
+        if ((Resolve-CommandName $command.GetCommandName()) -eq 'New-Object' -and
+            $command.Extent.Text -match '(?i)\bDiagnostics\.Process(StartInfo)?\b|\bProcessStartInfo\b') {
+            $failures.Add("prohibited process launch API remains reachable at line $($command.Extent.StartLineNumber): New-Object $($Matches[0])")
+        }
+    }
+
+    if ($Fragment) { return $failures.ToArray() }
+
+    # `$Status = $false` (or $script:Status, or Set-Variable Status) at script level would make the guard
+    # below a lie. A function's own param($Status) is a different variable, and the guard check ignores it.
+    foreach ($assignment in @($ast.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.AssignmentStatementAst]
+    }, $true))) {
+        $target = $assignment.Left
+        while ($target -is [System.Management.Automation.Language.ConvertExpressionAst] -or
+               $target -is [System.Management.Automation.Language.AttributedExpressionAst]) { $target = $target.Child }
+        if (-not ($target -is [System.Management.Automation.Language.VariableExpressionAst])) { continue }
+        $assigned = $target.VariablePath.UserPath
+        if ($assigned -match '(?i)^(script|global):Status$' -or
+            ($assigned -match '(?i)^Status$' -and -not (Get-OwningFunctionName $assignment))) {
+            $failures.Add("the -Status switch is reassigned at line $($assignment.Extent.StartLineNumber)")
+        }
+    }
+    foreach ($command in $commands) {
+        if ((Resolve-CommandName $command.GetCommandName()) -in @('Set-Variable', 'New-Variable', 'Clear-Variable', 'Remove-Variable') -and
+            $command.Extent.Text -match '(?i)(?<![\w$:-])Status(?![\w-])') {
+            $failures.Add("the -Status switch is reassigned at line $($command.Extent.StartLineNumber)")
         }
     }
 
@@ -501,7 +610,28 @@ $fixtures = @(
     @{ Name = 'Set-Location into the registry'; Body = "Set-Location 'HKLM:\SOFTWARE'; New-Item -Name X -Force | Out-Null"; Expect = 'registry location change' },
     @{ Name = 'filesystem New-Item through a variable'; Body = '$dir = Join-Path $env:TEMP ''kit''; New-Item -Path $dir -ItemType Directory -Force | Out-Null'; Expect = $null },
     @{ Name = 'filesystem New-Item through a config member beside a SafeBoot path'; Body = "`$cfg = @{ WorkingDir = (Join-Path `$env:TEMP 'w'); SafeBootMinimal = '$safeBootKey' }; New-Item -Path `$cfg.WorkingDir -ItemType Directory -Force | Out-Null"; Expect = $null },
-    @{ Name = 'read-only reg query'; Body = 'reg query "HKLM\SOFTWARE\X" /v n'; Expect = $null }
+    @{ Name = 'read-only reg query'; Body = 'reg query "HKLM\SOFTWARE\X" /v n'; Expect = $null },
+    # Strings a launcher hands over are read as code too.
+    @{ Name = 'powershell -Command hiding an alias'; Body = 'powershell.exe -NoProfile -Command "sp -Path HKLM:\X -Name n -Value 1"'; Expect = 'launched through' },
+    @{ Name = 'iex hiding an alias'; Body = "iex 'sp -Path HKLM:\X -Name n -Value 1'"; Expect = 'launched through' },
+    @{ Name = 'iex hiding a registry New-Item'; Body = "iex 'New-Item -Path HKLM:\SOFTWARE\X'"; Expect = 'launched through' },
+    @{ Name = 'ComSpec launching bare pnputil'; Body = '& $env:ComSpec /c "pnputil /add-driver x.inf"'; Expect = 'launched through' },
+    @{ Name = 'iex through a variable'; Body = '$cmd = ''sp -Path HKLM:\X -Name n -Value 1''; iex $cmd'; Expect = 'launched through' },
+    @{ Name = 'harmless iex'; Body = "iex 'Get-Date'"; Expect = $null },
+    # Launch targets held in variables.
+    @{ Name = 'reg.exe through a variable'; Body = '$regExe = Join-Path $env:SystemRoot ''System32\reg.exe''; & $regExe add "HKLM\SOFTWARE\X" /v n /d 1 /f'; Expect = 'registry tool call' },
+    @{ Name = 'Start-Process reg.exe through a variable'; Body = '$regExe = Join-Path $env:SystemRoot ''System32\reg.exe''; Start-Process -FilePath $regExe -ArgumentList "add HKLM\X /f"'; Expect = 'registry tool launch' },
+    @{ Name = 'devcon through a variable'; Body = '$devcon = ''C:\tools\devcon.exe''; & $devcon install x.inf "PCI\X"'; Expect = 'devcon.exe' },
+    @{ Name = 'system tool through a variable'; Body = '$fsutil = Join-Path ([Environment]::SystemDirectory) ''fsutil.exe''; & $fsutil bypassio state C:'; Expect = $null },
+    @{ Name = 'Start-Process explorer through a variable'; Body = '$dir = Join-Path $env:TEMP ''kit''; Start-Process -FilePath (Join-Path $env:SystemRoot ''explorer.exe'') -ArgumentList $dir'; Expect = $null },
+    # Process APIs hide the program from every check above.
+    @{ Name = 'Process::Start'; Body = "[Diagnostics.Process]::Start('reg.exe', 'add HKLM\SOFTWARE\X /f') | Out-Null"; Expect = 'process launch API' },
+    @{ Name = 'New-Object ProcessStartInfo'; Body = "`$psi = New-Object System.Diagnostics.ProcessStartInfo 'reg.exe'"; Expect = 'process launch API' },
+    # A guard on a shadowed or reassigned $Status proves nothing.
+    @{ Name = '-Status guard on a function''s own parameter'; Body = ''; EventLog = 'function Start-AppLogging { param($Status) if (-not $Status) { Initialize-EventLogSource } }'; Expect = 'without a -Status guard' },
+    @{ Name = '-Status reassigned before the guard'; Body = ''; EventLog = '$Status = $false; if (-not $Status) { Initialize-EventLogSource }'; Expect = 'reassigned' },
+    @{ Name = 'Set-Variable on Status'; Body = 'Set-Variable -Name Status -Value $false -Scope Script'; Expect = 'reassigned' },
+    @{ Name = 'a function parameter named Status'; Body = 'function Update-Progress { param([int]$Value, [string]$Status = "") $Status = "$Status." }'; Expect = $null }
 )
 # Every alias of a watched cmdlet must resolve to it: Get-Alias on this host, plus the 5.1 table above
 # (mkdir is a function, so it only resolves through that table).
