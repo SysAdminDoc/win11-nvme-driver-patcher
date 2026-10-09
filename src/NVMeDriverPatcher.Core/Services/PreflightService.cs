@@ -205,7 +205,7 @@ public static class PreflightService
         {
             result.IsLaptop = DriveService.TestLaptopChassis();
             checks["LaptopPower"] = result.IsLaptop
-                ? new(CheckStatus.Warning, "Laptop -- APST broken, ~15% battery impact")
+                ? new(CheckStatus.Warning, "Laptop: battery life after patching isn't known (how nvmedisk idles the drive isn't documented)")
                 : new(CheckStatus.Pass, "Desktop");
 
             // Modern Standby laptops carry a distinct sleep-wake DATA risk (drives vanishing on

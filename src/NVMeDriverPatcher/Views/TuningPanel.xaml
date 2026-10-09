@@ -82,7 +82,7 @@
             <Border Margin="0,10,0,0" Style="{StaticResource InsetCard}">
                 <StackPanel>
                     <TextBlock Text="Custom tuning" Style="{StaticResource SectionEyebrow}"/>
-                    <TextBlock Text="Each value is written to the StorNVMe registry parameters."
+                    <TextBlock Text="Each value is written to the StorNVMe registry parameters. Only Queue Depth and I/O Submission Queues are in the list of values stornvme itself reads. Microsoft doesn't document the two split sizes or the two power timeouts for stornvme, so their effect can't be confirmed. Windows sets drive idle timing through the power plan."
                                Margin="0,5,0,0"
                                Style="{StaticResource BodyCopy}"/>
 
@@ -253,7 +253,7 @@
                             </Grid.RowDefinitions>
                             <StackPanel Grid.Row="0" Grid.ColumnSpan="2">
                                 <TextBlock Text="Idle Power Timeout" Foreground="{DynamicResource TextSecondary}" FontWeight="SemiBold"/>
-                                <TextBlock Text="0 disables idle power-down. Lower values favor faster power saving, while higher values stay more performance-biased."
+                                <TextBlock Text="Meant to set how soon the drive powers down at idle (0 for never). stornvme isn't known to read it, so the effect can't be confirmed."
                                            Margin="0,4,0,0"
                                            Foreground="{DynamicResource TextDim}"
                                            FontSize="{StaticResource FontSizeMeta}"
@@ -290,7 +290,7 @@
                             </Grid.RowDefinitions>
                             <StackPanel Grid.Row="0" Grid.ColumnSpan="2">
                                 <TextBlock Text="Standby Power Timeout" Foreground="{DynamicResource TextSecondary}" FontWeight="SemiBold"/>
-                                <TextBlock Text="0 keeps deeper standby disabled. Higher values can save more power, but they may add wake latency on some controllers."
+                                <TextBlock Text="Meant to set how soon the drive drops into deeper standby (0 for never). stornvme isn't known to read it, so the effect can't be confirmed."
                                            Margin="0,4,0,0"
                                            Foreground="{DynamicResource TextDim}"
                                            FontSize="{StaticResource FontSizeMeta}"
@@ -324,7 +324,7 @@
                             BorderBrush="{DynamicResource Border}"
                             BorderThickness="1"
                             CornerRadius="8">
-                        <TextBlock Text="A queue count of 0 lets Windows choose. A timeout of 0 turns that power-saving step off. Run a benchmark after each restart to see whether the change helped."
+                        <TextBlock Text="A queue count of 0 lets Windows choose. Run a benchmark after each restart to see whether the change helped."
                                    Foreground="{DynamicResource Yellow}"
                                    FontSize="{StaticResource FontSizeBody}"
                                    TextWrapping="Wrap"/>

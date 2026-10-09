@@ -34,7 +34,7 @@ public sealed class PreflightServiceTests
         var checks = new Dictionary<string, PreflightCheck>
         {
             ["WindowsVersion"] = new(CheckStatus.Pass, "Win 11 25H2 (Build 26200)", true),
-            ["LaptopPower"] = new(CheckStatus.Warning, "Laptop -- APST broken"),
+            ["LaptopPower"] = new(CheckStatus.Warning, "Laptop: battery life after patching isn't known"),
             ["Compatibility"] = new(CheckStatus.Fail,
                 "BLOCKED [ConfirmedPresent]: Intel RST/VMD driver iaStorVD (state=Running, start=Boot) is loaded or set to start at boot; boot-safe nvmedisk.sys enablement is not proved.", true)
         };

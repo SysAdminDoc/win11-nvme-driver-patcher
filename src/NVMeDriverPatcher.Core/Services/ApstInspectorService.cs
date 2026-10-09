@@ -369,12 +369,12 @@ public static class ApstInspectorService
             var savingsText = est.EstimatedIdleSavingsWatts.HasValue
                 ? $" (up to ~{est.EstimatedIdleSavingsWatts:F1}W idle savings)"
                 : "";
-            est.Impact = $"Windows idles this drive into a low-power state{savingsText}. The native NVMe driver (nvmedisk.sys) will ignore these transitions.";
-            est.Recommendation = "Expect ~10-15% shorter battery life on idle workloads after patching. Consider keeping the OS drive on stornvme.sys if battery life is critical.";
+            est.Impact = $"Windows idles this drive into a low-power state{savingsText} through the power plan's NVMe idle settings. Microsoft doesn't document whether nvmedisk.sys follows them.";
+            est.Recommendation = "Battery life after patching isn't known. Compare idle drain before and after, and keep the OS drive on stornvme.sys if battery life is critical.";
         }
         else if (est.IdleStatesUsed == false)
         {
-            est.Impact = "This drive doesn't idle into a low-power state now, so patching adds no battery regression.";
+            est.Impact = "This drive doesn't idle into a low-power state now, so there's no idle saving for the patch to lose.";
             est.Recommendation = "No additional impact from the native NVMe patch.";
         }
         else
@@ -388,8 +388,8 @@ public static class ApstInspectorService
 
     /// <summary>
     /// Modern Standby (Connected Standby / S0 low-power idle) detection via
-    /// HKLM\SYSTEM\CurrentControlSet\Control\Power\CsEnabled. On these systems StorNVMe does not
-    /// support APST, and the native stack's wake timing can be too optimistic for some controllers.
+    /// HKLM\SYSTEM\CurrentControlSet\Control\Power\CsEnabled. On these systems the native stack's
+    /// wake timing can be too optimistic for some controllers.
     /// </summary>
     public static bool IsModernStandbyEnabled()
     {
@@ -403,17 +403,17 @@ public static class ApstInspectorService
     }
 
     /// <summary>
-    /// Pure: a distinct Modern-Standby sleep-wake risk warning for laptops, else null. StorNVMe
-    /// has no APST on Modern Standby (Microsoft Learn), and nvmedisk.sys can let NVMe drives
-    /// "vanish" on wake when controller firmware is too optimistic about wake-up timing. Separate
-    /// from the general APST battery warning — this is a data-availability risk, not just battery.
+    /// Pure: a distinct Modern-Standby sleep-wake risk warning for laptops, else null. nvmedisk.sys
+    /// can let NVMe drives "vanish" on wake when controller firmware is too optimistic about wake-up
+    /// timing. Separate from the battery warning: this is a data-availability risk. StorNVMe doesn't
+    /// use the drive's APST at all; Windows picks idle states from the power plan (Microsoft Learn).
     /// </summary>
     internal static string? ModernStandbyApstWarning(bool isLaptop, bool modernStandby)
     {
         if (!isLaptop || !modernStandby) return null;
-        return "Modern Standby laptop: StorNVMe does not support APST on Modern Standby (S0 low-power) " +
-               "systems, and nvmedisk.sys can let NVMe drives vanish on wake from sleep when controller " +
-               "firmware is too optimistic about wake-up timing. Mitigations before patching: disable Fast " +
+        return "Modern Standby laptop: on S0 low-power systems, nvmedisk.sys can let NVMe drives vanish " +
+               "on wake from sleep when controller firmware is too optimistic about wake-up timing. " +
+               "Mitigations before patching: disable Fast " +
                "Startup (powercfg /h off, or Control Panel > Power Options), and set PCIe Link State Power " +
                "Management to Off in the active power plan.";
     }

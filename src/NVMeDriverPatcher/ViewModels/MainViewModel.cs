@@ -494,7 +494,7 @@ public partial class MainViewModel : ObservableObject
                         vm.Tooltip = (_preflight.BitLockerRecovery?.Detail ?? check.Message) +
                                      "\nThe protector ID is safe to match against escrow records; recovery key material is never displayed.";
                     else if (leftMap[i] == "LaptopPower" && _preflight.IsLaptop)
-                        vm.Tooltip = "Native NVMe breaks APST power management.\nExpect ~15% battery life reduction and higher idle SSD temps.";
+                        vm.Tooltip = "Under stornvme, Windows idles this drive through the power plan.\nMicrosoft doesn't document how nvmedisk idles it, so battery life after patching isn't known.";
                     else if (leftMap[i] == "WindowsVersion" && _preflight.BuildDetails is not null)
                         vm.Tooltip = $"{_preflight.BuildDetails.Caption}\nBuild {_preflight.BuildDetails.BuildNumber}.{_preflight.BuildDetails.UBR}";
                     ReadinessChecks.Add(vm);
@@ -1185,7 +1185,7 @@ public partial class MainViewModel : ObservableObject
             AttentionNotes.Add(new AttentionNoteVM
             {
                 Title = "Laptop power behavior may change",
-                Detail = "Native NVMe can reduce APST power savings on mobile systems, which usually means higher idle SSD temperature and shorter battery life.",
+                Detail = "Microsoft doesn't document how the native driver idles the drive. If it idles less than stornvme does under the power plan, battery life gets shorter and the idle SSD runs warmer, so watch idle drain after the restart.",
                 ToneColor = "Yellow"
             });
         }
@@ -1348,7 +1348,7 @@ public partial class MainViewModel : ObservableObject
                 warnings.Add($"Older Windows build: {_preflight.BuildDetails.DisplayVersion}. This patch is designed for Windows 11 24H2 or later.");
 
             if (_preflight.IsLaptop)
-                warnings.Add("Laptop power: nvmedisk.sys disables APST. Expect shorter battery life and higher idle SSD temperatures.");
+                warnings.Add("Laptop power: Microsoft doesn't document how nvmedisk.sys idles the drive, so battery life after patching isn't known. Watch idle drain after the restart.");
 
             // Microsoft's Feb/Mar 2026 block — let the user know the patch may silently
             // no-op on the latest Insider builds, and that we'll tell them post-reboot.

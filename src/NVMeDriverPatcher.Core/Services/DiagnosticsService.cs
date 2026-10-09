@@ -585,7 +585,7 @@ public static class DiagnosticsService
         sb.AppendLine(DataFileProvenanceService.RenderForDiagnostics(dataFileProvenance, includePath: true));
 
         sb.AppendLine().AppendLine("CHASSIS / POWER").AppendLine("---------------");
-        sb.AppendLine($"Is Laptop: {(preflight?.IsLaptop ?? false ? "Yes (APST warning applies)" : "No (Desktop)")}");
+        sb.AppendLine($"Is Laptop: {(preflight?.IsLaptop ?? false ? "Yes (battery warning applies)" : "No (Desktop)")}");
 
         sb.AppendLine().AppendLine("BITLOCKER STATUS").AppendLine("----------------");
         var bitLockerProof = preflight?.BitLockerRecovery ?? BitLockerRecoveryService.InspectSystemVolume();

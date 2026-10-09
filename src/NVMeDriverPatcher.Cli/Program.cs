@@ -1286,7 +1286,7 @@ class Program
         }
 
         if (preflight.IsLaptop)
-            Console.WriteLine("\nWARNING: Laptop detected -- APST power management broken with native NVMe");
+            Console.WriteLine("\nWARNING: Laptop detected. Microsoft doesn't document how the native driver idles the drive, so battery life after patching isn't known.");
 
         if (preflight.IncompatibleSoftware.Count > 0)
         {

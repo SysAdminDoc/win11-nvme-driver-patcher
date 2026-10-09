@@ -168,7 +168,7 @@ public static class DryRunService
                 preflight.CriticalProbes.Items.All(item => item.Id != "VeraCrypt"))
                 report.PreflightBlockers.Add("VeraCrypt system encryption present. Patch is blocked.");
             if (preflight.BitLockerEnabled) report.PreflightWarnings.Add("BitLocker will be suspended for one reboot cycle.");
-            if (preflight.IsLaptop) report.PreflightWarnings.Add("Laptop detected. APST power-management regression (~15% battery).");
+            if (preflight.IsLaptop) report.PreflightWarnings.Add("Laptop detected. Under stornvme, Windows idles the drive through the power plan. Microsoft doesn't document how nvmedisk idles it, so battery life after patching isn't known.");
             foreach (var sw in preflight.IncompatibleSoftware)
                 report.PreflightWarnings.Add($"Incompatible software: {sw.Name} [{sw.Severity}]: {sw.Message}");
         }
