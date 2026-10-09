@@ -31,8 +31,10 @@ Available topics:
 NVMe Driver Patcher enables the Server 2025 Native NVMe driver (nvmedisk.sys) on
 Windows 11 by writing three feature-management override keys and two SafeBoot keys.
 The patch swaps the storage stack from the legacy stornvme.sys to the new native path,
-which delivers large gains on 4K random I/O and sequential reads. BypassIO support is
-lost in exchange, which affects DirectStorage-aware games.
+which showed its gains at high queue depths (servers, heavy parallel I/O). Ordinary
+desktop use may see little or no change, and StorageReview's Windows Server testing
+measured 4K random writes slightly slower. BypassIO support is lost in exchange, which
+affects DirectStorage-aware games.
 ",
         ["profiles"] = @"
 Safe profile (default)    Writes only the primary feature flag (735209102) + both

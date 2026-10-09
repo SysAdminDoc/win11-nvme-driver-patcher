@@ -1067,6 +1067,14 @@ public partial class MainViewModel : ObservableObject
         catch { }
     }
 
+    // Shown in the "Good to know" tier of the Apply confirmation. The claim stays inside what the
+    // README's benchmark sources measured: gains at high queue depth, and slightly slower 4K
+    // random writes in StorageReview's Windows Server testing.
+    internal const string FirstRunExpectationNote =
+        "Don't expect a big change on a desktop. Measured gains show up at high queue depths, the kind of load servers and heavy parallel I/O create, " +
+        "while ordinary desktop use may see little or no difference. StorageReview's Windows Server native NVMe testing also measured 4K random writes slightly slower. " +
+        "The built-in benchmark's desktop QD1 profile shows what this drive does before and after.";
+
     private string BuildConfirmMessage(string title)
     {
         var blockers = new List<string>();   // [!!] you really should read these before clicking yes
@@ -1101,6 +1109,7 @@ public partial class MainViewModel : ObservableObject
                     ? "Mode: FULL with 156965516. Writes the primary flag plus 1853569164 and 156965516. This can improve peak performance on some drives, but carries higher crash risk. While 156965516 is set, DISM /ScanHealth reports component store corruption (seen on 24H2 26100.9550). SFC stays clean, and the report clears once the value is removed. Community reports also describe rare power-loss data corruption under the extended flags (unconfirmed, single-source)."
                     : "Mode: FULL. Writes the primary flag plus 1853569164. This can improve peak performance on some drives, but carries higher crash risk. 156965516 stays off. Community reports also describe rare power-loss data corruption under the extended flags (unconfirmed, single-source).";
             notes.Insert(0, profileLine);
+            notes.Insert(1, FirstRunExpectationNote);
 
             // BypassIO / DirectStorage — elevated from an afterthought to a first-class
             // warning. nvmedisk.sys vetoes BypassIO, which hurts DirectStorage games.
