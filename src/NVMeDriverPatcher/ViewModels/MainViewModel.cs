@@ -32,8 +32,6 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _statusText = "Checking…";
     [ObservableProperty] private string _statusColor = "TextDim";
     [ObservableProperty] private string _driverLabelText = "Scanning driver path";
-    [ObservableProperty] private string _benchLabelText = "";
-    [ObservableProperty] private bool _benchLabelVisible;
     [ObservableProperty] private string _versionText = "";
     [ObservableProperty] private bool _updateAvailable;
     [ObservableProperty] private string _updateVersionText = "";
@@ -78,14 +76,6 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _nextStepTitle = "Running readiness checks";
     [ObservableProperty] private string _nextStepDescription = "Driver changes stay locked until Windows build support, drive visibility, and rollback safety are confirmed.";
     [ObservableProperty] private string _nextStepColor = "Accent";
-    [ObservableProperty] private bool _hasNextStepPrimaryAction;
-    [ObservableProperty] private string _nextStepPrimaryActionText = "";
-    [ObservableProperty] private string _nextStepPrimaryActionId = "";
-    [ObservableProperty] private bool _nextStepPrimaryActionEnabled;
-    [ObservableProperty] private bool _hasNextStepSecondaryAction;
-    [ObservableProperty] private string _nextStepSecondaryActionText = "";
-    [ObservableProperty] private string _nextStepSecondaryActionId = "";
-    [ObservableProperty] private bool _nextStepSecondaryActionEnabled;
     [ObservableProperty] private string _recoveryKitStatusText = NoRecoveryKitText;
     [ObservableProperty] private string _verificationScriptStatusText = NoVerificationScriptText;
     [ObservableProperty] private string _diagnosticsReportStatusText = NoDiagnosticsReportText;
@@ -144,9 +134,14 @@ public partial class MainViewModel : ObservableObject
     // UI collections
     public ObservableCollection<PreflightCheckVM> ReadinessChecks { get; } = [];
     public ObservableCollection<DriveRowVM> Drives { get; } = [];
-    public ObservableCollection<string> LogEntries { get; } = [];
 
-    public string LogText => string.Join("\n", LogEntries);
+    // The visible activity log. Only LogText is bound; the full audit trail is _logHistory.
+    private readonly List<string> _logEntries = [];
+
+    public string LogText => string.Join("\n", _logEntries);
+
+    // Raised after a benchmark saves a new result, so the window can drop its cached history.
+    public event EventHandler? BenchmarkHistoryChanged;
 
     private PreflightResult? _preflight;
     private readonly List<string> _logHistory = [];
@@ -274,7 +269,7 @@ public partial class MainViewModel : ObservableObject
 
     public void ClearLog()
     {
-        LogEntries.Clear();
+        _logEntries.Clear();
         lock (_logHistoryLock) { _logHistory.Clear(); }
         LogEntryCount = 0;
         LogWarningCount = 0;
@@ -450,14 +445,13 @@ public partial class MainViewModel : ObservableObject
             Log($"Safe Boot upgrade check skipped: {ex.Message}", "DEBUG");
         }
 
-        // One benchmark-history read per refresh cycle, taken off the UI thread. The bench label and
-        // the overview summary both used to read the file again inside the dispatcher call.
-        List<BenchmarkResult> benchmarkHistory;
-        try { benchmarkHistory = await Task.Run(() => BenchmarkService.GetHistory(Config.WorkingDir)); }
-        catch { benchmarkHistory = []; }
-
         try
         {
+            // One read of the patch status, the FeatureStore fallback and the benchmark history per
+            // refresh cycle, taken off the UI thread. The dispatcher call below only applies it.
+            var workingDir = Config.WorkingDir;
+            var patchState = await Task.Run(() => GatherPatchState(workingDir));
+
             Application.Current?.Dispatcher.Invoke(() =>
             {
             OsRecoverySummaryText = _preflight.OsRecoveryEvidence?.Summary
@@ -542,8 +536,8 @@ public partial class MainViewModel : ObservableObject
 
             // Drives, registry, status
             UpdateDrivesList();
-            UpdateStatusDisplay();
-            UpdateOverviewSummary(benchmarkHistory);
+            UpdateStatusDisplay(patchState);
+            UpdateOverviewSummary(patchState);
             UpdateOperationalHistory();
 
             // Update badge. PreflightService now runs the update check fire-and-forget so it
@@ -556,19 +550,6 @@ public partial class MainViewModel : ObservableObject
             else if (_preflight.UpdateCheckTask is { } updateTask)
             {
                 ObserveLateUpdateCheck(updateTask);
-            }
-
-            // Benchmark label
-            BenchLabelText = "";
-            BenchLabelVisible = false;
-            if (benchmarkHistory.Count > 0)
-            {
-                var last = benchmarkHistory[^1];
-                if (last.Read.IOPS > 0)
-                {
-                    BenchLabelText = $"Last bench: {last.Read.IOPS} IOPS high-QD read / {last.Write.IOPS} IOPS high-QD write; {last.Desktop.Read.IOPS} IOPS desktop QD1 read ({last.Label})";
-                    BenchLabelVisible = true;
-                }
             }
 
             // Post-reboot check
@@ -592,7 +573,7 @@ public partial class MainViewModel : ObservableObject
                 Log($"Patch actions turned off by build policy: {buildPolicy.Reason}", "WARNING");
             RefreshMutationSafetyState();
             // The overview was written before the build policy was known.
-            UpdateOverviewSummary(benchmarkHistory);
+            UpdateOverviewSummary(patchState);
             });
         }
         catch (Exception ex)
@@ -814,18 +795,54 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private void UpdateStatusDisplay()
+    /// <summary>
+    /// What the status card and the overview read from the registry, the FeatureStore and the
+    /// benchmark history file. Gathered on the thread pool; applying it touches only view-model state.
+    /// </summary>
+    internal sealed record PatchStateSnapshot(PatchStatus Status, bool FallbackEvidence, bool HasBenchmarkHistory);
+
+    // Pure gather: registry, FeatureStore and the history file. No view-model state, no dispatcher.
+    internal static PatchStateSnapshot GatherPatchState(string workingDir)
     {
         var status = RegistryService.GetPatchStatus();
+        bool fallbackEvidence = false;
+        try { fallbackEvidence = FeatureStoreWriterService.HasFallbackEvidence(); } catch { }
+        bool hasBenchmarkHistory = BenchmarkService.GetHistory(workingDir).Count > 0;
+        return new PatchStateSnapshot(status, fallbackEvidence, hasBenchmarkHistory);
+    }
+
+    // After apply, remove, a benchmark or a failed command. Starts on the UI thread, gathers on
+    // the thread pool and applies back on the UI thread. The benchmark path leaves the status card
+    // alone, since a benchmark doesn't change the patch state.
+    private async Task RefreshPatchStateAsync(bool includeStatusCard = true)
+    {
+        var workingDir = Config.WorkingDir;
+        try
+        {
+            var state = await Task.Run(() => GatherPatchState(workingDir));
+            if (includeStatusCard)
+            {
+                UpdateStatusDisplay(state);
+                RefreshMutationActionAvailability();
+            }
+            UpdateOverviewSummary(state);
+        }
+        catch (Exception ex)
+        {
+            Log($"Status refresh skipped: {ex.Message}", "WARNING");
+        }
+    }
+
+    private void UpdateStatusDisplay(PatchStateSnapshot state)
+    {
+        var status = state.Status;
 
         // RD-004: when Microsoft's official rollout enabled the driver (active with no
         // user-driven evidence), "apply the patch" is an obsolete job — pivot the hero
         // state to managing/tuning the official enablement instead of offering to enable
         // something Windows already enabled.
-        bool fallbackEvidence = false;
-        try { fallbackEvidence = FeatureStoreWriterService.HasFallbackEvidence(); } catch { }
         _enablementSource = PatchVerificationService.ClassifyEnablementSource(
-            _preflight?.NativeNVMeStatus?.IsActive == true, status.Count, fallbackEvidence);
+            _preflight?.NativeNVMeStatus?.IsActive == true, status.Count, state.FallbackEvidence);
 
         if (_enablementSource == EnablementSource.Official)
         {
@@ -866,7 +883,7 @@ public partial class MainViewModel : ObservableObject
             DriverLabelText = $"Current driver: {_preflight.DriverInfo.CurrentDriver}";
     }
 
-    private void UpdateOverviewSummary(IReadOnlyList<BenchmarkResult>? benchmarkHistory = null)
+    private void UpdateOverviewSummary(PatchStateSnapshot state)
     {
         if (_preflight is null)
         {
@@ -874,8 +891,8 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        bool hasBenchmarkHistory = (benchmarkHistory ?? BenchmarkService.GetHistory(Config.WorkingDir)).Count > 0;
-        var status = RegistryService.GetPatchStatus();
+        bool hasBenchmarkHistory = state.HasBenchmarkHistory;
+        var status = state.Status;
 
         _warningCount = _preflight.Checks.Values.Count(c => c.Status == CheckStatus.Warning);
         _criticalCount = _preflight.Checks.Values.Count(c => c.Critical && c.Status == CheckStatus.Fail);
@@ -970,7 +987,6 @@ public partial class MainViewModel : ObservableObject
         // own registry handle — avoids 4+ redundant reads and the TOCTOU window they create.
         UpdateActionGuidance(status);
         UpdateWorkflowGuide(status);
-        UpdateRecommendedActions(status);
         UpdateWorkspaceBadges();
     }
 
@@ -988,14 +1004,6 @@ public partial class MainViewModel : ObservableObject
         _criticalCount = 0;
         _nvmeDriveCount = 0;
         _totalDriveCount = 0;
-        HasNextStepPrimaryAction = false;
-        NextStepPrimaryActionText = "";
-        NextStepPrimaryActionId = "";
-        NextStepPrimaryActionEnabled = false;
-        HasNextStepSecondaryAction = false;
-        NextStepSecondaryActionText = "";
-        NextStepSecondaryActionId = "";
-        NextStepSecondaryActionEnabled = false;
         ApplyButtonTooltipText = "Readiness checks are still running.";
         RemoveButtonTooltipText = RemoveUnavailableText;
         UpdateWorkspaceBadges();
@@ -1007,8 +1015,8 @@ public partial class MainViewModel : ObservableObject
 
 
     // Guidance / workflow partial — UpdateActionGuidance,
-    // BuildBlockingActionSummary, GetCheckDisplayName, UpdateWorkflowGuide, and
-    // UpdateRecommendedActions live in MainViewModel.Guidance.cs (same partial class).
+    // BuildBlockingActionSummary, GetCheckDisplayName and UpdateWorkflowGuide
+    // live in MainViewModel.Guidance.cs (same partial class).
 
 
     // Settings & preferences partials (SetThemeMode, RefreshThemeModeSummary, DebouncedSaveSettings + its timer field, all
@@ -1318,8 +1326,7 @@ public partial class MainViewModel : ObservableObject
         {
             SetProgress(0, "");
             ButtonsEnabled = true;
-            UpdateStatusDisplay();
-            UpdateOverviewSummary();
+            _ = RefreshPatchStateAsync();
             UpdateOperationalHistory();
         }
         catch
@@ -1337,18 +1344,14 @@ public partial class MainViewModel : ObservableObject
 
     private void AppendLogEntry(string entry, string message, string level)
     {
-        LogEntries.Add(entry);
+        _logEntries.Add(entry);
         LogEntryCount++;
 
         // Bound the visible buffer so a runaway logging loop cannot blow up the UI thread by
         // forcing the TextBox to re-render millions of lines. The full audit trail still lives
         // in _logHistory and gets exported in diagnostics.
-        if (LogEntries.Count > MaxVisibleLogEntries)
-        {
-            int toRemove = LogEntries.Count - MaxVisibleLogEntries;
-            for (int i = 0; i < toRemove; i++)
-                LogEntries.RemoveAt(0);
-        }
+        if (_logEntries.Count > MaxVisibleLogEntries)
+            _logEntries.RemoveRange(0, _logEntries.Count - MaxVisibleLogEntries);
 
         switch (level.ToUpperInvariant())
         {

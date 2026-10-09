@@ -103,8 +103,7 @@ public partial class MainViewModel
         Application.Current?.Dispatcher.Invoke(() =>
         {
             LogBeforeAfter(result.BeforeSnapshot, result.AfterSnapshot, "Install Patch");
-            UpdateStatusDisplay();
-            UpdateOverviewSummary();
+            _ = RefreshPatchStateAsync();
             UpdateOperationalHistory();
             ButtonsEnabled = true;
             RefreshMutationActionAvailability();
@@ -149,7 +148,7 @@ public partial class MainViewModel
                     if (!watchdogRollback.Success)
                         Log("[ERROR] Watchdog rollback checkpoint failed: " + watchdogRollback.Summary, "ERROR");
                     ConfigService.Save(Config);
-                    UpdateStatusDisplay();
+                    _ = RefreshPatchStateAsync();
                     InfoDialog?.Invoke("Checkpoint Not Saved",
                         restored.Success
                             ? "The patch writes landed, but the reboot checkpoint could not be made durable. The exact pre-patch state was restored, so no restart is needed. Resolve the working-directory disk or permissions problem before retrying."
@@ -246,8 +245,7 @@ public partial class MainViewModel
         Application.Current?.Dispatcher.Invoke(() =>
         {
             LogBeforeAfter(result.BeforeSnapshot, result.AfterSnapshot, "Remove Patch");
-            UpdateStatusDisplay();
-            UpdateOverviewSummary();
+            _ = RefreshPatchStateAsync();
             UpdateOperationalHistory();
             ButtonsEnabled = true;
 
@@ -402,7 +400,7 @@ public partial class MainViewModel
         BenchmarkRunning = true;
         try
         {
-            var status = RegistryService.GetPatchStatus();
+            var status = await Task.Run(() => RegistryService.GetPatchStatus());
             string label = status.Applied ? "Post-Patch" : "Pre-Patch";
             Log($"Starting storage benchmark ({label})...");
             Log("This will take approximately 120 seconds. Do not use disk-heavy apps. Click Cancel to stop early.", "WARNING");
@@ -415,7 +413,14 @@ public partial class MainViewModel
 
             if (result is not null)
             {
-                BenchmarkService.SaveResults(Config.WorkingDir, result);
+                // The save waits on the machine-wide history lock, so it and the comparison read
+                // run on the thread pool.
+                var workingDir = Config.WorkingDir;
+                var history = await Task.Run(() =>
+                {
+                    BenchmarkService.SaveResults(workingDir, result);
+                    return BenchmarkService.GetHistory(workingDir);
+                });
                 Log("");
                 Log("============ BENCHMARK RESULTS ============");
                 Log($"  {label} @ {DateTime.Now:HH:mm:ss}");
@@ -425,7 +430,6 @@ public partial class MainViewModel
                 Log($"  Desktop QD1 4K Random Write (t1/o1): {result.Desktop.Write.IOPS} IOPS  |  {result.Desktop.Write.ThroughputMBs} MB/s  |  {result.Desktop.Write.AvgLatencyMs} ms avg", "SUCCESS");
 
                 // Compare with previous
-                var history = BenchmarkService.GetHistory(Config.WorkingDir);
                 var prev = history.Where(h => h.Label != label).LastOrDefault();
                 if (prev?.Read.IOPS > 0)
                 {
@@ -434,9 +438,8 @@ public partial class MainViewModel
                 }
                 Log("===========================================");
 
-                BenchLabelText = $"Last bench: {result.Read.IOPS} IOPS read / {result.Write.IOPS} IOPS write ({label})";
-                BenchLabelVisible = true;
-                UpdateOverviewSummary();
+                BenchmarkHistoryChanged?.Invoke(this, EventArgs.Empty);
+                _ = RefreshPatchStateAsync(includeStatusCard: false);
                 UpdateOperationalHistory();
             }
         }

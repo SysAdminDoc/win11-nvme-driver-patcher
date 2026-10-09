@@ -119,15 +119,9 @@ public partial class MainViewModel
 
     partial void OnRestartDelayTextChanged(string value) => DebouncedSaveSettings();
 
-    partial void OnButtonsEnabledChanged(bool value)
-    {
-        RefreshMutationActionAvailability();
-        UpdateRecommendedActions();
-    }
-    partial void OnApplyEnabledChanged(bool value) => UpdateRecommendedActions();
+    partial void OnButtonsEnabledChanged(bool value) => RefreshMutationActionAvailability();
     partial void OnIsLoadingChanged(bool value)
     {
-        UpdateRecommendedActions();
         if (!value)
             UpdateWorkflowGuide();
     }

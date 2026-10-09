@@ -230,7 +230,6 @@ public partial class MainViewModel
         };
 
         UpdateWorkflowGuide(snapshot.PatchStatus);
-        UpdateRecommendedActions(snapshot.PatchStatus);
         UpdateWorkspaceBadges();
     }
 
