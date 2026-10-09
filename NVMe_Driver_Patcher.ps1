@@ -4120,7 +4120,11 @@ function Start-BackgroundPreflight {
                 }
             }
             catch {
-                Write-Log "Pre-flight check error: $($_.Exception.Message)" -Level "ERROR"
+                # EndInvoke (or the marshal-back) threw, so run the checks inline or the panel stays empty. The
+                # completion handler reads a null result as "the synchronous fallback ran".
+                Write-Log "Pre-flight check error: $($_.Exception.Message) -- falling back to synchronous checks" -Level "ERROR"
+                $r = $null
+                $needSync = $true
             }
             try { $script:bgPS.Dispose(); $script:bgRunspace.Dispose() } catch {}
         }
