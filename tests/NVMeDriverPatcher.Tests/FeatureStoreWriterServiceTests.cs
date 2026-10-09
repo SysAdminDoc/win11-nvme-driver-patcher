@@ -142,6 +142,29 @@ public sealed class FeatureStoreWriterServiceTests
     }
 
     [Fact]
+    public void ExactRestorePasses_ResetsGoInTheirOwnCallAhead_AndNoCallNamesAnIdTwice()
+    {
+        // Nothing documents whether RtlSetFeatureConfigurations takes one ID twice in a call or
+        // applies the array in order, so the reset and the re-assert never share a call.
+        var entries = new[]
+        {
+            new FeatureStoreConfigurationBaseline { FeatureId = 60786016, Found = true, CompactState = 4u | (1u << 4) },
+            new FeatureStoreConfigurationBaseline { FeatureId = 48433719, Found = true, CompactState = 8u | (2u << 4) },
+            new FeatureStoreConfigurationBaseline { FeatureId = 55369237, Found = false },
+        };
+
+        var (resets, restores) = FeatureStoreWriterService.DescribeRestorePasses(entries);
+
+        Assert.Equal(new[] { (60786016u, 8u, 4u) }, resets);
+        Assert.Equal(new[] { (60786016u, 4u, 3u), (48433719u, 8u, 3u), (55369237u, 8u, 4u) }, restores);
+        Assert.Equal(restores.Count, restores.Select(u => u.FeatureId).Distinct().Count());
+        // Every entry's single-entry plan is the same updates, split the same way.
+        Assert.Equal(
+            entries.SelectMany(e => FeatureStoreWriterService.DescribeRestorePlan(e)).OrderBy(u => u),
+            resets.Concat(restores).OrderBy(u => u));
+    }
+
+    [Fact]
     public void IndexOfBytes_FindsNeedleInMiddle()
     {
         byte[] hay = { 1, 2, 3, 4, 5, 6, 7, 8 };
