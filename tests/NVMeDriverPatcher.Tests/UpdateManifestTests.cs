@@ -6,8 +6,8 @@ using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.Tests;
 
-// The signed update manifest: what the updater accepts, what it refuses, and the download gate
-// that stops an exe swapped together with its .sha256 sidecar.
+// The signed update manifest: what update-check accepts and what it refuses. A release whose exe
+// and .sha256 sidecar were both swapped still fails here, because the manifest pins the hash.
 public sealed class UpdateManifestTests : IDisposable
 {
     private const string Release = "https://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v9.0.0/";
@@ -17,7 +17,6 @@ public sealed class UpdateManifestTests : IDisposable
     private readonly ECDsa _primary = ECDsa.Create(ECCurve.NamedCurves.nistP256);
     private readonly ECDsa _next = ECDsa.Create(ECCurve.NamedCurves.nistP256);
     private readonly ECDsa _stranger = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"NVMeDriverPatcher.UpdateManifest.Tests.{Guid.NewGuid():N}");
 
     private IReadOnlyList<string> Trusted => [Spki(_primary), Spki(_next)];
 
@@ -26,7 +25,6 @@ public sealed class UpdateManifestTests : IDisposable
         _primary.Dispose();
         _next.Dispose();
         _stranger.Dispose();
-        try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
 
     [Fact]
@@ -176,33 +174,74 @@ public sealed class UpdateManifestTests : IDisposable
     }
 
     [Fact]
-    public async Task ReplacedExeWithAMatchingReplacedSidecar_IsRefusedAndDeleted()
+    public async Task ReleaseManifestCheck_ReportsVerifiedWithThePinnedHash()
     {
-        var attackerExe = Encoding.ASCII.GetBytes("MZ attacker payload");
-        var attackerSidecar = $"{Sha256(attackerExe)}  NVMeDriverPatcher.exe";
-        using var client = AssetClient(attackerExe, attackerSidecar);
-        var staged = Path.Combine(_tempDir, "NVMeDriverPatcher.exe");
+        var bytes = Manifest();
+        using var client = ReleaseClient(bytes, Sign(_primary, bytes));
 
-        var result = await AutoUpdaterService.DownloadPinnedAsync(
-            client, new Uri(Release + "NVMeDriverPatcher.exe"), staged, TestPolicy, GenuineHash, CancellationToken.None);
+        var (verified, summary, sha256) = await AutoUpdaterService.CheckReleaseManifestAsync(
+            Release + "NVMeDriverPatcher.exe", client, Trusted, Installed, Now, CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Contains("not the signed update manifest", result.Summary, StringComparison.Ordinal);
-        Assert.False(File.Exists(staged));
+        Assert.True(verified, summary);
+        Assert.Equal(GenuineHash, sha256);
     }
 
     [Fact]
-    public async Task GenuineExe_PassesBothTheSidecarAndTheManifest()
+    public async Task ReleaseManifestCheck_AnExeSwappedWithItsSidecar_StillDoesntMatchThePinnedHash()
     {
-        using var client = AssetClient(GenuineExe, $"{GenuineHash}  NVMeDriverPatcher.exe");
-        var staged = Path.Combine(_tempDir, "NVMeDriverPatcher.exe");
+        // The check never trusts the sidecar: the hash it reports comes from the signed manifest,
+        // so a swapped exe and sidecar on GitHub can't change it.
+        var bytes = Manifest();
+        using var client = new HttpClient(new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            var path when path.EndsWith("/" + UpdateManifestService.ManifestFileName, StringComparison.Ordinal) =>
+                new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) },
+            var path when path.EndsWith("/" + UpdateManifestService.SignatureFileName, StringComparison.Ordinal) =>
+                new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Sign(_primary, bytes)) },
+            _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent($"{AttackerHash}  NVMeDriverPatcher.exe") }
+        }));
 
-        var result = await AutoUpdaterService.DownloadPinnedAsync(
-            client, new Uri(Release + "NVMeDriverPatcher.exe"), staged, TestPolicy, GenuineHash, CancellationToken.None);
+        var (verified, _, sha256) = await AutoUpdaterService.CheckReleaseManifestAsync(
+            Release + "NVMeDriverPatcher.exe", client, Trusted, Installed, Now, CancellationToken.None);
 
-        Assert.True(result.Success, result.Summary);
-        Assert.Equal(GenuineHash, result.VerifiedSha256);
-        Assert.True(File.Exists(staged));
+        Assert.True(verified);
+        Assert.Equal(GenuineHash, sha256);
+        Assert.NotEqual(AttackerHash, sha256);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("not a url")]
+    [InlineData("http://github.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v9.0.0/NVMeDriverPatcher.exe")]
+    [InlineData("https://evil.example.com/SysAdminDoc/win11-nvme-driver-patcher/releases/download/v9.0.0/NVMeDriverPatcher.exe")]
+    public async Task ReleaseManifestCheck_RefusesAnythingButAnHttpsGitHubUrl_WithoutFetching(string? url)
+    {
+        var fetched = false;
+        using var client = new HttpClient(new StubHandler(_ =>
+        {
+            fetched = true;
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        }));
+
+        var (verified, summary, sha256) = await AutoUpdaterService.CheckReleaseManifestAsync(
+            url, client, Trusted, Installed, Now, CancellationToken.None);
+
+        Assert.False(verified);
+        Assert.Null(sha256);
+        Assert.Contains("https GitHub address", summary, StringComparison.Ordinal);
+        Assert.False(fetched);
+    }
+
+    [Fact]
+    public async Task ReleaseManifestCheck_OfflineIsAnAnswerNotAnException()
+    {
+        using var client = new HttpClient(new StubHandler(_ => throw new HttpRequestException("offline")));
+
+        var (verified, summary, _) = await AutoUpdaterService.CheckReleaseManifestAsync(
+            Release + "NVMeDriverPatcher.exe", client, Trusted, Installed, Now, CancellationToken.None);
+
+        Assert.False(verified);
+        Assert.False(string.IsNullOrWhiteSpace(summary));
     }
 
     [Fact]
@@ -231,14 +270,6 @@ public sealed class UpdateManifestTests : IDisposable
     private static readonly byte[] GenuineExe = Encoding.ASCII.GetBytes("MZ genuine release payload");
     private static readonly string GenuineHash = Sha256(GenuineExe);
     private static readonly string AttackerHash = new('a', 64);
-
-    private static VerifiedDownloader.DownloadPolicy TestPolicy => new()
-    {
-        AllowedHosts = ["github.com"],
-        MinBytes = 1,
-        RequireIntegrity = true,
-        AllowAuthenticodeFallback = false
-    };
 
     private static byte[] Manifest(string version = "9.0.0", string? minimum = "5.0.0", DateTimeOffset? expires = null)
     {
@@ -275,11 +306,6 @@ public sealed class UpdateManifestTests : IDisposable
                 new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(signature) },
             _ => new HttpResponseMessage(HttpStatusCode.NotFound)
         }));
-
-    private static HttpClient AssetClient(byte[] exe, string sidecar) =>
-        new(new StubHandler(request => request.RequestUri!.AbsolutePath.EndsWith(".sha256", StringComparison.Ordinal)
-            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(sidecar) }
-            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(exe) }));
 
     private static string RepoRoot([CallerFilePath] string sourceFile = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFile)!, "..", ".."));

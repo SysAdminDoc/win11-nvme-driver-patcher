@@ -66,9 +66,3 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
   Acceptance: The build is clean, the suite passes, the GUI charts render the same in all three themes, and `wrangler deploy --dry-run` passes for the receiver.
   Complexity: S
 
-- [ ] P3 — The in-place updater's staging code has no caller
-  Why: `AutoUpdaterService.StageUpdateAsync` (sidecar check, signed manifest, protected staging, swap command) is only reached from tests. The GUI's update badge opens the release page, and the CLI's `update-check` only prints the asset URL. The README used to describe a Help menu updater that stages downloads; it was corrected on 2026-10-06. The code either gets a front end or goes.
-  Evidence: `git grep StageUpdateAsync` (tests only); `MainViewModel.ApplyUpdateBadge`; `Program.UpdateCheckCommand`.
-  Touches: either a CLI `update --stage` command (admin, prints the restart command) plus a GUI button behind it, or deleting `StageUpdateAsync`, `DownloadPinnedAsync`, `BuildRestartCommand` and their tests while keeping the manifest checks for `update-check`.
-  Acceptance: Either a user can stage a verified update from the CLI and the GUI, shown working against a real release with a signed manifest, or the dead path is gone and `update-check` reports whether the latest release's manifest verifies.
-  Complexity: M

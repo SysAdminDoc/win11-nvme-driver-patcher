@@ -1,53 +1,12 @@
-using System.Diagnostics;
 using System.Net;
 using NVMeDriverPatcher.Services;
 
 namespace NVMeDriverPatcher.Tests;
 
-// AutoUpdaterService.StageUpdateAsync host-allowlist + filename guards — both run pre-network
-// so these tests exercise rejection paths without any I/O. The happy path is covered
-// manually since it requires a live GitHub release.
+// AutoUpdaterService: the latest-release lookup update-check uses, and the sidecar parsing it
+// shares with VerifiedDownloader. The signed manifest check is in UpdateManifestTests.
 public sealed class AutoUpdaterServiceTests
 {
-    [Fact]
-    public async Task NonHttpsUrl_Rejected()
-    {
-        var result = await AutoUpdaterService.StageUpdateAsync(
-            "http://github.com/foo/bar/releases/download/asset.exe",
-            "asset.exe");
-        Assert.False(result.Success);
-        Assert.Contains("https", result.Summary);
-    }
-
-    [Fact]
-    public async Task UrlOnUnknownHost_Rejected()
-    {
-        var result = await AutoUpdaterService.StageUpdateAsync(
-            "https://evil.example.com/foo.exe",
-            "asset.exe");
-        Assert.False(result.Success);
-        Assert.Contains("not in the allowlist", result.Summary);
-    }
-
-    [Fact]
-    public async Task AssetNameWithPathTraversal_Rejected()
-    {
-        var result = await AutoUpdaterService.StageUpdateAsync(
-            "https://github.com/foo/bar/releases/download/asset.exe",
-            "..\\evil.exe");
-        Assert.False(result.Success);
-        Assert.Contains("invalid", result.Summary);
-    }
-
-    [Fact]
-    public async Task MalformedUri_Rejected()
-    {
-        var result = await AutoUpdaterService.StageUpdateAsync(
-            "not a url at all",
-            "asset.exe");
-        Assert.False(result.Success);
-    }
-
     [Theory]
     [InlineData("", null)]
     [InlineData(null, null)]
@@ -84,70 +43,6 @@ public sealed class AutoUpdaterServiceTests
         Assert.Equal(
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             AutoUpdaterService.ExtractSha256(body));
-    }
-
-    [Fact]
-    public void BuildRestartCommand_EscapesSingleQuotesInPaths()
-    {
-        // PowerShell single-quoted strings treat '' as a literal apostrophe. The restart
-        // command builder must double up any apostrophe in the staged or current exe path
-        // so a directory like `C:\Users\O'Brien\…` doesn't break the command line.
-        var cmd = AutoUpdaterService.BuildRestartCommand(
-            @"C:\Users\O'Brien\staged.exe",
-            @"C:\Program Files\App's\current.exe",
-            new string('a', 64));
-
-        Assert.Contains(@"'C:\Users\O''Brien\staged.exe'", cmd);
-        Assert.Contains(@"'C:\Program Files\App''s\current.exe'", cmd);
-        Assert.Contains("-LiteralPath", cmd);
-        Assert.DoesNotContain("\"", cmd); // Never emit double quotes — they can re-break inside the single-quoted context.
-        Assert.Equal(2, CountOccurrences(cmd, "Get-FileHash"));
-        Assert.True(cmd.IndexOf("Get-FileHash", StringComparison.Ordinal) <
-                    cmd.IndexOf("Copy-Item", StringComparison.Ordinal));
-        Assert.True(cmd.LastIndexOf("Get-FileHash", StringComparison.Ordinal) <
-                    cmd.IndexOf("Start-Process", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void BuildRestartCommand_RejectsInvalidExpectedDigest()
-    {
-        Assert.Throws<ArgumentException>(() => AutoUpdaterService.BuildRestartCommand(
-            @"C:\staged.exe", @"C:\current.exe", "not-a-hash"));
-    }
-
-    [Fact]
-    public void RestartCommand_TamperedStageFailsBeforeCopyOrLaunch()
-    {
-        var dir = Path.Combine(Path.GetTempPath(), $"NVMePatcher.UpdaterSwap.{Guid.NewGuid():N}");
-        Directory.CreateDirectory(dir);
-        var staged = Path.Combine(dir, "staged.exe");
-        var target = Path.Combine(dir, "target.exe");
-        File.WriteAllText(staged, "tampered payload");
-        try
-        {
-            var command = AutoUpdaterService.BuildRestartCommand(staged, target, new string('0', 64));
-            var startInfo = new ProcessStartInfo(SystemToolPathService.PowerShell)
-            {
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            startInfo.ArgumentList.Add("-NoProfile");
-            startInfo.ArgumentList.Add("-Command");
-            startInfo.ArgumentList.Add(command);
-
-            var result = TestProcessRunner.Run(startInfo, TimeSpan.FromSeconds(10));
-            Assert.False(result.TimedOut, "Generated updater command timed out.");
-
-            Assert.NotEqual(0, result.ExitCode);
-            Assert.Contains("SHA-256 changed", result.StdOut + result.StdErr, StringComparison.OrdinalIgnoreCase);
-            Assert.False(File.Exists(target));
-        }
-        finally
-        {
-            try { Directory.Delete(dir, recursive: true); } catch { }
-        }
     }
 
     [Fact]
@@ -191,7 +86,7 @@ public sealed class AutoUpdaterServiceTests
     [Fact]
     public void SelectGuiAsset_FailsClosed_WhenGuiAssetMissing()
     {
-        // CLI/tray/watchdog executables must NEVER be staged as a GUI update.
+        // CLI/tray/watchdog executables must NEVER be reported as the GUI update.
         var withoutGui = FullReleaseAssets.Where(a => a.Name != "NVMeDriverPatcher.exe").ToArray();
         var (url, name) = AutoUpdaterService.SelectGuiAsset(withoutGui);
         Assert.Null(url);
@@ -310,6 +205,4 @@ public sealed class AutoUpdaterServiceTests
             Task.FromResult(responder(request));
     }
 
-    private static int CountOccurrences(string value, string token) =>
-        (value.Length - value.Replace(token, string.Empty, StringComparison.Ordinal).Length) / token.Length;
 }
