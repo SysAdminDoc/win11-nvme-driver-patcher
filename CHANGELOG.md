@@ -5,6 +5,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- The sample telemetry receiver's summary counted only the first 998 records once a deployment held more than about a thousand, and still said it wasn't truncated. Cloudflare allows 1,000 KV operations per request and the summary read records one at a time, so every read past the limit failed and was skipped as if the record were corrupt. It now reads 100 records per bulk get (102 operations at most for the full 5,000), and a new `unreadableRecords` count shows anything it couldn't read. A submission that hits KV's one-write-per-second limit gets a plain 503 asking to retry instead of a bare 500, and a failed summary cache write no longer throws away the summary. The deploy comment says `wrangler deploy`, since wrangler 4 has no `publish`.
 - The window no longer scans folders and reads the history database on the UI thread during refresh. The benchmark history is read once per refresh instead of three times.
 - Refresh in the legacy script no longer freezes the window while the system checks run.
 - The legacy script's `-Status` run no longer creates the Windows event log source, which wrote to HKLM from a command that's meant to only read.

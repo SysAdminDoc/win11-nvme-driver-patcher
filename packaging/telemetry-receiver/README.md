@@ -106,7 +106,12 @@ capped reader **before** parsing, so an oversized payload is rejected without be
 `GET /nvme/compat/summary` paginates the KV keyspace by following list cursors, so a dataset larger
 than one 1000-key list page is not silently dropped. It stops after `MAX_SUMMARY_LIST_PAGES` (50)
 pages, reads up to `MAX_SUMMARY_RECORDS` (5000) stored records, and reports `scannedKeys`,
-`summarizedRecords` and a `truncated` flag so any cap is explicit rather than silent. The computed
+`summarizedRecords`, `unreadableRecords` and a `truncated` flag so any cap is explicit rather than silent.
+Records are read 100 keys per bulk get. Cloudflare allows 1,000 KV operations per invocation and
+counts a bulk get as one, so an uncached summary needs at most 102 of them. Earlier versions read
+one key at a time, hit that limit near the 1,000th record, and quietly summarized only the first
+998 while `truncated` stayed false. A record that expired after the list, or a bulk read that
+failed, now shows up in `unreadableRecords`. The computed
 aggregate is cached for 5 minutes, so N concurrent readers cause one namespace scan rather than N.
 The cursor-follow, the page ceiling and the cache are all tested.
 
@@ -137,7 +142,9 @@ worker, keep those field names in sync with the client (a contract test pins the
 ```
 
 Controllers are counted **per drive** (`model/firmware`), so a two-NVMe machine contributes two
-controller rows but one `totalSubmissions`. `verification` is bucketed per submission against the
+controller rows but one `totalSubmissions`. Records are keyed per client per day, so a resubmit on
+the same day replaces that day's record, and a machine that submits on three different days counts
+three times. `verification` is bucketed per submission against the
 `VerificationOutcome` set (`Confirmed`, `AwaitingRestart`, `OverrideBlocked`, `FlagsEnabledNotBound`,
 `Reverted`, `StalePending`, `StorPortHeldLegacy`, `None`) plus `Unknown`; anything else falls into `Other`.
 
@@ -164,6 +171,10 @@ controller rows but one `totalSubmissions`. `verification` is bucketed per submi
     "Unknown": 0,
     "Other": 2
   },
+  "scannedKeys": 142,
+  "summarizedRecords": 142,
+  "unreadableRecords": 0,
+  "truncated": false,
   "generatedAt": "2026-06-11T12:00:00.000Z"
 }
 ```
