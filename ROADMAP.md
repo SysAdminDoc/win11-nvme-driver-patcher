@@ -10,16 +10,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
-- [ ] P3 — `winre-inject --apply` adds the same stornvme package again on every run
-  Category: correctness
-  Where: `WinReDriverInjectionService.BuildPlan` (the `/Add-Driver` step), `ApplyAsync`
-  Problem: Every apply runs `dism /Add-Driver` with the Driver Store stornvme package, and DISM stages it as a new `oem<N>.inf` each time even when the image already carries that exact DriverVer. On the 24H2 rig three runs grew `winre.wim` from 510 MB to 515 MB to 517 MB, and a fourth would grow it again. The second and later runs also take a full backup and a mount for nothing.
-  Evidence: VM run of three consecutive applies (2026-10-05): sizes 510, 515, 517 MB; `dism /Get-Drivers` on the image shows `oem0.inf` after the first injection.
-  Fix: Before mounting for real, read the image's driver list (`dism /Image:<mount> /Get-Drivers` after a read-only mount, or `/Get-ImageInfo` plus the package list) and compare the stornvme DriverVer against the Driver Store package. Same or newer in the image: report "already current" and stop without a backup or commit. Older: inject, and remove the superseded `oem<N>.inf` copy (`/Remove-Driver`) so the image keeps one copy.
-  Acceptance: Two applies in a row leave the image's size and SHA-256 unchanged after the first; the second run says the image is current; a staged newer package replaces the older copy rather than sitting beside it.
-  Confidence: Verified
-  Effort: M
-
 - [ ] P3 — GUI: large dead ViewModel surface still computed every refresh; user-facing features silently vanished in the redesign
   Category: maintainability
   Where: `src/NVMeDriverPatcher/ViewModels/`: `ReadinessChecks`/`LeftChecks`/`RightChecks` + `PreflightCheckVM` tooltips (`MainViewModel.cs:467-506`), `Drives`/`DriveRowVM` (`RowViewModels.cs:63-106`), `RegistryFlags`/`SafeBootFlags` (`:804-836`), `AttentionNotes` cluster (`:1089-1167`), `DirectStorageImpactText/Severity/PanelVisible` (`:156-159, 1046-1087`), `SkipWarnings` (no toggle anywhere yet described by `OptionsSummaryText`, `MainViewModel.Settings.cs:22-24`), `ChangePlanSteps`, `RiskSummaryColor`, `ActionReadinessText/Color` (bound only inside collapsed XAML)

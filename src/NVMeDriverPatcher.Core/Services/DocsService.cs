@@ -65,6 +65,8 @@ Flip via `apply --safe` / `apply --full` or the GUI's Install Mode radio.
 5. WinRE driver hardening. `winre-inject` previews the DISM plan to inject stornvme.inf
    into winre.wim, taking the Driver Store package so the image gets the running system's build. `winre-inject --apply` backs up winre.wim, logs SHA-256 before/after,
    mounts under the app working dir, commits or discards, and runs DISM cleanup on failure.
+   A read-only look at the image's driver list comes first: an image that already carries that
+   stornvme version or newer is left alone, and a newer package replaces the older injected copy.
    The oldest backup (the image from before the first injection) and the newest stay under the
    working dir's backups folder; the ones between are removed.
    After applying, boot into WinRE once and confirm the system volume is accessible.

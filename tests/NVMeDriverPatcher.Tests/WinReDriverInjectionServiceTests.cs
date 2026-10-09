@@ -192,10 +192,10 @@ public sealed class WinReDriverInjectionServiceTests
             var plan = WinReDriverInjectionService.BuildPlan(image, mount, inf);
             var commands = new List<string>();
 
-            Task Runner(string exe, string[] args, int timeoutSeconds, CancellationToken cancellationToken)
+            Task<string> Runner(string exe, string[] args, int timeoutSeconds, CancellationToken cancellationToken)
             {
                 commands.Add(string.Join(" ", args));
-                return Task.CompletedTask;
+                return Task.FromResult(string.Empty);
             }
 
             var result = await WinReDriverInjectionService.ApplyAsync(plan, root, Runner);
@@ -207,7 +207,10 @@ public sealed class WinReDriverInjectionServiceTests
             Assert.Contains(commands, c => c.Contains("/Mount-Image"));
             Assert.Contains(commands, c => c.Contains("/Add-Driver"));
             Assert.Contains(commands, c => c.Contains("/Unmount-Image") && c.Contains("/Commit"));
-            Assert.DoesNotContain(commands, c => c.Contains("/Discard"));
+            // The only discard is the read-only check's, before the image is mounted for writing.
+            var discard = Assert.Single(commands, c => c.Contains("/Discard"));
+            Assert.True(commands.IndexOf(discard) < commands.FindIndex(c => c.Contains("/Mount-Image") && !c.Contains("/ReadOnly")));
+            Assert.DoesNotContain(commands, c => c.Contains("/Remove-Driver"));
             Assert.DoesNotContain(commands, c => c.Contains("/Cleanup-Mountpoints"));
             Assert.False(Directory.Exists(mount));
         }
@@ -234,7 +237,7 @@ public sealed class WinReDriverInjectionServiceTests
             var plan = WinReDriverInjectionService.BuildPlan(image, Path.Combine(root, "mount"), inf);
 
             var result = await WinReDriverInjectionService.ApplyAsync(plan, root,
-                (_, _, _, _) => Task.CompletedTask);
+                (_, _, _, _) => Task.FromResult(string.Empty));
 
             Assert.True(result.Success, result.Summary);
             var attributes = File.GetAttributes(result.BackupPath!);
@@ -262,13 +265,13 @@ public sealed class WinReDriverInjectionServiceTests
             var plan = WinReDriverInjectionService.BuildPlan(image, mount, inf);
             var commands = new List<string>();
 
-            Task Runner(string exe, string[] args, int timeoutSeconds, CancellationToken cancellationToken)
+            Task<string> Runner(string exe, string[] args, int timeoutSeconds, CancellationToken cancellationToken)
             {
                 var command = string.Join(" ", args);
                 commands.Add(command);
                 if (command.Contains("/Add-Driver"))
                     throw new InvalidOperationException("add failed");
-                return Task.CompletedTask;
+                return Task.FromResult(string.Empty);
             }
 
             var result = await WinReDriverInjectionService.ApplyAsync(plan, root, Runner);
@@ -276,7 +279,8 @@ public sealed class WinReDriverInjectionServiceTests
             Assert.False(result.Success);
             Assert.Contains("add failed", result.Summary);
             Assert.True(File.Exists(result.BackupPath));
-            Assert.Contains(commands, c => c.Contains("/Unmount-Image") && c.Contains("/Discard"));
+            var added = commands.FindIndex(c => c.Contains("/Add-Driver"));
+            Assert.Contains(commands.Skip(added), c => c.Contains("/Unmount-Image") && c.Contains("/Discard"));
             Assert.Contains(commands, c => c.Contains("/Cleanup-Mountpoints"));
             Assert.False(Directory.Exists(mount));
         }
@@ -313,7 +317,7 @@ public sealed class WinReDriverInjectionServiceTests
             var log = new List<string>();
 
             var result = await WinReDriverInjectionService.ApplyAsync(
-                plan, root, (_, _, _, _) => Task.CompletedTask, log.Add);
+                plan, root, (_, _, _, _) => Task.FromResult(string.Empty), log.Add);
 
             Assert.True(result.Success, result.Summary);
             Assert.True(File.Exists(original));
@@ -361,13 +365,189 @@ public sealed class WinReDriverInjectionServiceTests
             var result = await WinReDriverInjectionService.ApplyAsync(plan, root, (_, args, _, _) =>
                 args.Any(a => a.Contains("/Add-Driver", StringComparison.Ordinal))
                     ? throw new InvalidOperationException("add failed")
-                    : Task.CompletedTask);
+                    : Task.FromResult(string.Empty));
 
             Assert.False(result.Success);
             Assert.True(File.Exists(result.BackupPath));
             Assert.True(File.Exists(original));
             Assert.False(File.Exists(middle));
             Assert.Equal(3, WinReDriverInjectionService.ListBackups(backups).Count);
+        }
+        finally
+        {
+            TryDeleteDir(root);
+        }
+    }
+
+    // --- The stornvme copy already in the image ---
+
+    private const string StagedVersion = "10.0.26100.9549";
+
+    private static string DriverBlock(string published, string original, string version) =>
+        $"Published Name : {published}\r\nOriginal File Name : {original}\r\nInbox : No\r\nClass Name : SCSIAdapter\r\n" +
+        $"Provider Name : Microsoft\r\nDate : 6/21/2006\r\nVersion : {version}\r\n\r\n";
+
+    private static string DriverListing(params string[] blocks) =>
+        "\r\nDeployment Image Servicing and Management tool\r\nVersion: 10.0.26100.5074\r\n\r\nImage Version: 10.0.26100.6584\r\n\r\n" +
+        "Obtaining list of 3rd party drivers from the driver store...\r\n\r\nDriver packages listing:\r\n\r\n" +
+        string.Concat(blocks) + "The operation completed successfully.\r\n";
+
+    private static string WriteStagedInf(string root)
+    {
+        var inf = Path.Combine(root, "stornvme.inf");
+        File.WriteAllText(inf, $"[Version]\r\nClass=SCSIAdapter\r\nDriverVer = 06/21/2006,{StagedVersion}\r\n");
+        return inf;
+    }
+
+    [Fact]
+    public void ParseDriverList_ReadsEachPackageAndSkipsTheToolHeader()
+    {
+        var packages = WinReDriverInjectionService.ParseDriverList(DriverListing(
+            DriverBlock("oem0.inf", "stornvme.inf", "10.0.26100.1"),
+            DriverBlock("oem1.inf", "netkvm.inf", "100.95.104.26200")));
+
+        Assert.Equal(2, packages.Count);
+        Assert.Equal(new ImageDriverPackage("oem0.inf", "stornvme.inf", new Version(10, 0, 26100, 1)), packages[0]);
+        Assert.Equal("netkvm.inf", packages[1].OriginalFileName);
+        Assert.Empty(WinReDriverInjectionService.ParseDriverList(DriverListing()));
+        Assert.Empty(WinReDriverInjectionService.ParseDriverList(""));
+    }
+
+    [Theory]
+    [InlineData(StagedVersion, true)]
+    [InlineData("10.0.26200.1", true)]
+    [InlineData("10.0.26100.1", false)]
+    public void CheckImageCopies_CurrentOnlyWhenACopyIsAtTheStagedVersionOrNewer(string imageVersion, bool current)
+    {
+        var drivers = new[] { new ImageDriverPackage("oem0.inf", "stornvme.inf", Version.Parse(imageVersion)) };
+
+        var check = WinReDriverInjectionService.CheckImageCopies(drivers, @"C:\Store\stornvme.inf", Version.Parse(StagedVersion));
+
+        Assert.Equal(current, check.AlreadyCurrent);
+        if (current) Assert.Empty(check.Superseded);
+        else Assert.Equal("oem0.inf", Assert.Single(check.Superseded).PublishedName);
+    }
+
+    [Fact]
+    public void CheckImageCopies_IgnoresOtherDriversAndAnythingNotAnOemCopy()
+    {
+        var drivers = new[]
+        {
+            new ImageDriverPackage("oem3.inf", "storahci.inf", new Version(99, 0)),
+            new ImageDriverPackage("stornvme.inf", "stornvme.inf", new Version(99, 0)),
+        };
+
+        var check = WinReDriverInjectionService.CheckImageCopies(drivers, @"C:\Store\stornvme.inf", Version.Parse(StagedVersion));
+
+        Assert.False(check.AlreadyCurrent);
+        Assert.Empty(check.Superseded);
+    }
+
+    [Fact]
+    public void CheckImageCopies_StagedVersionUnreadable_DoesNotStackAnotherCopy()
+    {
+        var drivers = new[] { new ImageDriverPackage("oem0.inf", "stornvme.inf", new Version(10, 0, 26100, 1)) };
+
+        var check = WinReDriverInjectionService.CheckImageCopies(drivers, @"C:\Store\stornvme.inf", stagedVersion: null);
+
+        Assert.True(check.AlreadyCurrent);
+        Assert.Contains("no DriverVer", check.Detail, StringComparison.Ordinal);
+        // With nothing in the image there's no copy to stack on, so the first injection still runs.
+        Assert.False(WinReDriverInjectionService.CheckImageCopies([], @"C:\Store\stornvme.inf", null).AlreadyCurrent);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_TwoAppliesInARow_TheSecondFindsTheImageCurrentAndChangesNothing()
+    {
+        // Seen in the VM: three applies grew winre.wim from 510 to 515 to 517 MB, because DISM
+        // staged the same package as a new oem<N>.inf each time. The fake image here gains the
+        // copy when the first run commits, the way DISM's driver list would show it afterwards.
+        var root = CreateTempDir();
+        try
+        {
+            var image = Path.Combine(root, "winre.wim");
+            var mount = Path.Combine(root, "mount");
+            File.WriteAllText(image, "fake winre image");
+            var inf = WriteStagedInf(root);
+            var listing = DriverListing();
+            var commands = new List<string>();
+
+            Task<string> Runner(string exe, string[] args, int timeoutSeconds, CancellationToken cancellationToken)
+            {
+                var command = string.Join(" ", args);
+                commands.Add(command);
+                if (command.Contains("/Commit"))
+                {
+                    File.AppendAllText(image, " + stornvme");
+                    listing = DriverListing(DriverBlock("oem0.inf", "stornvme.inf", StagedVersion));
+                }
+                return Task.FromResult(command.Contains("/Get-Drivers") ? listing : string.Empty);
+            }
+
+            var first = await WinReDriverInjectionService.ApplyAsync(
+                WinReDriverInjectionService.BuildPlan(image, mount, inf), root, Runner);
+            Assert.True(first.Success, first.Summary);
+            Assert.False(first.AlreadyCurrent);
+            var afterFirst = await WinReDriverInjectionService.ComputeSha256Async(image);
+            var sizeAfterFirst = new FileInfo(image).Length;
+            commands.Clear();
+            var log = new List<string>();
+
+            var second = await WinReDriverInjectionService.ApplyAsync(
+                WinReDriverInjectionService.BuildPlan(image, mount, inf), root, Runner, log.Add);
+
+            Assert.True(second.Success, second.Summary);
+            Assert.True(second.AlreadyCurrent);
+            Assert.Contains("already current", second.Summary, StringComparison.Ordinal);
+            Assert.Contains(log, line => line.Contains("oem0.inf", StringComparison.Ordinal) && line.Contains(StagedVersion, StringComparison.Ordinal));
+            Assert.Null(second.BackupPath);
+            Assert.Equal(afterFirst, await WinReDriverInjectionService.ComputeSha256Async(image));
+            Assert.Equal(sizeAfterFirst, new FileInfo(image).Length);
+            // Only the read-only look ran: no writable mount, no add, no commit, and no second backup.
+            Assert.Contains(commands, c => c.Contains("/Mount-Image") && c.Contains("/ReadOnly"));
+            Assert.DoesNotContain(commands, c => c.Contains("/Add-Driver") || c.Contains("/Commit"));
+            Assert.DoesNotContain(commands, c => c.Contains("/Mount-Image") && !c.Contains("/ReadOnly"));
+            Assert.Single(WinReDriverInjectionService.ListBackups(Path.Combine(root, "backups")));
+            Assert.False(Directory.Exists(mount));
+        }
+        finally
+        {
+            TryDeleteDir(root);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyAsync_OlderCopyInTheImage_IsRemovedInTheSameMountAfterTheNewOneGoesIn()
+    {
+        var root = CreateTempDir();
+        try
+        {
+            var image = Path.Combine(root, "winre.wim");
+            File.WriteAllText(image, "fake winre image");
+            var inf = WriteStagedInf(root);
+            var plan = WinReDriverInjectionService.BuildPlan(image, Path.Combine(root, "mount"), inf);
+            var listing = DriverListing(
+                DriverBlock("oem0.inf", "stornvme.inf", "10.0.26100.1"),
+                DriverBlock("oem1.inf", "stornvme.inf", "10.0.26100.2"),
+                DriverBlock("oem2.inf", "netkvm.inf", "100.95.104.26200"));
+            var commands = new List<string>();
+
+            var result = await WinReDriverInjectionService.ApplyAsync(plan, root, (_, args, _, _) =>
+            {
+                var command = string.Join(" ", args);
+                commands.Add(command);
+                return Task.FromResult(command.Contains("/Get-Drivers") ? listing : string.Empty);
+            });
+
+            Assert.True(result.Success, result.Summary);
+            Assert.Contains("oem0.inf, oem1.inf", result.Summary, StringComparison.Ordinal);
+            var add = commands.FindIndex(c => c.Contains("/Add-Driver"));
+            var remove = commands.FindIndex(c => c.Contains("/Remove-Driver"));
+            var commit = commands.FindIndex(c => c.Contains("/Commit"));
+            Assert.True(add >= 0 && remove > add && commit > remove, string.Join(" | ", commands));
+            Assert.Contains("/Driver:oem0.inf", commands[remove], StringComparison.Ordinal);
+            Assert.Contains("/Driver:oem1.inf", commands[remove], StringComparison.Ordinal);
+            Assert.DoesNotContain("oem2.inf", commands[remove], StringComparison.Ordinal);
         }
         finally
         {
