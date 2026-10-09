@@ -18,7 +18,9 @@ Produces a per-machine MSI installer for NVMe Driver Patcher with four features:
   ```
 
   `policy-install` copies the bundled `admx\` templates beside the exe; pass `--source=<dir>` to point at a different template set. Both commands need an elevated shell. Central Store deployment makes the templates available to every Group Policy editor in the domain; local install only affects the current machine.
-- **WatchdogService**: opt-in (Level 2, NOT installed by default): drops `NVMeDriverPatcher.Watchdog.exe` and registers/starts the `NVMeDriverPatcherWatchdog` service as **NT AUTHORITY\LocalService** (least privilege, matching the wxs `ServiceInstall` Account); removed cleanly on uninstall. Select via the installer feature tree or `msiexec /i NVMeDriverPatcher.msi ADDLOCAL=WatchdogService`
+- **WatchdogService**: opt-in (Level 2, NOT installed by default): drops `NVMeDriverPatcher.Watchdog.exe` and registers/starts the `NVMeDriverPatcherWatchdog` service as **NT AUTHORITY\LocalService** (least privilege, matching the wxs `ServiceInstall` Account); removed cleanly on uninstall. The installer UI has no feature tree, so pick it on the command line. A fresh install takes `msiexec /i NVMeDriverPatcher.msi ADDLOCAL=ALL` (naming only `WatchdogService` there would leave out the app itself), and an existing install adds it with `ADDLOCAL=WatchdogService`.
+
+The MSI installs only under Program Files. There's no folder picker, and an `INSTALLFOLDER` on the command line has to be a folder inside Program Files or the install stops with a message saying so. The install folder gets an admin-only DACL, but that protects the files, not the path to them. Outside Program Files a standard user can usually rename a parent folder, move the real one aside and put their own programs at the same path, and the elevated app, the SYSTEM custom action and the watchdog service would run them. `scripts/Test-InstallFolderAcl.ps1` checks both halves on a real install.
 
 The installer's license/info page and product-facing strings come from `packaging\wix\License.rtf` (no placeholder text, see issue #12) and the `packaging\wix\en-US.wxl` string contract.
 

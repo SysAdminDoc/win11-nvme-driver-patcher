@@ -89,10 +89,10 @@ public sealed class InstallerContentTests
     [Fact]
     public void InstallFolder_GetsAProtectedDaclBecauseItRunsAServiceAndASystemCustomAction()
     {
-        // INSTALLFOLDER is user-selectable via WixUI_InstallDir. Without an explicit DACL it
-        // inherits its parent's, so an install outside Program Files leaves the watchdog binary
-        // writable by a standard user while the MSI registers it as an auto-start service and
-        // invokes it from a deferred SYSTEM custom action.
+        // INSTALLFOLDER can be set on the command line to a folder inside Program Files. Without an
+        // explicit DACL it inherits its parent's, so a folder under another vendor's writable
+        // directory leaves the watchdog binary writable by a standard user while the MSI registers
+        // it as an auto-start service and invokes it from a deferred SYSTEM custom action.
         var wxs = Read("packaging", "wix", "NVMeDriverPatcher.wxs");
 
         var installFolderSecurity = Regex.Match(
@@ -172,12 +172,44 @@ public sealed class InstallerContentTests
     }
 
     [Fact]
+    public void Msi_InstallsOnlyUnderProgramFiles_AndOffersNoFolderPicker()
+    {
+        // The install folder's DACL protects the files, not the path. A standard user who can rename
+        // a parent outside Program Files (C:\Tools) can move the real folder aside and build their
+        // own tree at the same path, which the elevated GUI, the SYSTEM custom action and the
+        // watchdog service would then run.
+        var wxs = Read("packaging", "wix", "NVMeDriverPatcher.wxs");
+        Assert.DoesNotContain("WixUI_InstallDir", wxs);
+        Assert.DoesNotContain("WIXUI_INSTALLDIR", wxs);
+        Assert.Contains(@"<ui:WixUI Id=""WixUI_Minimal""", wxs);
+
+        var launch = Regex.Match(wxs, @"<Launch\s+Condition='([^']+)'\s+Message=""([^""]+)""", RegexOptions.Singleline);
+        Assert.True(launch.Success, "The MSI has no Launch condition guarding INSTALLFOLDER.");
+        var condition = launch.Groups[1].Value;
+        Assert.StartsWith("Installed OR NOT INSTALLFOLDER OR (", condition);
+        Assert.Contains("INSTALLFOLDER ~&lt;&lt; ProgramFiles64Folder", condition);   // case-insensitive prefix
+        Assert.Contains("NOT (INSTALLFOLDER ~= ProgramFiles64Folder)", condition);    // never Program Files itself
+        Assert.Contains(@"NOT (INSTALLFOLDER &gt;&lt; ""\."")", condition);           // no "..", no "."
+        Assert.Contains(@"NOT (INSTALLFOLDER &gt;&lt; ""/"")", condition);
+        Assert.DoesNotContain(" OR ", condition[condition.IndexOf('(')..]);         // every guard is ANDed
+
+        // The smoke matches the refusal by its first sentence.
+        var script = Read("scripts", "Test-InstallFolderAcl.ps1");
+        var refusal = Regex.Match(script, @"\$refusalText = '([^']+)'").Groups[1].Value;
+        Assert.False(string.IsNullOrEmpty(refusal), "Test-InstallFolderAcl.ps1 no longer names the refusal text.");
+        Assert.StartsWith(refusal, launch.Groups[2].Value);
+    }
+
+    [Fact]
     public void InstallFolderAclSmoke_ProvesTheDaclIsAppliedAtInstallTime()
     {
-        // The unit test above can only see the .wxs authoring; this smoke is what proves the DACL
-        // actually lands, by installing into a deliberately user-writable parent directory.
+        // The unit tests above can only see the .wxs authoring; this smoke is what proves the
+        // refusal fires and the DACL actually lands, by trying a user-writable folder outside
+        // Program Files first and then installing to the default folder.
         var script = Read("scripts", "Test-InstallFolderAcl.ps1");
         Assert.Contains("INSTALLFOLDER=", script);
+        Assert.Contains("ExitCode -eq 0", script);   // an install outside Program Files is a failure
+        Assert.Contains("ProgramW6432", script);     // the default install is checked to be under Program Files
         Assert.Contains("AreAccessRulesProtected", script);
         Assert.Contains("GetOwner", script);
         Assert.Contains("NVMeDriverPatcher.Watchdog.exe", script);

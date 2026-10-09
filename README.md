@@ -38,7 +38,7 @@ A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driv
 and watchdog. These are diagnostic/status builds until Microsoft ships an ARM64 `nvmedisk.sys`;
 use the x64 assets under emulation if you need the current native-NVMe enablement path.
 
-**MSI (managed deployment)**: `NVMeDriverPatcher-<version>.msi` from the release installs GUI + CLI + tray per-machine; the real-time watchdog service is an opt-in feature (`ADDLOCAL=WatchdogService`).
+**MSI (managed deployment)**: `NVMeDriverPatcher-<version>.msi` from the release installs GUI + CLI + tray per-machine under Program Files (it refuses any other folder, since a standard user can often rename a folder elsewhere and swap in their own programs). The real-time watchdog service is an opt-in feature: `ADDLOCAL=ALL` on a fresh install, or `ADDLOCAL=WatchdogService` to add it to an existing one.
 
 <details>
 <summary><b>Legacy PowerShell script (deprecated)</b></summary>
