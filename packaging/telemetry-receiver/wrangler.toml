@@ -3,7 +3,7 @@
 
 name = "nvme-driver-patcher-compat"
 main = "cloudflare-worker.js"
-compatibility_date = "2026-09-26"
+compatibility_date = "2026-10-02"
 
 account_id = "<account-id>"
 

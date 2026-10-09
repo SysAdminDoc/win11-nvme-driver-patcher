@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <!-- xunit.runner.visualstudio 3.x is backward-compatible with xunit 2.x test assemblies.
          The runner update is safe without migrating to the xunit v3 test framework. -->

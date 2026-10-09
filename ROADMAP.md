@@ -58,11 +58,3 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
   Touches: `Build-ReleaseArtifacts.ps1` MSI staging, the WiX source, the service and scheduled-task registration paths, `Validate-ReleaseAssets.ps1`. The portable single-file exes stay as they are. Relates to the P3 "dll-hosted runs register `dotnet.exe`" item above: a shared directory must still register the apphost exe, not `dotnet.exe`.
   Acceptance: MSI and Intune zip sizes measured before and after; install, upgrade over the 5.6.0 MSI, repair and uninstall all pass; the service and tray start from the new layout.
   Complexity: M
-
-- [ ] P3 — Dependency refresh: SourceGear.sqlite3 3.53.4, Microsoft.NET.Test.Sdk 18.10.1, SkiaSharp 4.153.1, wrangler 4.148.0
-  Why: All four have newer stable releases with no advisories against the pinned versions, and staying close makes the next security bump small. SkiaSharp needs a render check because 4.150 turned obsolete APIs into errors. SQLitePCLRaw stays on 3.0.4.
-  Evidence: NuGet flat-container lookups (2026-10-06); https://www.sqlite.org/changes.html; https://developers.cloudflare.com/workers/wrangler/migration/deprecations/.
-  Touches: `NVMeDriverPatcher.Core.csproj`, the test csproj, `NVMeDriverPatcher.csproj` (SkiaSharp family), `packaging/telemetry-receiver/package.json` and `wrangler.toml` `compatibility_date`.
-  Acceptance: The build is clean, the suite passes, the GUI charts render the same in all three themes, and `wrangler deploy --dry-run` passes for the receiver.
-  Complexity: S
-
