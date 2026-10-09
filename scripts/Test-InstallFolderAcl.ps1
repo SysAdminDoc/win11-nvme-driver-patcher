@@ -34,6 +34,7 @@ $refusedFolder = Join-Path $InstallRoot 'NVMe Driver Patcher'
 $msiexec = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'msiexec.exe'
 $installed = $false
 $createdRoot = $false
+$originalRootAcl = $null
 
 # The start of the Launch message in NVMeDriverPatcher.wxs. InstallerContentTests keeps the two in step.
 $refusalText = 'NVMe Driver Patcher installs only under Program Files.'
@@ -46,10 +47,21 @@ $plantableRights =
     0x00000100 -bor 0x00010000 -bor 0x00040000 -bor 0x00080000 -bor
     0x10000000 -bor 0x40000000
 
+# Start-Process joins an argument array with plain spaces, so a path with a space would reach
+# msiexec as two arguments (exit 1639, before any Launch condition runs). Quote each one the way
+# msiexec reads it: PROPERTY="value", or "path".
+function Format-MsiArgument {
+    param([Parameter(Mandatory)] [string]$Argument)
+    if ($Argument -notmatch '\s') { return $Argument }
+    if ($Argument -match '^([A-Za-z_][A-Za-z0-9_.]*)=(.*)$') { return $Matches[1] + '="' + $Matches[2] + '"' }
+    return '"' + $Argument + '"'
+}
+
 function Invoke-MsiExecRaw {
     param([Parameter(Mandatory)] [string[]]$Arguments)
     $log = Join-Path $env:TEMP ('nvme-acl-smoke-' + [guid]::NewGuid().ToString('N') + '.log')
-    $proc = Start-Process -FilePath $msiexec -ArgumentList ($Arguments + @('/qn', '/l*v', $log)) -Wait -PassThru -WindowStyle Hidden
+    $commandLine = (($Arguments + @('/qn', '/l*v', $log)) | ForEach-Object { Format-MsiArgument $_ }) -join ' '
+    $proc = Start-Process -FilePath $msiexec -ArgumentList $commandLine -Wait -PassThru -WindowStyle Hidden
     [pscustomobject]@{ ExitCode = $proc.ExitCode; Log = $log }
 }
 
@@ -80,6 +92,10 @@ try {
         New-Item -ItemType Directory -Path $InstallRoot | Out-Null
         $createdRoot = $true
     }
+    else {
+        # Put a folder that was already there back the way it was.
+        $originalRootAcl = Get-Acl -LiteralPath $InstallRoot
+    }
     $rootAcl = Get-Acl -LiteralPath $InstallRoot
     $rootAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
         'BUILTIN\Users', 'Modify', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
@@ -89,6 +105,9 @@ try {
     if ($refused.ExitCode -eq 0) {
         $installed = $true
         throw "The MSI installed into '$refusedFolder', outside Program Files. The Launch condition didn't fire."
+    }
+    if (-not (Test-Path -LiteralPath $refused.Log)) {
+        throw "msiexec failed with exit $($refused.ExitCode) and wrote no log, so the refusal wasn't seen."
     }
     if (-not (Select-String -LiteralPath $refused.Log -SimpleMatch $refusalText -Quiet)) {
         throw "msiexec failed with exit $($refused.ExitCode), but not with the Program Files refusal. Log: $($refused.Log)"
@@ -135,5 +154,8 @@ finally {
     }
     if ($createdRoot) {
         Remove-Item -LiteralPath $InstallRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    elseif ($originalRootAcl) {
+        Set-Acl -LiteralPath $InstallRoot -AclObject $originalRootAcl
     }
 }
