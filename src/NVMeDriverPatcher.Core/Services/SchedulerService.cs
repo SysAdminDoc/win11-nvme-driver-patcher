@@ -318,36 +318,117 @@ public static class SchedulerService
     internal static string[] BuildUnregisterArgs(string taskName) =>
         new[] { "/Delete", "/F", "/TN", taskName };
 
+    internal static string[] BuildQueryXmlArgs(string taskName) =>
+        new[] { "/Query", "/TN", taskName, "/XML" };
+
+    /// <summary>
+    /// Reads back the program each of this app's tasks runs and puts it through the same check
+    /// register-tasks uses. Tasks registered before that check existed, or pointed somewhere else
+    /// since, are never re-checked otherwise, and they still run as SYSTEM on every trigger.
+    /// </summary>
+    public static IReadOnlyList<ScheduledTaskTargetAudit> AuditRegisteredTaskTargets()
+    {
+        var audits = new List<ScheduledTaskTargetAudit>();
+        foreach (var taskName in new[] { BootTaskName, WatchdogTaskName })
+        {
+            int? exitCode = null;
+            string xml = string.Empty;
+            try
+            {
+                var run = LaunchSchtasks(BuildQueryXmlArgs(taskName), 10_000);
+                if (run.Outcome == SchtasksOutcome.Exited)
+                {
+                    exitCode = run.ExitCode;
+                    xml = run.Stdout;
+                }
+            }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+            {
+                // Left as "couldn't ask"; EvaluateTaskQuery reports that rather than "not registered".
+            }
+            audits.Add(EvaluateTaskQuery(taskName, exitCode, xml, CheckTaskTarget));
+        }
+        return audits;
+    }
+
+    /// <summary>
+    /// Turns one <c>schtasks /Query /TN name /XML</c> result into a verdict. <paramref name="exitCode"/>
+    /// is null when schtasks didn't start or ran out of time.
+    /// </summary>
+    internal static ScheduledTaskTargetAudit EvaluateTaskQuery(
+        string taskName,
+        int? exitCode,
+        string? taskXml,
+        Func<string, TaskTargetCheck> check)
+    {
+        if (exitCode is null)
+            return new(taskName, ScheduledTaskTargetState.Unreadable, null,
+                $"Couldn't ask Task Scheduler about {taskName}, so the program it runs wasn't checked.");
+        // schtasks has no locale-independent "no such task" code. Anything but success reads as
+        // not registered, the same way IsRegistered treats it.
+        if (exitCode != 0)
+            return new(taskName, ScheduledTaskTargetState.NotRegistered, null, $"{taskName} isn't registered.");
+
+        var commands = ParseTaskExecCommands(taskXml);
+        if (commands is null || commands.Count == 0)
+            return new(taskName, ScheduledTaskTargetState.Unreadable, null,
+                $"Couldn't read which program {taskName} runs, so it wasn't checked. Run unregister-tasks, then register-tasks from the installed CLI.");
+
+        // Task Scheduler expands %VARS% in the command before it runs it, so check what it runs.
+        var targets = commands.Select(Environment.ExpandEnvironmentVariables).ToList();
+        foreach (var target in targets)
+        {
+            var verdict = check(target);
+            if (!verdict.IsProtected)
+                return new(taskName, ScheduledTaskTargetState.Unprotected, target,
+                    $"{taskName} runs {target} as SYSTEM, and that program isn't protected. {verdict.Reason} Run unregister-tasks, then register-tasks from the installed CLI.");
+        }
+        return new(taskName, ScheduledTaskTargetState.Protected, targets[0],
+            $"{taskName} runs {targets[0]}, which only administrators can change.");
+    }
+
+    private static readonly System.Xml.Linq.XNamespace TaskNamespace = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+
+    /// <summary>
+    /// Pure: the program of every Exec action in a Task Scheduler XML definition, with the quotes
+    /// schtasks keeps around a path that has spaces taken off. Null when the XML is empty or
+    /// malformed, has no Actions, or has an Exec with no command.
+    /// </summary>
+    internal static IReadOnlyList<string>? ParseTaskExecCommands(string? taskXml)
+    {
+        if (string.IsNullOrWhiteSpace(taskXml)) return null;
+        System.Xml.Linq.XDocument doc;
+        try
+        {
+            // Trimmed because schtasks can lead with a blank line, and nothing may precede the
+            // XML declaration.
+            doc = System.Xml.Linq.XDocument.Parse(taskXml.Trim());
+        }
+        catch (System.Xml.XmlException)
+        {
+            return null;
+        }
+
+        var actions = doc.Descendants(TaskNamespace + "Actions").ToList();
+        if (actions.Count == 0) return null;
+        var commands = new List<string>();
+        foreach (var exec in actions.SelectMany(a => a.Elements(TaskNamespace + "Exec")))
+        {
+            var command = exec.Element(TaskNamespace + "Command")?.Value.Trim().Trim('"').Trim();
+            if (string.IsNullOrEmpty(command)) return null;
+            commands.Add(command);
+        }
+        return commands;
+    }
+
     public static bool IsRegistered(string taskName)
     {
         try
         {
-            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("schtasks.exe"))
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            psi.ArgumentList.Add("/Query");
-            psi.ArgumentList.Add("/TN");
-            psi.ArgumentList.Add(taskName);
-            using var proc = Process.Start(psi);
-            if (proc is null) return false;
-
-            // Drain stdout/stderr asynchronously before WaitForExit. schtasks /Query emits a
-            // formatted task summary that easily fills the pipe buffer when the task name
-            // matches a localized Windows entry — reading concurrently avoids the deadlock.
-            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
-            var stderrTask = proc.StandardError.ReadToEndAsync();
-            if (!proc.WaitForExit(10_000))
-            {
-                try { proc.Kill(true); } catch { }
-                return false;
-            }
-            try { stdoutTask.GetAwaiter().GetResult(); } catch { }
-            try { stderrTask.GetAwaiter().GetResult(); } catch { }
-            return proc.ExitCode == 0;
+            // schtasks /Query emits a formatted task summary that easily fills the pipe buffer when
+            // the task name matches a localized Windows entry; LaunchSchtasks drains it.
+            var run = LaunchSchtasks(new[] { "/Query", "/TN", taskName }, 10_000);
+            return run.Outcome == SchtasksOutcome.Exited && run.ExitCode == 0;
         }
         catch { return false; }
     }
@@ -356,31 +437,22 @@ public static class SchedulerService
     {
         try
         {
-            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("schtasks.exe"))
+            var run = LaunchSchtasks(args, 30_000);
+            if (run.Outcome == SchtasksOutcome.NotStarted)
             {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            foreach (var a in args) psi.ArgumentList.Add(a);
-            using var proc = Process.Start(psi);
-            if (proc is null) { log?.Invoke("[ERROR] schtasks.exe did not start."); return false; }
-            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
-            var stderrTask = proc.StandardError.ReadToEndAsync();
-            if (!proc.WaitForExit(30_000))
+                log?.Invoke("[ERROR] schtasks.exe did not start.");
+                return false;
+            }
+            if (run.Outcome == SchtasksOutcome.TimedOut)
             {
-                try { proc.Kill(true); } catch { }
                 log?.Invoke("[ERROR] schtasks.exe timed out.");
                 return false;
             }
-            if (proc.ExitCode != 0)
+            if (run.ExitCode != 0)
             {
-                var err = stderrTask.GetAwaiter().GetResult().Trim();
-                log?.Invoke($"[ERROR] schtasks /{args[0]} exit {proc.ExitCode}: {err}");
+                log?.Invoke($"[ERROR] schtasks {args[0]} exit {run.ExitCode}: {run.Stderr.Trim()}");
                 return false;
             }
-            _ = stdoutTask.GetAwaiter().GetResult();
             return true;
         }
         catch (Exception ex)
@@ -389,4 +461,59 @@ public static class SchedulerService
             return false;
         }
     }
+
+    private enum SchtasksOutcome { Exited, NotStarted, TimedOut }
+
+    private readonly record struct SchtasksRun(SchtasksOutcome Outcome, int ExitCode, string Stdout, string Stderr);
+
+    // Every schtasks call goes through here: the System32 copy, never a bare name, and both pipes
+    // drained asynchronously before the wait, so a full buffer can't deadlock the child against us.
+    private static SchtasksRun LaunchSchtasks(IEnumerable<string> args, int timeoutMs)
+    {
+        var psi = new ProcessStartInfo(SystemToolPathService.Resolve("schtasks.exe"))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        using var proc = Process.Start(psi);
+        if (proc is null) return new(SchtasksOutcome.NotStarted, -1, string.Empty, string.Empty);
+
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+        if (!proc.WaitForExit(timeoutMs))
+        {
+            try { proc.Kill(true); } catch { }
+            return new(SchtasksOutcome.TimedOut, -1, string.Empty, string.Empty);
+        }
+        string stdout = string.Empty, stderr = string.Empty;
+        try { stdout = stdoutTask.GetAwaiter().GetResult(); } catch { }
+        try { stderr = stderrTask.GetAwaiter().GetResult(); } catch { }
+        return new(SchtasksOutcome.Exited, proc.ExitCode, stdout, stderr);
+    }
+}
+
+/// <summary>What a registered task's program turned out to be.</summary>
+public enum ScheduledTaskTargetState
+{
+    NotRegistered,
+    /// <summary>Runs a program only administrators can change.</summary>
+    Protected,
+    /// <summary>Runs a program someone else could swap.</summary>
+    Unprotected,
+    /// <summary>Exists, or may, but its program couldn't be read.</summary>
+    Unreadable
+}
+
+/// <summary>One of this app's scheduled tasks and whether the program it runs is safe to run as SYSTEM.</summary>
+public sealed record ScheduledTaskTargetAudit(
+    string TaskName,
+    ScheduledTaskTargetState State,
+    string? Target,
+    string Detail)
+{
+    public bool NeedsAttention =>
+        State is ScheduledTaskTargetState.Unprotected or ScheduledTaskTargetState.Unreadable;
 }

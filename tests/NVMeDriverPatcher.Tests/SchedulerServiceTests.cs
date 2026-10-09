@@ -322,6 +322,106 @@ public sealed class SchedulerServiceTests
         Assert.True(guard >= 0 && guard < register, "the protection check must run before any task is registered");
     }
 
+    [Fact]
+    public void QueryXmlArgs_AskForOneTaskDefinition()
+    {
+        Assert.Equal(new[] { "/Query", "/TN", SchedulerService.BootTaskName, "/XML" },
+            SchedulerService.BuildQueryXmlArgs(SchedulerService.BootTaskName));
+    }
+
+    // schtasks /Query /XML as Windows prints it: a UTF-16 declaration on what is already a string, a
+    // leading blank line, and the quotes kept around a path with spaces.
+    private static string TaskXml(string command) => $"""
+
+        <?xml version="1.0" encoding="UTF-16"?>
+        <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+          <RegistrationInfo>
+            <URI>\SysAdminDoc\NVMePatcher\BootVerify</URI>
+          </RegistrationInfo>
+          <Principals>
+            <Principal id="Author">
+              <UserId>S-1-5-18</UserId>
+              <RunLevel>HighestAvailable</RunLevel>
+            </Principal>
+          </Principals>
+          <Actions Context="Author">
+            <Exec>
+              <Command>{command}</Command>
+              <Arguments>watchdog --auto-revert</Arguments>
+            </Exec>
+          </Actions>
+        </Task>
+        """;
+
+    [Fact]
+    public void ParseTaskExecCommands_ReadsTheQuotedProgramOutOfSchtasksXml()
+    {
+        Assert.Equal(new[] { StockExe }, SchedulerService.ParseTaskExecCommands(TaskXml("\"" + StockExe + "\"")));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("<Task><Actions>")]
+    [InlineData("ERROR: The system cannot find the file specified.")]
+    [InlineData("<Task xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\"><Settings /></Task>")]
+    [InlineData("<Task xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\"><Actions><Exec><Command> \"\" </Command></Exec></Actions></Task>")]
+    public void ParseTaskExecCommands_ReturnsNullForAnythingItCantRead(string? xml) =>
+        Assert.Null(SchedulerService.ParseTaskExecCommands(xml));
+
+    private static TaskTargetCheck StockCheck(string exe) =>
+        SchedulerService.CheckTaskTarget(exe, ProgramFilesRoots, Reader(StockProgramFiles()));
+
+    [Fact]
+    public void EvaluateTaskQuery_ATaskRunningTheInstalledCliIsProtected()
+    {
+        var audit = SchedulerService.EvaluateTaskQuery(
+            SchedulerService.BootTaskName, 0, TaskXml("\"" + StockExe + "\""), StockCheck);
+
+        Assert.Equal(ScheduledTaskTargetState.Protected, audit.State);
+        Assert.Equal(StockExe, audit.Target);
+        Assert.False(audit.NeedsAttention);
+    }
+
+    [Fact]
+    public void EvaluateTaskQuery_FlagsATaskRegisteredAgainstADownloadsCopy()
+    {
+        // What a task registered before register-tasks checked its target can still point at.
+        const string portable = @"C:\Users\someone\Downloads\NVMeDriverPatcher.Cli.exe";
+
+        var audit = SchedulerService.EvaluateTaskQuery(
+            SchedulerService.WatchdogTaskName, 0, TaskXml(portable), StockCheck);
+
+        Assert.Equal(ScheduledTaskTargetState.Unprotected, audit.State);
+        Assert.Equal(portable, audit.Target);
+        Assert.True(audit.NeedsAttention);
+        Assert.Contains(portable + " isn't under Program Files", audit.Detail);
+        Assert.Contains("unregister-tasks", audit.Detail);
+    }
+
+    [Fact]
+    public void EvaluateTaskQuery_AMissingTaskIsNotAWarning()
+    {
+        var audit = SchedulerService.EvaluateTaskQuery(
+            SchedulerService.BootTaskName, 1, "", _ => throw new InvalidOperationException("nothing to check"));
+
+        Assert.Equal(ScheduledTaskTargetState.NotRegistered, audit.State);
+        Assert.False(audit.NeedsAttention);
+    }
+
+    // A definition that can't be parsed, or a schtasks that never answered, must not read as safe.
+    [Theory]
+    [InlineData(0, "<Task><Actions>")]
+    [InlineData(null, "")]
+    public void EvaluateTaskQuery_MalformedXmlOrNoAnswerIsFlaggedNotPassed(int? exitCode, string xml)
+    {
+        var audit = SchedulerService.EvaluateTaskQuery(
+            SchedulerService.WatchdogTaskName, exitCode, xml, _ => new TaskTargetCheck(true, "would pass"));
+
+        Assert.Equal(ScheduledTaskTargetState.Unreadable, audit.State);
+        Assert.True(audit.NeedsAttention);
+    }
+
     // Every path the check asks about gets the descriptor mapped to it, or an admin-only one.
     private static Func<string, PathSecurity> Reader(
         Dictionary<string, string>? sddlByPath = null,
