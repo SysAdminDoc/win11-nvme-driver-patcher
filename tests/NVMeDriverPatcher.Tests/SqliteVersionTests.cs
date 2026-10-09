@@ -241,4 +241,16 @@ public sealed class SqliteVersionTests
             throw new Exception($"SQLite error {rc}: {msg}");
         }
     }
+
+    [Fact]
+    public void CliSingleFile_BundlesTheNativeSqliteLibrary()
+    {
+        // The release uploads publish/cli/NVMeDriverPatcher.Cli.exe alone, so a loose
+        // e_sqlite3.dll beside it never reaches a direct CLI download.
+        var csproj = File.ReadAllText(Path.GetFullPath(Path.Combine(
+            Path.GetDirectoryName(typeof(SqliteVersionTests).Assembly.Location)!,
+            "..", "..", "..", "..", "..",
+            "src", "NVMeDriverPatcher.Cli", "NVMeDriverPatcher.Cli.csproj")));
+        Assert.Contains("<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>", csproj);
+    }
 }
