@@ -299,7 +299,7 @@ public static class WinReDriverInjectionService
         sb.AppendLine("  stornvme version or newer, it doesn't add another copy. Older or duplicate injected copies");
         sb.AppendLine("  are removed (/Remove-Driver) in the same mount, so the image keeps one copy.");
         sb.AppendLine();
-        var dism = plan.Steps.Count > 0 ? plan.Steps[0].Exe : "dism.exe";
+        var dism = plan.Steps.Count > 0 ? plan.Steps[0].Exe : SystemToolPathService.Resolve("dism.exe");
         sb.AppendLine("  0. By hand, check the image first (read-only, nothing changes):");
         sb.AppendLine($"     {dism} /Mount-Image /ImageFile:{plan.WinReImagePath} /Index:1 /MountDir:{plan.MountDir} /ReadOnly");
         sb.AppendLine($"     {dism} /Image:{plan.MountDir} /Get-Drivers /English");
