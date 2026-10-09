@@ -312,7 +312,11 @@ NVMeDriverPatcher.Cli dashboard                            # Generate HTML dashb
 NVMeDriverPatcher.Cli winpe --output=E:\                   # WinPE recovery USB
 NVMeDriverPatcher.Cli config-export --export=<path>        # Export config bundle
 NVMeDriverPatcher.Cli config-import --import=<path>        # Import config bundle
+NVMeDriverPatcher.Cli register-tasks                       # Startup watchdog check + hourly sweep as SYSTEM tasks (installed copy only)
+NVMeDriverPatcher.Cli unregister-tasks                     # Remove those scheduled tasks
 ```
+
+`register-tasks` sets up two scheduled tasks that run the CLI as SYSTEM, a startup watchdog check with auto-revert and an hourly watchdog sweep. Since whoever can swap that exe gets SYSTEM, the tasks are only registered when the CLI runs from Program Files or from the folder the MSI installed to, and only if nobody but administrators can change the exe or its folder, or rename the folders above it. A portable copy (Downloads, the desktop, a USB stick) is refused, and so is a copy sitting in a Program Files folder another app left writable. The error names the folder that failed and why. If tasks were registered earlier against a program someone else could change, `status` and `status --json` warn about it. Run `unregister-tasks`, then `register-tasks` from the installed CLI to fix that.
 
 When you redirect the CLI's output to a file or a pipe, it's written as UTF-8 without a BOM, so `NVMeDriverPatcher.Cli dry-run > plan.md` from cmd or PowerShell 7.4+ keeps the arrows in the "Before → After" column. Output to the console itself is unchanged, and the CLI never changes your console's code page. Windows PowerShell 5.1 decodes a program's output with the console code page and writes `>` files as UTF-16, so run `[Console]::OutputEncoding = [Text.Encoding]::UTF8` first there, and pipe to `Out-File -Encoding utf8` if you need a UTF-8 file. The PowerShell module and the Intune remediation script already decode it as UTF-8.
 

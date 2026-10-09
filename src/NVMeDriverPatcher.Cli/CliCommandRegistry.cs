@@ -231,7 +231,8 @@ public static class CliCommandRegistry
 
         // ── Fleet & Admin ──
         new("register-tasks", [], CommandGroup.FleetAdmin,
-            "Register the boot-time watchdog check (with auto-revert) and an hourly watchdog sweep as scheduled tasks"),
+            "Register the boot-time watchdog check (with auto-revert) and an hourly watchdog sweep as scheduled tasks. " +
+            "Only works when the CLI runs from Program Files or the MSI install folder. A portable copy is refused"),
         new("unregister-tasks", [], CommandGroup.FleetAdmin,
             "Remove all NVMe Patcher scheduled tasks"),
         new("policy-install", [], CommandGroup.FleetAdmin,
