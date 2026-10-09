@@ -226,4 +226,20 @@ public sealed class GpoPolicyServiceTests
             Assert.Contains($"IsEnabled=\"{{Binding {binding}}}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ToolTipService.ShowOnDisabled=\"True\"", xaml, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void ReEnableAfterUpdate_ReappliesThePinsAfterRestoringTheRememberedInstall()
+    {
+        // The remembered profile and options are set after the startup re-apply, so this command
+        // has to pin again before it applies, or a pinned Safe comes back as the remembered Full.
+        var cli = ReadRepoFile("src", "NVMeDriverPatcher.Cli", "Program.cs");
+        var start = cli.IndexOf("static int ReEnableAfterUpdateCommand(", StringComparison.Ordinal);
+        Assert.True(start >= 0, "ReEnableAfterUpdateCommand not found");
+        var body = cli[start..];
+        var restored = body.IndexOf("FirmwareUpdateWorkflowService.RestoreMarkedOptions(marker, config);", StringComparison.Ordinal);
+        var pinned = body.IndexOf("GpoPolicyService.ReapplyPins(config, GpoPolicyService.Read())", StringComparison.Ordinal);
+        var apply = body.IndexOf("ApplyCommand(config,", StringComparison.Ordinal);
+        Assert.True(restored >= 0 && pinned > restored && apply > pinned,
+            "pins must be re-applied after the remembered install is restored and before apply runs");
+    }
 }

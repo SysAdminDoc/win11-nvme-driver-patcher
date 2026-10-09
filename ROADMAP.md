@@ -70,15 +70,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: M
 
-- [ ] P3 — `re-enable-after-update` sets the profile after the Group Policy pins are re-applied
-  Category: correctness
-  Where: `src/NVMeDriverPatcher.Cli/Program.cs` (`re-enable-after-update`, the `config.PatchProfile = profile` assignment from the stored install record)
-  Problem: Pins are put back once, right after flag parsing (`GpoPolicyService.ReapplyPins`). This command sets the profile later from the remembered install, so a pinned Safe can still come back as Full on that path.
-  Fix: Re-apply the pins after that assignment (or have it skip a pinned profile) and warn the same way the flag path does.
-  Acceptance: With a policy pinning Safe and a remembered Full install, `re-enable-after-update` writes the Safe set and prints one warning.
-  Confidence: Likely (found reading the GPO fix, 2026-10-09)
-  Effort: S
-
 - [ ] P3 — Test helpers launch `powershell.exe` by bare name
   Category: testing
   Where: `tests/NVMeDriverPatcher.Tests/DocumentationFactsValidatorTests.cs` (`RunValidator`), and any other test that starts a tool with `new ProcessStartInfo("<tool>.exe")`
