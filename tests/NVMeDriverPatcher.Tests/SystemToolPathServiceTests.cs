@@ -51,12 +51,19 @@ public sealed class SystemToolPathServiceTests
         RegexOptions.Compiled);
 
     /// <summary>
-    /// Literals that name an executable without launching it: an asset/file name, a fallback for a
-    /// path this process already owns, or a name being compared against. Each is a full line match
-    /// so a launch site can never hide behind one.
+    /// What may sit immediately before a literal for it to name an executable without launching it:
+    /// an asset/file name, a fallback for a path this process already owns, or a name being
+    /// compared against. It is matched against the text before that one literal (anchored at its
+    /// end), not the whole line, so a launch site can't hide behind a non-launch call elsewhere on
+    /// the same line. Parenthesis nesting is limited to one level, which is enough for the call
+    /// shapes in src.
     /// </summary>
-    private static readonly Regex NonLaunchToolLiteral = new(
-        @"(Environment\.ProcessPath|Path\.Combine|Directory\.GetFiles|Directory\.Enumerate|File\.Exists|const string|\.Equals\(|GetFileName\()",
+    private static readonly Regex NonLaunchLiteralPrefix = new(
+        @"(Environment\.ProcessPath\s*\?\?\s*" +
+        @"|(Path\.Combine|Directory\.GetFiles|Directory\.Enumerate\w*|File\.Exists)\((?:[^()]|\([^()]*\))*" +
+        @"|const\s+string\s+\w+\s*=\s*" +
+        @"|\.Equals\((?:[^()]|\([^()]*\))*" +
+        @"|(==|!=)\s*)$",
         RegexOptions.Compiled);
 
     [Fact]
@@ -78,6 +85,18 @@ public sealed class SystemToolPathServiceTests
         Assert.False(IsOffendingLine(@"new ProcessStartInfo(SystemToolPathService.Resolve(""fsutil.exe""))"));
         Assert.False(IsOffendingLine(@"var exe = Environment.ProcessPath ?? ""NVMeDriverPatcher.exe"";"));
         Assert.False(IsOffendingLine(@"var p = Path.Combine(dir, ""diskspd.exe"");"));
+        Assert.False(IsOffendingLine(@"if (!string.Equals(Path.GetFileName(exe), ""app.exe"", StringComparison.OrdinalIgnoreCase))"));
+        Assert.False(IsOffendingLine(@"return File.Exists(Path.Combine(sysDir, ""wpr.exe""));"));
+
+        // A launch must not hide behind a non-launch call elsewhere on its line. The old detector
+        // exempted the whole line, so this one passed it.
+        const string counterExample = @"new ProcessStartInfo(""dism.exe"") { WorkingDirectory = Path.Combine(dir) }";
+        Assert.True(IsOffendingLine(counterExample));
+        Assert.True(IsOffendingLine(@"Run(""sc.exe"", Path.Combine(dir, ""x.txt""));"));
+        var oldLineLevelExemption = new Regex(
+            @"(Environment\.ProcessPath|Path\.Combine|Directory\.GetFiles|Directory\.Enumerate|File\.Exists|const string|\.Equals\(|GetFileName\()");
+        Assert.True(UnresolvedToolLiteral.IsMatch(counterExample) && oldLineLevelExemption.IsMatch(counterExample),
+            "the counter-example must be one the old whole-line exemption would have waved through");
 
         var offenders = ShippedSourceFiles("src")
             .SelectMany(path => File.ReadAllLines(path)
@@ -232,7 +251,8 @@ public sealed class SystemToolPathServiceTests
         var code = line.TrimStart();
         if (code.StartsWith("//", StringComparison.Ordinal) || code.StartsWith("///", StringComparison.Ordinal))
             return false;
-        return UnresolvedToolLiteral.IsMatch(line) && !NonLaunchToolLiteral.IsMatch(line);
+        return UnresolvedToolLiteral.Matches(line)
+            .Any(m => !NonLaunchLiteralPrefix.IsMatch(line[..m.Index]));
     }
 
     private static IEnumerable<string> ShippedSourceFiles(params string[] relativeRoots) =>
