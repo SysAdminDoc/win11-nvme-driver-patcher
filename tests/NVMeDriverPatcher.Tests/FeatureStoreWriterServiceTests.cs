@@ -112,6 +112,36 @@ public sealed class FeatureStoreWriterServiceTests
         Assert.Equal(4u, update.Operation);
     }
     [Fact]
+    public void ExactRestorePlan_NonPriority8Baseline_ResetsPriority8ThenReasserts()
+    {
+        uint compact = 4u | (1u << 4);
+        var plan = FeatureStoreWriterService.DescribeRestorePlan(new FeatureStoreConfigurationBaseline
+        {
+            FeatureId = 60786016,
+            Found = true,
+            CompactState = compact
+        });
+
+        Assert.Equal(2, plan.Count);
+        Assert.Equal((8u, 4u), (plan[0].Priority, plan[0].Operation));
+        Assert.Equal((4u, 3u), (plan[1].Priority, plan[1].Operation));
+    }
+
+    [Fact]
+    public void ExactRestorePlan_Priority8Baseline_OnlyReasserts()
+    {
+        var plan = FeatureStoreWriterService.DescribeRestorePlan(new FeatureStoreConfigurationBaseline
+        {
+            FeatureId = 60786016,
+            Found = true,
+            CompactState = 8u | (1u << 4)
+        });
+
+        Assert.Single(plan);
+        Assert.Equal(3u, plan[0].Operation);
+    }
+
+    [Fact]
     public void IndexOfBytes_FindsNeedleInMiddle()
     {
         byte[] hay = { 1, 2, 3, 4, 5, 6, 7, 8 };
