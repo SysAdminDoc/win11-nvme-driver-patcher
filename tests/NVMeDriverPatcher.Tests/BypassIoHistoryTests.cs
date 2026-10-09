@@ -232,4 +232,77 @@ public sealed class BypassIoHistoryTests
         Assert.NotNull(pre);
         Assert.NotNull(post);
     }
+
+    [Fact]
+    public void InspectVolumes_UsesEachVolumesOwnController_NotAMachineWidePick()
+    {
+        var devices = new Dictionary<string, BypassIoDeviceEvidence>
+        {
+            ["C:"] = BypassIoInspectorService.BuildVolumeDeviceEvidence("C:", 0, "disk", "stornvme"),
+            ["D:"] = BypassIoInspectorService.BuildVolumeDeviceEvidence("D:", 1, "disk", "storahci")
+        };
+
+        var volumes = BypassIoInspectorService.InspectVolumes(
+            ["C:", "D:"],
+            BypassIoInspectorService.ClassifyRegistryValue(null),
+            drive => devices[drive],
+            _ => new BypassIoInspectorService.BypassIoQueryResult(0, string.Empty, string.Empty));
+
+        var c = Assert.Single(volumes, v => v.Letter == "C:");
+        var d = Assert.Single(volumes, v => v.Letter == "D:");
+        Assert.Equal("Enabled", c.Status);
+        Assert.Equal("stornvme.sys", c.Stack);
+        Assert.Equal("Disabled", d.Status);
+        Assert.Equal("storahci.sys", d.Stack);
+
+        var impact = BypassIoInspectorService.BuildGamingImpactSummary(volumes);
+        Assert.Contains("C:", impact);
+        Assert.DoesNotContain("D:", impact);
+    }
+
+    [Fact]
+    public void InspectVolumes_MixedNvmediskAndStornvmeMachine_ReportsEachVolumeItsOwnStack()
+    {
+        var devices = new Dictionary<string, BypassIoDeviceEvidence>
+        {
+            ["C:"] = BypassIoInspectorService.BuildVolumeDeviceEvidence("C:", 0, "nvmedisk", "stornvme"),
+            ["E:"] = BypassIoInspectorService.BuildVolumeDeviceEvidence("E:", 2, "disk", "stornvme")
+        };
+
+        var volumes = BypassIoInspectorService.InspectVolumes(
+            ["C:", "E:"],
+            BypassIoInspectorService.ClassifyRegistryValue(null),
+            drive => devices[drive],
+            _ => new BypassIoInspectorService.BypassIoQueryResult(0, string.Empty, string.Empty));
+
+        Assert.Equal("nvmedisk.sys", volumes.Single(v => v.Letter == "C:").Stack);
+        Assert.False(volumes.Single(v => v.Letter == "C:").Enabled);
+        Assert.Equal("stornvme.sys", volumes.Single(v => v.Letter == "E:").Stack);
+        Assert.True(volumes.Single(v => v.Letter == "E:").Enabled);
+    }
+
+    [Fact]
+    public void InspectVolumes_FailedControllerWalk_IsUnknownNotTheOtherVolumesDriver()
+    {
+        var failed = new BypassIoDeviceEvidence(false, string.Empty, "walk failed");
+
+        var volumes = BypassIoInspectorService.InspectVolumes(
+            ["D:"],
+            BypassIoInspectorService.ClassifyRegistryValue(null),
+            _ => failed,
+            _ => new BypassIoInspectorService.BypassIoQueryResult(0, string.Empty, string.Empty));
+
+        var d = Assert.Single(volumes);
+        Assert.Equal("Unknown", d.Status);
+        Assert.Equal("Unknown", d.DeviceService);
+        Assert.False(d.Enabled);
+    }
+
+    [Fact]
+    public void BuildVolumeDeviceEvidence_ControllerWithoutService_IsUnreadable()
+    {
+        var evidence = BypassIoInspectorService.BuildVolumeDeviceEvidence("D:", 1, "disk", null);
+        Assert.False(evidence.Readable);
+        Assert.Equal(string.Empty, evidence.ServiceName);
+    }
 }

@@ -32,7 +32,7 @@ internal sealed record BypassIoDeviceEvidence(
 
 // Per-volume inspector around `fsutil bypassio state <drive>`. Post-patch, nvmedisk.sys refuses
 // BypassIO — this lets the user see exactly which volumes lost it. The state verdict is based on
-// the non-localized storport registry value and PnP DEVPKEY_Device_Service binding; fsutil is used
+// the non-localized storport registry value and each volume's own PnP DEVPKEY_Device_Service binding; fsutil is used
 // only for its locale-independent query exit code and retained as diagnostic output.
 /// <summary>One recorded BypassIO snapshot: every volume captured at the same moment.</summary>
 public sealed record BypassIoSnapshotGroup(DateTime TakenAt, IReadOnlyList<BypassIoHistoryRecord> Volumes);
@@ -83,19 +83,6 @@ public static class BypassIoInspectorService
     }
     internal const string RegistryValueName = "EnableBypassIO";
 
-    private static readonly string[] StorageServicePriority =
-    [
-        "nvmedisk",
-        "stornvme",
-        "storahci",
-        "iaStorAC",
-        "iaStorAVC",
-        "iaStorV",
-        "vmd",
-        "nvraid",
-        "disk"
-    ];
-
     public static string BuildGamingImpactSummary(IEnumerable<BypassIoVolumeInfo> volumes)
     {
         var enabledVolumes = volumes
@@ -113,67 +100,83 @@ public static class BypassIoInspectorService
             "The native-NVMe mutation is machine-wide, so a game-library drive cannot be excluded; remove the patch or accept this global tradeoff.";
     }
 
+    internal sealed record BypassIoQueryResult(int ExitCode, string Stdout, string Stderr);
+
     public static List<BypassIoVolumeInfo> Inspect()
     {
-        var results = new List<BypassIoVolumeInfo>();
         try
         {
             var drives = DriveInfo.GetDrives()
                 .Where(d => d.DriveType == DriveType.Fixed && d.IsReady)
                 .Select(d => d.Name[..2])
                 .ToList();
-            if (drives.Count == 0) return results;
-
-            var registry = ReadRegistryEvidence();
-            var device = ReadDeviceServiceEvidence();
-            foreach (var drive in drives)
-            {
-                var info = InspectOne(drive, registry, device);
-                if (info is not null) results.Add(info);
-            }
+            return InspectVolumes(drives, ReadRegistryEvidence(), CreateVolumeDeviceResolver(), RunFsutilQuery);
         }
-        catch { }
+        catch { return []; }
+    }
+
+    /// <summary>
+    /// Inspects each volume against its own storage controller. <paramref name="resolveDevice"/> and
+    /// <paramref name="runQuery"/> are the two OS seams (PnP walk and fsutil), so the per-volume
+    /// verdict can be exercised without hardware.
+    /// </summary>
+    internal static List<BypassIoVolumeInfo> InspectVolumes(
+        IEnumerable<string> drives,
+        BypassIoRegistryEvidence registry,
+        Func<string, BypassIoDeviceEvidence> resolveDevice,
+        Func<string, BypassIoQueryResult?> runQuery)
+    {
+        var results = new List<BypassIoVolumeInfo>();
+        foreach (var drive in drives)
+        {
+            var info = InspectOne(drive, registry, resolveDevice, runQuery);
+            if (info is not null) results.Add(info);
+        }
         return results;
     }
 
-    internal static BypassIoVolumeInfo? InspectOne(string drive)
-    {
-        return InspectOne(drive, ReadRegistryEvidence(), ReadDeviceServiceEvidence());
-    }
+    internal static BypassIoVolumeInfo? InspectOne(string drive) =>
+        InspectOne(drive, ReadRegistryEvidence(), CreateVolumeDeviceResolver(), RunFsutilQuery);
 
-    private static BypassIoVolumeInfo? InspectOne(
+    internal static BypassIoVolumeInfo? InspectOne(
         string drive,
         BypassIoRegistryEvidence registry,
-        BypassIoDeviceEvidence device)
+        Func<string, BypassIoDeviceEvidence> resolveDevice,
+        Func<string, BypassIoQueryResult?> runQuery)
     {
         try
         {
-            var psi = new ProcessStartInfo(SystemToolPathService.Resolve("fsutil.exe"))
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            psi.ArgumentList.Add("bypassio");
-            psi.ArgumentList.Add("state");
-            psi.ArgumentList.Add(drive);
-            using var proc = Process.Start(psi);
-            if (proc is null) return null;
-            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
-            var stderrTask = proc.StandardError.ReadToEndAsync();
-            if (!proc.WaitForExit(10_000))
-            {
-                try { proc.Kill(true); } catch { }
-                return BuildVolumeInfo(drive, registry, device, -1, string.Empty,
-                    "fsutil bypassio query timed out after 10s");
-            }
-
-            var stdout = stdoutTask.GetAwaiter().GetResult();
-            var stderr = stderrTask.GetAwaiter().GetResult();
-            return BuildVolumeInfo(drive, registry, device, proc.ExitCode, stdout, stderr);
+            var query = runQuery(drive);
+            if (query is null) return null;
+            return BuildVolumeInfo(drive, registry, resolveDevice(drive), query.ExitCode, query.Stdout, query.Stderr);
         }
         catch { return null; }
+    }
+
+    private static BypassIoQueryResult? RunFsutilQuery(string drive)
+    {
+        var psi = new ProcessStartInfo(SystemToolPathService.Resolve("fsutil.exe"))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        psi.ArgumentList.Add("bypassio");
+        psi.ArgumentList.Add("state");
+        psi.ArgumentList.Add(drive);
+        using var proc = Process.Start(psi);
+        if (proc is null) return null;
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+        if (!proc.WaitForExit(10_000))
+        {
+            try { proc.Kill(true); } catch { }
+            return new BypassIoQueryResult(-1, string.Empty, "fsutil bypassio query timed out after 10s");
+        }
+
+        return new BypassIoQueryResult(
+            proc.ExitCode, stdoutTask.GetAwaiter().GetResult(), stderrTask.GetAwaiter().GetResult());
     }
 
     internal static BypassIoVolumeInfo BuildVolumeInfo(
@@ -281,63 +284,148 @@ public static class BypassIoInspectorService
             Detail: $"HKLM\\{RegistrySubKey}\\{RegistryValueName}={(numeric >= 0 ? numeric : "invalid")}; enabled={enabled}.");
     }
 
-    internal static BypassIoDeviceEvidence ReadDeviceServiceEvidence()
+    /// <summary>
+    /// Pure: turns the services found on a volume's disk node and its parent (the storage
+    /// controller) into device evidence. A disk node already bound to nvmedisk wins, since the
+    /// patched stack binds there and the controller above it stays on stornvme. Otherwise the
+    /// controller's service names the stack. No controller service means the walk failed, which
+    /// is reported as unreadable rather than guessed from another volume.
+    /// </summary>
+    internal static BypassIoDeviceEvidence BuildVolumeDeviceEvidence(
+        string drive,
+        int diskNumber,
+        string? diskService,
+        string? controllerService)
     {
-        var services = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        try
+        var disk = NormalizeServiceName(diskService);
+        var controller = NormalizeServiceName(controllerService);
+        var scope = $"Volume {drive} on disk {diskNumber}: DEVPKEY_Device_Service disk node={DisplayService(disk)}, controller={DisplayService(controller)}";
+        if (string.Equals(disk, "nvmedisk", StringComparison.OrdinalIgnoreCase))
+            return new BypassIoDeviceEvidence(true, "nvmedisk", scope + "; selected=nvmedisk.");
+        if (string.IsNullOrWhiteSpace(controller))
+            return new BypassIoDeviceEvidence(false, string.Empty, scope + "; no controller service to read.");
+        return new BypassIoDeviceEvidence(true, controller, scope + $"; selected={controller}.");
+
+        static string DisplayService(string value) => string.IsNullOrWhiteSpace(value) ? "none" : value;
+    }
+
+    /// <summary>
+    /// Production seam: volume letter to disk number (MSFT_Partition) to the disk's PnP node, then
+    /// CM_Get_Parent to its storage controller, reading DEVPKEY_Device_Service on both. The device
+    /// list is enumerated once per resolver. Any step that fails yields unreadable evidence.
+    /// </summary>
+    internal static Func<string, BypassIoDeviceEvidence> CreateVolumeDeviceResolver()
+    {
+        Dictionary<uint, string>? services = null;
+        string enumerationError = string.Empty;
+        var enumerated = false;
+
+        return drive =>
         {
-            using var deviceSet = NativeMethods.SetupDiGetClassDevsAllClasses(
-                IntPtr.Zero,
-                null,
-                IntPtr.Zero,
-                NativeMethods.DIGCF_PRESENT | NativeMethods.DIGCF_ALLCLASSES);
-            if (deviceSet.IsInvalid)
+            try
             {
-                return new BypassIoDeviceEvidence(
-                    Readable: false,
-                    ServiceName: string.Empty,
-                    Detail: $"SetupAPI could not enumerate present devices (Win32 error {Marshal.GetLastWin32Error()}).");
-            }
-
-            for (uint index = 0; ; index++)
-            {
-                var device = NativeMethods.SP_DEVINFO_DATA.Create();
-                if (!NativeMethods.SetupDiEnumDeviceInfo(deviceSet, index, ref device))
+                if (!enumerated)
                 {
-                    var error = Marshal.GetLastWin32Error();
-                    if (error == NativeMethods.ERROR_NO_MORE_ITEMS) break;
-                    continue;
+                    services = ReadDeviceServiceMap(out enumerationError);
+                    enumerated = true;
                 }
+                if (services is null)
+                    return Unreadable(drive, enumerationError);
 
-                if (TryReadDeviceService(deviceSet, ref device, out var service))
-                {
-                    var normalized = NormalizeServiceName(service);
-                    if (StorageServicePriority.Contains(normalized, StringComparer.OrdinalIgnoreCase))
-                        services.Add(normalized);
-                }
+                if (!TryGetDiskNumber(drive, out var diskNumber))
+                    return Unreadable(drive, "the disk number could not be read from MSFT_Partition.");
+                var pnpId = GetDiskPnpDeviceId(diskNumber);
+                if (string.IsNullOrWhiteSpace(pnpId))
+                    return Unreadable(drive, $"disk {diskNumber} has no PnP device ID.");
+
+                var locate = NativeMethods.CM_Locate_DevNode(
+                    out var diskDevInst, pnpId, NativeMethods.CM_LOCATE_DEVNODE_NORMAL);
+                if (locate != NativeMethods.CR_SUCCESS)
+                    return Unreadable(drive, $"CM_Locate_DevNode failed with CONFIGRET 0x{locate:X8}.");
+                var parent = NativeMethods.CM_Get_Parent(out var controllerDevInst, diskDevInst, 0);
+                if (parent != NativeMethods.CR_SUCCESS)
+                    return Unreadable(drive, $"CM_Get_Parent failed with CONFIGRET 0x{parent:X8}.");
+
+                services.TryGetValue(diskDevInst, out var diskService);
+                services.TryGetValue(controllerDevInst, out var controllerService);
+                return BuildVolumeDeviceEvidence(drive, diskNumber, diskService, controllerService);
             }
-
-            var selected = SelectStorageService(services);
-            if (string.IsNullOrWhiteSpace(selected))
+            catch (Exception ex)
             {
-                return new BypassIoDeviceEvidence(
-                    Readable: true,
-                    ServiceName: string.Empty,
-                    Detail: "DEVPKEY_Device_Service exposed no recognized storage-driver binding.");
+                return Unreadable(drive, ex.Message);
             }
+        };
 
-            return new BypassIoDeviceEvidence(
-                Readable: true,
-                ServiceName: selected,
-                Detail: $"DEVPKEY_Device_Service storage binding(s): {string.Join(", ", services.OrderBy(s => s, StringComparer.OrdinalIgnoreCase))}; selected={selected}.");
-        }
-        catch (Exception ex)
+        static BypassIoDeviceEvidence Unreadable(string drive, string reason) =>
+            new(Readable: false, ServiceName: string.Empty,
+                Detail: $"Unable to map volume {drive} to its storage controller: {reason}");
+    }
+
+    private static Dictionary<uint, string>? ReadDeviceServiceMap(out string error)
+    {
+        error = string.Empty;
+        var map = new Dictionary<uint, string>();
+        using var deviceSet = NativeMethods.SetupDiGetClassDevsAllClasses(
+            IntPtr.Zero,
+            null,
+            IntPtr.Zero,
+            NativeMethods.DIGCF_PRESENT | NativeMethods.DIGCF_ALLCLASSES);
+        if (deviceSet.IsInvalid)
         {
-            return new BypassIoDeviceEvidence(
-                Readable: false,
-                ServiceName: string.Empty,
-                Detail: $"Unable to read DEVPKEY_Device_Service: {ex.Message}");
+            error = $"SetupAPI could not enumerate present devices (Win32 error {Marshal.GetLastWin32Error()}).";
+            return null;
         }
+
+        for (uint index = 0; ; index++)
+        {
+            var device = NativeMethods.SP_DEVINFO_DATA.Create();
+            if (!NativeMethods.SetupDiEnumDeviceInfo(deviceSet, index, ref device))
+            {
+                if (Marshal.GetLastWin32Error() == NativeMethods.ERROR_NO_MORE_ITEMS) break;
+                continue;
+            }
+
+            if (TryReadDeviceService(deviceSet, ref device, out var service))
+                map[device.DevInst] = service;
+        }
+        return map;
+    }
+
+    private static bool TryGetDiskNumber(string drive, out int diskNumber)
+    {
+        diskNumber = -1;
+        if (string.IsNullOrEmpty(drive) || !char.IsLetter(drive[0])) return false;
+        var letter = (int)char.ToUpperInvariant(drive[0]);
+        using var search = new System.Management.ManagementObjectSearcher(
+            @"root\Microsoft\Windows\Storage",
+            $"SELECT DiskNumber FROM MSFT_Partition WHERE DriveLetter={letter}");
+        using var results = WmiQueryHelper.ExecuteWithTimeout(search);
+        foreach (var raw in results)
+        {
+            if (raw is not System.Management.ManagementObject part) continue;
+            using (part)
+            {
+                if (int.TryParse(part["DiskNumber"]?.ToString(), out diskNumber)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static string? GetDiskPnpDeviceId(int diskNumber)
+    {
+        using var search = new System.Management.ManagementObjectSearcher(
+            $"SELECT PNPDeviceID FROM Win32_DiskDrive WHERE Index={diskNumber}");
+        using var results = WmiQueryHelper.ExecuteWithTimeout(search);
+        foreach (var raw in results)
+        {
+            if (raw is not System.Management.ManagementObject disk) continue;
+            using (disk)
+            {
+                var id = disk["PNPDeviceID"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(id)) return id;
+            }
+        }
+        return null;
     }
 
     private static bool TryReadDeviceService(
@@ -386,12 +474,6 @@ public static class BypassIoInspectorService
         {
             Marshal.FreeHGlobal(buffer);
         }
-    }
-
-    private static string SelectStorageService(IEnumerable<string> services)
-    {
-        var set = services.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return StorageServicePriority.FirstOrDefault(set.Contains) ?? string.Empty;
     }
 
     private static string NormalizeServiceName(string? serviceName)
