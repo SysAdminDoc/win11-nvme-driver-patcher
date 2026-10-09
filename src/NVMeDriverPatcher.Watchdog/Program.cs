@@ -79,8 +79,9 @@ internal static class Program
         if (install)
         {
             // Under `dotnet NVMeDriverPatcher.Watchdog.dll` the process path is dotnet.exe, and a
-            // service registered against it would start bare dotnet.exe and fail forever.
-            if (!string.Equals(Path.GetFileName(exe), "NVMeDriverPatcher.Watchdog.exe", StringComparison.OrdinalIgnoreCase))
+            // service registered against it would start bare dotnet.exe and fail forever. Check
+            // for the host, not one exe name: the ARM64 build is NVMeDriverPatcher.Watchdog-win-arm64.exe.
+            if (string.Equals(Path.GetFileNameWithoutExtension(exe), "dotnet", StringComparison.OrdinalIgnoreCase))
             {
                 Console.Error.WriteLine("The Watchdog service must be installed from the published NVMeDriverPatcher.Watchdog.exe, not through dotnet.exe. " +
                     "Run NVMeDriverPatcher.Watchdog.exe /install from the install folder.");

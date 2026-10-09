@@ -778,8 +778,10 @@ class Program
         var cliExe = Environment.ProcessPath;
         // Under `dotnet NVMeDriverPatcher.Cli.dll` the process path is dotnet.exe, and a task
         // registered against it would run bare dotnet.exe with no dll and fail on every trigger.
+        // Check for the host, not one exe name: the ARM64 build ships as
+        // NVMeDriverPatcher.Cli-win-arm64.exe, and a renamed download is still the app.
         if (string.IsNullOrEmpty(cliExe) ||
-            !string.Equals(Path.GetFileName(cliExe), "NVMeDriverPatcher.Cli.exe", StringComparison.OrdinalIgnoreCase))
+            string.Equals(Path.GetFileNameWithoutExtension(cliExe), "dotnet", StringComparison.OrdinalIgnoreCase))
         {
             Console.Error.WriteLine("register-tasks must run from the published NVMeDriverPatcher.Cli.exe, not through dotnet.exe. " +
                 "Scheduled tasks need the exe path to launch later. Run NVMeDriverPatcher.Cli.exe register-tasks from the install folder.");
