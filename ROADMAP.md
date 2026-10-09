@@ -40,16 +40,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Likely (not profiled)
   Effort: M
 
-- [ ] P3 — Core and CLI prose still writes "SafeBoot" as one word
-  Category: docs
-  Where: `src/NVMeDriverPatcher.Core/Services/PreflightService.cs:124` (shown in the GUI readiness list), `RecoveryProofGateService.cs:170-177` (label "SafeBoot entries", logged by the GUI fallback gate), `RecoverySafetyGateService.cs:71`, `DryRunService.cs:86-96, 184-185`, `PatchService.cs:85-106` (component names), `MutationLedgerService.cs:214, 556, 604-608`, `CriticalEnvironmentProbeService.cs:293-306`; `src/NVMeDriverPatcher.Cli/CliCommandRegistry.cs:131, 210`, `Program.cs:342`; README prose at `:118, :132, :242`
-  Problem: The GUI and `SafeBootUpgradeService` now say "Safe Boot" in prose and keep `SafeBoot\Minimal` for literal registry paths, but these Core and CLI strings still glue the word together, and some of them surface in the GUI next to the corrected text.
-  Evidence: `MicrocopyTests.UserFacingText_SpellsSafeBootAsTwoWords` scans only `src/NVMeDriverPatcher` plus `SafeBootUpgradeService.cs`; the listed strings are outside it.
-  Fix: Rewrite each to "Safe Boot" (or to the literal `SafeBoot\...` path where it names a key), update the tests that assert the old labels (`RecoveryProofGateServiceTests.cs:117`, `RecoverySafetyGateServiceTests.cs:18-24`, `SafeBootRemovalAccessTests`), then widen the scan to `NVMeDriverPatcher.Core` and `NVMeDriverPatcher.Cli`.
-  Acceptance: The widened scan passes; CLI help and README match the GUI spelling.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 — CHANGELOG versions 5.4.0/5.5.0 have no git tags; 5.3.0 was released with no CHANGELOG entry; stray malformed tag `v.3.0.0`
   Category: docs
   Where: `CHANGELOG.md:35, 54` (5.5.0/5.4.0 entries); git tags (`v5.2.0` → `v5.6.0` jump, `v.3.0.0` typo tag); commit 95bbf11 "chore: release v5.3.0" with no `[5.3.0]` section
@@ -100,26 +90,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: M
 
-- [ ] P3 — FeatureStore exact restore cannot clear the priority-8 User override when the baseline held a non-priority-8 configuration
-  Category: correctness
-  Where: `src/NVMeDriverPatcher.Core/Services/FeatureStoreWriterService.cs:533-557` (`BuildRestoreUpdate`: `Found=true` branch re-asserts at the baseline's priority; only `Found=false` issues the Operation-4 reset)
-  Problem: If the pre-fallback configuration existed at a priority other than 8 (plausible for Microsoft/EKB-set velocity IDs on Insider builds), the fallback's priority-8 override is never reset; `ProbeConfigurationDifferences` then reports a permanent baseline difference and every uninstall retry fails identically (honest, but unrecoverable without manual `vivetool /reset`).
-  Evidence: Restore builder read; probe path traced.
-  Fix: For `Found=true` entries with priority != 8, emit a priority-8 Operation-4 reset first, then re-assert the baseline configuration.
-  Acceptance: Unit test with a priority-4 baseline fixture: restore plan contains the reset followed by the re-assert.
-  Confidence: Likely (environment-dependent precondition; mechanism verified)
-  Effort: S
-
-- [ ] P3 — BypassIO verdict uses one storage driver for every volume
-  Category: correctness
-  Where: `src/NVMeDriverPatcher.Core/Services/BypassIoInspectorService.cs` (`Inspect` reads `ReadDeviceServiceEvidence()` once; `SelectStorageService` picks the highest-priority service present anywhere on the machine, nvmedisk > stornvme > storahci > ...)
-  Problem: Every fixed volume inherits that one machine-wide service. A SATA (storahci) or USB data volume on a PC whose boot drive is on stornvme reports "Enabled", so `BuildGamingImpactSummary` lists it as a BypassIO volume, and a mixed nvmedisk/stornvme machine reports every volume as nvmedisk. The system-drive verdict (`DriveService.GetBypassIOStatus`) is right only when the system drive's controller happens to be the top-priority service.
-  Evidence: Code read on 2026-10-05; `BuildVolumeInfo` takes the single `BypassIoDeviceEvidence` for all letters.
-  Fix: Map each volume to its own controller: volume letter to disk number (`MSFT_Partition.DiskNumber`, already queried that way in `BenchmarkService`), disk to its PnP device, then walk `CM_Get_Parent` to the storage controller and read that node's `DEVPKEY_Device_Service`. Pass the per-volume service into `BuildVolumeInfo`; fall back to "Unknown" (not the machine-wide pick) when the walk fails. Keep the registry and fsutil evidence as they are.
-  Acceptance: Unit test with a two-volume fixture (C: on stornvme, D: on storahci) reports C: Enabled and D: Disabled with stack storahci.sys; the gaming-impact summary names only C:. A live run on a mixed NVMe+SATA machine matches Device Manager.
-  Confidence: Verified (mechanism); hardware confirmation pending
-  Effort: M
-
 - [ ] P3 — `re-enable-after-update` sets the profile after the Group Policy pins are re-applied
   Category: correctness
   Where: `src/NVMeDriverPatcher.Cli/Program.cs` (`re-enable-after-update`, the `config.PatchProfile = profile` assignment from the stored install record)
@@ -136,6 +106,15 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Fix: Route test launches through `SystemToolPathService.Resolve`/`.PowerShell` and widen the gate to `tests/` with an explicit allowlist for fixtures that need a bare name.
   Acceptance: The widened gate passes; a planted `powershell.exe` in the test output folder isn't picked up.
   Confidence: Verified (reported by the 2026-10-09 lane)
+  Effort: S
+
+- [ ] P3 — Build rule `26300-feature-flags-page` calls 26300+ "26H2 Experimental"
+  Category: docs
+  Where: `src/NVMeDriverPatcher.Core/windows_build_rules.json` (rule `26300-feature-flags-page` summary)
+  Problem: 26H2 ships as an enablement package over 25H2 on build 26200 (now noted in the 26200 rules), so labeling the 26300 Insider train "26H2" contradicts the same file.
+  Fix: Re-read the rule's `sourceUrl` and Microsoft's current Insider channel naming, then rename the label to what Microsoft calls 26300.x today. Don't touch the verdict or `lastReviewed` without that re-verification.
+  Acceptance: No rule summary calls two different builds 26H2; `WindowsBuildRulesServiceTests` pass.
+  Confidence: Likely (noticed 2026-10-09 while adding the 26H2 note)
   Effort: S
 
 ### Unaudited — needs a pass
@@ -161,20 +140,6 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
 ### P2
 
 ### P3
-
-- [ ] P3 — Prove BypassIO support from the bound driver's INF instead of inferring it
-  Why: BypassIO is gated by a storage driver declaring `STORAGE_SUPPORTED_FEATURES_BYPASS_IO`; if the declaration is absent, BypassIO on that volume is blocked outright and DirectStorage silently falls back. Reading whether the bound driver's INF declares it converts the gaming-impact warning from heuristic to proof. Depends on the P2 locale fix landing first.
-  Evidence: https://learn.microsoft.com/en-us/windows-hardware/drivers/ifs/bypassio; `Services/BypassIoInspectorService.cs`.
-  Touches: `Services/BypassIoInspectorService.cs`, `Services/DriveService.cs`, CLI `bypassio` JSON.
-  Acceptance: The gaming-impact summary states whether the currently bound storage driver declares BypassIO support, sourced from the INF rather than from `fsutil` prose.
-  Complexity: M
-
-- [ ] P3 — Build rules: record that 26H1 has no Hotpatch and 26H2 is an enablement package over 25H2
-  Why: 26H1 is an OEM-only ARM-targeted release without Hotpatch, and 26H2 ships as an enablement package on the 25H2 servicing branch — so build-number logic keyed on `26200.x` keeps working while the *reported version string* changes. Cheap pre-emptive correctness for the gate that decides whether apply is permitted.
-  Evidence: https://techcommunity.microsoft.com/blog/windows-itpro-blog/what-to-know-about-windows-11-version-26h1/4491941; `src/NVMeDriverPatcher.Core/windows_build_rules.json`.
-  Touches: `windows_build_rules.json`, `Services/WindowsBuildRulesService.cs`, `WindowsBuildRulesServiceTests`.
-  Acceptance: A 26H2-reporting host resolves the same rule as its 25H2 build number; the 26H1 rule summary states the Hotpatch exception.
-  Complexity: S
 
 - [ ] P3 — First-run expectation gate for the non-enthusiast audience
   Why: The tool is now mirrored by MajorGeeks, which brings users who did not read the README to a program whose measured benefit at desktop queue depths is near zero and whose 4K random write is slightly worse — while the downside is a boot-critical driver swap. The confirmation dialog explains risk well but never states "this may do nothing for you".
@@ -206,13 +171,6 @@ Evidence and full reasoning are in RESEARCH.md (2026-10-06 pass). None of these 
 ### P2
 
 ### P3
-
-- [ ] P3 — Record the DiskSpd version and flags with every benchmark result
-  Why: DiskSpd 2.3 (2026-09-04) changed two defaults (P-cores before E-cores, buffers separated by cache line) and added BypassIO and IoRing modes. The app pins v2.2 by hash, which is right, but results don't say which DiskSpd made them, so a later bump would put incomparable runs side by side.
-  Evidence: https://github.com/microsoft/diskspd/releases; `src/NVMeDriverPatcher.Core/Services/BenchmarkService.cs:28,39-45`.
-  Touches: `BenchmarkService` result model and SQLite history, the compare view, CLI benchmark JSON.
-  Acceptance: Each stored result carries the DiskSpd version, its SHA-256 and the full argument line. Comparing two results from different DiskSpd versions shows a warning instead of a percentage. Moving to 2.3 is its own decision, made only with `-aup -bsn` or a fresh baseline.
-  Complexity: S
 
 - [ ] P3 — Prove Identify and SMART reads still work under nvmedisk
   Why: A driver teardown says nvmedisk doesn't clearly expose `IOCTL_STORAGE_PROTOCOL_COMMAND`, and users say vendor SSD tools stop seeing the drive. The app's health reads use the `IOCTL_STORAGE_QUERY_PROPERTY` protocol-specific path, which nobody has checked under nvmedisk. If it fails, the health view goes blank after the swap, exactly when people want it.
