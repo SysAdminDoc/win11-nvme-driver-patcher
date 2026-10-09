@@ -259,7 +259,27 @@ public sealed class FeatureStoreWriterServiceTests
         var runtime = FeatureStoreWriterService.QueryConfiguration(123456789, bootStore: false);
         Assert.Equal("Boot", boot.Store);
         Assert.Equal("Runtime", runtime.Store);
-        Assert.False(boot.IsEnabled && boot.EnabledState != 2); // IsEnabled implies state 2
+        // Decoded fields stay inside their documented ranges whatever this host has configured.
+        foreach (var state in new[] { boot, runtime })
+        {
+            Assert.InRange(state.EnabledState, 0, 3);   // two-bit field
+            Assert.InRange(state.Priority, 0, 15);
+            Assert.Equal(123456789, state.FeatureId);
+        }
+    }
+
+    [Theory]
+    // IsEnabled is Found AND state 2. The old assertion on a live query was a tautology of that
+    // definition and could never fail, so the property is pinned on constructed states instead.
+    [InlineData(true, 2, true)]
+    [InlineData(true, 1, false)]
+    [InlineData(true, 0, false)]
+    [InlineData(false, 2, false)]
+    public void FeatureConfigState_IsEnabled_RequiresFoundAndEnabledState(bool found, int enabledState, bool expected)
+    {
+        var state = new FeatureConfigState(123456789, found, enabledState, Priority: 8, Store: "Boot");
+
+        Assert.Equal(expected, state.IsEnabled);
     }
 
     [Fact]

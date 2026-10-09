@@ -24,35 +24,61 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
 {
     private const string Leaf = "{75416E63-5912-4DFA-AE8F-3EFACCAFFB14}";
 
-    private readonly string _root = $@"Software\NVMeDriverPatcherTests\{Guid.NewGuid():N}";
+    // Only this class writes under TestParent, so the startup sweep can clear every sibling tree
+    // (left behind by a run that died between the deny ACE and Dispose) without touching other suites.
+    private const string TestParent = @"Software\NVMeDriverPatcherTests\SafeBootAccess";
+
+    private readonly string _root = $@"{TestParent}\{Guid.NewGuid():N}";
+
+    static SafeBootRemovalAccessTests()
+    {
+        try
+        {
+            using var parent = Registry.CurrentUser.OpenSubKey(TestParent);
+            if (parent is null) return;
+            foreach (var name in parent.GetSubKeyNames())
+                RestoreAccessAndDelete($@"{TestParent}\{name}");
+        }
+        catch
+        {
+            // Best effort: a stuck orphan under a GUID path is harmless.
+        }
+    }
 
     [Fact]
     public void AclDeniedOsOwnedKeyIsReportedAsPreservedNotFailed()
     {
         using var parent = Registry.CurrentUser.CreateSubKey($@"{_root}\SafeBoot\Minimal", writable: true)!;
-        using (var osOwned = parent.CreateSubKey(Leaf, writable: true)!)
+        try
         {
-            // Exactly what the reporter found on 26200.8737.
-            osOwned.SetValue("NvmeDisk", "Storage Disks", RegistryValueKind.String);
-            DenyAllAccess(osOwned);
+            using (var osOwned = parent.CreateSubKey(Leaf, writable: true)!)
+            {
+                // Exactly what the reporter found on 26200.8737.
+                osOwned.SetValue("NvmeDisk", "Storage Disks", RegistryValueKind.String);
+                DenyAllAccess(osOwned);
+            }
+
+            var log = new List<string>();
+            var removed = 0;
+
+            PatchService.RemoveOwnedSafeBootKey(
+                Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
+
+            var line = Assert.Single(log);
+            Assert.DoesNotContain("[FAIL]", line);
+            Assert.Contains("[PRESERVED]", line);
+            Assert.Contains("Safe Boot Minimal", line);
+            Assert.Equal(0, removed);
+
+            // And the OS-owned key must still be there — never deleted, never re-ACL'd.
+            // Enumerated from the parent, because opening the leaf hits the same deny ACE
+            // the production code just refused to fight (which is the whole point).
+            Assert.Contains(Leaf, parent.GetSubKeyNames());
         }
-
-        var log = new List<string>();
-        var removed = 0;
-
-        PatchService.RemoveOwnedSafeBootKey(
-            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
-
-        var line = Assert.Single(log);
-        Assert.DoesNotContain("[FAIL]", line);
-        Assert.Contains("[PRESERVED]", line);
-        Assert.Contains("Safe Boot Minimal", line);
-        Assert.Equal(0, removed);
-
-        // And the OS-owned key must still be there — never deleted, never re-ACL'd.
-        // Enumerated from the parent, because opening the leaf hits the same deny ACE
-        // the production code just refused to fight (which is the whole point).
-        Assert.Contains(Leaf, parent.GetSubKeyNames());
+        finally
+        {
+            RestoreAccess(_root);
+        }
     }
 
     [Fact]
@@ -142,43 +168,57 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
         // The exact 26100.9550 shape: readable, writable only by TrustedInstaller, default
         // "NvmeDisk". The old code logged [REMOVED] after DeleteSubKeyTree quietly did nothing.
         using var parent = Registry.CurrentUser.CreateSubKey($@"{_root}\SafeBoot\Minimal", writable: true)!;
-        using (var osOwned = parent.CreateSubKey(Leaf, writable: true)!)
+        try
         {
-            osOwned.SetValue("", "NvmeDisk", RegistryValueKind.String);
-            DenyWrites(osOwned);
+            using (var osOwned = parent.CreateSubKey(Leaf, writable: true)!)
+            {
+                osOwned.SetValue("", "NvmeDisk", RegistryValueKind.String);
+                DenyWrites(osOwned);
+            }
+
+            var log = new List<string>();
+            var removed = 0;
+
+            PatchService.RemoveOwnedSafeBootKey(
+                Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
+
+            var line = Assert.Single(log);
+            Assert.Contains("[PRESERVED]", line);
+            Assert.DoesNotContain("[REMOVED]", line);
+            Assert.Equal(0, removed);
+            Assert.Contains(Leaf, parent.GetSubKeyNames());
         }
-
-        var log = new List<string>();
-        var removed = 0;
-
-        PatchService.RemoveOwnedSafeBootKey(
-            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
-
-        var line = Assert.Single(log);
-        Assert.Contains("[PRESERVED]", line);
-        Assert.DoesNotContain("[REMOVED]", line);
-        Assert.Equal(0, removed);
-        Assert.Contains(Leaf, parent.GetSubKeyNames());
+        finally
+        {
+            RestoreAccess(_root);
+        }
     }
 
     [Fact]
     public void WriteProtectedKeyHoldingOurValueIsReportedAsFailedNotRemoved()
     {
         using var parent = Registry.CurrentUser.CreateSubKey($@"{_root}\SafeBoot\Minimal", writable: true)!;
-        using (var ours = parent.CreateSubKey(Leaf, writable: true)!)
+        try
         {
-            ours.SetValue("", "Storage Disks", RegistryValueKind.String);
-            DenyWrites(ours);
+            using (var ours = parent.CreateSubKey(Leaf, writable: true)!)
+            {
+                ours.SetValue("", "Storage Disks", RegistryValueKind.String);
+                DenyWrites(ours);
+            }
+
+            var log = new List<string>();
+            var removed = 0;
+
+            PatchService.RemoveOwnedSafeBootKey(
+                Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
+
+            Assert.Contains("[FAIL]", Assert.Single(log));
+            Assert.Equal(0, removed);
         }
-
-        var log = new List<string>();
-        var removed = 0;
-
-        PatchService.RemoveOwnedSafeBootKey(
-            Registry.CurrentUser, $@"{_root}\SafeBoot\Minimal", Leaf, "Safe Boot Minimal", ref removed, log.Add);
-
-        Assert.Contains("[FAIL]", Assert.Single(log));
-        Assert.Equal(0, removed);
+        finally
+        {
+            RestoreAccess(_root);
+        }
     }
 
     private static void DenyWrites(RegistryKey key)
@@ -206,12 +246,21 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
         key.SetAccessControl(security);
     }
 
-    public void Dispose()
+    public void Dispose() => RestoreAccessAndDelete(_root);
+
+    private static void RestoreAccessAndDelete(string root)
     {
-        // Re-grant before deleting, otherwise the deny ACE blocks cleanup too.
+        RestoreAccess(root);
+        try { Registry.CurrentUser.DeleteSubKeyTree(root, throwOnMissingSubKey: false); }
+        catch { /* leftover test key under a GUID path is harmless */ }
+    }
+
+    // Re-grant before deleting, otherwise the deny ACE blocks cleanup too.
+    private static void RestoreAccess(string root)
+    {
         try
         {
-            using var minimal = Registry.CurrentUser.OpenSubKey($@"{_root}\SafeBoot\Minimal", writable: true);
+            using var minimal = Registry.CurrentUser.OpenSubKey($@"{root}\SafeBoot\Minimal", writable: true);
             using var leaf = minimal?.OpenSubKey(
                 // The owner keeps READ_CONTROL and WRITE_DAC whatever the DACL says; asking for
                 // TakeOwnership too made a full deny ACE refuse the open and leak the test key.
@@ -235,8 +284,5 @@ public sealed class SafeBootRemovalAccessTests : IDisposable
         {
             // Best effort — the throwaway tree lives under a per-run GUID.
         }
-
-        try { Registry.CurrentUser.DeleteSubKeyTree(_root, throwOnMissingSubKey: false); }
-        catch { /* leftover test key under a GUID path is harmless */ }
     }
 }

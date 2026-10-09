@@ -105,8 +105,8 @@ public class ControlSetMirroringTests
             foreach (var original in primary)
             {
                 var expectedPath = ControlSetService.MirrorPath(original.Path, controlSet);
-                var mirror = Assert.Single(mirrored, m =>
-                    m.Path == expectedPath && m.ValueName == original.ValueName);
+                var mirror = Assert.Single(mirrored.Where(m =>
+                    m.Path == expectedPath && m.ValueName == original.ValueName));
                 Assert.Equal(original.ExpectedValue, mirror.ExpectedValue);
                 Assert.Equal(original.ValueKind, mirror.ValueKind);
             }

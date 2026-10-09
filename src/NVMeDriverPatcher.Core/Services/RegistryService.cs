@@ -186,7 +186,11 @@ public static class RegistryService
                 includeStandaloneFuture: extendedB));
     }
 
-    public static string? ExportRegistryBackup(string workingDir, string description = "NVMe_Backup")
+    public static string? ExportRegistryBackup(string workingDir, string description = "NVMe_Backup") =>
+        ExportRegistryBackup(workingDir, description, hive: null);
+
+    // `hive` stands in for HKLM64 so tests can feed a fixture tree under HKCU; production passes null.
+    internal static string? ExportRegistryBackup(string workingDir, string description, RegistryKey? hive)
     {
         if (string.IsNullOrEmpty(workingDir))
             return null;
@@ -211,7 +215,8 @@ public static class RegistryService
 
         try
         {
-            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var ownedHklm = hive is null ? RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64) : null;
+            var hklm = hive ?? ownedHklm!;
             var lines = new List<string>
             {
                 "Windows Registry Editor Version 5.00",
