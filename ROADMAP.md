@@ -10,63 +10,22 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
-- [ ] P3 — GUI: large dead ViewModel surface still computed every refresh; user-facing features silently vanished in the redesign
-  Category: maintainability
-  Where: `src/NVMeDriverPatcher/ViewModels/`: `ReadinessChecks`/`LeftChecks`/`RightChecks` + `PreflightCheckVM` tooltips (`MainViewModel.cs:467-506`), `Drives`/`DriveRowVM` (`RowViewModels.cs:63-106`), `RegistryFlags`/`SafeBootFlags` (`:804-836`), `AttentionNotes` cluster (`:1089-1167`), `DirectStorageImpactText/Severity/PanelVisible` (`:156-159, 1046-1087`), `SkipWarnings` (no toggle anywhere yet described by `OptionsSummaryText`, `MainViewModel.Settings.cs:22-24`), `ChangePlanSteps`, `RiskSummaryColor`, `ActionReadinessText/Color` (bound only inside collapsed XAML)
-  Problem: None of these are bound in any view (grep-verified); registry/WMI projections run on every refresh for nothing. Product decision folded in: the per-check readiness list, drive table with SMART/NATIVE-LEGACY badges, per-flag view, and the gaming-impact panel were real features whose only surfaces were removed.
-  Evidence: Grep across `Views/` for each binding path.
-  Fix: Decide per cluster: re-surface (drive table and readiness list have real value — pairs with the OverviewGrid item) or delete the VM code and its refresh cost. Remove the `SkipWarnings` sentence from `OptionsSummaryText` unless a toggle ships.
-  Acceptance: Every remaining VM public member is bound somewhere; refresh no longer computes unbound projections.
+- [ ] P3 — GUI: the Next step buttons, bench label and log list are still unbound, and post-command refreshes still read history on the UI thread
+  Category: maintainability / perf
+  Where: `src/NVMeDriverPatcher/ViewModels/`: `HasNextStep*`, `NextStep{Primary,Secondary}Action{Text,Enabled,Id}` and `UpdateRecommendedActions` (the ids are read only by `MainWindow.xaml.cs:539,544`), `BenchLabelText`/`BenchLabelVisible` (watched only at `MainWindow.xaml.cs:611`), `LogEntries` (feeds `LogText` only); `MainViewModel.UpdateOverviewSummary` called from `MainViewModel.Commands.cs:107,250,439`
+  Problem: The 2026-10-09 cleanup removed the unbound clusters it named but left these. The Next step card has no buttons at all, so its action plumbing is dead. After apply, remove and benchmark commands, `UpdateOverviewSummary` still reads benchmark history and `RegistryService.GetPatchStatus()` on the UI thread, which the refresh path no longer does.
+  Fix: Either give the Next step card its two buttons or delete the action cluster and its handlers; bind or delete the bench label; make `LogEntries` private. Move the post-command summary reads into the same background gather the refresh uses.
+  Acceptance: `ViewModelSurfaceTests` covers these members; no UI-thread SQLite or registry read remains in the post-command path.
+  Confidence: Verified by grep (leftovers reported by the cleanup pass)
+  Effort: S
+
+- [ ] P3 — `PatchServiceTests` still reads the live HKLM overrides key
+  Category: test-reliability
+  Where: `tests/NVMeDriverPatcher.Tests/PatchServiceTests.cs:20-31`, `InspectRegistryOverrideOwnership_ReadsLiveKeyWithoutMutatingIt`
+  Problem: The registry fixture work moved backup and residue coverage onto HKCU trees, but these two still read the real overrides key, so their interesting branches depend on whether the test machine is patched.
+  Fix: Point them at an HKCU fixture through the internal hive overloads the fixture tests already use, and keep one explicit live smoke test if the read path needs it.
+  Acceptance: Both pass with the same branches on a patched and an unpatched machine.
   Confidence: Verified
-  Effort: M
-
-- [ ] P3 — GUI synchronous I/O on the UI thread per refresh/tab switch
-  Category: perf
-  Where: `ViewModels/MainViewModel.Workspace.cs:12-187` (`UpdateOperationalHistory`: directory enumeration + three SQLite reads + registry read, run on tab switch, after every command, and inside the preflight render `Dispatcher.Invoke`); `MainViewModel.cs:565, 898` (`BenchmarkService.GetHistory` read twice per preflight)
-  Problem: Jank on slow ProgramData disks; duplicated history read per preflight.
-  Evidence: Call sites traced.
-  Fix: Move `UpdateOperationalHistory` data gathering to a background task marshaling results back; cache the benchmark-history read within one refresh cycle.
-  Acceptance: UI thread does no SQLite/directory I/O during tab switch (verify with a dispatcher-blocking assertion or profiler).
-  Confidence: Likely (not profiled)
-  Effort: M
-
-- [ ] P3 — Legacy script: Refresh runs preflight synchronously on the UI thread
-  Category: perf
-  Where: `NVMe_Driver_Patcher.ps1` `BtnRefresh` click handler (calls `Invoke-PreflightChecks`, `Get-NVMeHealthData` and `Get-StorageDiskMigration` inline, then repaints the check dots and labels); the background runspace and `DispatcherTimer` poll exist only in the SECTION 19 `Add_ContentRendered` startup handler, which carries its own copy of the same check-to-dot/label mapping
-  Problem: Clicking Refresh freezes the window for the 5-20 s the DISM/CIM/fsutil probes take, the freeze the v3.4.6 background runspace removed from startup.
-  Evidence: Handler read; every probe runs on the dispatcher thread.
-  Fix: Extract the startup runspace launch, poll and result marshaling into one function (for example `Start-BackgroundPreflight` with a completion script block) and call it from both ContentRendered and BtnRefresh, sharing one repaint helper. Keep `$funcNames` complete; `LegacyScriptArtifactTests.BackgroundPreflightRunspace_CarriesEveryScriptFunctionItsFunctionsCall` gates it.
-  Acceptance: Refresh keeps the window responsive; `Validate-LegacyPowerShellBoundary.ps1` and the legacy script tests pass.
-  Confidence: Verified
-  Effort: M
-
-- [ ] P3 — `Validate-LegacyPowerShellBoundary.ps1` enumerates what it guards; `-Status` writes HKLM via `CreateEventSource` unnoticed
-  Category: testing
-  Where: `scripts/Validate-LegacyPowerShellBoundary.ps1:59-89` (missing: `reg.exe`/`reg add`/`regedit /s`, `Set-Item`, `Copy-ItemProperty`, `Rename-ItemProperty`; `New-Item` check fires only when the extent mentions `RegistryPath|SafeBoot...`; .NET check catches only `SetValue`, not `CreateSubKey` or `Microsoft.Win32.Registry`-via-variable); `NVMe_Driver_Patcher.ps1:510-522, 540` (`Initialize-EventLogSource` runs unconditionally — first `-Silent -Status` creates an HKLM event-log source key, a machine mutation on a pure status query the gate cannot see)
-  Problem: The read/recover-only boundary is a release gate; as written it certifies mutation shapes it doesn't enumerate (this pass found the SafeBoot GUID-key deletion it never flagged).
-  Evidence: Gate patterns vs. script content compared.
-  Fix: Add the missing command/member patterns; make the `New-Item` check unconditional for HKLM paths; either gate `Initialize-EventLogSource` behind non-status modes or whitelist it explicitly with a comment; self-check the gate by reintroducing each real defect shape (the SafeBoot `Remove-Item` above is the first fixture).
-  Acceptance: Gate fails against the current script's SafeBoot deletion before that P1 fix lands, and against each fixture shape.
-  Confidence: Verified
-  Effort: M
-
-- [ ] P3 — Environment-dependent tests whose interesting branch never runs on a clean host; suite side-effects on the real machine
-  Category: testing
-  Where: `tests/NVMeDriverPatcher.Tests/RegistryBackupTests.cs:23-30, 41-50` (expected output derived from live HKLM; the "present → dword restore / issue-#13 never-delete" branch has no fixture coverage anywhere); `PatchServiceTests.cs:20-31` (`ProbeRemovalResidue` vacuous on clean hosts, acknowledged in comment); `FeatureStoreWriterServiceTests.cs:189` (vacuously-true assert on unconfigured hosts); `RecoveryProofGateServiceTests.cs:12-29, 51-56` (creates the real `%ProgramData%\NVMePatcher` directory + probe files on the dev machine); `SafeBootRemovalAccessTests.cs:27, 118-159` (deny-ACL'd HKCU keys orphaned if a run crashes between ACE and Dispose); build warning xUnit2031 at `ControlSetMirroringTests.cs:108` (pre-existing baseline)
-  Problem: Safety-critical contracts (backup restore of present values, residue formatting) are permanently uncovered on the machines that actually run the suite; two suites leave real-machine residue.
-  Evidence: Each test read; branch coverage reasoning per file.
-  Fix: Add fixture-driven variants using the HKCU-tree technique `SafeBootRemovalAccessTests` already uses; point `RecoveryProofGateService` tests at a temp working dir; wrap the deny-ACE test in a finally-based ACL restore plus a startup sweep of orphaned GUID keys; fix the xUnit2031 `Assert.Single` overload.
-  Acceptance: New fixtures exercise the present-value backup branch and residue formatting deterministically; suite run leaves no new keys/dirs outside temp; build warning-free.
-  Confidence: Verified
-  Effort: M
-
-- [ ] P3 — Test helpers launch `powershell.exe` by bare name
-  Category: testing
-  Where: `tests/NVMeDriverPatcher.Tests/DocumentationFactsValidatorTests.cs` (`RunValidator`), and any other test that starts a tool with `new ProcessStartInfo("<tool>.exe")`
-  Problem: The bare-name gates cover `src/`, `packaging/` and `scripts/`, not the test tree, so a test run resolves `powershell.exe` through PATH and the current directory.
-  Fix: Route test launches through `SystemToolPathService.Resolve`/`.PowerShell` and widen the gate to `tests/` with an explicit allowlist for fixtures that need a bare name.
-  Acceptance: The widened gate passes; a planted `powershell.exe` in the test output folder isn't picked up.
-  Confidence: Verified (reported by the 2026-10-09 lane)
   Effort: S
 
 ### Unaudited — needs a pass
@@ -82,13 +41,6 @@ Evidence and full reasoning in RESEARCH.md (2026-08-11 pass). No item here dupli
 ### P2
 
 ### P3
-
-- [ ] P3 — First-run expectation gate for the non-enthusiast audience
-  Why: The tool is now mirrored by MajorGeeks, which brings users who did not read the README to a program whose measured benefit at desktop queue depths is near zero and whose 4K random write is slightly worse — while the downside is a boot-critical driver swap. The confirmation dialog explains risk well but never states "this may do nothing for you".
-  Evidence: https://www.majorgeeks.com/files/details/nvme_driver_patcher_for_windows_11.html; https://www.storagereview.com/review/windows-server-native-nvme; `ViewModels/MainViewModel.cs` `BuildConfirmMessage`.
-  Touches: `ViewModels/MainViewModel.cs` (`BuildConfirmMessage` GOOD TO KNOW tier), `Services/DocsService.cs`, README "What Does This Do?".
-  Acceptance: The confirmation's expected-gains text distinguishes high-queue-depth workloads from ordinary desktop use and names the write regression; the README does the same above the fold. Pairs with the QD1 benchmark item so the claim is measurable on the user's own machine.
-  Complexity: S
 
 ## Research-Driven Additions — 2026-10-06
 

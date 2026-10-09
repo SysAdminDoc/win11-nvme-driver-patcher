@@ -5,6 +5,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 ## [Unreleased]
 
 ### Fixed
+- The window no longer scans folders and reads the history database on the UI thread during refresh. The benchmark history is read once per refresh instead of three times.
+- Refresh in the legacy script no longer freezes the window while the system checks run.
+- The legacy script's `-Status` run no longer creates the Windows event log source, which wrote to HKLM from a command that's meant to only read.
 - `winre-inject --apply` no longer adds the same stornvme package to the recovery image on every run. DISM stored each one as another `oem<N>.inf`, so `winre.wim` grew a few MB per run (510, 515, then 517 MB in testing) and every run took a full backup for nothing. It now mounts the image read-only and reads its driver list first. When the image already carries that stornvme version or newer, it says the image is current and stops with no backup and no commit. When it carries an older injected copy, the new package goes in and the older copy comes out in the same mount, so the image keeps one.
 - BypassIO is judged per volume, from that volume's own storage controller. A SATA or USB data volume on a PC whose boot drive is on stornvme no longer reads as BypassIO capable (or lands in the gaming-impact list), and a mixed nvmedisk/stornvme machine no longer reports every volume as nvmedisk. When the controller can't be read, the volume says Unknown instead of borrowing the machine-wide pick.
 - Remove clears the FeatureStore fallback's priority-8 override even when the setting Windows had before sat at another priority. It used to re-assert only the old setting, which left the override in place, so every retry failed the same baseline check and only `vivetool /reset` got out of it. The override is cleared in its own call before the old setting goes back, so the two never depend on how Windows orders one batch.
@@ -133,6 +136,9 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - `verify-payload --json` now uses the same versioned envelope as every other command (`schemaVersion`, `command`, `data`), and `bypassio --json --history` carries the pre/post snapshot diff and the volumes that lost BypassIO, which the text output had and the JSON dropped.
 
 ### Changed
+- The window no longer rebuilds registry-flag, compatibility-note, change-plan and gaming-impact lists that nothing displayed. The Overview now lists each readiness check, and the Drives tab shows whether each drive is on the native or the legacy driver.
+- The Apply confirmation, the README and the offline overview now say that the measured gains show up at high queue depths, that ordinary desktop use may see little or no change, and that StorageReview measured 4K random writes slightly slower.
+- The legacy script's release gate checks many more registry-writing shapes (`Set-Item`, `reg.exe`, writable `OpenSubKey`, `New-Item` on a registry path and others) and tests itself against a fixture for each one, so a pattern that stops matching fails the gate.
 - Core and CLI messages, the recovery kit's verification script, the legacy PowerShell output and the README write "Safe Boot" as two words, like the GUI. Literal registry paths keep `SafeBoot\...`, and the spelling check now covers Core and the CLI too.
 - The build rules name build 26300 as Windows 11 26H2 (enablement package KB5121794, generally available since 2026-09-29) instead of an Insider-only train, and note that 26H1 has no Hotpatch. Preflight and the offline docs say the Feature flags page is for Insiders on the Experimental channel, so a retail 26H2 PC isn't sent looking for a page it doesn't have.
 - The test that stops shipped code from launching a Windows tool by bare name now judges each `.exe` name by its own context, so an unrelated `Path.Combine` on the same line can't hide a launch. The suite also runs the documentation-facts validator against the real checkout, so a README count that drifts fails a normal test run instead of waiting for a release build.
@@ -178,6 +184,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
 - Removed leftovers of the old window layout that nothing used anymore: an unused tab control style, a hidden maximize button and its handlers (the standard title bar buttons do that job), a collapsed panel splitter and the grid rows and columns that existed for it, a settings toggle command with no button, and two converters nothing bound.
 
 ### Docs
+- Registry backup and removal-residue tests run against fixture trees instead of the live machine. The recovery gate tests use a temp folder, and a crashed run no longer leaves protected test keys behind.
 - README counts 28 preflight checks, the number PreflightService defines. It said 27.
 - CLI help now describes what `register-tasks`, `tail` and `watchdog --auto-revert` actually do,
   and lists every command that supports `--json` (twelve, not five).
@@ -206,6 +213,7 @@ All notable changes to win11-nvme-driver-patcher will be documented in this file
   next cut actually uploads its sidecars.
 
 ### Security
+- Test runs no longer find `powershell.exe` or `cmd.exe` through the current directory or PATH, and a gate keeps new tests from doing it.
 - `register-tasks` only points its SYSTEM scheduled tasks at a CLI under Program Files or the folder the MSI installed to. Run from Downloads or the desktop, it used to register tasks that ran that copy as SYSTEM, so any program able to replace the file could get itself run as SYSTEM at the next sign-in or hourly sweep.
 - Each release now carries a signed `update-manifest.json` with the version, the oldest install allowed to take it, an expiry and the SHA-256 of every release file. The update staging code refuses a download unless the signature matches one of the two public keys the app ships with, the manifest names that release and a newer version, it hasn't expired, and the file matches both its `.sha256` sidecar and the manifest. Swapping an exe and its sidecar on the release page no longer gets past it. The release gate checks the signature and every hash before anything is published. The README explains key rotation.
 - Release publishing now requires SDK 10.0.401 or newer, embeds .NET runtime 10.0.12 or newer
