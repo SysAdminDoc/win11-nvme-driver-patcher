@@ -75,14 +75,62 @@ public sealed class OperationalHistoryTests : IDisposable
     }
 
     [Fact]
-    public void Preflight_ReadsTheBenchmarkHistoryOncePerCycle_OffTheUiThread()
+    public void Preflight_ReadsThePatchStateOncePerCycle_OffTheUiThread()
     {
         var source = ReadSource("MainViewModel.cs");
         var preflight = MethodBody(source, "public async Task RunPreflightAsync()");
 
-        Assert.Equal(1, CountOf(preflight, "BenchmarkService.GetHistory("));
-        Assert.Contains("await Task.Run(() => BenchmarkService.GetHistory(Config.WorkingDir))", preflight, StringComparison.Ordinal);
-        Assert.Equal(2, CountOf(preflight, "UpdateOverviewSummary(benchmarkHistory)"));
+        Assert.Equal(1, CountOf(preflight, "GatherPatchState("));
+        Assert.Contains("await Task.Run(() => GatherPatchState(workingDir))", preflight, StringComparison.Ordinal);
+        Assert.Equal(2, CountOf(preflight, "UpdateOverviewSummary(patchState)"));
+        foreach (var io in new[] { "BenchmarkService.GetHistory(", "RegistryService.GetPatchStatus(" })
+            Assert.DoesNotContain(io, preflight, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PatchStateGather_IsPure_AndTheStatusAndOverviewSteps_DoNoIo()
+    {
+        var source = ReadSource("MainViewModel.cs");
+
+        var gather = MethodBody(source, "internal static PatchStateSnapshot GatherPatchState(");
+        foreach (var forbidden in new[] { "Dispatcher", "Application.", "StatusText", "Config.", "Log(" })
+            Assert.DoesNotContain(forbidden, gather, StringComparison.Ordinal);
+        Assert.Contains("RegistryService.GetPatchStatus()", gather, StringComparison.Ordinal);
+        Assert.Contains("BenchmarkService.GetHistory(workingDir)", gather, StringComparison.Ordinal);
+
+        var refresh = MethodBody(source, "private async Task RefreshPatchStateAsync(");
+        Assert.Contains("await Task.Run(() => GatherPatchState(workingDir))", refresh, StringComparison.Ordinal);
+
+        foreach (var apply in new[] { "private void UpdateStatusDisplay(", "private void UpdateOverviewSummary(" })
+        {
+            var body = MethodBody(source, apply);
+            foreach (var io in new[] { "RegistryService.", "BenchmarkService.", "DataService.", "FeatureStoreWriterService.", "File." })
+                Assert.DoesNotContain(io, body, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void PostCommandRefreshes_GoThroughTheBackgroundGather()
+    {
+        var commands = ReadSource("MainViewModel.Commands.cs");
+
+        // Apply, remove, the checkpoint rollback and the benchmark all refresh through the gather.
+        Assert.Equal(4, CountOf(commands, "_ = RefreshPatchStateAsync("));
+        Assert.Contains("_ = RefreshPatchStateAsync(includeStatusCard: false);", commands, StringComparison.Ordinal);
+        foreach (var direct in new[] { "UpdateStatusDisplay(", "UpdateOverviewSummary(" })
+            Assert.DoesNotContain(direct, commands, StringComparison.Ordinal);
+
+        // The benchmark's save waits on a machine-wide lock; it and the comparison read stay off the UI thread.
+        var benchmark = MethodBody(commands, "private async Task RunBenchmark()");
+        Assert.Contains("await Task.Run(() => RegistryService.GetPatchStatus())", benchmark, StringComparison.Ordinal);
+        Assert.Equal(1, CountOf(benchmark, "BenchmarkService.SaveResults("));
+        Assert.Equal(1, CountOf(benchmark, "BenchmarkService.GetHistory("));
+        int run = benchmark.IndexOf("await Task.Run(() =>\n", StringComparison.Ordinal);
+        if (run < 0) run = benchmark.IndexOf("await Task.Run(() =>\r\n", StringComparison.Ordinal);
+        Assert.True(run >= 0 && run < benchmark.IndexOf("BenchmarkService.SaveResults(", StringComparison.Ordinal));
+
+        var failure = MethodBody(ReadSource("MainViewModel.cs"), "private void RecoverOperationFailure(");
+        Assert.Contains("_ = RefreshPatchStateAsync();", failure, StringComparison.Ordinal);
     }
 
     private static int CountOf(string text, string needle)

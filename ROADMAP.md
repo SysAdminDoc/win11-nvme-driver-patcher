@@ -10,15 +10,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
 
 ### P3
 
-- [ ] P3 — GUI: the Next step buttons, bench label and log list are still unbound, and post-command refreshes still read history on the UI thread
-  Category: maintainability / perf
-  Where: `src/NVMeDriverPatcher/ViewModels/`: `HasNextStep*`, `NextStep{Primary,Secondary}Action{Text,Enabled,Id}` and `UpdateRecommendedActions` (the ids are read only by `MainWindow.xaml.cs:539,544`), `BenchLabelText`/`BenchLabelVisible` (watched only at `MainWindow.xaml.cs:611`), `LogEntries` (feeds `LogText` only); `MainViewModel.UpdateOverviewSummary` called from `MainViewModel.Commands.cs:107,250,439`
-  Problem: The 2026-10-09 cleanup removed the unbound clusters it named but left these. The Next step card has no buttons at all, so its action plumbing is dead. After apply, remove and benchmark commands, `UpdateOverviewSummary` still reads benchmark history and `RegistryService.GetPatchStatus()` on the UI thread, which the refresh path no longer does.
-  Fix: Either give the Next step card its two buttons or delete the action cluster and its handlers; bind or delete the bench label; make `LogEntries` private. Move the post-command summary reads into the same background gather the refresh uses.
-  Acceptance: `ViewModelSurfaceTests` covers these members; no UI-thread SQLite or registry read remains in the post-command path.
-  Confidence: Verified by grep (leftovers reported by the cleanup pass)
-  Effort: S
-
 ### Unaudited — needs a pass
 
 ## Research-Driven Additions — 2026-08-11

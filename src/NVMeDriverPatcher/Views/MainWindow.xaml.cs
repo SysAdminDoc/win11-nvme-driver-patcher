@@ -39,6 +39,7 @@ public partial class MainWindow : Window
         _vm.InfoDialog = ShowInfoDialog;
         DataContext = _vm;
         _vm.PropertyChanged += ViewModel_PropertyChanged;
+        _vm.BenchmarkHistoryChanged += ViewModel_BenchmarkHistoryChanged;
         TelemetryPanelControl.DriveSelected += TelemetryPanel_DriveSelected;
         TuningPanelControl.LogMessage += TuningPanel_LogMessage;
         ThemeService.ThemeChanged += ThemeService_ThemeChanged;
@@ -125,6 +126,7 @@ public partial class MainWindow : Window
     {
         try { _vm.OnClosing(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[OnClosing] {ex}"); }
         try { _vm.PropertyChanged -= ViewModel_PropertyChanged; } catch { }
+        try { _vm.BenchmarkHistoryChanged -= ViewModel_BenchmarkHistoryChanged; } catch { }
         try { TelemetryPanelControl.DriveSelected -= TelemetryPanel_DriveSelected; } catch { }
         try { TuningPanelControl.LogMessage -= TuningPanel_LogMessage; } catch { }
         try { ThemeService.ThemeChanged -= ThemeService_ThemeChanged; } catch { }
@@ -534,16 +536,6 @@ public partial class MainWindow : Window
         _vm.ClearLog();
     }
 
-    private void RecommendedPrimaryAction_Click(object sender, RoutedEventArgs e)
-    {
-        ExecuteRecommendedAction(_vm.NextStepPrimaryActionId);
-    }
-
-    private void RecommendedSecondaryAction_Click(object sender, RoutedEventArgs e)
-    {
-        ExecuteRecommendedAction(_vm.NextStepSecondaryActionId);
-    }
-
     private void UpdateThemeToggleButton()
     {
         bool dark = ThemeService.CurrentTheme is AppTheme.Dark or AppTheme.HighContrast;
@@ -606,69 +598,27 @@ public partial class MainWindow : Window
         }
     }
 
+    // A completed benchmark wrote a new result: drop the cached history and redraw the chart
+    // panel if it's the visible tab.
+    private void ViewModel_BenchmarkHistoryChanged(object? sender, EventArgs e)
+    {
+        _benchmarkHistoryCache.Invalidate();
+        if (WorkspaceTabs.SelectedIndex == 0)
+            RefreshBenchmarkWorkspace();
+    }
+
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.BenchLabelText))
-            _benchmarkHistoryCache.Invalidate();
-
-        // BenchLabelText and StatusText fire often during preflight; only refresh the
-        // benchmark chart panel when it's the visible tab. The cache avoids re-reading and
-        // re-parsing the JSON on every status update, while the label change invalidates it
-        // after a completed benchmark writes a new result.
-        if ((e.PropertyName == nameof(MainViewModel.BenchLabelText) ||
-             e.PropertyName == nameof(MainViewModel.StatusText)) &&
-            WorkspaceTabs.SelectedIndex == 0)
-        {
+        // StatusText fires often during preflight; only refresh the benchmark chart panel when
+        // it's the visible tab. The cache avoids re-reading and re-parsing the JSON on every
+        // status update.
+        if (e.PropertyName == nameof(MainViewModel.StatusText) && WorkspaceTabs.SelectedIndex == 0)
             RefreshBenchmarkWorkspace();
-        }
 
         if (e.PropertyName == nameof(MainViewModel.DriveInventorySummaryText) &&
             WorkspaceTabs.SelectedIndex == 1)
         {
             _ = RefreshTelemetryWorkspaceAsync();
-        }
-    }
-
-    private void ExecuteRecommendedAction(string? actionId)
-    {
-        switch (actionId)
-        {
-            case "apply_patch":
-                if (_vm.ApplyPatchCommand.CanExecute(null))
-                    _vm.ApplyPatchCommand.Execute(null);
-                break;
-            case "create_backup":
-                if (_vm.RunBackupCommand.CanExecute(null))
-                    _vm.RunBackupCommand.Execute(null);
-                break;
-            case "run_benchmark":
-                if (_vm.RunBenchmarkCommand.CanExecute(null))
-                    _vm.RunBenchmarkCommand.Execute(null);
-                break;
-            case "export_diagnostics":
-                if (_vm.ExportDiagnosticsCommand.CanExecute(null))
-                    _vm.ExportDiagnosticsCommand.Execute(null);
-                break;
-            case "create_recovery_kit":
-                if (_vm.ExportRecoveryKitCommand.CanExecute(null))
-                    _vm.ExportRecoveryKitCommand.Execute(null);
-                break;
-            case "refresh_checks":
-                if (_vm.RefreshCommand.CanExecute(null))
-                    _vm.RefreshCommand.Execute(null);
-                break;
-            case "open_activity":
-                FocusActivityRail();
-                break;
-            case "open_benchmarks":
-                SelectWorkspaceTab(0);
-                break;
-            case "open_telemetry":
-                SelectWorkspaceTab(1);
-                break;
-            case "open_recovery":
-                SelectWorkspaceTab(2);
-                break;
         }
     }
 
@@ -693,12 +643,6 @@ public partial class MainWindow : Window
         }
 
         WorkspaceTabs.SelectedIndex = index;
-    }
-
-    private void FocusActivityRail()
-    {
-        ActivityRailLogOutput.Focus();
-        ActivityRailLogScroller.ScrollToBottom();
     }
 
     private void RefreshBenchmarkWorkspace()
