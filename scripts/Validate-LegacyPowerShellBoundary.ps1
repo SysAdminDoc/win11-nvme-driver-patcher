@@ -156,6 +156,38 @@ function Get-OwningFunctionName {
     return $null
 }
 
+# Functions allowed to call Initialize-EventLogSource without their own -Status guard. The shipped
+# artifact needs none: its only call is the top-level `if (-not $Status)` guard.
+$script:EventLogInitializerCallers = @()
+
+# True when the call sits in the true branch of `if (-not $Status)` / `if (!$Status)` with no deferred
+# script block or unlisted function between them. A function body or script block can be invoked from
+# anywhere, so an enclosing guard outside it proves nothing.
+function Test-StatusGuardedCall {
+    param($Command)
+    $child = $Command
+    $walker = $Command.Parent
+    while ($walker) {
+        if ($walker -is [System.Management.Automation.Language.IfStatementAst]) {
+            foreach ($clause in $walker.Clauses) {
+                $isThisBranch = $clause.Item2.Extent.StartOffset -eq $child.Extent.StartOffset -and
+                    $clause.Item2.Extent.EndOffset -eq $child.Extent.EndOffset
+                if ($isThisBranch -and $clause.Item1.Extent.Text.Trim() -match '^(-not\s*|!\s*)\$Status$') { return $true }
+            }
+        }
+        if ($walker -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+            return ($script:EventLogInitializerCallers -contains $walker.Name)
+        }
+        if ($walker -is [System.Management.Automation.Language.ScriptBlockAst] -and $walker.Parent -and
+            -not ($walker.Parent -is [System.Management.Automation.Language.FunctionDefinitionAst])) {
+            return $false
+        }
+        $child = $walker
+        $walker = $walker.Parent
+    }
+    return $false
+}
+
 function Get-BoundaryFailure {
     param([string]$Source)
 
@@ -323,22 +355,13 @@ function Get-BoundaryFailure {
         }
     }
 
-    # Initialize-EventLogSource creates an HKLM key, so a pure -Status query must never reach it.
+    # Initialize-EventLogSource creates an HKLM key, so a pure -Status query must never reach it. Mentioning
+    # $Status is not enough (`if ($Status)` is the inverse); the call must sit in the true branch of
+    # `if (-not $Status)`, or inside a function named in $script:EventLogInitializerCallers.
     foreach ($command in $commands) {
-        if ($command.GetCommandName() -ne 'Initialize-EventLogSource') { continue }
-        $guarded = $false
-        $walker = $command.Parent
-        while ($walker) {
-            if ($walker -is [System.Management.Automation.Language.IfStatementAst]) {
-                foreach ($clause in $walker.Clauses) {
-                    if ($clause.Item1.Extent.Text -match '\$Status\b') { $guarded = $true }
-                }
-            }
-            if ($walker -is [System.Management.Automation.Language.FunctionDefinitionAst]) { $guarded = $true; break }
-            $walker = $walker.Parent
-        }
-        if (-not $guarded) {
-            $failures.Add("Initialize-EventLogSource is called at line $($command.Extent.StartLineNumber) without a -Status guard (it writes HKLM)")
+        if ((Resolve-CommandName $command.GetCommandName()) -ne 'Initialize-EventLogSource') { continue }
+        if (-not (Test-StatusGuardedCall $command)) {
+            $failures.Add("Initialize-EventLogSource is called at line $($command.Extent.StartLineNumber) without a -Status guard (it must sit in the true branch of if (-not `$Status) because it writes HKLM)")
         }
     }
 
@@ -444,6 +467,11 @@ $fixtures = @(
     @{ Name = 'writable OpenSubKey'; Body = '$k = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey("SOFTWARE\X", $true)'; Expect = 'writable OpenSubKey' },
     @{ Name = 'CreateEventSource outside its function'; Body = "[System.Diagnostics.EventLog]::CreateEventSource('Src', 'Application')"; Expect = 'outside Initialize-EventLogSource' },
     @{ Name = 'ungated Initialize-EventLogSource'; Body = ''; EventLog = 'Initialize-EventLogSource'; Expect = 'without a -Status guard' },
+    @{ Name = 'inverted -Status guard'; Body = ''; EventLog = 'if ($Status) { Initialize-EventLogSource }'; Expect = 'without a -Status guard' },
+    @{ Name = 'else branch of the -Status guard'; Body = ''; EventLog = 'if (-not $Status) { } else { Initialize-EventLogSource }'; Expect = 'without a -Status guard' },
+    @{ Name = 'Initialize-EventLogSource in an unlisted function'; Body = ''; EventLog = 'function Start-AppLogging { Initialize-EventLogSource }'; Expect = 'without a -Status guard' },
+    @{ Name = 'Initialize-EventLogSource in a deferred script block'; Body = ''; EventLog = 'if (-not $Status) { $init = { Initialize-EventLogSource } }'; Expect = 'without a -Status guard' },
+    @{ Name = '!$Status guard'; Body = ''; EventLog = 'if (!$Status) { Initialize-EventLogSource }'; Expect = $null },
     @{ Name = 'New-EventLog outside its function'; Body = 'New-EventLog -LogName Application -Source Src'; Expect = 'New-EventLog is reachable outside Initialize-EventLogSource' },
     @{ Name = 'Remove-EventLog'; Body = 'Remove-EventLog -Source Src'; Expect = 'Remove-EventLog' },
     @{ Name = 'Limit-EventLog'; Body = 'Limit-EventLog -LogName Application -MaximumSize 1MB'; Expect = 'Limit-EventLog' },
