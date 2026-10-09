@@ -34,6 +34,15 @@ public class TuningProfile
     public const string Key_NoLowPowerTransitions = "NoLowPowerTransitions";
     public const string Key_ApstIdleTimeout = "ApstIdleTimeout";
 
+    /// <summary>
+    /// Values TuningService writes that aren't in stornvme's own list of the Parameters\Device
+    /// values it reads (string dump in djdallmann/GamingPCSetup, registrykeys_stornvme.txt) and
+    /// that Microsoft doesn't document for it. Their effect can't be confirmed, and the tuning
+    /// panel says so. IoQueueDepth and IoSubmissionQueueCount are in that list.
+    /// </summary>
+    public static IReadOnlyList<string> UnconfirmedKeys { get; } =
+        [Key_MaxReadSplit, Key_MaxWriteSplit, Key_IdlePowerTimeout, Key_StandbyPowerTimeout];
+
     // ========================================================================
     // Tunable Parameters
     // ========================================================================
@@ -68,14 +77,16 @@ public class TuningProfile
 
     /// <summary>
     /// Idle power management timeout in milliseconds.
-    /// How long the controller waits at idle before entering a low-power state.
+    /// Meant as how long the controller waits at idle before entering a low-power state. Not in
+    /// stornvme's list of the Parameters\Device values it reads (see <see cref="UnconfirmedKeys"/>).
     /// Default: 100, Performance: 0 (disabled), PowerSave: 50.
     /// </summary>
     public int? IdlePowerTimeout { get; set; }
 
     /// <summary>
     /// Standby power management timeout in milliseconds.
-    /// How long before the controller enters deeper standby.
+    /// Meant as how long before the controller enters deeper standby. Not in stornvme's list of
+    /// the values it reads (see <see cref="UnconfirmedKeys"/>).
     /// Default: 0 (disabled), PowerSave: 2000.
     /// </summary>
     public int? StandbyPowerTimeout { get; set; }
@@ -102,12 +113,14 @@ public class TuningProfile
     /// Community tweak carried since v4.5: 1 is meant to keep the drive in an operational state.
     /// Microsoft doesn't document this value for stornvme and the driver isn't known to read it,
     /// so the effect can't be confirmed; the power plan's NVMe idle settings are what Windows
-    /// documents (see ApstInspectorService).
+    /// documents (see ApstInspectorService). Carried in exported profiles only: TuningService
+    /// never writes it.
     /// </summary>
     public int? NoLowPowerTransitions { get; set; }
 
     /// <summary>
-    /// APST idle timeout override in microseconds (v4.5). Mirrors ApstInspectorService surface.
+    /// APST idle timeout override in microseconds (v4.5). Carried in exported profiles only:
+    /// TuningService never writes it, and stornvme isn't known to read it.
     /// </summary>
     public int? ApstIdleTimeout { get; set; }
 
@@ -131,7 +144,7 @@ public class TuningProfile
     public static TuningProfile Performance { get; } = new()
     {
         Name = "Performance",
-        Description = "Maximum throughput and IOPS. Disables power management. Best for desktops with good cooling.",
+        Description = "Biased toward throughput and IOPS, with the idle timeouts set to 0. Best for desktops with good cooling.",
         QueueDepth = 128,
         NvmeMaxReadSplit = 512,
         NvmeMaxWriteSplit = 512,
@@ -163,7 +176,7 @@ public class TuningProfile
     public static TuningProfile PowerSave { get; } = new()
     {
         Name = "Power Save",
-        Description = "Reduced queue depth with aggressive power management. Best for laptops on battery.",
+        Description = "Reduced queue depth with short idle timeouts. Meant for laptops on battery.",
         QueueDepth = 16,
         NvmeMaxReadSplit = 64,
         NvmeMaxWriteSplit = 64,

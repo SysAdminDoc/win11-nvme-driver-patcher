@@ -176,7 +176,7 @@ Some builds ship the two GUID SafeBoot keys themselves. On 24H2 26100.9550 and 2
 - **Authenticated ViVeTool fallback**: the native FeatureStore path is primary and ViVeTool is a secondary cross-check only; the signed app embeds exact v0.3.4 x64/ARM64 archive and member hashes. That trusted upstream release was published on 2025-03-10 and is dormant, so its dictionary may not cover current Windows builds. An unlisted release, wrong architecture, missing/extra/nested file, modified companion DLL/data file, or tampered cache is rejected before installation and rechecked before every elevated launch
 - **Verified non-boot hot-swap transaction**: a live swap aborts before dismount if any volume flush fails, uses the controller's documented SetupAPI property-state change, honors restart flags, and reports success only after the exact controller driver/service and every original volume mount are independently proved
 - **Comprehensive software detection**: warns about Intel RST (BSOD risk), Intel VMD (boot failures), Hyper-V/WSL2 (40% I/O regression), Storage Spaces (array degradation), Veeam, Acronis, Macrium, UrBackup, NinjaOne, Paragon, Samsung Magician, WD Dashboard, Crucial Storage Executive, CrystalDiskInfo, Data Deduplication
-- **Laptop/power warning**: detects laptops and warns about APST battery regression (~15% impact)
+- **Laptop/power warning**: detects laptops and warns that battery life after patching isn't known. Under stornvme, Windows idles the drive through the power plan, and Microsoft doesn't document how nvmedisk does it
 - **Rollback on partial failure**: restores pre-existing values from the durable baseline instead of assuming every touched value was absent
 - **Registry backup** export + system restore point creation before any changes
 - **Windows recovery features**: preflight reports whether the Windows build offers Point-in-Time Restore, how old the newest restore point is when Windows says, and the Quick Machine Recovery and remediation state. They're there for reference and don't count toward readiness. The offline Recovery Kit and the recovery gate are still the main way back.
@@ -424,7 +424,7 @@ The tool automatically detects and warns about all of these. VeraCrypt is a hard
 | **Crucial Storage Executive** | Cannot detect drives (SCSI pass-through) | Low | Yes (warns) |
 | **CrystalDiskInfo** | SMART monitoring may stop reading NVMe health (SCSI pass-through) | Medium | Yes (warns) |
 | **Data Deduplication** | Microsoft confirms incompatibility | High | Yes (warns) |
-| **Laptop / Battery** | APST broken, ~15% battery life reduction | Medium | Yes (warns) |
+| **Laptop / Battery** | Idle behavior under nvmedisk isn't documented, so battery life may change | Medium | Yes (warns) |
 | DirectStorage games | BypassIO not supported, higher CPU | Low-Medium | Yes (warns) |
 
 If you experience problems, use the **Remove Patch** button (or `-Silent -Remove`) and restart.

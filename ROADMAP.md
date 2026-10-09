@@ -20,16 +20,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Verified
   Effort: M
 
-- [ ] P3 — Laptop warnings blame APST, which StorNVMe doesn't use
-  Category: correctness
-  Where: `PreflightService.cs:199` ("APST broken"), `DryRunService.cs:125`, `MainViewModel.cs:483`, `:1147`, `:1318`, CLI `Program.cs:1300`, `DiagnosticsService.cs:594`, `ApstInspectorService.ModernStandbyApstWarning`, README "Laptop/power warning" and the risk table, `TuningProfile` keys `NoLowPowerTransitions` and `ApstIdleTimeout`
-  Problem: Microsoft's StorNVMe power management page says StorNVMe doesn't use the drive's APST; it picks non-operational states itself from the power plan's NVMe idle timeouts and latency tolerances. The warnings say nvmedisk "breaks" or "disables" APST, and the tuning profile carries two stornvme values Microsoft doesn't document and no machine we've read has. The ~15% battery figure has no cited source in the repo.
-  Evidence: Found while rebuilding the APST inspector on the power plan settings (it now reads "Windows idles this drive to PS3 after 200 ms and PS4 after 2000 ms" on a Samsung PM9C1b under stornvme). A string dump of stornvme.sys (djdallmann/GamingPCSetup, registrykeys_stornvme.txt) lists the Parameters\Device values the driver reads: the power ones are `IdlePowerMode`, `MedPowerResumeLatency`, `MedPowerFxIdleTimeout`, `MedPowerD3IdleTimeout`, `LowestPowerResumeLatency`, `LowestPowerFxIdleTimeout` and `LowestPowerD3IdleTimeout`. `NoLowPowerTransitions`, `AutonomousPowerStateTransitionEnabled`, `ApstIdleTimeout` and `PowerState<N>_IdleTimeUs` aren't in it, so the tuning profile's two keys and the inspector's per-state reads name values stornvme never looks at. The inspector no longer lets the two "off" values decide the verdict; the tuning profile still writes them.
-  Fix: Reword the laptop warnings around what's known (stornvme's idle states come from the power plan; how nvmedisk idles the drive isn't documented), cite or drop the 15% figure, and either source the two tuning keys or stop writing them.
-  Acceptance: No user-facing text says nvmedisk breaks or disables APST; every battery figure shown has a source; the tuning profile writes only documented stornvme values or says it can't confirm them.
-  Confidence: Likely
-  Effort: S
-
 - [ ] P3 — GUI: large dead ViewModel surface still computed every refresh; user-facing features silently vanished in the redesign
   Category: maintainability
   Where: `src/NVMeDriverPatcher/ViewModels/`: `ReadinessChecks`/`LeftChecks`/`RightChecks` + `PreflightCheckVM` tooltips (`MainViewModel.cs:467-506`), `Drives`/`DriveRowVM` (`RowViewModels.cs:63-106`), `RegistryFlags`/`SafeBootFlags` (`:804-836`), `AttentionNotes` cluster (`:1089-1167`), `DirectStorageImpactText/Severity/PanelVisible` (`:156-159, 1046-1087`), `SkipWarnings` (no toggle anywhere yet described by `OptionsSummaryText`, `MainViewModel.Settings.cs:22-24`), `ChangePlanSteps`, `RiskSummaryColor`, `ActionReadinessText/Color` (bound only inside collapsed XAML)
