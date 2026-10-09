@@ -60,8 +60,9 @@ public sealed class FirstRunExpectationTests
         Assert.DoesNotContain("delivers large gains", text, StringComparison.Ordinal);
     }
 
+    // LF-normalized: the multi-line IndexOf probes above spell "\n", and a CRLF checkout must match too.
     private static string ReadRepoFile(params string[] parts) =>
-        File.ReadAllText(Path.Combine([RepoRoot(), .. parts]));
+        File.ReadAllText(Path.Combine([RepoRoot(), .. parts])).Replace("\r\n", "\n");
 
     private static string RepoRoot([CallerFilePath] string sourceFile = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFile)!, "..", ".."));
