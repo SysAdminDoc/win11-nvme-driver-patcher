@@ -6,6 +6,8 @@
 
 A GUI + CLI tool to enable the experimental Windows Server 2025 Native NVMe driver (nvmedisk.sys) on Windows 11, replacing the legacy SCSI translation layer for improved NVMe performance.
 
+> **Before you try it:** the measured gains show up at high queue depths, the kind of load servers and heavy parallel I/O create. Ordinary desktop use may see little or no change. [Details below](#what-does-this-do).
+
 ![Version](https://img.shields.io/badge/Version-5.7.0-blue)
 ![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows11)
@@ -124,6 +126,8 @@ the retired key is gone from then on. If a signing key ever leaked, the same ste
 the CHANGELOG would say so.
 
 ## What Does This Do?
+
+**Set your expectations first.** The improvements people measured show up at high queue depths, which is what servers and heavy parallel I/O produce. Ordinary desktop use may see little or no change. StorageReview's [Windows Server native NVMe testing](https://www.storagereview.com/review/windows-server-native-nvme) also measured 4K random writes slightly slower. The built-in benchmark has a desktop QD1 profile, so you can check your own drive before and after (see [Performance Benchmarks](#performance-benchmarks)).
 
 Windows Server 2025 introduced a new **Native NVMe driver** that eliminates the legacy SCSI translation layer, allowing direct communication with NVMe drives. This driver is available in Windows 11 (24H2+) but disabled by default. Microsoft has stated they are ["absolutely exploring"](https://techcommunity.microsoft.com/blog/windowsservernewsandbestpractices/announcing-native-nvme-in-windows-server-2025-ushering-in-a-new-era-of-storage-p/4477353) bringing it broadly to the entire Windows codebase.
 
