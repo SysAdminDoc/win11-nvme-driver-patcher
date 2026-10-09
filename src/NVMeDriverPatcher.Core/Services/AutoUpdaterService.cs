@@ -181,6 +181,8 @@ public static class AutoUpdaterService
             result.RestartCommand = BuildRestartCommand(download.Path!, currentExe, protectedHash);
             result.Summary =
                 $"Update staged in protected ProgramData storage ({result.VerificationMethod} verified). Run the printed RestartCommand in a separate PowerShell window, then exit the app; it re-verifies SHA-256 before copy and launch.";
+            if (SmartAppControlService.DownloadNote(SmartAppControlService.Read()) is string sacNote)
+                result.Summary += " " + sacNote;
         }
         catch (Exception ex)
         {

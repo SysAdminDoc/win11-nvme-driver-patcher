@@ -734,8 +734,10 @@ public partial class MainViewModel : ObservableObject
         UpdateAvailable = true;
         UpdateVersionText = $"v{info.Version}";
         UpdateUrl = info.URL;
-        UpdateTooltip = $"Click to download v{info.Version}";
+        var sacNote = SmartAppControlService.DownloadNote(SmartAppControlService.Read());
+        UpdateTooltip = sacNote is null ? $"Click to download v{info.Version}" : $"Click to download v{info.Version}. {sacNote}";
         Log($"UPDATE AVAILABLE: v{info.Version} -- {AppConfig.GitHubURL}/releases", "WARNING");
+        if (sacNote is not null) Log(sacNote, "WARNING");
     }
 
     // Called when preflight kicked off the update check but it hadn't replied by the time
