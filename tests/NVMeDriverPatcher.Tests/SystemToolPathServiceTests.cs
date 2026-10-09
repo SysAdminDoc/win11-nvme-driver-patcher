@@ -50,6 +50,16 @@ public sealed class SystemToolPathServiceTests
         @"(?<!SystemToolPathService\.Resolve\()""[A-Za-z0-9_.\-]+\.exe""",
         RegexOptions.Compiled);
 
+    // The tools this suite knows, named without ".exe". CreateProcess appends ".exe" to a bare name
+    // and searches the same directories, so "reg" runs a planted reg.exe just as "reg.exe" would.
+    private const string KnownBareTool =
+        "reg|regedit|schtasks|dism|bcdedit|powershell|pwsh|pnputil|sc|wevtutil|fsutil|mountvol|" +
+        "manage-bde|shutdown|reagentc|verifier|wpr|cmd|explorer|notepad|diskpart|devcon";
+
+    private static readonly Regex UnresolvedBareToolLiteral = new(
+        @"(?<!SystemToolPathService\.Resolve\()""(?i:" + KnownBareTool + @")""",
+        RegexOptions.Compiled);
+
     /// <summary>
     /// What may sit immediately before a literal for it to name an executable without launching it:
     /// an asset/file name, a fallback for a path this process already owns, or a name being
@@ -80,8 +90,14 @@ public sealed class SystemToolPathServiceTests
         Assert.True(IsOffendingLine(@"=> RunProcess(""sc.exe"", args);"));            // watchdog defect
         Assert.True(IsOffendingLine(@"var bcd = RunCapture(""bcdedit.exe"", args);")); // WinRE probe defect
         Assert.True(IsOffendingLine(@"await runner(""dism.exe"","));                   // WinPE/WinRE defect
+        // The same tools without ".exe", which the .exe-only literal match never saw.
+        Assert.True(IsOffendingLine(@"var psi = new ProcessStartInfo(""schtasks"")"));
+        Assert.True(IsOffendingLine(@"=> RunProcess(""sc"", args);"));
+        Assert.True(IsOffendingLine(@"await runner(""PowerShell"", args,"));
 
         // ...and must stay quiet on a resolved launch and on the non-launch shapes.
+        Assert.False(IsOffendingLine(@"if (document.Root?.Name.LocalName != ""PnpUtil"")"));
+        Assert.False(IsOffendingLine(@"var category = ""registry"";"));
         Assert.False(IsOffendingLine(@"new ProcessStartInfo(SystemToolPathService.Resolve(""fsutil.exe""))"));
         Assert.False(IsOffendingLine(@"var exe = Environment.ProcessPath ?? ""NVMeDriverPatcher.exe"";"));
         Assert.False(IsOffendingLine(@"var p = Path.Combine(dir, ""diskspd.exe"");"));
@@ -112,14 +128,16 @@ public sealed class SystemToolPathServiceTests
 
     /// <summary>
     /// A test that starts a process from a bare name: a ProcessStartInfo or Process.Start call whose
-    /// first argument is a string literal, or a FileName assignment of an .exe literal. A bare name
-    /// resolves through the current directory and PATH, so a planted binary in the test output
+    /// first argument is a string literal, or a FileName assignment (initializer or a later
+    /// <c>psi.FileName = ...</c>) of an executable literal, with or without its extension. A bare
+    /// name resolves through the current directory and PATH, so a planted binary in the test output
     /// folder would run in place of the real tool. Only launch-shaped uses count: asset names,
-    /// fixtures and assertions that merely mention an .exe are fine.
+    /// fixtures and assertions that merely mention an .exe are fine. Names held in a variable are
+    /// <see cref="NoSourceStartsAProcessFromAnUnresolvedTarget"/>'s job.
     /// </summary>
     private static readonly Regex BareNameLaunch = new(
         @"(ProcessStartInfo\(\s*|Process\.Start\(\s*)""(?<tool>[^""\\/:]+)""" +
-        @"|FileName\s*=\s*""(?<tool>[^""\\/:]+\.exe)""",
+        @"|(?<!\w)FileName\s*=\s*""(?<tool>[^""\\/:.]+(?:\.(?:exe|com|cmd|bat))?)""",
         RegexOptions.Compiled);
 
     // Fixtures that must carry a bare name, as (file, tool). node has no fixed install path, and the
@@ -137,6 +155,9 @@ public sealed class SystemToolPathServiceTests
         Assert.Matches(BareNameLaunch, "process.StartInfo = new System.Diagnostics.ProcessStartInfo(\n    \"cmd.exe\", args)");
         Assert.Matches(BareNameLaunch, "Process.Start(\"explorer.exe\");");
         Assert.Matches(BareNameLaunch, "new ProcessStartInfo { FileName = \"sc.exe\" }");
+        Assert.Matches(BareNameLaunch, "new ProcessStartInfo { FileName = \"reg\" }");      // no extension
+        Assert.Matches(BareNameLaunch, "startInfo.FileName = \"schtasks\";");             // separate statement
+        Assert.DoesNotMatch(BareNameLaunch, "const string ManifestFileName = \"update.exe\";");
         Assert.DoesNotMatch(BareNameLaunch, "new ProcessStartInfo(SystemToolPathService.PowerShell)");
         Assert.DoesNotMatch(BareNameLaunch, "new ProcessStartInfo(SystemToolPathService.Resolve(\"cmd.exe\"), args)");
         Assert.DoesNotMatch(BareNameLaunch, "new ProcessStartInfo(@\"C:\\Windows\\System32\\cmd.exe\")");
@@ -154,6 +175,114 @@ public sealed class SystemToolPathServiceTests
         Assert.True(
             offenders.Count == 0,
             $"These tests launch a tool by bare name; use SystemToolPathService.Resolve/.PowerShell, or add a justified allowlist entry: {string.Join(", ", offenders)}");
+    }
+
+    /// <summary>
+    /// What a process is started from: the first argument of <c>new ProcessStartInfo(...)</c>, a
+    /// string literal passed to <c>Process.Start(...)</c>, or any <c>FileName = ...</c> assignment.
+    /// The literal-shaped detectors above miss a name that arrives through a variable or a later
+    /// <c>psi.FileName = tool;</c>, so here every target has to be visibly trusted. Parenthesis
+    /// nesting is limited to two levels, enough for <c>SystemToolPathService.Resolve(Path.Combine(...))</c>.
+    /// </summary>
+    private static readonly Regex LaunchTarget = new(
+        @"new\s+(?:System\.Diagnostics\.)?ProcessStartInfo\s*\(\s*(?<value>(?:[^(),]|\((?:[^()]|\([^()]*\))*\))+)[,)]" +
+        @"|Process\.Start\(\s*(?<value>@?""(?:[^""]|"""")*"")" +
+        @"|(?<!\w)FileName\s*=(?![=>])\s*(?<value>[^,;}\r\n]+)",
+        RegexOptions.Compiled);
+
+    // A SystemToolPathService call (optionally namespace-qualified) or a literal fully qualified path.
+    private static readonly Regex TrustedLaunchTarget = new(
+        @"^(?:(?:[\w]+\.)*SystemToolPathService\.|@?""[A-Za-z]:\\)",
+        RegexOptions.Compiled);
+
+    // Launch targets held in a variable whose origin was checked by hand, as (repo-relative file,
+    // target expression, where the value comes from). An entry that stops matching fails the test,
+    // so the list can't outlive the code it vouches for.
+    private static readonly (string File, string Target, string Origin)[] LaunchTargetAllowlist =
+    [
+        ("src/NVMeDriverPatcher.Watchdog/Program.cs", "executable",
+            "RunProcess's parameter; its only caller passes SystemToolPathService.Resolve(\"sc.exe\")"),
+        ("src/NVMeDriverPatcher.Tray/Program.cs", "exe",
+            "Path.Combine of AppContext.BaseDirectory (or its parent) and NVMeDriverPatcher.exe"),
+        ("src/NVMeDriverPatcher.Core/Services/BenchmarkService.cs", "exePath",
+            "the hash-pinned diskspd.exe InstallDiskSpdAsync places under the working directory"),
+        ("src/NVMeDriverPatcher.Core/Services/ViVeToolService.cs", "exePath",
+            "Path.Combine of the verified payload directory and ViVeTool.exe"),
+        ("src/NVMeDriverPatcher.Core/Services/VerifiedDownloader.cs", "signtool",
+            "ResolveSigntool, which only returns absolute Windows Kits paths that exist"),
+        ("src/NVMeDriverPatcher.Core/Services/WinReDriverInjectionService.cs", "file",
+            "RunProcessAsync's parameter; callers pass SystemToolPathService.Resolve(\"dism.exe\") or a plan step whose Exe defaults to it"),
+        ("src/NVMeDriverPatcher.Core/Services/WinReBcdPrepService.cs", "exe",
+            "RunCapture's parameter; every caller passes SystemToolPathService.Resolve(...)"),
+        ("src/NVMeDriverPatcher.Core/Services/WinPERecoveryBuilderService.cs", "file",
+            "RunProcessAsync's parameter; every caller passes SystemToolPathService.Resolve(...)"),
+        ("src/NVMeDriverPatcher/ViewModels/MainViewModel.cs", "url",
+            "an https URL opened through the shell after IsAllowedBrowserUrl, not a tool"),
+        ("src/NVMeDriverPatcher.Core/Services/DataFileProvenanceService.cs", "fileName",
+            "a provenance record's FileName property, not a process launch"),
+        ("tests/NVMeDriverPatcher.Tests/TelemetryReceiverSummaryTests.cs", "\"node\"",
+            "node has no fixed install path and the test skips itself when it's missing"),
+        ("tests/NVMeDriverPatcher.Tests/DataFileProvenanceServiceTests.cs", "\"compat.json\"",
+            "a provenance record's FileName property, not a process launch"),
+    ];
+
+    private static IEnumerable<(string Target, int Index)> UntrustedLaunchTargets(string source) =>
+        LaunchTarget.Matches(source)
+            .Select(m => (Target: m.Groups["value"].Value.Trim(), m.Groups["value"].Index))
+            .Where(hit => !TrustedLaunchTarget.IsMatch(hit.Target));
+
+    [Fact]
+    public void NoSourceStartsAProcessFromAnUnresolvedTarget()
+    {
+        // Self-check: bare literals with and without .exe, a FileName set in a separate statement, and
+        // names passed through a variable all count...
+        Assert.Single(UntrustedLaunchTargets("var psi = new ProcessStartInfo(\"sc.exe\");"));
+        Assert.Single(UntrustedLaunchTargets("var psi = new ProcessStartInfo(\"schtasks\") { CreateNoWindow = true };"));
+        Assert.Single(UntrustedLaunchTargets("var psi = new ProcessStartInfo { FileName = \"reg\", UseShellExecute = false };"));
+        Assert.Single(UntrustedLaunchTargets("psi.FileName = \"dism\";"));
+        Assert.Single(UntrustedLaunchTargets("var tool = \"bcdedit.exe\";\nvar psi = new ProcessStartInfo(tool, args);"));
+        Assert.Single(UntrustedLaunchTargets("startInfo.FileName = toolPath;"));
+        Assert.Single(UntrustedLaunchTargets("process.StartInfo = new System.Diagnostics.ProcessStartInfo(\n    \"cmd.exe\", args)"));
+        Assert.Single(UntrustedLaunchTargets("Process.Start(\"explorer\");"));
+        // ...and resolved launches, literal full paths and non-launch FileName shapes do not.
+        Assert.Empty(UntrustedLaunchTargets("new ProcessStartInfo(SystemToolPathService.PowerShell)"));
+        Assert.Empty(UntrustedLaunchTargets("new ProcessStartInfo(NVMeDriverPatcher.Services.SystemToolPathService.PowerShell)"));
+        Assert.Empty(UntrustedLaunchTargets("new ProcessStartInfo(\n    SystemToolPathService.Resolve(\"cmd.exe\"), $\"/d /c {Path.Combine(dir, name)}\")"));
+        Assert.Empty(UntrustedLaunchTargets("new ProcessStartInfo(SystemToolPathService.Resolve(Path.Combine(\"x\", \"y.exe\")))"));
+        Assert.Empty(UntrustedLaunchTargets("new ProcessStartInfo(@\"C:\\Windows\\System32\\cmd.exe\")"));
+        Assert.Empty(UntrustedLaunchTargets("var psi = new ProcessStartInfo();"));
+        Assert.Empty(UntrustedLaunchTargets("public const string ManifestFileName = \"update-manifest.json\";"));
+        Assert.Empty(UntrustedLaunchTargets("if (psi.FileName == expected) return;"));
+        Assert.Empty(UntrustedLaunchTargets("using var proc = Process.Start(psi);"));
+
+        // This file's string literals are the detectors' fixtures, not launches.
+        var self = Path.Combine("tests", "NVMeDriverPatcher.Tests", nameof(SystemToolPathServiceTests) + ".cs");
+        var hits = ShippedSourceFiles("src", "tests")
+            .Where(path => !path.EndsWith(self, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(path =>
+            {
+                var relative = Path.GetRelativePath(RepoRoot(), path).Replace('\\', '/');
+                // Blank out line comments so a doc example is not read as a launch.
+                var source = Regex.Replace(File.ReadAllText(path), @"^[ \t]*//.*$", string.Empty, RegexOptions.Multiline);
+                return UntrustedLaunchTargets(source).Select(hit =>
+                    (File: relative, hit.Target, Line: source.AsSpan(0, hit.Index).Count('\n') + 1));
+            })
+            .ToList();
+
+        var offenders = hits
+            .Where(hit => !LaunchTargetAllowlist.Any(entry => entry.File == hit.File && entry.Target == hit.Target))
+            .Select(hit => $"{hit.File}:{hit.Line} ({hit.Target})")
+            .ToList();
+        Assert.True(
+            offenders.Count == 0,
+            "These start a process from a target that isn't a SystemToolPathService call or a literal full path. " +
+            $"Resolve it through SystemToolPathService, or add an allowlist entry that says where the value comes from: {string.Join(", ", offenders)}");
+
+        var stale = LaunchTargetAllowlist
+            .Where(entry => !hits.Any(hit => hit.File == entry.File && hit.Target == entry.Target))
+            .Select(entry => $"{entry.File} ({entry.Target})")
+            .ToList();
+        Assert.True(stale.Count == 0, $"These allowlist entries no longer match a launch site; remove them: {string.Join(", ", stale)}");
     }
 
     [Fact]
@@ -331,6 +460,7 @@ public sealed class SystemToolPathServiceTests
         if (code.StartsWith("//", StringComparison.Ordinal) || code.StartsWith("///", StringComparison.Ordinal))
             return false;
         return UnresolvedToolLiteral.Matches(line)
+            .Concat(UnresolvedBareToolLiteral.Matches(line))
             .Any(m => !NonLaunchLiteralPrefix.IsMatch(line[..m.Index]));
     }
 
