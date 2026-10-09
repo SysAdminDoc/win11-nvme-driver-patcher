@@ -30,16 +30,6 @@ Baseline at audit time: `dotnet build` clean (1 warning: xUnit2031 at `tests/NVM
   Confidence: Likely
   Effort: S
 
-- [ ] P3 — Remove restores a baseline captured over a v5.0.0 patch, leaving that version's flags set
-  Category: correctness
-  Where: `PatchService.Uninstall` (ledger branch, `MutationLedgerService.RestoreOriginalState`), `MutationLedgerService.RestoreOriginalStateCore`
-  Problem: The ledger arrived in v5.1.0. A machine patched by v5.0.0 Full and then upgraded gets a baseline that records 735209102, 1853569164 and 156965516 as pre-existing, so Remove's "exact pre-mutation state" writes all three back, logs "[Registry] Registry override residue: 3 value(s) remain" from `InspectLiveRegistryOverrideOwnership`, and still reports REMOVED and verified. Apply's leftover sweep now presumes those flags are this tool's when the baseline also holds the primary flag (`PatchService.FindUnplannedOverrides`, mid-life rule); Remove doesn't.
-  Evidence: Code reading during the round-3 review of the leftover sweep; the residue summary and the SUCCESS line come from the same Uninstall branch.
-  Fix: Apply the mid-life rule in the ledger restore too: when the baseline holds the primary flag for a subkey, delete this tool's override values there instead of writing them back, say so in the log, and make the REMOVED verdict depend on `InspectLiveRegistryOverrideOwnership` finding none of this tool's values.
-  Acceptance: A ledger whose baseline records all three flags as present, restored against a fake registry, ends with the owned values absent and a log line saying why; a baseline without the primary flag still restores the extras exactly; Remove reports PARTIAL, not REMOVED, while any owned value remains.
-  Confidence: Likely
-  Effort: M
-
 - [ ] P3 — GUI: large dead ViewModel surface still computed every refresh; user-facing features silently vanished in the redesign
   Category: maintainability
   Where: `src/NVMeDriverPatcher/ViewModels/`: `ReadinessChecks`/`LeftChecks`/`RightChecks` + `PreflightCheckVM` tooltips (`MainViewModel.cs:467-506`), `Drives`/`DriveRowVM` (`RowViewModels.cs:63-106`), `RegistryFlags`/`SafeBootFlags` (`:804-836`), `AttentionNotes` cluster (`:1089-1167`), `DirectStorageImpactText/Severity/PanelVisible` (`:156-159, 1046-1087`), `SkipWarnings` (no toggle anywhere yet described by `OptionsSummaryText`, `MainViewModel.Settings.cs:22-24`), `ChangePlanSteps`, `RiskSummaryColor`, `ActionReadinessText/Color` (bound only inside collapsed XAML)

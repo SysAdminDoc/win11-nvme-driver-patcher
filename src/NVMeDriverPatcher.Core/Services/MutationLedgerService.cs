@@ -522,6 +522,81 @@ public static class MutationLedgerService
     public static MutationRestoreResult RestoreOriginalState(string workingDir, Action<string>? log = null) =>
         RestoreOriginalState(workingDir, RestoreOriginalStateCore, IsOwnerActive, log);
 
+    /// <summary>
+    /// Remove's restore. Same as <see cref="RestoreOriginalState(string, Action{string}?)"/>, except
+    /// that values the baseline presumes to be an older version's patch are cleared instead of
+    /// written back (<see cref="RemovalTargets"/>). Rollbacks of a failed apply keep the exact
+    /// restore: they return the machine to how it was, older patch included.
+    /// </summary>
+    public static MutationRestoreResult RestoreForRemoval(string workingDir, Action<string>? log = null) =>
+        RestoreOriginalState(
+            workingDir,
+            (ledger, l) => RestoreOriginalStateCore(ledger, l, RemovalTargets(ledger.Baseline.RegistryValues, l)),
+            IsOwnerActive,
+            log);
+
+    /// <summary>
+    /// The ledger arrived in v5.1.0, so one first captured over a v5.0.0 patch records that
+    /// version's flags as pre-existing. No apply of this tool writes the other flags without the
+    /// primary one, so in a key where the baseline already held the primary flag, this tool's
+    /// values are presumed to be an older version's (the rule apply's leftover sweep uses, see
+    /// <c>PatchService.FindUnplannedOverrides</c>).
+    /// </summary>
+    internal static bool IsPresumedOlderVersionValue(
+        IReadOnlyList<RegistryValueBaseline> baseline,
+        RegistryValueBaseline value) =>
+        value.Existed &&
+        AppConfig.IsOwnedOverrideValueName(value.ValueName) &&
+        baseline.Any(v =>
+            v.Existed &&
+            string.Equals(v.KeyPath, value.KeyPath, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(v.ValueName, AppConfig.PrimaryFeatureID, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The registry state Remove restores to: the baseline, with every value presumed to be an
+    /// older version's turned into "absent". Writing those back would leave the old patch in
+    /// place under a REMOVED verdict.
+    /// </summary>
+    internal static IReadOnlyList<RegistryValueBaseline> RemovalTargets(
+        IReadOnlyList<RegistryValueBaseline> baseline,
+        Action<string>? log)
+    {
+        var targets = new List<RegistryValueBaseline>(baseline.Count);
+        foreach (var value in baseline)
+        {
+            if (!IsPresumedOlderVersionValue(baseline, value))
+            {
+                targets.Add(value);
+                continue;
+            }
+            log?.Invoke($"  [LEDGER] Clearing {value.ValueName} under {value.KeyPath} instead of restoring it: it was already set alongside this tool's primary flag when the ledger was first written, so it's presumed to be an older version's patch.");
+            targets.Add(new RegistryValueBaseline { KeyPath = value.KeyPath, ValueName = value.ValueName, Existed = false });
+        }
+        return targets;
+    }
+
+    /// <summary>
+    /// This tool's values a removal left in the live Overrides key. A value the baseline recorded
+    /// as set before the first apply, in a key without the primary flag, belongs to whoever set it
+    /// and was restored on purpose, so it doesn't count.
+    /// </summary>
+    internal static IReadOnlyList<string> OwnedValuesLeftAfterRemoval(
+        IEnumerable<string> remainingOwnedValueNames,
+        IReadOnlyList<RegistryValueBaseline> baseline)
+    {
+        var left = new List<string>();
+        foreach (var name in remainingOwnedValueNames)
+        {
+            var before = baseline.FirstOrDefault(v =>
+                string.Equals(v.KeyPath, AppConfig.RegistrySubKey, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(v.ValueName, name, StringComparison.OrdinalIgnoreCase));
+            bool restoredAsSomeoneElses = before is { Existed: true } && !IsPresumedOlderVersionValue(baseline, before);
+            if (!restoredAsSomeoneElses)
+                left.Add(name);
+        }
+        return left;
+    }
+
     internal static MutationRestoreResult RestoreOriginalState(
         string workingDir,
         Func<MutationOperationLedger, Action<string>?, MutationRestoreResult> restore,
@@ -597,10 +672,24 @@ public static class MutationLedgerService
 
     private static MutationRestoreResult RestoreOriginalStateCore(
         MutationOperationLedger ledger,
-        Action<string>? log)
+        Action<string>? log) =>
+        RestoreOriginalStateCore(ledger, log, ledger.Baseline.RegistryValues);
+
+    private static MutationRestoreResult RestoreOriginalStateCore(
+        MutationOperationLedger ledger,
+        Action<string>? log,
+        IReadOnlyList<RegistryValueBaseline> registryTargets)
     {
         var failures = new List<string>();
-        RestoreRegistryValues(ledger.Baseline.RegistryValues, failures, log);
+        try
+        {
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            RestoreRegistryValues(hklm, registryTargets, failures, log);
+        }
+        catch (Exception ex)
+        {
+            failures.Add("Registry baseline open failed: " + ex.GetType().Name);
+        }
 
         var safeBootFailures = SafeBootStateService.RestoreFromJournal(
             new RealSafeBootRegistry(), ledger.Baseline.SafeBoot, log);
@@ -621,19 +710,23 @@ public static class MutationLedgerService
                 failures.Add("BitLocker protection resume failed: " + resumed.Summary);
         }
 
-        failures.AddRange(ProbeBaselineDifferences(ledger));
+        failures.AddRange(ProbeBaselineDifferences(ledger, registryTargets));
         return failures.Count == 0
             ? MutationRestoreResult.Succeeded
             : new(false, failures.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
     }
 
-    internal static IReadOnlyList<string> ProbeBaselineDifferences(MutationOperationLedger ledger)
+    /// <param name="registryTargets">What each registry value should read now: the baseline, or
+    /// Remove's <see cref="RemovalTargets"/>.</param>
+    internal static IReadOnlyList<string> ProbeBaselineDifferences(
+        MutationOperationLedger ledger,
+        IReadOnlyList<RegistryValueBaseline> registryTargets)
     {
         var differences = new List<string>();
         try
         {
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-            foreach (var expected in ledger.Baseline.RegistryValues)
+            foreach (var expected in registryTargets)
             {
                 var actual = CaptureRegistryValue(hklm, expected.KeyPath, expected.ValueName);
                 if (!RegistryValuesEqual(expected, actual))
@@ -747,44 +840,38 @@ public static class MutationLedgerService
             entries.Count == FeatureStoreWriterService.PostBlockFeatureIds.Length * 2);
     }
 
-    private static void RestoreRegistryValues(
+    /// <param name="root">HKLM's 64-bit view in production; tests pass a scratch HKCU key.</param>
+    internal static void RestoreRegistryValues(
+        RegistryKey root,
         IEnumerable<RegistryValueBaseline> values,
         List<string> failures,
         Action<string>? log)
     {
-        try
+        foreach (var value in values)
         {
-            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-            foreach (var value in values)
+            try
             {
-                try
+                if (!value.Existed)
                 {
-                    if (!value.Existed)
-                    {
-                        using var key = hklm.OpenSubKey(value.KeyPath, writable: true);
-                        key?.DeleteValue(value.ValueName, throwOnMissingValue: false);
-                        key?.Flush();
-                    }
-                    else
-                    {
-                        using var key = hklm.CreateSubKey(value.KeyPath, writable: true)
-                            ?? throw new IOException("Registry key could not be opened for restore.");
-                        key.SetValue(value.ValueName, DecodeRegistryValue(value), (RegistryValueKind)value.Kind);
-                        key.Flush();
-                    }
-                    log?.Invoke($"  [LEDGER] Restored registry value {value.KeyPath}\\{value.ValueName}.");
+                    using var key = root.OpenSubKey(value.KeyPath, writable: true);
+                    key?.DeleteValue(value.ValueName, throwOnMissingValue: false);
+                    key?.Flush();
                 }
-                catch (Exception ex)
+                else
                 {
-                    // Include the key path: mirrored control sets repeat every value name, so a
-                    // name-only failure cannot say which control set is still dirty.
-                    failures.Add($"Registry {value.KeyPath}\\{value.ValueName} ({ex.GetType().Name})");
+                    using var key = root.CreateSubKey(value.KeyPath, writable: true)
+                        ?? throw new IOException("Registry key could not be opened for restore.");
+                    key.SetValue(value.ValueName, DecodeRegistryValue(value), (RegistryValueKind)value.Kind);
+                    key.Flush();
                 }
+                log?.Invoke($"  [LEDGER] Restored registry value {value.KeyPath}\\{value.ValueName}.");
             }
-        }
-        catch (Exception ex)
-        {
-            failures.Add("Registry baseline open failed: " + ex.GetType().Name);
+            catch (Exception ex)
+            {
+                // Include the key path: mirrored control sets repeat every value name, so a
+                // name-only failure cannot say which control set is still dirty.
+                failures.Add($"Registry {value.KeyPath}\\{value.ValueName} ({ex.GetType().Name})");
+            }
         }
     }
 

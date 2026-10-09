@@ -361,7 +361,7 @@ public sealed class PatchServiceTests
         var line = Assert.Single(log);
         Assert.Contains("[CLEARED] 156965516", line, StringComparison.Ordinal);
         Assert.Contains("presumed to be an older version's", line, StringComparison.Ordinal);
-        Assert.Contains("Remove restores it", line, StringComparison.Ordinal);
+        Assert.Contains("Remove clears it too", line, StringComparison.Ordinal);
     }
 
     [Fact]
