@@ -1,7 +1,28 @@
 using System.Diagnostics;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using NVMeDriverPatcher.Models;
 
 namespace NVMeDriverPatcher.Services;
+
+/// <summary>Whether a program may be the target of a SYSTEM task, and in plain words why not.</summary>
+public sealed record TaskTargetCheck(bool IsProtected, string Reason);
+
+/// <summary>A path's owner and DACL, and whether the path is a junction or symbolic link.</summary>
+internal sealed record PathSecurity(FileSystemSecurity Descriptor, bool IsReparsePoint = false);
+
+/// <summary>Where a path sits relative to the protected root, which decides which rights matter.</summary>
+internal enum TargetPathRole
+{
+    /// <summary>The exe itself.</summary>
+    Program,
+    /// <summary>A folder from the exe's own folder up to and including the protected root.</summary>
+    Folder,
+    /// <summary>A folder above the protected root.</summary>
+    AboveRoot,
+    /// <summary>The drive or share the path lives on.</summary>
+    VolumeRoot
+}
 
 // Wraps schtasks.exe to register a boot-time verifier + periodic watchdog evaluator. Keeps
 // verification + auto-revert decisions running even when the user never launches the app.
@@ -19,18 +40,21 @@ public static class SchedulerService
 
     /// <summary>
     /// Both tasks run the CLI as SYSTEM, so whoever can replace the exe gets SYSTEM. Only a CLI
-    /// under Program Files, where only administrators and TrustedInstaller can write, or in the
-    /// folder the MSI installed to (it pins an admin-only DACL there, and records the folder under
-    /// HKLM) may be the target. A copy in Downloads or on the desktop can be swapped by any
-    /// program the user runs.
+    /// under Program Files or in the folder the MSI installed to (it pins an admin-only DACL there,
+    /// and records the folder under HKLM) may be the target, and only when the permissions on disk
+    /// back that up. A copy in Downloads or on the desktop can be swapped by any program the user
+    /// runs, and so can one in a Program Files folder another vendor left writable. A refusal names
+    /// the file or folder that failed and why.
     /// </summary>
-    public static bool IsProtectedTaskTarget(string? exePath) =>
-        IsProtectedTaskTarget(exePath, new[]
-        {
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-            ReadMsiInstallLocation() ?? string.Empty,
-        });
+    public static TaskTargetCheck CheckTaskTarget(string? exePath) =>
+        CheckTaskTarget(exePath, DefaultProtectedRoots(), ReadPathSecurity);
+
+    private static string[] DefaultProtectedRoots() => new[]
+    {
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+        ReadMsiInstallLocation() ?? string.Empty,
+    };
 
     private static string? ReadMsiInstallLocation()
     {
@@ -47,9 +71,14 @@ public static class SchedulerService
         }
     }
 
-    internal static bool IsProtectedTaskTarget(string? exePath, IEnumerable<string> protectedRoots)
+    /// <summary>
+    /// The path half of the check: the protected root (full path, no trailing separator) that
+    /// <paramref name="exePath"/> sits under, or null. A prefix alone proves nothing about the
+    /// folders' permissions; <c>CheckTaskTarget</c> reads those.
+    /// </summary>
+    internal static string? MatchProtectedRoot(string? exePath, IEnumerable<string> protectedRoots)
     {
-        if (string.IsNullOrWhiteSpace(exePath)) return false;
+        if (string.IsNullOrWhiteSpace(exePath) || !Path.IsPathFullyQualified(exePath)) return null;
         string full;
         try
         {
@@ -57,21 +86,199 @@ public static class SchedulerService
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
-            return false;
+            return null;
         }
-        foreach (var root in protectedRoots)
+        foreach (var candidate in protectedRoots)
         {
-            if (string.IsNullOrWhiteSpace(root)) continue;
-            var prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)) + Path.DirectorySeparatorChar;
-            if (full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.IsNullOrWhiteSpace(candidate) || !Path.IsPathFullyQualified(candidate)) continue;
+            string root;
+            try
+            {
+                root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidate));
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                continue;
+            }
+            // An MSI installed straight to D:\ records InstallLocation D:\, which would vouch for
+            // every program on the drive.
+            if (IsVolumeRoot(root)) continue;
+            if (full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return root;
         }
-        return false;
+        return null;
+    }
+
+    private static bool IsVolumeRoot(string fullPath) =>
+        Path.GetPathRoot(fullPath) is { } volume &&
+        string.Equals(volume.TrimEnd('\\', '/'), fullPath.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+
+    private const string TrustedInstallerSid = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
+
+    private static readonly SecurityIdentifier[] TrustedSids =
+    {
+        new(WellKnownSidType.LocalSystemSid, null),
+        new(WellKnownSidType.BuiltinAdministratorsSid, null),
+        new(TrustedInstallerSid),
+    };
+
+    // Windows maps generic rights to specific ones when it applies a descriptor, but an entry can
+    // still carry raw GENERIC_WRITE or GENERIC_ALL, and those share no bits with the specific masks.
+    private const FileSystemRights GenericAllRight = (FileSystemRights)0x10000000;
+    private const FileSystemRights GenericWriteRight = (FileSystemRights)0x40000000;
+
+    // Individual bits, never the composite Write/Modify/FullControl values: those fold in
+    // READ_CONTROL and SYNCHRONIZE, so a read-only Users entry (0x1200a9) would look like a writer.
+    private const FileSystemRights ReplaceRights =
+        FileSystemRights.WriteData |
+        FileSystemRights.AppendData |
+        FileSystemRights.DeleteSubdirectoriesAndFiles |
+        FileSystemRights.Delete |
+        FileSystemRights.ChangePermissions |
+        FileSystemRights.TakeOwnership |
+        GenericAllRight |
+        GenericWriteRight;
+
+    // Above the protected root the folders' contents don't matter, only the path through them.
+    // Whoever can rename one (DELETE on it, or DELETE_CHILD on its parent) can move the real tree
+    // aside and build their own at the same path, so those rights, and the rights to re-permission
+    // the folder, are what's checked there. Creating folders, which every user can do in C:\, is fine.
+    private const FileSystemRights RenameRights =
+        FileSystemRights.Delete |
+        FileSystemRights.DeleteSubdirectoriesAndFiles |
+        FileSystemRights.ChangePermissions |
+        FileSystemRights.TakeOwnership |
+        GenericAllRight;
+
+    /// <summary>
+    /// Checks the exe and every folder from its own up to and including the protected root: each
+    /// must be owned by SYSTEM, Administrators or TrustedInstaller, and grant no write, delete or
+    /// re-permission right to anyone else. The folders above the root must not let anyone else
+    /// rename them. Anything that can't be read is refused.
+    /// </summary>
+    internal static TaskTargetCheck CheckTaskTarget(
+        string? exePath,
+        IEnumerable<string> protectedRoots,
+        Func<string, PathSecurity> readSecurity)
+    {
+        if (string.IsNullOrWhiteSpace(exePath))
+            return new(false, "No program path was given.");
+        var root = MatchProtectedRoot(exePath, protectedRoots);
+        if (root is null)
+            return new(false, $"{exePath} isn't under Program Files or the folder the MSI installed to.");
+
+        var exe = Path.GetFullPath(exePath);
+        var chain = new List<(string Path, TargetPathRole Role)> { (exe, TargetPathRole.Program) };
+        var insideRoot = true;
+        for (var dir = Path.GetDirectoryName(exe); dir is not null; dir = Path.GetDirectoryName(dir))
+        {
+            var role = insideRoot
+                ? TargetPathRole.Folder
+                : (Path.GetDirectoryName(dir) is null) ? TargetPathRole.VolumeRoot : TargetPathRole.AboveRoot;
+            chain.Add((dir, role));
+            if (string.Equals(dir, root, StringComparison.OrdinalIgnoreCase)) insideRoot = false;
+        }
+
+        foreach (var (path, role) in chain)
+        {
+            var weakness = Inspect(path, role, readSecurity);
+            if (weakness is not null) return new(false, weakness);
+        }
+        return new(true, $"{exe} and the folders above it can only be changed by administrators.");
+    }
+
+    private static string? Inspect(string path, TargetPathRole role, Func<string, PathSecurity> readSecurity)
+    {
+        PathSecurity found;
+        try
+        {
+            found = readSecurity(path);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return $"{path} doesn't exist.";
+        }
+        catch (Exception ex)
+        {
+            // Fail closed: a descriptor that can't be read can't show who may write there.
+            return $"Couldn't read the permissions on {path} ({ex.Message}), so it can't be trusted.";
+        }
+        return FindWeakness(path, found, role);
+    }
+
+    /// <summary>
+    /// Pure: the reason <paramref name="path"/> can't be trusted, or null when its owner and every
+    /// allow entry that applies to it belong to SYSTEM, Administrators or TrustedInstaller.
+    /// </summary>
+    internal static string? FindWeakness(string path, PathSecurity found, TargetPathRole role)
+    {
+        if (found.IsReparsePoint)
+            return $"{path} is a junction or symbolic link, so the folder that really holds the program can't be vouched for.";
+
+        var owner = found.Descriptor.GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier;
+        if (owner is null || !IsTrusted(owner))
+            return $"{path} is owned by {Describe(owner)}, and an owner can always change who may write there.";
+
+        var watched = role switch
+        {
+            TargetPathRole.AboveRoot => RenameRights,
+            // A drive's root can't be renamed or deleted, so DELETE on it means nothing.
+            TargetPathRole.VolumeRoot => RenameRights & ~FileSystemRights.Delete,
+            _ => ReplaceRights,
+        };
+        foreach (FileSystemAccessRule rule in found.Descriptor.GetAccessRules(true, true, typeof(SecurityIdentifier)))
+        {
+            // An inherit-only entry (CREATOR OWNER on Program Files, for one) only seeds new
+            // children. It grants nothing on this object, and every child on the path is checked.
+            if (rule.AccessControlType != AccessControlType.Allow ||
+                (rule.PropagationFlags & PropagationFlags.InheritOnly) != 0 ||
+                (rule.FileSystemRights & watched) == 0)
+                continue;
+            var sid = rule.IdentityReference as SecurityIdentifier;
+            if (sid is not null && IsTrusted(sid)) continue;
+
+            var who = Describe(sid);
+            return role switch
+            {
+                TargetPathRole.Program => $"{who} can change or replace {path}.",
+                TargetPathRole.Folder => $"{who} can add, change or delete files in {path}.",
+                _ => $"{who} can rename or re-permission {path}, which would let them swap in a folder of their own.",
+            };
+        }
+        return null;
+    }
+
+    private static bool IsTrusted(SecurityIdentifier sid) => TrustedSids.Any(trusted => trusted.Equals(sid));
+
+    private static string Describe(SecurityIdentifier? sid)
+    {
+        if (sid is null) return "an account that couldn't be identified";
+        try
+        {
+            return sid.Translate(typeof(NTAccount)).Value;
+        }
+        catch (SystemException)
+        {
+            // IdentityNotMappedException and friends: the raw SID still names the account.
+            return sid.Value;
+        }
+    }
+
+    /// <summary>Reads a file's or folder's owner and DACL from disk. Throws when it can't.</summary>
+    internal static PathSecurity ReadPathSecurity(string path)
+    {
+        const AccessControlSections sections = AccessControlSections.Owner | AccessControlSections.Access;
+        var attributes = File.GetAttributes(path);
+        FileSystemSecurity descriptor = (attributes & FileAttributes.Directory) != 0
+            ? new DirectoryInfo(path).GetAccessControl(sections)
+            : new FileInfo(path).GetAccessControl(sections);
+        return new PathSecurity(descriptor, (attributes & FileAttributes.ReparsePoint) != 0);
     }
 
     private static bool GuardTaskTarget(string cliPath, Action<string>? log)
     {
-        if (IsProtectedTaskTarget(cliPath)) return true;
-        log?.Invoke($"[ERROR] Not registering a SYSTEM task for {cliPath}: it isn't under Program Files or the MSI's install folder, so other programs could replace it.");
+        var check = CheckTaskTarget(cliPath);
+        if (check.IsProtected) return true;
+        log?.Invoke($"[ERROR] Not registering a SYSTEM task for {cliPath}: {check.Reason}");
         return false;
     }
 
