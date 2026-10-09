@@ -103,7 +103,6 @@ public partial class MainViewModel
         Application.Current?.Dispatcher.Invoke(() =>
         {
             LogBeforeAfter(result.BeforeSnapshot, result.AfterSnapshot, "Install Patch");
-            UpdateRegistryDisplay();
             UpdateStatusDisplay();
             UpdateOverviewSummary();
             UpdateOperationalHistory();
@@ -150,7 +149,6 @@ public partial class MainViewModel
                     if (!watchdogRollback.Success)
                         Log("[ERROR] Watchdog rollback checkpoint failed: " + watchdogRollback.Summary, "ERROR");
                     ConfigService.Save(Config);
-                    UpdateRegistryDisplay();
                     UpdateStatusDisplay();
                     InfoDialog?.Invoke("Checkpoint Not Saved",
                         restored.Success
@@ -248,7 +246,6 @@ public partial class MainViewModel
         Application.Current?.Dispatcher.Invoke(() =>
         {
             LogBeforeAfter(result.BeforeSnapshot, result.AfterSnapshot, "Remove Patch");
-            UpdateRegistryDisplay();
             UpdateStatusDisplay();
             UpdateOverviewSummary();
             UpdateOperationalHistory();
@@ -813,11 +810,12 @@ public partial class MainViewModel
     {
         if (ServerKeyEditable) IncludeServerKey = true;
         if (_policyOverlay.IncludeStandaloneFuture is null) IncludeStandaloneFuture = false;
-        if (_policyOverlay.SkipWarnings is null) SkipWarnings = false;
+        if (_policyOverlay.SkipWarnings is null) Config.SkipWarnings = false;
         AutoSaveLog = true;
         EnableToasts = true;
         WriteEventLog = true;
         RestartDelayText = "30";
+        DebouncedSaveSettings();
 
         Log("Recommended setup restored: server key on, confirmations on, auditing on, notifications on, 30-second restart countdown.", "SUCCESS");
     }
@@ -961,8 +959,8 @@ public partial class MainViewModel
     [RelayCommand]
     private void OpenUpdateUrl()
     {
-        if (string.IsNullOrEmpty(UpdateUrl)) return;
-        OpenUrlInBrowser(UpdateUrl);
+        if (string.IsNullOrEmpty(_updateUrl)) return;
+        OpenUrlInBrowser(_updateUrl);
     }
 
     [RelayCommand]
