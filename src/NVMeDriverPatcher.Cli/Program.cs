@@ -1540,7 +1540,11 @@ class Program
 
         config.PatchProfile = profile;
         FirmwareUpdateWorkflowService.RestoreMarkedOptions(marker, config);
-        Console.WriteLine($"Re-enabling Native NVMe ({profile} profile) after the firmware update...");
+        // The remembered install ran after the policy pins were put back, so pin again: a fleet
+        // that pins Safe mustn't get Full back because the last install before the update was Full.
+        foreach (var (setting, pinned) in GpoPolicyService.ReapplyPins(config, GpoPolicyService.Read()))
+            Console.Error.WriteLine($"[WARNING] Group Policy pins {setting} to {pinned}, so the setting remembered from before the firmware update was ignored.");
+        Console.WriteLine($"Re-enabling Native NVMe ({config.PatchProfile} profile) after the firmware update...");
 
         // Thread the build-policy override through. Without it the refusal message told the
         // user to re-run with --force-unsupported-build, which this command silently dropped --
