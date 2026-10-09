@@ -29,7 +29,7 @@ public sealed class MsiSandboxScriptTests
     {
         var script = Script();
         var input = Regex.Match(script,
-            @"<HostFolder>\$escapedInput</HostFolder>\s*<SandboxFolder>C:\NVMeMsiInput</SandboxFolder>\s*<ReadOnly>true</ReadOnly>");
+            @"<HostFolder>\$escapedInput</HostFolder>\s*<SandboxFolder>C:\\NVMeMsiInput</SandboxFolder>\s*<ReadOnly>true</ReadOnly>");
         Assert.True(input.Success, "the MSI folder must be mapped read-only");
         Assert.Contains(@"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\NVMeMsiSmoke\bootstrap.ps1", script, StringComparison.Ordinal);
     }
