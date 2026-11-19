@@ -43,7 +43,7 @@ public static class DiagnosticsService
     // Single-file ZIP support bundle — bundles the text diagnostics report with every local
     // artifact a support engineer normally has to chase down manually (crash log, config, SQLite
     // DB snapshot, recent registry backups, recovery kit location, benchmark history).
-    // Modeled on WinUtil's CollectLogs.ps1 one-click diagnostic ZIP pattern.
+    // Same shape as a one-click "collect logs" support script: one ZIP, nothing to chase.
     public static string? ExportBundle(
         string workingDir,
         PreflightResult? preflight,
